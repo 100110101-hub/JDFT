@@ -1,15 +1,17 @@
-//! K3 Task 状态机（冻结）。
+//! K3 Task 状态机（冻结，v2.1 = 6 条转移）。
 //!
 //! ```text
 //! draft → queued → running → converged
-//!                    │
-//!                    ├→ failed
-//!                    └→ cancelled
+//!            │         ├→ failed
+//!            └→ cancelled
+//!                      └→ cancelled
 //! ```
 //!
-//! **本模块只实现 K3 图上有的 5 条转移。** 图上没有的转移（如 `queued → cancelled`、
-//! `failed → queued` 重试）一律拒绝，并在 `docs/choices.md` 里作为待人类裁决项登记
-//! —— 按 §10.2.2，agent 不得自行扩展 K3。
+//! **本模块只实现 K3 表上有的 6 条转移。** 表上没有的转移（如 `failed → queued` 重试、
+//! `draft → running`）一律拒绝。
+//!
+//! **重试语义（冻结）**：`failed` 是终态，不回 `queued`；重试 = 用新 task id 重建任务，
+//! 这样结果目录永远不可变、可追溯。
 
 use serde::{Deserialize, Serialize};
 
@@ -47,10 +49,12 @@ impl TaskState {
         TaskState::Cancelled,
     ];
 
-    /// 冻结的合法转移集合（与 K3 图逐条对应）。
-    pub const LEGAL: [(TaskState, TaskState); 5] = [
+    /// 冻结的合法转移集合（与 K3 表逐条对应，v2.1 起 6 条）。
+    pub const LEGAL: [(TaskState, TaskState); 6] = [
         (TaskState::Draft, TaskState::Queued),
         (TaskState::Queued, TaskState::Running),
+        // v2.1 新增：取消一个还没开始的任务（P-03 的"取消即停"需要）。
+        (TaskState::Queued, TaskState::Cancelled),
         (TaskState::Running, TaskState::Converged),
         (TaskState::Running, TaskState::Failed),
         (TaskState::Running, TaskState::Cancelled),
@@ -222,6 +226,12 @@ mod tests {
     fn k3_legal_transitions_only() {
         assert!(TaskState::Draft.transition_to(TaskState::Queued).is_ok());
         assert!(TaskState::Queued.transition_to(TaskState::Running).is_ok());
+        // v2.1：排队中的任务可以被取消。
+        assert!(
+            TaskState::Queued
+                .transition_to(TaskState::Cancelled)
+                .is_ok()
+        );
         assert!(
             TaskState::Running
                 .transition_to(TaskState::Converged)
@@ -234,10 +244,10 @@ mod tests {
                 .is_ok()
         );
 
-        // K3 图上没有的：
+        // K3 表上没有的（含"重试"：failed 是终态，重试要走新 task id）：
         for (from, to) in [
-            (TaskState::Queued, TaskState::Cancelled),
             (TaskState::Draft, TaskState::Running),
+            (TaskState::Draft, TaskState::Cancelled),
             (TaskState::Failed, TaskState::Queued),
             (TaskState::Converged, TaskState::Running),
             (TaskState::Cancelled, TaskState::Draft),

@@ -2,6 +2,20 @@
 
 语义化版本。**任何破坏性变更必须在此登记并经人类评审**（§4 契约前置要求）。
 
+## 0.1.1 — 2026-10-22（随 project.md v2.1）
+
+### K3 · 状态机新增一条转移（**新增，非破坏**）
+- `queued → cancelled`：取消一个尚未开始的任务。P-03 的"取消即停"需要它，
+  T7 的"kill -9 后恢复 queued 任务"也需要它。
+- 同步改动：`qwb-core/crates/qwb-io/src/task.rs`（`TaskState::LEGAL` 5 → 6）、
+  `studio/task.schema.yaml`（`x-state-machine.transitions`）、单测与 proptest。
+- **明确不改**：`failed → queued`（重试）**不**加入。重试语义 = 用**新 task id** 重建任务，
+  保证结果目录不可变、可追溯。这条现在是冻结决策（project.md §4 K3 / §14 #15）。
+
+### 文档
+- `project.md` v2.1 把 C 轨实际落地的 K1–K6 形态全部写入 §4，并清掉 v2.0 的 6 处内部矛盾
+  （详见 project.md §15）。本 CHANGELOG 与 project.md §4 应始终一致。
+
 ## 0.1.0 — 2026-10-22（C 轨：K1–K6 首次冻结）
 
 ### K1 · 数据 schema（`schema/`）
@@ -39,6 +53,7 @@
   `request_cancel()`；错误类型带 `exit_code`；矩阵为 `NDArray[float64] | None`。
 - 验收：`mypy --strict` 对桩文件与一份 typed consumer 均 0 issue。
 
-### 已知缺口（等人类决策，未擅自扩展）
-- K3 缺 `queued→cancelled`、`failed→queued`（重试）。
-- K5 的 4 处增量用法见 `docs/choices.md` §5。
+### 已知缺口
+- ~~K3 缺 `queued→cancelled`~~ → **0.1.1 已补**。
+- `failed→queued`（重试）**故意不加**：重试 = 新 task id（冻结决策）。
+- K5 的 4 处增量用法已写进 project.md §4 K5（不再是"隐含增量"）。

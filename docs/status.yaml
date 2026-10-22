@@ -1,68 +1,78 @@
-# docs/status.yaml 的格式见 project.md §12.4。
+# docs/status.yaml — WBS 状态台账
 #
-# 状态取值：done / in_progress / blocked / pending
-# 每个 done 的包必须有可复查的验收命令（verification 字段）。
+# 格式见 project.md §12.4。状态：done / in_progress / blocked / pending
+# 每个 done 必须有可复查的 verification。
+#
+# 本文件描述的是 project.md **v2.1**。
+
+project_version: "2.1.0"
+
+# ─────────────────────────── C 轨（契约）───────────────────────────
 
 C-01:
   state: done
   ts: "2026-10-22T22:53:00Z"
-  artifact: "qwb-core/crates/qwb-registry（K1 类型 + schemars 生成）+ qwb-contracts/schema/*.schema.{json,yaml} + qwb-data/examples（5 个样例）"
-  verification: "cargo run -p qwb-cli -- data verify  → 缺 citation 被拒（tests/verify.rs）；qwb-gen-schemas --check 无漂移"
+  artifact: "qwb-core/crates/qwb-registry（K1 类型 + schemars 生成 7×2 schema）+ qwb-contracts/schema/ + qwb-data/examples/（6 个 SPECIMEN）"
+  verification: "cargo run -p qwb-registry --bin qwb-gen-schemas -- ../qwb-contracts/schema --check；qwb data verify（6/6 通过；缺 citation → 退出码 3，code g2.citation）"
 C-02:
   state: done
   ts: "2026-10-22T22:53:00Z"
-  artifact: "qwb-contracts/engine-api（qwb-engine-api 0.1.0，23 个单测）"
-  verification: "cargo clippy --all-targets -- -D warnings；cargo doc --no-deps；cargo test --all-targets；Engine::new ⇒ Unsupported"
+  artifact: "qwb-contracts/engine-api（qwb-engine-api 0.1.0，23 单测，deny unsafe/missing_docs）"
+  verification: "cargo fmt --check + clippy -D warnings + RUSTDOCFLAGS='-D warnings' cargo doc --no-deps + cargo test --all-targets；Engine::new ⇒ Unsupported"
 C-03:
   state: done
   ts: "2026-10-22T22:53:00Z"
-  artifact: "qwb-contracts/studio/{task,result}.schema.yaml + qwb-io::task 状态机 + qwb-io/tests/k3_*.rs"
-  verification: "proptest 覆盖 6×6 转移关系；schema 文档与 Rust 类型逐字段一致"
+  artifact: "qwb-contracts/studio/{task,result}.schema.yaml + qwb-io::task 状态机（v2.1 = 6 条转移）+ tests/k3_state_machine.rs、tests/k3_schema_docs.rs"
+  verification: "proptest 覆盖 6×6 转移关系与 LEGAL 精确相等；schema 文档与 Rust 类型逐字段一致"
 C-04:
   state: done
   ts: "2026-10-22T22:53:00Z"
-  artifact: "qwb-contracts/studio/qwb-format.md + qwb-io::container + qwb-contracts/studio/examples/example.qwb"
-  verification: "cargo test -p qwb-io --test example_container；容器字节可复现（container 单测）"
+  artifact: "qwb-contracts/studio/qwb-format.md + qwb-io::container + studio/examples/example.qwb"
+  verification: "cargo test -p qwb-io --test example_container；容器导出字节可复现（container 单测）"
 C-05:
   state: done
   ts: "2026-10-22T22:53:00Z"
-  artifact: "qwb-core/crates/qwb-cli（K5 clap）+ qwb-contracts/studio/{cli.md,python/qwb_engine.pyi}"
-  verification: "qwb --help 及全部子命令 --help；mypy --strict pyi + typed consumer 均 0 issue"
+  artifact: "qwb-core/crates/qwb-cli（K5 clap）+ studio/cli.md + studio/python/qwb_engine.pyi"
+  verification: "qwb --help 及 9 个子命令 --help 退出 0；mypy --strict 桩 + typed consumer 均 0 issue"
 C-06:
   state: done
   ts: "2026-10-22T22:53:00Z"
-  artifact: "qwb-core workspace + rust-toolchain.toml + qwb-core/deny.toml + .github/workflows/ci.yml + scripts/*.sh"
-  verification: "cargo fmt/clippy/test 全绿；cargo deny check 四类全 ok；脚本在 ubuntu CI 跑"
+  artifact: "qwb-core workspace + 根 rust-toolchain.toml（1.97.1）+ qwb-core/deny.toml + .github/workflows/ci.yml + 三个门禁脚本 + scripts/{verify.sh,verify.ps1}"
+  verification: "scripts/verify.ps1 与 scripts/verify.sh 各 15/15 通过（fmt/clippy/test/deny/schema/data/mypy/门禁脚本）"
+
+# ─────────────────────────── D 轨（数据）───────────────────────────
 
 D-01:
   state: pending
   depends: [C-01, C-06]
-  note: "K1 类型与校验已在 C-01 落地；D-01 还差 Registry 加载器（get_basis / get_functional）与 Registry::load_pair"
+  note: "K1 类型与校验已在 C-01 落地。D-01 还差 Registry 加载器（open/get_*/load_pair/features）与『空注册表可加载』的语义（§8.6：load ≠ verify）"
 D-02:
   state: pending
   depends: [D-01]
-  note: "qwb data verify 已实装（C-01 交付）；D-02 的验收是 3 坏/3 好文件的固定回归集"
+  note: "最小 verify 已实装（C-01）；D-02 = 6 坏 / 6 好回归集，坏文件的 code 见 §6.2"
 D-03:
   state: pending
   depends: [D-01]
-  note: "当前 qwb-data 只有 H 的 STO-3G『样例』（example- 前缀，非交付物）；D-03 需要 H/C/N/O/F + BSE 逐项 diff"
+  note: "qwb-data 目前只有 H 的 STO-3G『样例』（example- 前缀，非交付物）；D-03 要 H/C/N/O/F + BSE 逐项 diff + 每元素基函数数断言"
 D-04: {state: pending, depends: [D-01]}
 D-05: {state: pending, depends: [D-01]}
 D-06: {state: pending, depends: [D-01]}
-D-07: {state: pending, depends: [D-01]}
+D-07: {state: pending, depends: [D-01], note: "先确认 Stuttgart/BSE 的再分发条款（§14 #20）"}
 D-08: {state: pending, depends: [D-01]}
 D-09: {state: pending, depends: [D-01]}
 D-10: {state: pending, depends: [D-01]}
 D-11: {state: pending, depends: [D-01]}
 D-12: {state: pending, depends: [D-01]}
-D-13: {state: pending, depends: [D-01]}
+D-13: {state: pending, depends: [D-01], note: "初始参数已在 §6.2 D-13 给出"}
 D-14: {state: pending, depends: [D-01]}
 D-15: {state: pending, depends: [D-02, D-14]}
+
+# ─────────────────────────── I / X / S / G / F 轨 ───────────────────────────
 
 I-00: {state: pending, depends: [C-06]}
 I-01: {state: pending, depends: [C-02, D-01]}
 I-02: {state: pending, depends: [I-01]}
-I-03: {state: pending, depends: [I-01]}
+I-03: {state: pending, depends: [I-01], note: "Obara-Saika 为主 + Rys 交叉验证（R-03 已定案）"}
 I-04: {state: pending, depends: [I-03]}
 I-05: {state: pending, depends: [I-02]}
 I-06: {state: pending, depends: [I-03]}
@@ -78,6 +88,7 @@ S-02: {state: pending, depends: [S-01, X-05]}
 S-03: {state: pending, depends: [S-02]}
 S-04: {state: pending, depends: [S-02]}
 S-05: {state: pending, depends: [S-03]}
+S-06: {state: pending, depends: [S-03], note: "v2.1 新增：偶极 / Mulliken+Löwdin 布居 / 轨道能级（qwb-props）"}
 
 G-01: {state: pending, depends: [S-03]}
 G-02: {state: pending, depends: [G-01]}
@@ -86,29 +97,35 @@ G-03: {state: pending, depends: [G-02]}
 F-01: {state: pending, depends: [G-01]}
 F-02: {state: pending, depends: [F-01]}
 
+# ─────────────────────────── P 轨（产品）───────────────────────────
+
 P-01: {state: pending, depends: [C-03], note: "qwb-studio/（Python + pydantic v2）尚未创建"}
-P-02: {state: pending, depends: [P-01, C-04], note: "Rust 侧 .qwb 已可用；P-02 是 Python zipfile 实现"}
-P-03: {state: pending, depends: [P-01, C-05]}
+P-02: {state: pending, depends: [P-01, C-04], note: "Rust 侧 .qwb 已可用；P-02 = Python zipfile 实现 + 与 Rust 互操作"}
+P-03: {state: pending, depends: [P-01, C-05], note: "取消 queued/running 依赖 K3 的两条 cancelled 边（已冻结）"}
 P-04: {state: pending, depends: [P-01, C-02], note: "EnvInfo 类型与 G5 校验已在 K2/K3 落地"}
-P-05: {state: pending, depends: [P-01], note: "K5 CLI 已实现；P-05 是 Python shell 转发层"}
-P-06: {state: pending, depends: [C-02, P-04], note: "K6 .pyi 已冻结并通过 mypy；P-06 是 pyo3 + maturin 实现"}
+P-05: {state: pending, depends: [P-01], note: "K5 CLI 已实现；P-05 = Python shell 转发层"}
+P-06: {state: pending, depends: [C-02, P-04], note: "K6 .pyi 已冻结并通过 mypy；P-06 = pyo3 + maturin（abi3-py39）"}
 P-07: {state: pending, depends: [P-05, P-06], note: "依赖引擎（I/X/S 轨）"}
 P-08: {state: pending, depends: [P-03, P-04], note: "replay --dry-run 已可用"}
 P-09: {state: pending, depends: [P-07, P-08]}
 P-10: {state: pending, depends: [P-09, G-02, F-02]}
 
+# ─────────────────────────── V 轨（验证）───────────────────────────
+
 V-01: {state: pending, depends: [S-02]}
 V-02: {state: pending, depends: [G-01]}
-V-03: {state: pending, depends: [S-02, G-02]}
-V-04: {state: pending, depends: [all], note: "C 轨子集已在 .github/workflows/ci.yml"}
+V-03: {state: pending, depends: [S-02, G-02], note: "基准 CSV 放 qwb-core/tests/reference/，每行必须带 source_doi 或 source_url（§7.0）"}
+V-04: {state: pending, depends: [all], note: "C 轨子集已在 scripts/verify.{ps1,sh} 与 .github/workflows/ci.yml"}
 V-05: {state: pending, depends: [all]}
 V-06: {state: pending, depends: [I-03, X-03, S-03]}
 
+# ─────────────────────────── 垂直切片 ───────────────────────────
+
 T1: {state: pending, note: "前置 WP 全绿后跑 qwb run examples/h2_sto3g_svwn5.yaml"}
-T2: {state: pending}
+T2: {state: pending, note: "含 S-06 性质断言（偶极 1.85 D ± 0.15、电荷和 == 总电荷）"}
 T3: {state: pending}
 T4: {state: pending}
-T5: {state: pending}
+T5: {state: pending, note: "体系已冻结：CuH/LANL2DZ 与 ZnO/def2-SVP+def2-ECP"}
 T6: {state: pending}
 T7: {state: pending}
 T8: {state: pending}

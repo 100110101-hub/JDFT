@@ -38,23 +38,24 @@ $defs:
       由 `qwb-core/crates/qwb-io/tests/k3_state_machine.rs` 用 proptest 覆盖。
     enum: [draft, queued, running, converged, failed, cancelled]
 
-# K3 状态机（冻结）。只有这 5 条合法转移：
-#   draft -> queued
-#   queued -> running
+# K3 状态机（冻结，v2.1 起 6 条合法转移）：
+#   draft   -> queued
+#   queued  -> running
+#   queued  -> cancelled       （v2.1 新增：取消尚未开始的任务，P-03 需要）
 #   running -> converged
 #   running -> failed
 #   running -> cancelled
-# converged / failed / cancelled 是终态。
+# converged / failed / cancelled 是终态，没有出边。
 #
-# 图上没有的转移一律非法。已知的待裁决缺口（docs/choices.md）：
-#   - `queued -> cancelled`（取消一个还没开始的任务，P-03 需要）
-#   - `failed -> queued`（重试）
+# 重试语义（冻结）：failed 不回到 queued —— 重试 = 用**新 task id** 重建任务，
+# 保证结果目录不可变、可追溯。不要再加 `failed -> queued`。
 x-state-machine:
   initial: draft
   terminal: [converged, failed, cancelled]
   transitions:
     - {from: draft, to: queued}
     - {from: queued, to: running}
+    - {from: queued, to: cancelled}
     - {from: running, to: converged}
     - {from: running, to: failed}
     - {from: running, to: cancelled}
