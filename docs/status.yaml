@@ -88,7 +88,12 @@ I-00:
   artifact: "qwb-core/crates/qwb-linalg：Matrix/Vector（列主序）+ matmul/symmetric_eigen/cholesky，nalgebra 默认 + faer 可选 feature；solve_symmetric 在抽象层共享实现"
   verification: "cargo test -p qwb-linalg（12 例，golden 值全部解析可算：A=[[4,1],[1,3]] 的特征值/Cholesky/解 x=[1/11,7/11]）在两种 feature 下都通过；scripts/verify.{ps1,sh} 已加 faer 步骤（16/16 绿）"
   note: "验收里的『cargo bench 有 baseline』属 V-06（收尾），未在此伪造；deny.toml 为 faer 的传递依赖 paste 登记了一条 unmaintained ignore（有注释说明）"
-I-01: {state: pending, depends: [C-02, D-01]}
+I-01:
+  state: done
+  ts: "2026-10-22T23:31:53Z"
+  artifact: "qwb-core/crates/qwb-basis：K1 BasisSet -> InternalBasis（每原子每收缩一个壳层，Å→Bohr，归一化在加载时完成）"
+  verification: "cargo test -p qwb-basis --test d01_basis_layer（8 例）：H2 AO=2、C AO=5、H2O AO=7、angular 只来自数据、每个收缩 <f|f>=1、错误的 l2 声明被拒、未覆盖元素 → Data、球心转 Bohr"
+  note: "l<=1 时球谐与直角坐标分量数相同，第一阶段用直角坐标表示；l>=2 的球谐转换在 SCF 前补（R-06 的显式入口仍是 BasisSet.angular）"
 I-02: {state: pending, depends: [I-01]}
 I-03: {state: pending, depends: [I-01], note: "Obara-Saika 为主 + Rys 交叉验证（R-03 已定案）"}
 I-04: {state: pending, depends: [I-03]}

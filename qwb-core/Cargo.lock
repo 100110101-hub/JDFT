@@ -1297,6 +1297,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "qwb-basis"
+version = "0.1.0"
+dependencies = [
+ "qwb-engine-api",
+ "qwb-registry",
+ "thiserror 2.0.21",
+]
+
+[[package]]
 name = "qwb-cli"
 version = "0.1.0"
 dependencies = [

@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/qwb-registry", "crates/qwb-io", "crates/qwb-cli", "crates/qwb-linalg"]
+members = ["crates/qwb-registry", "crates/qwb-io", "crates/qwb-cli", "crates/qwb-linalg", "crates/qwb-basis"]
 
 [workspace.package]
 version = "0.1.0"
@@ -30,6 +30,7 @@ qwb-registry = { path = "crates/qwb-registry" }
 qwb-io = { path = "crates/qwb-io" }
 qwb-cli = { path = "crates/qwb-cli" }
 qwb-linalg = { path = "crates/qwb-linalg" }
+qwb-basis = { path = "crates/qwb-basis" }
 
 # G6：workspace 级禁 unsafe、强制文档。crate 用 `[lints] workspace = true` 继承。
 [workspace.lints.rust]

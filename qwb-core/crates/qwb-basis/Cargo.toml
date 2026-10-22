@@ -1,0 +1,16 @@
+[package]
+name = "qwb-basis"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "QWB 内部 AO 基组（K1 BasisSet -> 以原子为中心的收缩高斯壳层，I-01）"
+
+[dependencies]
+qwb-registry.workspace = true
+qwb-engine-api.workspace = true
+thiserror.workspace = true
+
+[lints]
+workspace = true
