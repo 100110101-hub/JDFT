@@ -1,0 +1,19 @@
+sha256: ffb6d485fb393dafb89d50d139fa09282b78075619ac9492cd93209c5504fb17
+name: grid-veryfine
+version: 1.0.0
+notes: Very fine XC grid level. (radial, lebedev, sharpness) = (140, 974, 0.8) is the initial parameter set frozen in project.md 6.2 (D-13); note the sharpness differs from the other levels (0.8 vs 0.6). The convergence gate (adjacent levels < 0.1 mHa) is asserted at T2.
+citation:
+- title: A multicenter numerical integration scheme for polyatomic molecules (Becke partitioning)
+  doi: 10.1063/1.454033
+- title: Quadratures on a sphere (Lebedev angular grids)
+  url: https://cgl.ethz.ch/research/visualcomputing/projects_files/sphericalquadrature.php
+license:
+  spdx: Apache-2.0
+  commercial_ok: true
+  redistribute_ok: true
+created: 2026-10-22T23:30:00Z
+level: veryfine
+radial_points: 140
+lebedev_order: 974
+becke_sharpness: 0.8
+cutoff: 20.0

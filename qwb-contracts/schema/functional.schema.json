@@ -37,6 +37,13 @@
         "null"
       ]
     },
+    "parameter_sources": {
+      "description": "每个参数的来源（`参数名 -> 出处`）。K1 v1.1 新增可选字段：\nD-09 的验收要求“参数逐个带 citation”，而 `citation` 是文件级的，\n无法定位到单个参数，所以补这张表（§10.3 允许新增可选字段）。",
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
     "parameters": {
       "description": "参数字典（如 PBE 的 `kappa = 0.804`、`mu = 0.21951`）。",
       "type": "object",

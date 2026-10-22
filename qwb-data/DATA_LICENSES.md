@@ -18,7 +18,10 @@
 |---|---|---|---|---|---|
 | sto-3g（H,C,N,O,F） | `basis/sto-3g.yaml` | Apache-2.0 | yes | yes | 数值是 1969 年论文发表**的科学常数**（Hehre/Stewart/Pople, doi:10.1063/1.1672392），不构成受版权保护的表达；本文件是我们自己的 K1 结构 + 机器转录，故按 Apache-2.0 授权。BSE 只作导出通道（§8.1 允许），ground truth 存于 `qwb-core/crates/qwb-registry/tests/fixtures/bse/sto-3g.json`。 |
 
-## 当前样例（qwb-data 0.1.0，全部为 SPECIMEN）
+| svwn5 | `functional/svwn5.yaml` | Apache-2.0 | yes | yes | 参数是 1980 年发表的**科学常数**（Vosko/Wilk/Nusair, doi:10.1139/p80-159）与精确常数 2/3、−1/(6π)；本文件是我们自己的 K1 结构，按 Apache-2.0 授权。 |
+| grid-coarse / normal / fine / veryfine | `grid/grid-*.yaml` | Apache-2.0 | yes | yes | 网格参数取自 project.md §6.2 冻结值与 Becke 1988 / Lebedev 的公开方法（doi:10.1063/1.454033）；本文件是我们的数据，按 Apache-2.0 授权。 |
+
+## 当前样例（`examples/`，**非生产数据**，不进 registry.yaml）
 
 | 数据 | 文件 | SPDX | 商用 | 再分发 | 备注 |
 |---|---|---|---|---|---|

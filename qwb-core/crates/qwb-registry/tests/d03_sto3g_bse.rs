@@ -243,9 +243,16 @@ fn sto3g_is_registered_under_its_production_name() {
     assert_eq!(basis.elements.len(), 5);
     assert_eq!(basis.n_basis_functions(), 21);
 
-    // 样例仍在（example- 前缀），两者不冲突。
+    // 样例文件仍在磁盘上（D-02 的回归夹具按路径用它），但**不进**生产清单，
+    // 否则 grid/functional 之类会出现两个同义定义。
     assert!(
-        registry.get_basis("example-sto-3g-H").is_ok(),
-        "样例不应被删除"
+        repo_root()
+            .join("qwb-data/examples/basis/example-sto-3g-H.yaml")
+            .is_file(),
+        "样例文件应保留"
+    );
+    assert!(
+        registry.get_basis("example-sto-3g-H").is_err(),
+        "样例不应出现在生产注册表里"
     );
 }

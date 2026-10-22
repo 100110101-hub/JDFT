@@ -1,0 +1,54 @@
+sha256: e62bd0014d27c73d38e1475a261c47cb273eafa320f337217179b42910b4ebd8
+name: svwn5
+version: 1.0.0
+notes: 'SVWN5 = Slater LDA exchange (alpha = 2/3) + VWN5 correlation (Vosko-Wilk-Nusair parameterization V, with spin interpolation / 自旋插值). Component ids: `LdaSlaterX` (exchange, an additive id against project.md 8.3''s table, which only lists the correlation term `LdaSvwn5`) and `LdaSvwn5` (VWN5 correlation). Parameterization V was identified numerically, not from memory: it reproduces the Ceperley-Alder paramagnetic uniform-gas correlation energy to ~1e-3 Ha across rs=1..20, while the VWN3/RPA parameter set (A=0.0310907, x0=-0.10498, b=3.72744, c=12.9352, which several online tables mislabel as VWN5) is off by ~1.7e-2 Ha. dEps/dSigma is identically zero for a pure LDA (requires.sigma = false).'
+citation:
+- title: 'Accurate spin-dependent electron liquid correlation energies for local spin density calculations: a critical analysis (Vosko, Wilk & Nusair, Can. J. Phys. 58, 1200)'
+  doi: 10.1139/p80-159
+- title: Electron correlations by the Slater X-alpha method (Dirac-Slater LDA exchange, alpha = 2/3)
+  doi: 10.1103/PhysRev.140.A1133
+license:
+  spdx: Apache-2.0
+  commercial_ok: true
+  redistribute_ok: true
+created: 2026-10-22T23:30:00Z
+components:
+- id: LdaSlaterX
+  weight: 1.0
+- id: LdaSvwn5
+  weight: 1.0
+requires:
+  rho: true
+  sigma: false
+  laplacian: false
+parameters:
+  slater_alpha: 0.6666666666666666
+  vwn5_p_A: 0.0310907
+  vwn5_p_x0: -0.409286
+  vwn5_p_b: 13.072
+  vwn5_p_c: 42.7198
+  vwn5_f_A: 0.0155453
+  vwn5_f_x0: -0.743294
+  vwn5_f_b: 20.1231
+  vwn5_f_c: 101.578
+  vwn5_a_A: -0.05305164769729845
+  vwn5_a_x0: -0.0047584
+  vwn5_a_b: 1.13107
+  vwn5_a_c: 13.0045
+parameter_sources:
+  slater_alpha: 'Dirac-Slater LDA exchange: alpha = 2/3 exactly (Dirac 1930 / Slater 1951; Phys. Rev. 140 A1133)'
+  vwn5_p_A: VWN 1980 parameterization V, paramagnetic set (Can. J. Phys. 58, 1200, Table 5)
+  vwn5_p_x0: VWN 1980 parameterization V, paramagnetic set (Table 5)
+  vwn5_p_b: VWN 1980 parameterization V, paramagnetic set (Table 5)
+  vwn5_p_c: VWN 1980 parameterization V, paramagnetic set (Table 5)
+  vwn5_f_A: VWN 1980 parameterization V, ferromagnetic set (Table 5)
+  vwn5_f_x0: VWN 1980 parameterization V, ferromagnetic set (Table 5)
+  vwn5_f_b: VWN 1980 parameterization V, ferromagnetic set (Table 5)
+  vwn5_f_c: VWN 1980 parameterization V, ferromagnetic set (Table 5)
+  vwn5_a_A: exact -1/(6*pi), the spin-stiffness prefactor of VWN eq. (A33); parameterization V alpha set
+  vwn5_a_x0: VWN 1980 parameterization V, alpha set (Table 5)
+  vwn5_a_b: VWN 1980 parameterization V, alpha set (Table 5)
+  vwn5_a_c: VWN 1980 parameterization V, alpha set (Table 5)
+stability:
+  density_floor: 1e-12
+  sigma_ceiling: 100000000.0

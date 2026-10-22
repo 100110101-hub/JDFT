@@ -3,6 +3,27 @@
 数据仓独立 semver（§8.6）。**任何数据改动都必须 bump version 并在此登记**，
 否则 CI 拒绝（§8.6「变更必须 bump version」）。
 
+## 0.3.0 — 2026-10-22
+
+### 新增：生产数据 `functional/svwn5.yaml`（D-09）
+- SVWN5 = Slater 交换（`LdaSlaterX`，α = 2/3）+ VWN5 相关（`LdaSvwn5`）。
+- **parameterization V 是数值确认的**，不是凭记忆：VWN5 常数在 rs=1..20 复现
+  Ceperley-Alder 顺磁相关能到 ~1e-3 Ha；而常被误标为 "VWN5" 的 VWN3/RPA 常数
+  （x0=-0.10498, b=3.72744, c=12.9352）偏差 ~1.7e-2 Ha。负对照写进测试。
+- 13 个参数逐个带 `parameter_sources`（K1 新增可选字段，见 qwb-contracts/CHANGELOG）。
+- 有限差分导数门禁（X-02，< 1e-9）属于 X 轨，D-09 的 status 里注明未覆盖。
+
+### 新增：网格等级 `grid/{coarse,normal,fine,veryfine}.yaml`（D-13）
+- 冻结初始参数 `(50,194,0.6)`、`(75,302,0.6)`、`(99,590,0.6)`、`(140,974,0.8)`，
+  `cutoff = 20 Bohr`；`radii_scale` 故意留空（原子半径表在代码侧，X-03 需要缩放时再数据化）。
+- "相邻等级能量差 < 0.1 mHa" 属 T2 断言（需引擎），未在 D-13 内伪造。
+
+### 变更：`registry.yaml` 只索引生产数据
+- `examples/` 下的 K1 样例**移出**清单：它们保留为 D-02 的回归夹具（按路径校验），
+  但不再进引擎加载路径 —— 否则同一个 grid 等级会有两个定义，`get_grid_by_level`
+  出现歧义（现在它也会把重复等级报成 `Data` 错误）。
+- 版本 bump 0.2.0 → 0.3.0。
+
 ## 0.2.0 — 2026-10-22
 
 ### 新增：生产数据 `basis/sto-3g.yaml`（D-03）

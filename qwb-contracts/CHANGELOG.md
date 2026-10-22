@@ -2,6 +2,16 @@
 
 语义化版本。**任何破坏性变更必须在此登记并经人类评审**（§4 契约前置要求）。
 
+## 1.1.0 — 2026-10-22（D 轨增量：K1 新增一个可选字段）
+
+### K1 · `Functional.parameter_sources`（**新增可选字段，非破坏**）
+- 类型：`BTreeMap<String, String>`（参数名 → 出处），`#[serde(default)]`，缺省即空。
+- 动机：§6.2 D-09 的验收要求“参数逐个带 citation”，而 K1 的 `citation` 是文件级的，
+  无法定位到单个参数。§10.3 明确允许“新增可选字段/新变体/新方法”直接做。
+- 校验（`Functional::check_structure`）：`parameter_sources` 的键必须是 `parameters`
+  里存在的键（禁止悬空来源）；不强制覆盖全部参数（部分参数可由文件级 citation 覆盖）。
+- 兼容性：旧数据文件（无此字段）行为不变；`functional.schema.json/yaml` 已重新生成。
+
 ## 0.1.1 — 2026-10-22（随 project.md v2.1）
 
 ### K3 · 状态机新增一条转移（**新增，非破坏**）

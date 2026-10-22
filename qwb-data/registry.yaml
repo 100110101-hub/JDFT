@@ -1,6 +1,9 @@
+# qwb-data registry (K1 registry.schema.yaml)
+# 只索引**生产数据**；examples/ 下的 K1 样例是 schema 夹具，不进引擎加载路径
+# （否则 grid 的 normal 等级会有两个定义、get_grid_by_level 歧义）。
 schema_version: 1.0.0
 name: qwb-data
-version: 0.2.0
+version: 0.3.0
 created: 2026-10-22T22:53:00Z
 features:
   - "jobtype:sp"
@@ -18,22 +21,20 @@ bases:
   - name: sto-3g
     path: basis/sto-3g.yaml
     sha256: fce3af14b8b3ea121844756117a2489b5f7859be452be02b54509dc20b8ff249
-  - name: example-sto-3g-H
-    path: examples/basis/example-sto-3g-H.yaml
-    sha256: 68f7eaed756278740cfd1f643bab0960f0e09780c5eb862ab1a9a143054a60d6
-ecps:
-  - name: example-ecp-cu
-    path: examples/ecp/example-ecp-cu.yaml
-    sha256: cf2cccecae63bb187cef97dfe0b1b372a3c3309ddacdb5b44932b3c6ee343d9b
 functionals:
-  - name: example-svwn5
-    path: examples/functional/example-svwn5.yaml
-    sha256: 5378a9d4909ed592acc549875383cff913c0de9376a559097e79e746a50974d0
+  - name: svwn5
+    path: functional/svwn5.yaml
+    sha256: e62bd0014d27c73d38e1475a261c47cb273eafa320f337217179b42910b4ebd8
 grids:
-  - name: example-grid-normal
-    path: examples/grid/example-grid-normal.yaml
-    sha256: 2508c561584b5243fc2542b557dba0313f85818335c04aba8c0c22dd6626bdc9
-solvents:
-  - name: example-water
-    path: examples/solvent/example-water.yaml
-    sha256: 63a71dbc4bf280ef6909449c2cac1e09a2a5e6d92fb3adea39138106f3293303
+  - name: grid-coarse
+    path: grid/grid-coarse.yaml
+    sha256: f7293e270dbfe866526afbffe7e7efb5c0500a8a9d992e7b5bd62a4f57b8801d
+  - name: grid-normal
+    path: grid/grid-normal.yaml
+    sha256: e5d5670e0f5f5153cf500e825175dea0d34e6ab00aa0b366ad60b35655a8259a
+  - name: grid-fine
+    path: grid/grid-fine.yaml
+    sha256: 435ea45ebeb5f72b3d9413ff5e916ef502d7ba21ae832ef946f9bf4cd238b0e5
+  - name: grid-veryfine
+    path: grid/grid-veryfine.yaml
+    sha256: ffb6d485fb393dafb89d50d139fa09282b78075619ac9492cd93209c5504fb17

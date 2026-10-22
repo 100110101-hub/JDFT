@@ -62,11 +62,21 @@ D-05: {state: pending, depends: [D-01]}
 D-06: {state: pending, depends: [D-01]}
 D-07: {state: pending, depends: [D-01], note: "先确认 Stuttgart/BSE 的再分发条款（§14 #20）"}
 D-08: {state: pending, depends: [D-01]}
-D-09: {state: pending, depends: [D-01]}
+D-09:
+  state: done
+  ts: "2026-10-22T23:23:27Z"
+  artifact: "qwb-data/functional/svwn5.yaml（LdaSlaterX + LdaSvwn5，13 参数逐个带 parameter_sources）"
+  verification: "cargo test -p qwb-registry --test d09_svwn5（4 例）：13 常数逐位相等、每参数有来源且无悬空、rs=1 复现 C-A 相关能（含 VWN3 负对照）、Q² 指纹、Registry 按 svwn5 可取"
+  note: "D-09 原文的『X-02 有限差分导数 < 1e-9』依赖 X-01 的 FunctionalTerm，属 X 轨；数据侧可做项已全做，该门禁在 X-02 落地后回填"
 D-10: {state: pending, depends: [D-01]}
 D-11: {state: pending, depends: [D-01]}
 D-12: {state: pending, depends: [D-01]}
-D-13: {state: pending, depends: [D-01], note: "初始参数已在 §6.2 D-13 给出"}
+D-13:
+  state: done
+  ts: "2026-10-22T23:23:27Z"
+  artifact: "qwb-data/grid/grid-{coarse,normal,fine,veryfine}.yaml（§6.2 冻结参数，cutoff=20 Bohr）"
+  verification: "cargo test -p qwb-registry --test d13_grids（4 例）：四等级参数逐一相等、单调加密、每等级恰好一个定义、缺等级/等级重复 → Data"
+  note: "『相邻等级能量差 < 0.1 mHa』是 T2 断言（需 SCF + 网格求值），未在 D-13 内伪造"
 D-14: {state: pending, depends: [D-01]}
 D-15: {state: pending, depends: [D-02, D-14]}
 

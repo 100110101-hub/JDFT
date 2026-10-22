@@ -199,22 +199,48 @@ impl Registry {
     ///
     /// # Errors
     ///
-    /// [`EngineError::Data`]：没有任何 grid 条目的 `level` 等于它。
+    /// - [`EngineError::Data`]：没有任何 grid 条目的 `level` 等于它；
+    /// - [`EngineError::Data`]：**多于一个**条目声明了同一等级（注册表有歧义，
+    ///   引擎不能靠“先到先得”猜参数）。
     pub fn get_grid_by_level(&self, level: GridLevelName) -> Result<&GridLevelDef, EngineError> {
-        self.grids
-            .values()
-            .find(|grid| grid.level == level)
-            .ok_or_else(|| {
-                EngineError::Data(format!(
-                    "no grid definition for level `{}`; available levels: {}",
-                    level_dir_name(level),
-                    self.grids
+        let matches: Vec<(&str, &GridLevelDef)> = self
+            .grids
+            .iter()
+            .filter(|(_, grid)| grid.level == level)
+            .map(|(name, grid)| (name.as_str(), grid))
+            .collect();
+
+        match matches.as_slice() {
+            [(_, grid)] => Ok(grid),
+            [] => Err(EngineError::Data(format!(
+                "no grid definition for level `{}`; available levels: {}",
+                level_dir_name(level),
+                {
+                    let mut levels: Vec<&str> = self
+                        .grids
                         .values()
                         .map(|grid| level_dir_name(grid.level))
-                        .collect::<Vec<_>>()
-                        .join(", ")
-                ))
-            })
+                        .collect();
+                    levels.sort_unstable();
+                    levels.dedup();
+                    if levels.is_empty() {
+                        "none".to_string()
+                    } else {
+                        levels.join(", ")
+                    }
+                }
+            ))),
+            many => Err(EngineError::Data(format!(
+                "ambiguous grid level `{}`: {} definitions declared ({}); \
+                 registry.yaml must declare exactly one grid per level",
+                level_dir_name(level),
+                many.len(),
+                many.iter()
+                    .map(|(name, _)| *name)
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ))),
+        }
     }
 
     /// **唯一**的基组/ECP 配对入口（§8.2）。

@@ -72,6 +72,11 @@ pub struct Functional {
     pub requires: FunctionalRequires,
     /// 参数字典（如 PBE 的 `kappa = 0.804`、`mu = 0.21951`）。
     pub parameters: BTreeMap<String, f64>,
+    /// 每个参数的来源（`参数名 -> 出处`）。K1 v1.1 新增可选字段：
+    /// D-09 的验收要求“参数逐个带 citation”，而 `citation` 是文件级的，
+    /// 无法定位到单个参数，所以补这张表（§10.3 允许新增可选字段）。
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub parameter_sources: BTreeMap<String, String>,
     /// 稳定性截断规则。
     pub stability: StabilityRules,
 }
@@ -124,6 +129,14 @@ impl Functional {
             }
         }
 
+        for key in self.parameter_sources.keys() {
+            if !self.parameters.contains_key(key) {
+                issues.push(format!(
+                    "parameter_sources.{key} does not name a parameter in `parameters` (dangling source)"
+                ));
+            }
+        }
+
         if !self.stability.density_floor.is_finite() || self.stability.density_floor <= 0.0 {
             issues.push("stability.density_floor must be positive and finite (§8.3)".into());
         }
@@ -172,6 +185,7 @@ mod tests {
                 laplacian: false,
             },
             parameters,
+            parameter_sources: BTreeMap::new(),
             stability: StabilityRules {
                 density_floor: 1.0e-12,
                 sigma_ceiling: 1.0e8,

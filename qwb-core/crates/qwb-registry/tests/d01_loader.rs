@@ -439,25 +439,37 @@ fn real_qwb_data_registry_loads() {
         registry.manifest().all_entries().count(),
         "snapshot 必须覆盖清单里的每一条"
     );
-    assert!(registry.snapshot().len() >= 5, "至少还有 5 个样例条目");
-
-    // 六类样例都必须仍可加载（D 轨只会新增，不会删样例）。
-    assert_eq!(
-        registry
-            .get_basis("example-sto-3g-H")
-            .expect("basis")
-            .n_basis_functions(),
-        1
+    assert!(
+        registry.snapshot().len() >= 6,
+        "至少 sto-3g + svwn5 + 四个网格"
     );
-    assert!(registry.get_ecp("example-ecp-cu").is_ok());
-    assert!(registry.get_functional("example-svwn5").is_ok());
-    assert!(registry.get_grid("example-grid-normal").is_ok());
-    assert!(registry.get_solvent("example-water").is_ok());
 
-    let grid = registry
+    // 生产数据（D-03 / D-09 / D-13）。
+    assert_eq!(
+        registry.get_basis("sto-3g").expect("sto-3g").elements.len(),
+        5
+    );
+    assert!(registry.get_functional("svwn5").is_ok());
+    for level in [
+        GridLevelName::Coarse,
+        GridLevelName::Normal,
+        GridLevelName::Fine,
+        GridLevelName::VeryFine,
+    ] {
+        assert!(registry.get_grid_by_level(level).is_ok(), "{level:?}");
+    }
+    let normal = registry
         .get_grid_by_level(GridLevelName::Normal)
         .expect("normal grid");
-    assert_eq!(grid.lebedev_order, 302);
+    assert_eq!(normal.name, "grid-normal");
+    assert_eq!(normal.lebedev_order, 302);
+
+    // `examples/` 下的 K1 样例**不进** registry.yaml（那会让 grid 等级出现两个定义），
+    // 它们只作为 D-02 回归夹具按路径校验。
+    assert!(
+        registry.get_basis("example-sto-3g-H").is_err(),
+        "样例不应出现在生产清单里"
+    );
 
     // feature 声明要能直接喂给 K2 的引擎句柄。
     let handle = registry.engine_handle();
