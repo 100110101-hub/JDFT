@@ -99,7 +99,7 @@ I-02:
   ts: "2026-10-22T23:38:30Z"
   artifact: "qwb-core/crates/qwb-integrals：boys.rs（向下递推的 Boys 函数）+ one_electron.rs（Hermite/McMurchie-Davidson 的 S、T、V）"
   verification: "cargo test -p qwb-integrals（4+8 例）：H2/STO-3G 的 S/T/V 与解析闭式 < 1e-10（含对角/非对角分别用 R=0 与 R=0.74Å 的闭式）；F0 对 erf 闭式 < 1e-12；同中心归一化原函数 S=1、纯 L 分量 T=(2L+3)α/2、s 型 V=−2√(2α/π)"
-  note: "**未完成项**：核吸引的 l>0 项还没实现。用 R^n=(−2p)^n F_n 的简化 Hermite Coulomb 系数时，奇次项缺少 (P−C) 的方向依赖，同中心 ⟨s|1/r|p_x⟩ 本应为 0 却给出 0.957 —— 被测试抓到。正确实现需完整 Hermite Coulomb 递推（Helgaker 9.4 / Rys），排在 I-05（那里本来就要和数值积分对照 < 1e-8）。当前 one_electron 遇到 l>0 显式返回 Unsupported（退出码 4），不会给出错值；测试 nuclear_attraction_for_l_above_zero_is_reported_unsupported 钉住这个状态。T1（H2，全 s）不受影响，T2（含 p 函数）被它阻塞。"
+  note: "**未完成项**：核吸引的 l>0 项还没实现。新增了 `tests/numerical_oracle.rs`（Golub–Welsch Gauss–Hermite，精确到多项式）作为独立对照：S/T 在 5 种角动量组合上与 oracle 一致到 1e-12；核吸引 l>0 的宇称判据以 characterization 测试钉住。用 R^n=(−2p)^n F_n 的简化 Hermite Coulomb 系数时，奇次项缺少 (P−C) 的方向依赖，同中心 ⟨s|1/r|p_x⟩ 本应为 0 却给出 0.957 —— 被测试抓到。正确实现需完整 Hermite Coulomb 递推（Helgaker 9.4 / Rys），排在 I-05（那里本来就要和数值积分对照 < 1e-8）。当前 one_electron 遇到 l>0 显式返回 Unsupported（退出码 4），不会给出错值；测试 nuclear_attraction_for_l_above_zero_is_reported_unsupported 钉住这个状态。T1（H2，全 s）不受影响，T2（含 p 函数）被它阻塞。"
 I-03: {state: pending, depends: [I-01], note: "Obara-Saika 为主 + Rys 交叉验证（R-03 已定案）"}
 I-04: {state: pending, depends: [I-03]}
 I-05: {state: pending, depends: [I-02]}
