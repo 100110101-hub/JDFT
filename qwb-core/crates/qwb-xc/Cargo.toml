@@ -1,0 +1,14 @@
+[package]
+name = "qwb-xc"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "QWB 交换相关泛函（X-01 trait + LDA 项，X-02 有限差分导数门禁）"
+
+[dependencies]
+thiserror.workspace = true
+
+[lints]
+workspace = true

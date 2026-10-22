@@ -104,8 +104,17 @@ I-04: {state: pending, depends: [I-03]}
 I-05: {state: pending, depends: [I-02]}
 I-06: {state: pending, depends: [I-03]}
 
-X-01: {state: pending, depends: [C-02, D-01]}
-X-02: {state: pending, depends: [X-01]}
+X-01:
+  state: done
+  ts: "2026-10-22T23:48:09Z"
+  artifact: "qwb-core/crates/qwb-xc：FunctionalTerm trait（批量切片）+ LdaSlaterX + LdaSvwn5 + build_term 工厂 + DensityBatch"
+  verification: "cargo test -p qwb-xc（7 例）：Slater 交换对解析式 1e-14（含 rs 形式与齐次性 ε(8ρ)=2ε(ρ)）；VWN5 在 rs=1 复现 Ceperley–Alder；批量接口 1000 点；未知组件/缺参数 → XcError"
+X-02:
+  state: done
+  ts: "2026-10-22T23:48:09Z"
+  artifact: "qwb-xc/tests/x01_x02_lda.rs：五点中心差分导数校验（dε/dρ、dε/dσ）"
+  verification: "Slater 与 VWN5 的解析 dε/dρ 与五点差分在 rs=0.5..12 全部 < 1e-9 相对；dε/dσ ≡ 0（纯 LDA）"
+  note: "同时补上了 D-09 被推迟的验收（D-09 原文要求 X-02 有限差分导数 < 1e-9）：VWN5 常数现在两侧都验过——能量对 Ceperley–Alder（D-09），解析导数对有限差分（X-02）"
 X-03: {state: pending, depends: [X-01, D-13]}
 X-04: {state: pending, depends: [X-03]}
 X-05: {state: pending, depends: [X-02, X-04]}
