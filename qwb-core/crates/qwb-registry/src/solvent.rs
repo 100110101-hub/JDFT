@@ -61,10 +61,20 @@ pub struct Solvent {
 impl_data_common!(Solvent);
 
 impl Solvent {
-    /// 语义校验（ε 与文献一致的检查在 D-14 用基准值做，这里只查自洽性）。
+    /// 完整校验（`qwb data verify` 用）：G2 门禁 + 结构检查。
+    ///
+    /// ε 与文献一致的检查由 D-14 用基准值做，这里只查自洽性。
     #[must_use]
     pub fn check(&self) -> Vec<String> {
         let mut issues = self.check_common();
+        issues.extend(self.check_structure());
+        issues
+    }
+
+    /// 结构性检查：**不含** G2 门禁（`Registry::open` 用，见 §8.6）。
+    #[must_use]
+    pub fn check_structure(&self) -> Vec<String> {
+        let mut issues = Vec::new();
 
         if !self.epsilon.is_finite() || self.epsilon < 1.0 {
             issues.push("epsilon must be finite and >= 1 (vacuum = 1)".into());

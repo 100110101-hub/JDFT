@@ -43,13 +43,15 @@ C-06:
 # ─────────────────────────── D 轨（数据）───────────────────────────
 
 D-01:
-  state: pending
-  depends: [C-01, C-06]
-  note: "K1 类型与校验已在 C-01 落地。D-01 还差 Registry 加载器（open/get_*/load_pair/features）与『空注册表可加载』的语义（§8.6：load ≠ verify）"
+  state: done
+  ts: "2026-10-22T23:16:10Z"
+  artifact: "qwb-registry::loader（Registry::open/get_basis|get_functional|get_ecp|get_grid|get_solvent/get_grid_by_level/load_pair/features/snapshot/engine_handle）+ 5 个类型的 check_structure 拆分（load 不做 G2 门禁）"
+  verification: "cargo test -p qwb-registry --test d01_loader（14 例）：空注册表 Ok 且 verify 拒（load≠verify）、3 个畸形文件各报字段级 Data、load_pair 元素不匹配 → Data；真实 qwb-data 可加载"
 D-02:
-  state: pending
-  depends: [D-01]
-  note: "最小 verify 已实装（C-01）；D-02 = 6 坏 / 6 好回归集，坏文件的 code 见 §6.2"
+  state: done
+  ts: "2026-10-22T23:16:10Z"
+  artifact: "qwb-cli/tests/fixtures/d02/bad/basis/（6 个畸形夹具，带 notes 自述预期 code）+ tests/d02_verify_regression.rs"
+  verification: "cargo test -p qwb-cli --test d02_verify_regression：6 坏各退出 3 且只报 1 条指定 code（schema.deserialize/g2.citation/schema.deserialize/sha256.mismatch/schema.deserialize/semantic）；6 好（qwb-data/examples 六类）退出 0"
 D-03:
   state: pending
   depends: [D-01]

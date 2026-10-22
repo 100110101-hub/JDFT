@@ -1,0 +1,2005 @@
+<!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="UTF-8">
+            <title>project&period;md &centerdot; QuantumWorkbench v2&period;1</title>
+            <style>
+/* From extension vscode.github */
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
+
+.vscode-dark img[src$=\#gh-light-mode-only],
+.vscode-light img[src$=\#gh-dark-mode-only],
+.vscode-high-contrast:not(.vscode-high-contrast-light) img[src$=\#gh-light-mode-only],
+.vscode-high-contrast-light img[src$=\#gh-dark-mode-only] {
+	display: none;
+}
+
+</style>
+            <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex/dist/katex.min.css">
+<link href="https://cdn.jsdelivr.net/npm/katex-copytex@latest/dist/katex-copytex.min.css" rel="stylesheet" type="text/css">
+        <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/Microsoft/vscode/extensions/markdown-language-features/media/markdown.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/Microsoft/vscode/extensions/markdown-language-features/media/highlight.css">
+<style>
+            body {
+                font-family: -apple-system, BlinkMacSystemFont, 'Segoe WPC', 'Segoe UI', system-ui, 'Ubuntu', 'Droid Sans', sans-serif;
+                font-size: 14px;
+                line-height: 1.6;
+            }
+        </style>
+        <style>
+.task-list-item {
+    list-style-type: none;
+}
+
+.task-list-item-checkbox {
+    margin-left: -20px;
+    vertical-align: middle;
+    pointer-events: none;
+}
+</style>
+<style>
+:root {
+  --color-note: #0969da;
+  --color-tip: #1a7f37;
+  --color-warning: #9a6700;
+  --color-severe: #bc4c00;
+  --color-caution: #d1242f;
+  --color-important: #8250df;
+}
+
+</style>
+<style>
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-note: #2f81f7;
+    --color-tip: #3fb950;
+    --color-warning: #d29922;
+    --color-severe: #db6d28;
+    --color-caution: #f85149;
+    --color-important: #a371f7;
+  }
+}
+
+</style>
+<style>
+.markdown-alert {
+  padding: 0.5rem 1rem;
+  margin-bottom: 16px;
+  color: inherit;
+  border-left: .25em solid #888;
+}
+
+.markdown-alert>:first-child {
+  margin-top: 0
+}
+
+.markdown-alert>:last-child {
+  margin-bottom: 0
+}
+
+.markdown-alert .markdown-alert-title {
+  display: flex;
+  font-weight: 500;
+  align-items: center;
+  line-height: 1
+}
+
+.markdown-alert .markdown-alert-title .octicon {
+  margin-right: 0.5rem;
+  display: inline-block;
+  overflow: visible !important;
+  vertical-align: text-bottom;
+  fill: currentColor;
+}
+
+.markdown-alert.markdown-alert-note {
+  border-left-color: var(--color-note);
+}
+
+.markdown-alert.markdown-alert-note .markdown-alert-title {
+  color: var(--color-note);
+}
+
+.markdown-alert.markdown-alert-important {
+  border-left-color: var(--color-important);
+}
+
+.markdown-alert.markdown-alert-important .markdown-alert-title {
+  color: var(--color-important);
+}
+
+.markdown-alert.markdown-alert-warning {
+  border-left-color: var(--color-warning);
+}
+
+.markdown-alert.markdown-alert-warning .markdown-alert-title {
+  color: var(--color-warning);
+}
+
+.markdown-alert.markdown-alert-tip {
+  border-left-color: var(--color-tip);
+}
+
+.markdown-alert.markdown-alert-tip .markdown-alert-title {
+  color: var(--color-tip);
+}
+
+.markdown-alert.markdown-alert-caution {
+  border-left-color: var(--color-caution);
+}
+
+.markdown-alert.markdown-alert-caution .markdown-alert-title {
+  color: var(--color-caution);
+}
+
+</style>
+        
+        </head>
+        <body class="vscode-body vscode-light">
+            <h1 id="projectmd--quantumworkbench-v21"><a href="http://project.html">project.md</a> · QuantumWorkbench v2.1</h1>
+<blockquote>
+<p>本文件是 <strong>唯一开工依据</strong>。agent 与人类开发者都按本文件执行。
+不在本文件中的事项视为未授权，需人类决策后修订本文件再执行。</p>
+<p><strong>v2.1（2026-10-22）</strong>：按 C 轨（C-01..C-06）实际落地的契约修订，并<strong>清掉所有会让 agent
+卡住的缺口</strong>。变更清单见 §15。凡 v2.0 与本版冲突，以本版为准。</p>
+</blockquote>
+<hr>
+<h2 id="0-五分钟上手新会话从这里开始">0. 五分钟上手（新会话从这里开始）</h2>
+<p>目标：做一个<strong>模仿 Jaguar 的分子 DFT 软件</strong>——产品面（项目/任务/结果/调度/复现 +
+GUI/Python/CLI 同一 Task 模型）对齐 Jaguar，算法面<strong>全部自研</strong>。</p>
+<pre><code class="language-powershell"><span class="hljs-built_in">cd</span> D:\python_II\Jaguar
+
+<span class="hljs-comment"># 1. 看状态：哪些 WP 已 done、下一个该做哪个</span>
+<span class="hljs-built_in">type</span> docs\status.yaml
+
+<span class="hljs-comment"># 2. 跑全部门禁（一条命令）</span>
+powershell <span class="hljs-literal">-NoProfile</span> <span class="hljs-operator">-File</span> scripts\verify.ps1   <span class="hljs-comment"># Windows 本地（含 mypy）</span>
+bash scripts/verify.sh                           <span class="hljs-comment"># Linux / CI / WSL</span>
+
+<span class="hljs-comment"># 3. 找下一个 WP：§6 中依赖全 done 且状态最小的那个</span>
+</code></pre>
+<p>三条铁律：</p>
+<ol>
+<li><strong>契约（§4 K1–K6）已冻结</strong>，语义不得改；只允许<strong>新增</strong>（新字段可选、新变体、新方法）。
+真要改语义 → 走 §10.4 的升级流程，不要自己改。</li>
+<li><strong>每完成一个 WP 立刻写 <code>docs/status.yaml</code></strong>（<code>state: done</code> + 验收命令输出摘要）。</li>
+<li><strong>本文件与代码冲突时</strong>：以<strong>代码 + 本文件的 §4</strong> 为准，并把差异在提交里同步修本文件
+（本版就是这么来的）。不要静默偏离。</li>
+</ol>
+<hr>
+<h2 id="1-阅读顺序">1. 阅读顺序</h2>
+<table>
+<thead>
+<tr>
+<th>你要做什么</th>
+<th>看哪节</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>理解项目边界与&quot;模仿 Jaguar&quot;到什么程度</td>
+<td>§2</td>
+</tr>
+<tr>
+<td>理解为什么这样排顺序</td>
+<td>§3</td>
+</tr>
+<tr>
+<td>确认契约（已冻结，不要改）</td>
+<td>§4（K1–K6）</td>
+</tr>
+<tr>
+<td>我要做哪个包</td>
+<td>§6（WBS，每行都有可执行验收）</td>
+</tr>
+<tr>
+<td>项目的&quot;完成&quot;刻度</td>
+<td>§7（垂直切片 T1–T8）</td>
+</tr>
+<tr>
+<td>数据层怎么做（本项目中心）</td>
+<td>§8</td>
+</tr>
+<tr>
+<td>验收怎么判</td>
+<td>§9</td>
+</tr>
+<tr>
+<td>agent 每步必须怎么做</td>
+<td>§10</td>
+</tr>
+<tr>
+<td>Rust 特有的坑</td>
+<td>§11</td>
+</tr>
+<tr>
+<td>目录结构 / 命名 / 提交规范</td>
+<td>§12</td>
+</tr>
+<tr>
+<td>本机环境事实与命令</td>
+<td>§13</td>
+</tr>
+<tr>
+<td>已定决策台账（<strong>别再重新讨论</strong>）</td>
+<td>§14</td>
+</tr>
+<tr>
+<td>v2.0 → v2.1 改了什么</td>
+<td>§15</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2 id="2-目标与非目标">2. 目标与非目标</h2>
+<h3 id="21-目标">2.1 目标</h3>
+<p>从零实现一个<strong>分子 DFT 软件</strong>：</p>
+<ul>
+<li><strong>引擎自研</strong>：不调用 PySCF/ORCA/Gaussian/QE/Psi4/libxc/ase 等电子结构引擎或泛函库。</li>
+<li><strong>数据是中心</strong>：基组、ECP、泛函、网格、溶剂参数的<strong>获取、本地实现、验证、版本化</strong>是核心工作。</li>
+<li><strong>工作流完整</strong>：项目 / 分子 / 任务 / 结果 / 调度 / 复现。</li>
+<li><strong>界面完整</strong>：GUI（Python + PySide6）+ Python API（pyo3）+ CLI（clap），共用同一套 Task 模型。</li>
+<li><strong>可复现是底线</strong>：每个结果都能回溯到输入 + 数据快照 + 环境（<code>env.json</code> 必须含 Rust
+toolchain、<code>Cargo.lock</code> 的 sha256、crate 版本清单）。</li>
+</ul>
+<h3 id="22-与-jaguar-的对齐范围v21-新增回答模仿到什么程度">2.2 与 Jaguar 的对齐范围（<strong>v2.1 新增：回答&quot;模仿到什么程度&quot;</strong>）</h3>
+<p>第一阶段<strong>对齐 Jaguar 的产品面与方法集合</strong>，<strong>不复制它的算法内核</strong>。</p>
+<table>
+<thead>
+<tr>
+<th>Jaguar 的能力</th>
+<th>QWB 第一阶段</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>HF / LDA / GGA / 杂化 DFT</td>
+<td>✅ 做</td>
+<td>SVWN5、PBE、B88、LYP、B3LYP（§8.3）</td>
+</tr>
+<tr>
+<td>ECP（LACVP 系）</td>
+<td>✅ 做（子集）</td>
+<td>LANL2DZ + def2-ECP，元素 H–Kr</td>
+</tr>
+<tr>
+<td>单点 / 几何优化 / 频率</td>
+<td>✅ 做</td>
+<td>T1/T2/T3/T4</td>
+</tr>
+<tr>
+<td>偶极 / 布居电荷 / 轨道能级</td>
+<td>✅ 做</td>
+<td>S-06（Jaguar 也报这些）</td>
+</tr>
+<tr>
+<td>溶剂（PBF/PCM）</td>
+<td>⚠ 只做接口 + 数据</td>
+<td>引擎返回 <code>Unsupported</code>（§8.5）</td>
+</tr>
+<tr>
+<td>基组（6-31G*、cc-pVTZ、LACVP）</td>
+<td>✅ 做等价集合</td>
+<td>STO-3G、def2-SVP/TZVP、cc-pVDZ + ECP</td>
+</tr>
+<tr>
+<td>项目 / 任务 / 结果 / 调度 / 复现</td>
+<td>✅ 做</td>
+<td>T7</td>
+</tr>
+<tr>
+<td>GUI 工作流（Maestro 那一层）</td>
+<td>✅ 做简化版</td>
+<td>T8，PySide6 + VTK</td>
+</tr>
+<tr>
+<td><strong>pseudospectral（PS）积分</strong></td>
+<td>❌ 不做</td>
+<td>见下</td>
+</tr>
+<tr>
+<td><strong>PBF / RISM 溶剂</strong></td>
+<td>❌ 不做</td>
+<td>只留字段</td>
+</tr>
+<tr>
+<td>MP2 / CC / GVB / TDDFT / meta-GGA / range-separated</td>
+<td>❌ 不做</td>
+<td>§2.3</td>
+</tr>
+<tr>
+<td>过渡态 / IRC / 势能面扫描 / NBO / EPR</td>
+<td>❌ 不做</td>
+<td>第一阶段外</td>
+</tr>
+</tbody>
+</table>
+<p><strong>为什么不模仿 PS 积分</strong>：Jaguar 的 pseudospectral 方法把 Coulomb/exchange 放到网格上算，
+是<strong>另一套积分与误差分析体系</strong>。本项目契约要求&quot;每个数都能回溯 + 与解析/文献对照&quot;，
+而 PS 的误差来源（网格密度、去别名）会把 T1 首次端到端推远，并把 §9 的三层验证搅浑。
+所以：<strong>解析积分（Obara-Saika）+ 网格只用于 XC</strong>，与 §6 的 I/X 轨一致。</p>
+<h3 id="23-非目标第一阶段明确不做">2.3 非目标（第一阶段明确不做）</h3>
+<p>固体/周期、TS/IRC/scan、TDDFT、多参考、耦合簇、MP2、相对论（ECP 除外）、GPU、MPI 大规模、
+meta-GGA、双杂化、range-separated、显式溶剂、QM/MM、SMD、pseudospectral 积分、PBF/RISM、
+NBO/EPR。</p>
+<h3 id="24-允许使用的第三方库冻结v21-修订">2.4 允许使用的第三方库（冻结，v2.1 修订）</h3>
+<p><strong>引擎（Rust）</strong>：</p>
+<p><code>serde</code>, <code>serde_json</code>, <code>serde_yaml</code>, <code>schemars</code>（<strong>v2.1 批准</strong>，C-01 定案）,
+<code>nalgebra</code>, <code>faer</code>（可选后端）, <code>rayon</code>, <code>ndarray</code>（数据交换）, <code>tracing</code>,
+<code>tracing-subscriber</code>, <code>anyhow</code>, <code>thiserror</code>, <code>clap</code>, <code>zip</code>, <code>sha2</code>, <code>hex</code>, <code>bytemuck</code>,
+<code>wide</code>（portable SIMD）, <code>approx</code>（测试）, <code>proptest</code>, <code>criterion</code>, <code>pyo3</code>, <code>numpy</code>。</p>
+<p><strong>GUI / 产品（Python）</strong>：</p>
+<p><code>PySide6</code>, <code>VTK</code>, <code>rdkit</code>（<strong>仅</strong>结构读写）, <code>numpy</code>, <code>pydantic</code>（v2，P-01 需要）,
+<code>pytest</code>, <code>hypothesis</code>, <code>mypy</code>（类型门禁）, <code>maturin</code>。</p>
+<p><strong>明确不引入</strong>：<code>h5py</code> / 系统 libhdf5（K4 定案）、<code>ndarray-npy</code>（R-14 定案不引入）、
+<code>cargo-audit</code>（<code>cargo deny check advisories</code> 已覆盖）、任何电子结构引擎或泛函库。</p>
+<p><strong>任何不在此列表且进入产品依赖树的库，需人类批准，并进 <code>qwb-core/deny.toml</code> 白名单。</strong></p>
+<hr>
+<h2 id="3-组织原则">3. 组织原则</h2>
+<ol>
+<li><strong>契约先行，并行不返工</strong>。K1–K6 已冻结（C 轨完成），数据/引擎/产品三轨可以并行。</li>
+<li><strong>数据层随垂直切片增量补</strong>。第一次只需要 H 与 STO-3G。</li>
+<li><strong>引擎按垂直切片推进，不做层内串行</strong>。第一次就跑通一条能量，把集成风险前移。</li>
+<li><strong>产品轨先于引擎成熟开工</strong>。Product 轨前期用 mock 数据。</li>
+<li><strong>每个工作包都可独立验收</strong>。没有&quot;感觉差不多了&quot;这一步；§6 每行都有可复制命令。</li>
+<li><strong>agent 不自由发挥</strong>；但<strong>也不允许被模糊处卡死</strong> —— 见 §10.3 的决策规则。</li>
+<li><strong>Rust 特有约束</strong>：
+<ul>
+<li><code>#![deny(unsafe_code)]</code> 默认；只允许 3 类 crate 例外：FFI（BLAS）、SIMD intrinsics
+（<code>wide</code> 已封装）、获批的热点优化。例外需 <code>// SAFETY:</code> 注释 + 人类批准 + 进
+<code>scripts/unsafe_allowlist.txt</code>。</li>
+<li><strong><code>Cargo.lock</code> 入 git</strong>，禁止无 PR 记录 <code>cargo update</code>。</li>
+<li><strong><code>cargo fmt --check</code> / <code>cargo clippy -- -D warnings</code> 必须全绿</strong>才能合入。</li>
+<li><strong>workspace 层级不得引入循环依赖</strong>。</li>
+<li><strong>三方依赖只能出现在 <code>qwb-core/Cargo.toml</code> 的 <code>[workspace.dependencies]</code></strong>
+（<code>scripts/check_deps_centralized.sh</code> 强制）。</li>
+</ul>
+</li>
+</ol>
+<p><strong>风险优先级</strong>：集成风险 &gt; 数学正确性风险 &gt; 数据正确性风险 &gt; 性能。</p>
+<hr>
+<h2 id="4-契约-k1k6已冻结v21--实际落地形态">4. 契约 K1–K6（<strong>已冻结</strong>；v2.1 = 实际落地形态）</h2>
+<blockquote>
+<p>契约 crate / schema 文件已存在于仓库；本节签名与字段<strong>与代码逐项一致</strong>（有测试强制）。
+变更只允许新增，语义不得改。任何变更需 <code>CHANGELOG.md</code> + 人类评审 + 修订本节。</p>
+</blockquote>
+<h3 id="k1--数据-schema">K1 · 数据 Schema</h3>
+<p><strong>路径</strong>：<code>qwb-contracts/schema/</code>（生成物）、<code>qwb-core/crates/qwb-registry/src/*.rs</code>（真相源）</p>
+<p><strong>生成方式（已定案）</strong>：<code>schemars</code> 从 Rust 类型生成，<code>BasisSet</code> 等类型即唯一真相源。
+生成器：<code>cargo run -p qwb-registry --bin qwb-gen-schemas -- &lt;dir&gt; [--check]</code>。
+每类产出 <code>&lt;kind&gt;.schema.json</code>（工具读）+ <code>&lt;kind&gt;.schema.yaml</code>（人读，K1 规定文件名）。</p>
+<p><strong>7 类</strong>：<code>basis</code>、<code>ecp</code>、<code>functional</code>、<code>grid</code>、<code>solvent</code>、<code>molecule</code>、<code>registry</code>
+（枚举 <code>qwb_registry::verify::DataKind</code>，顺序即生成顺序）。</p>
+<p><strong>共同字段</strong>（在 5 个数据集类型里内联声明；<code>schema.rs</code> 的测试强制 5 处定义逐字节一致）：</p>
+<table>
+<thead>
+<tr>
+<th>字段</th>
+<th>类型</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>name</code></td>
+<td><code>String</code></td>
+<td>数据键名（数据目录下的标识）</td>
+</tr>
+<tr>
+<td><code>version</code></td>
+<td><code>String</code></td>
+<td>独立 semver；变更即 bump</td>
+</tr>
+<tr>
+<td><code>citation</code></td>
+<td><code>Vec&lt;Citation&gt;</code></td>
+<td><strong>required</strong>，≥1 条；每条 <code>title</code> + <code>doi</code>/<code>url</code></td>
+</tr>
+<tr>
+<td><code>license</code></td>
+<td><code>License</code></td>
+<td><strong>required</strong>；<code>spdx</code>、<code>commercial_ok</code>、<code>redistribute_ok</code></td>
+</tr>
+<tr>
+<td><code>created</code></td>
+<td><code>String</code></td>
+<td>ISO 8601 UTC</td>
+</tr>
+<tr>
+<td><code>sha256</code></td>
+<td><code>Option&lt;String&gt;</code></td>
+<td>工具生成（规则见下）</td>
+</tr>
+<tr>
+<td><code>notes</code></td>
+<td><code>Option&lt;String&gt;</code></td>
+<td>备注/来源说明</td>
+</tr>
+</tbody>
+</table>
+<p><strong>规范化 sha256 规则</strong>（唯一实现 <code>qwb_registry::sha256</code>）：解析 YAML → 删顶层 <code>sha256</code>
+→ 转 JSON（键字典序）→ 对紧凑 JSON 取 SHA-256（64 位小写 hex）。
+<strong>与排版/注释/键序无关</strong>，改一个数字必换摘要。<code>qwb-stamp-data</code> 打戳（会丢 YAML 注释，
+所以说明写进 <code>notes</code>）。</p>
+<p><strong>各类型特有字段</strong>（与代码一致）：</p>
+<ul>
+<li><code>BasisSet</code>：<code>elements: Vec&lt;String&gt;</code>、<code>angular: spherical|cartesian</code>、
+<code>normalization: l2|none</code>、<code>role: orbital|ri-j|ri-jk|ecp-fit</code>、
+<strong><code>shells: Vec&lt;ShellBlock&gt;</code></strong>（<code>ShellBlock { element, shells: Vec&lt;Shell&gt; }</code>，
+每元素一块，必须与 <code>elements</code> 一一对应）。
+原因：一个基组文件可覆盖多元素（D-03 的 STO-3G 覆盖 H/C/N/O/F），平坦 <code>shells[]</code> 无法区分元素。</li>
+<li><code>Shell</code>：<code>l: u32</code>、<code>exponents: Vec&lt;f64&gt;</code>（Bohr⁻²，大→小）、
+<strong><code>coefficients: Vec&lt;Vec&lt;f64&gt;&gt;</code></strong>（每条内层 = 一个收缩函数，长度 == <code>exponents.len()</code>）、
+<code>contraction_type: segmented|general</code>。
+原因：def2-TZVP 的通用收缩（D-05）无法用一维系数表达。</li>
+<li><code>Ecp</code>：<code>element</code>、<code>n_core_electrons</code>、<code>z_eff</code>（必须 == Z − n_core）、
+<code>r_power_convention: &quot;r^n&quot;|&quot;r^(n-2)&quot;</code>、<code>local_part{id,terms[{power,exponent,coefficient}]}</code>、
+<code>nonlocal_parts[{l,id,terms[]}]</code>。</li>
+<li><code>Functional</code>：<code>components[{id,weight}]</code>、<code>requires{rho,sigma,laplacian}</code>、
+<code>parameters: BTreeMap&lt;String,f64&gt;</code>、<code>stability{density_floor,sigma_ceiling}</code>。</li>
+<li><code>GridLevelDef</code>：<code>level: coarse|normal|fine|veryfine</code>、<code>radial_points</code>、<code>lebedev_order</code>、
+<code>becke_sharpness</code>、<code>radii_scale?</code>、<code>cutoff</code>（Bohr）。</li>
+<li><code>Solvent</code>：<code>epsilon</code>、<code>temperature_K</code>、<code>atomic_radii: BTreeMap&lt;符号,f64&gt;</code>（Å）、
+<code>cavity_model: none|pcm|smd</code>、<code>scale</code>。</li>
+<li><code>MoleculeFile</code>（用户输入，<strong>不受 G2 许可门禁</strong>）：<code>name</code>、<code>notes?</code>、
+<code>atoms[{symbol,position_angstrom}]</code>、<code>charge</code>、<code>multiplicity</code>、<code>citation?</code>、
+<code>created</code>、<code>sha256?</code>。校验含电子数奇偶与多重度一致、坐标重合检测。</li>
+<li><code>RegistryManifest</code>：<code>schema_version</code>（必须 == <code>K1_VERSION</code>）、<code>name</code>、<code>version</code>、
+<code>created</code>、<code>features: Vec&lt;String&gt;</code>、
+5 个条目表 <code>bases/ecps/functionals/grids/solvents</code>，每条 <code>{name, path, sha256}</code>。</li>
+</ul>
+<p><strong>校验代码（机器可读）</strong>：<code>yaml.parse</code>、<code>schema.deserialize</code>、<code>sha256.compute</code>、
+<code>sha256.mismatch</code>、<code>g2.citation</code>、<code>g2.license</code>、<code>g2.sha256</code>、<code>semantic</code>、<code>registry.*</code>。
+<code>verify</code> 与 <code>load</code> 的语义分工见 §8.6。</p>
+<p><strong>Rust 实现约定</strong>：所有类型 <code>#[serde(deny_unknown_fields)]</code> + <code>#[non_exhaustive]</code>；
+反序列化拼错字段必须报错。</p>
+<h3 id="k2--引擎-rust-apiqwb-contractsengine-apicrate-qwb-engine-api-010">K2 · 引擎 Rust API（<code>qwb-contracts/engine-api</code>，crate <code>qwb-engine-api</code> 0.1.0）</h3>
+<pre><code class="language-rust"><span class="hljs-comment">//! qwb-engine-api: 冻结的引擎接口。任何破坏性变更需经 CHANGELOG。</span>
+<span class="hljs-meta">#![deny(unsafe_code)]</span> <span class="hljs-meta">#![deny(missing_docs)]</span>
+
+<span class="hljs-keyword">pub</span> <span class="hljs-keyword">const</span> SUPPORTED_FEATURES: &amp;[&amp;<span class="hljs-type">str</span>];   <span class="hljs-comment">// &quot;&lt;域&gt;:&lt;值&gt;&quot; 词汇表，见下</span>
+
+<span class="hljs-keyword">pub</span> <span class="hljs-keyword">struct</span> <span class="hljs-title class_">Atom</span> { <span class="hljs-keyword">pub</span> symbol: <span class="hljs-type">String</span>, <span class="hljs-keyword">pub</span> position_angstrom: [<span class="hljs-type">f64</span>; <span class="hljs-number">3</span>] }        <span class="hljs-comment">// non_exhaustive</span>
+<span class="hljs-keyword">pub</span> <span class="hljs-keyword">struct</span> <span class="hljs-title class_">Molecule</span> { <span class="hljs-keyword">pub</span> atoms: <span class="hljs-type">Vec</span>&lt;Atom&gt;, <span class="hljs-keyword">pub</span> charge: <span class="hljs-type">i32</span>, <span class="hljs-keyword">pub</span> multiplicity: <span class="hljs-type">u32</span> }
+<span class="hljs-keyword">pub</span> <span class="hljs-keyword">enum</span> <span class="hljs-title class_">GridLevel</span> { Coarse, Normal, Fine, VeryFine }   <span class="hljs-comment">// Default = Normal；as_str()</span>
+<span class="hljs-keyword">pub</span> <span class="hljs-keyword">enum</span> <span class="hljs-title class_">JobType</span> { Sp, Opt, Freq }                       <span class="hljs-comment">// as_str()</span>
+<span class="hljs-keyword">pub</span> <span class="hljs-keyword">struct</span> <span class="hljs-title class_">TaskOptions</span> {
+    <span class="hljs-keyword">pub</span> scf_max_iter: <span class="hljs-type">u32</span>,                       <span class="hljs-comment">// 128</span>
+    <span class="hljs-keyword">pub</span> scf_energy_threshold_hartree: <span class="hljs-type">f64</span>,       <span class="hljs-comment">// 1e-8</span>
+    <span class="hljs-keyword">pub</span> scf_density_threshold: <span class="hljs-type">f64</span>,              <span class="hljs-comment">// 1e-6</span>
+    <span class="hljs-keyword">pub</span> diis_history: <span class="hljs-type">u32</span>,                       <span class="hljs-comment">// 8</span>
+    <span class="hljs-keyword">pub</span> threads: <span class="hljs-type">u32</span>,                            <span class="hljs-comment">// 0 = auto</span>
+    <span class="hljs-keyword">pub</span> max_opt_steps: <span class="hljs-type">u32</span>,                      <span class="hljs-comment">// 100</span>
+    <span class="hljs-keyword">pub</span> opt_gradient_threshold_hartree_per_bohr: <span class="hljs-type">f64</span>,  <span class="hljs-comment">// 4.5e-4（T3 门禁值）</span>
+    <span class="hljs-keyword">pub</span> freq_step_angstrom: <span class="hljs-type">f64</span>,                 <span class="hljs-comment">// 0.01</span>
+    <span class="hljs-keyword">pub</span> ecp_name: <span class="hljs-type">Option</span>&lt;<span class="hljs-type">String</span>&gt;,
+}
+<span class="hljs-keyword">pub</span> <span class="hljs-keyword">struct</span> <span class="hljs-title class_">JobInput</span> { <span class="hljs-keyword">pub</span> molecule: Molecule, <span class="hljs-keyword">pub</span> basis_name: <span class="hljs-type">String</span>,
+    <span class="hljs-keyword">pub</span> method_name: <span class="hljs-type">String</span>, <span class="hljs-keyword">pub</span> grid_level: GridLevel, <span class="hljs-keyword">pub</span> solvent: <span class="hljs-type">String</span>,
+    <span class="hljs-keyword">pub</span> jobtype: JobType, <span class="hljs-keyword">pub</span> options: TaskOptions }
+<span class="hljs-keyword">pub</span> <span class="hljs-keyword">struct</span> <span class="hljs-title class_">JobResult</span> {
+    <span class="hljs-keyword">pub</span> energy_hartree: <span class="hljs-type">f64</span>,
+    <span class="hljs-keyword">pub</span> gradient_hartree_per_bohr: <span class="hljs-type">Option</span>&lt;DMatrix&lt;<span class="hljs-type">f64</span>&gt;&gt;,   <span class="hljs-comment">// 3N×1</span>
+    <span class="hljs-keyword">pub</span> hessian_hartree_per_bohr2: <span class="hljs-type">Option</span>&lt;DMatrix&lt;<span class="hljs-type">f64</span>&gt;&gt;,  <span class="hljs-comment">// 3N×3N</span>
+    <span class="hljs-keyword">pub</span> dipole_debye: <span class="hljs-type">Option</span>&lt;DVector&lt;<span class="hljs-type">f64</span>&gt;&gt;,
+    <span class="hljs-keyword">pub</span> mo_energies_hartree: <span class="hljs-type">Option</span>&lt;DVector&lt;<span class="hljs-type">f64</span>&gt;&gt;,
+    <span class="hljs-keyword">pub</span> mo_coeffs: <span class="hljs-type">Option</span>&lt;DMatrix&lt;<span class="hljs-type">f64</span>&gt;&gt;,
+    <span class="hljs-keyword">pub</span> scf_converged: <span class="hljs-type">bool</span>,
+    <span class="hljs-keyword">pub</span> data_snapshot: DataSnapshot,   <span class="hljs-comment">// path -&gt; sha256</span>
+    <span class="hljs-keyword">pub</span> log: <span class="hljs-type">String</span>,
+    <span class="hljs-keyword">pub</span> env: EnvInfo,                  <span class="hljs-comment">// rustc, Cargo.lock sha256, 数据版本, threads, os</span>
+}
+<span class="hljs-keyword">pub</span> <span class="hljs-keyword">struct</span> <span class="hljs-title class_">DataSnapshot</span>(BTreeMap&lt;<span class="hljs-type">String</span>, <span class="hljs-type">String</span>&gt;);   <span class="hljs-comment">// serde(transparent)</span>
+<span class="hljs-keyword">pub</span> <span class="hljs-keyword">struct</span> <span class="hljs-title class_">EnvInfo</span> { <span class="hljs-keyword">pub</span> engine_version, rustc_version, cargo_lock_sha256: <span class="hljs-type">String</span>,
+    <span class="hljs-keyword">pub</span> data_snapshot: DataSnapshot, <span class="hljs-keyword">pub</span> threads: <span class="hljs-type">u32</span>, <span class="hljs-keyword">pub</span> os, created_at_utc: <span class="hljs-type">String</span>,
+    <span class="hljs-keyword">pub</span> toolchain_channel: <span class="hljs-type">Option</span>&lt;<span class="hljs-type">String</span>&gt;, <span class="hljs-keyword">pub</span> crate_versions: BTreeMap&lt;<span class="hljs-type">String</span>, <span class="hljs-type">String</span>&gt; }
+<span class="hljs-keyword">pub</span> <span class="hljs-keyword">struct</span> <span class="hljs-title class_">Registry</span> { root: PathBuf, declared_features: BTreeSet&lt;<span class="hljs-type">String</span>&gt; }  <span class="hljs-comment">// 数据根 + 能力声明</span>
+
+<span class="hljs-keyword">pub</span> <span class="hljs-keyword">enum</span> <span class="hljs-title class_">EngineError</span> {
+    <span class="hljs-title function_ invoke__">InvalidInput</span>(<span class="hljs-type">String</span>),                              <span class="hljs-comment">// K5 退出码 1</span>
+    <span class="hljs-title function_ invoke__">Data</span>(<span class="hljs-type">String</span>),                                      <span class="hljs-comment">// 3</span>
+    ScfNotConverged { iters: <span class="hljs-type">u32</span>, max: <span class="hljs-type">u32</span> },          <span class="hljs-comment">// 2</span>
+    <span class="hljs-title function_ invoke__">Unsupported</span>(<span class="hljs-type">String</span>), <span class="hljs-title function_ invoke__">Io</span>(..), <span class="hljs-title function_ invoke__">Internal</span>(<span class="hljs-type">String</span>),      <span class="hljs-comment">// 4</span>
+}
+<span class="hljs-keyword">impl</span> <span class="hljs-title class_">EngineError</span> { <span class="hljs-keyword">pub</span> <span class="hljs-keyword">fn</span> <span class="hljs-title function_">exit_code</span>(&amp;<span class="hljs-keyword">self</span>) <span class="hljs-punctuation">-&gt;</span> <span class="hljs-type">i32</span> }    <span class="hljs-comment">// 上表，单测钉死</span>
+
+<span class="hljs-keyword">pub</span> <span class="hljs-keyword">trait</span> <span class="hljs-title class_">Reporter</span>: <span class="hljs-built_in">Send</span> + <span class="hljs-built_in">Sync</span> { <span class="hljs-keyword">fn</span> <span class="hljs-title function_">progress</span>(&amp;<span class="hljs-keyword">self</span>, stage: &amp;<span class="hljs-type">str</span>, pct: <span class="hljs-type">f64</span>);
+    <span class="hljs-keyword">fn</span> <span class="hljs-title function_">log</span>(&amp;<span class="hljs-keyword">self</span>, line: &amp;<span class="hljs-type">str</span>); <span class="hljs-keyword">fn</span> <span class="hljs-title function_">is_cancelled</span>(&amp;<span class="hljs-keyword">self</span>) <span class="hljs-punctuation">-&gt;</span> <span class="hljs-type">bool</span> }
+<span class="hljs-keyword">pub</span> <span class="hljs-keyword">struct</span> <span class="hljs-title class_">NullReporter</span>;                               <span class="hljs-comment">// 什么都不做</span>
+
+<span class="hljs-keyword">pub</span> <span class="hljs-keyword">trait</span> <span class="hljs-title class_">EngineBackend</span>: <span class="hljs-built_in">Send</span> + <span class="hljs-built_in">Sync</span> {
+    <span class="hljs-keyword">fn</span> <span class="hljs-title function_">run</span>(&amp;<span class="hljs-keyword">self</span>, input: &amp;JobInput, reporter: &amp;<span class="hljs-keyword">dyn</span> Reporter) <span class="hljs-punctuation">-&gt;</span> <span class="hljs-type">Result</span>&lt;JobResult, EngineError&gt;;
+    <span class="hljs-keyword">fn</span> <span class="hljs-title function_">request_cancel</span>(&amp;<span class="hljs-keyword">self</span>);
+}
+<span class="hljs-keyword">pub</span> <span class="hljs-keyword">struct</span> <span class="hljs-title class_">Engine</span> { <span class="hljs-comment">/* opaque */</span> }
+<span class="hljs-keyword">impl</span> <span class="hljs-title class_">Engine</span> {
+    <span class="hljs-keyword">pub</span> <span class="hljs-keyword">fn</span> <span class="hljs-title function_">new</span>(registry: &amp;Registry) <span class="hljs-punctuation">-&gt;</span> <span class="hljs-type">Result</span>&lt;<span class="hljs-keyword">Self</span>, EngineError&gt;;  <span class="hljs-comment">// 契约 crate 无后端 ⇒ 恒 Unsupported</span>
+    <span class="hljs-keyword">pub</span> <span class="hljs-keyword">fn</span> <span class="hljs-title function_">with_backend</span>(registry: &amp;Registry, backend: <span class="hljs-type">Box</span>&lt;<span class="hljs-keyword">dyn</span> EngineBackend&gt;)
+        <span class="hljs-punctuation">-&gt;</span> <span class="hljs-type">Result</span>&lt;<span class="hljs-keyword">Self</span>, EngineError&gt;;
+    <span class="hljs-keyword">pub</span> <span class="hljs-keyword">fn</span> <span class="hljs-title function_">registry_root</span>(&amp;<span class="hljs-keyword">self</span>) <span class="hljs-punctuation">-&gt;</span> &amp;Path;
+    <span class="hljs-keyword">pub</span> <span class="hljs-keyword">fn</span> <span class="hljs-title function_">run</span>(&amp;<span class="hljs-keyword">self</span>, input: &amp;JobInput, reporter: &amp;<span class="hljs-keyword">dyn</span> Reporter) <span class="hljs-punctuation">-&gt;</span> <span class="hljs-type">Result</span>&lt;JobResult, EngineError&gt;;
+    <span class="hljs-keyword">pub</span> <span class="hljs-keyword">fn</span> <span class="hljs-title function_">request_cancel</span>(&amp;<span class="hljs-keyword">self</span>);
+}
+</code></pre>
+<p><strong>冻结约定</strong>：</p>
+<ul>
+<li>公共 struct/enum 一律 <code>#[non_exhaustive]</code>；因为 <code>non_exhaustive</code> 禁止跨 crate 的
+struct literal，<strong>所有类型都提供 <code>new(..)</code> 与 <code>with_*</code> 建造方法</strong>（API 的一部分，不是可选项）。</li>
+<li>公共字段后缀 <code>_hartree</code>/<code>_bohr</code>/<code>_debye</code>/<code>_angstrom</code>，禁止裸 <code>energy</code>。</li>
+<li>错误 enum 只允许新增变体（<code>#[non_exhaustive]</code>），禁止删除；新变体必须进 <code>exit_code()</code>。</li>
+<li>所有跨线程类型 <code>Send + Sync</code>（有静态断言测试）。</li>
+<li><code>Engine::run</code> 接受 <code>&amp;dyn Reporter</code>，<strong>引擎不得直接写 stdout</strong>。</li>
+<li><strong><code>Registry</code> 在契约 crate 里只是&quot;数据根 + 本次计算声明的 feature 集合&quot;的句柄</strong>，
+不解析数据文件（加载属 D-01）。<code>Engine::new</code>/<code>with_backend</code> 校验：
+数据根不存在 → <code>Data</code>；声明了 <code>SUPPORTED_FEATURES</code> 之外的 feature → <code>Unsupported</code>。</li>
+<li><strong>矩阵 JSON 表示 = list-of-list</strong>（K4 二选一定案）；由 engine-api 显式 serde 适配，
+不依赖 nalgebra 私有布局；<code>None</code> 字段<strong>省略</strong>而非写 <code>null</code>。</li>
+<li><code>SUPPORTED_FEATURES</code>（第一阶段词汇表）：
+<code>jobtype:sp|opt|freq</code>、<code>basis:orbital|ri-j|ri-jk|ecp-fit</code>、
+<code>functional:lda|gga|hybrid</code>、<code>grid</code>、<code>solvent:vacuum|implicit</code>、<code>ecp</code>。
+表外 feature（如 <code>functional:meta-gga</code>、<code>solvent:smd</code>）→ <code>Unsupported</code>。
+<strong>&quot;声明支持 ≠ 本构建实现&quot;</strong>：后端还会再判一次。</li>
+</ul>
+<h3 id="k3--task--result-schema产品面">K3 · Task / Result Schema（产品面）</h3>
+<p><strong>路径</strong>：<code>qwb-contracts/studio/task.schema.yaml</code>、<code>result.schema.yaml</code>
+（手写文档；与 Rust 类型的一致性由 <code>qwb-core/crates/qwb-io/tests/k3_*.rs</code> 强制）</p>
+<p><strong>Task 状态机（v2.1：6 条转移，冻结）</strong>：</p>
+<pre><code>draft → queued → running → converged
+           │        ├→ failed
+           └→ cancelled
+                    └→ cancelled
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>from</th>
+<th>to</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>draft</code></td>
+<td><code>queued</code></td>
+</tr>
+<tr>
+<td><code>queued</code></td>
+<td><code>running</code></td>
+</tr>
+<tr>
+<td><code>queued</code></td>
+<td><strong><code>cancelled</code></strong>（v2.1 新增：取消尚未开始的任务，P-03 需要）</td>
+</tr>
+<tr>
+<td><code>running</code></td>
+<td><code>converged</code></td>
+</tr>
+<tr>
+<td><code>running</code></td>
+<td><code>failed</code></td>
+</tr>
+<tr>
+<td><code>running</code></td>
+<td><code>cancelled</code></td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>终态：<code>converged</code> / <code>failed</code> / <code>cancelled</code>，<strong>没有出边</strong>。</li>
+<li><strong>重试语义（冻结）</strong>：<code>failed</code> <strong>不回到</strong> <code>queued</code>；重试 = 用<strong>新 task id</strong> 重建任务
+（保证结果目录不可变、可追溯）。不要再加 <code>failed→queued</code>。</li>
+<li><code>TaskState::LEGAL</code>（Rust）是该表的唯一真相源；<code>task.schema.yaml</code> 的 <code>x-state-machine</code>
+与 proptest 都对齐它。</li>
+</ul>
+<p><strong>结果目录布局（冻结）</strong>：</p>
+<pre><code>&lt;task_id&gt;/
+  input.yaml          # JobInput（K2 类型 ≡ K4 格式）
+  env.json            # rustc, cargo.lock sha256, data_snapshot, threads, OS, toolchain, crate 版本
+  log.txt
+  result.json         # JobResult 序列化（矩阵 list-of-list）
+  data_snapshot.json  # 与 env/result 里的 data_snapshot 同内容
+  artifacts/
+</code></pre>
+<p><strong>没有 <code>env.json</code> 视为不完整结果</strong>，<code>qwb inspect</code> 退出码 <strong>3</strong>（G5）。</p>
+<h3 id="k4--文件格式">K4 · 文件格式</h3>
+<p><strong>详细定义</strong>：<code>qwb-contracts/studio/qwb-format.md</code>（含全部结构约束）。</p>
+<ul>
+<li><strong>输入</strong>：YAML，形态 ≡ <code>qwb_engine_api::JobInput</code>（不允许第二套字段）。</li>
+<li><strong>项目容器 <code>.qwb</code></strong>：<strong>Zip</strong>（<code>zip</code> crate，<strong>只启用 <code>deflate</code></strong>；不用 HDF5）。
+内部：<code>meta.json</code>（第一位）+ <code>tasks/&lt;id&gt;/{input.yaml,result.json,env.json,log.txt}</code>
+<ul>
+<li><code>data_snapshot.json</code> + <code>artifacts/**</code>。</li>
+</ul>
+</li>
+<li><strong>结构性约束（必须拒绝，不是&quot;约定&quot;）</strong>：绝对路径/盘符/反斜杠、<code>..</code>、空路径段、
+目录条目、重复条目、缺 <code>meta.json</code>、<code>meta.task_count</code> ≠ <code>tasks/</code> 目录数、截断的 zip。</li>
+<li><strong>字节可复现</strong>：条目时间戳固定 1980-01-01T00:00:00、Deflate、条目顺序固定 ⇒
+相同内容导出<strong>逐字节相同</strong>（有测试）。这支撑 G5 的 replay 比对。</li>
+<li><strong>矩阵</strong>：list-of-list（见 K2）。大矩阵二进制快通道（<code>.npy</code>/<code>ndarray-npy</code>）
+<strong>不引入</strong>（R-14 已定案）。</li>
+<li><strong>分子</strong>：<code>.xyz</code>/<code>.mol</code>/<code>.sdf</code>，Python 侧 rdkit 只做结构读写；引擎不解析。</li>
+</ul>
+<h3 id="k5--cli-契约qwb-corecratesqwb-cli二进制-qwb">K5 · CLI 契约（<code>qwb-core/crates/qwb-cli</code>，二进制 <code>qwb</code>）</h3>
+<pre><code>qwb run    input.yaml [--out DIR] [--threads N]
+qwb batch  PATTERN|DIR [--parallel N]          # PATTERN 形如 DIR/*.yaml
+qwb inspect PATH                                # 结果目录 或 .qwb 容器
+qwb replay PATH [--dry-run]
+qwb data list
+qwb data show NAME
+qwb data verify [PATH...]                       # 省略则校验整个注册表
+</code></pre>
+<p><strong>退出码（冻结）</strong>：<code>0</code> 成功 / <code>1</code> 输入错误 / <code>2</code> 收敛失败 / <code>3</code> 数据校验失败 / <code>4</code> 内部错误。
+映射唯一实现在 <code>EngineError::exit_code()</code>；容器/布局错误算 <code>3</code>，<code>Io</code> 算 <code>4</code>。</p>
+<p><strong>数据根定位</strong>：<code>QWB_DATA_ROOT</code> 环境变量，或从当前目录向上依次找 <code>qwb-data</code>。
+<strong>不加新命令行参数。</strong></p>
+<p><strong>各子命令在&quot;引擎未接入&quot;阶段的真实行为</strong>见 <code>qwb-contracts/studio/cli.md</code>：C 轨
+<code>run</code>/<code>batch</code> 完整解析校验输入后返回 <code>4</code>（<strong>不伪造结果</strong>）；<code>inspect</code>/<code>replay --dry-run</code>/
+<code>data *</code> 完全实装。</p>
+<h3 id="k6--python-api-契约">K6 · Python API 契约</h3>
+<p><strong>路径</strong>：<code>qwb-contracts/studio/python/qwb_engine.pyi</code>（已冻结，<code>mypy --strict</code> 0 issue）</p>
+<p><strong>构建</strong>：<code>pyo3</code> + <code>maturin</code>；ABI <strong><code>abi3-py39</code></strong>（R-12 已定案）。</p>
+<pre><code class="language-python">eng = qwb.Engine(registry_path=<span class="hljs-string">&quot;qwb-data/&quot;</span>, features=[<span class="hljs-string">&quot;jobtype:sp&quot;</span>])
+result = eng.run(job_input, reporter=<span class="hljs-literal">None</span>)
+result.energy_hartree                <span class="hljs-comment"># float</span>
+result.gradient_hartree_per_bohr     <span class="hljs-comment"># np.ndarray | None</span>
+result.data_snapshot.items()         <span class="hljs-comment"># list[tuple[str, str]]</span>
+result.env.rustc_version             <span class="hljs-comment"># str</span>
+qwb.EngineError / InvalidInputError / ScfNotConvergedError / DataError / UnsupportedError
+    .exit_code                       <span class="hljs-comment"># 与 K5 一致</span>
+</code></pre>
+<p><strong>硬约定</strong>：</p>
+<ul>
+<li><strong>GIL 释放</strong>：<code>Engine.run</code> 内部必须 <code>py.allow_threads</code>；CI 用 concurrency 测试强制。</li>
+<li><strong>矩阵零拷贝</strong>：初期全部拷贝（&lt; 500×500 可接受），接口不变（R-18）。</li>
+<li><strong><code>Reporter</code> 回调</strong>：Rust 侧批量推送，禁止逐行跨 GIL 回调。</li>
+<li>桩文件里的 <code>__init__</code> 签名就是 P-06 必须实现的签名（<code>registry_path</code> 为关键字）。</li>
+</ul>
+<hr>
+<h2 id="5-依赖-dag">5. 依赖 DAG</h2>
+<pre><code>K1..K6 (契约) ✅ 已冻结
+   │
+   ├──&gt; D-tracks (数据)            ─┐
+   ├──&gt; I/X/S-plumbing (引擎骨架)   ─┤
+   └──&gt; P-scaffold (产品骨架)       ─┤
+                                      ▼
+                                T1 集成（H2/STO-3G/SVWN5 单点能）
+                                      ▼
+                                T2（H2O/def2-SVP/PBE + 性质）
+                                      ▼  T3（梯度+优化）→ T4（频率）
+                                      ▼  T5（ECP）   → T6（B3LYP）
+                                      ▼
+                                T7（工作流+调度+复现）→ T8（GUI）
+</code></pre>
+<p><strong>关键规则</strong>：</p>
+<ul>
+<li>K1–K6 已冻结（C 轨 <code>done</code>）；D/I/X/S/P 可并行开工。</li>
+<li><code>qwb-linalg</code>（I-00）必须在 I-01 前冻结接口，让 <code>nalgebra</code>/<code>faer</code> 后端可切换。</li>
+</ul>
+<hr>
+<h2 id="6-wbs-工作包">6. WBS 工作包</h2>
+<blockquote>
+<p>每个包：<code>ID · 依赖 · 产物 · 验收</code>。验收必须是<strong>可复制执行的命令</strong>或<strong>可检查断言</strong>。
+状态记录在 <code>docs/status.yaml</code>。<strong>C 轨已全部 done，保留其验收以便回归。</strong></p>
+</blockquote>
+<h3 id="60-状态总览v21">6.0 状态总览（v2.1）</h3>
+<table>
+<thead>
+<tr>
+<th>轨道</th>
+<th>状态</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>C（契约）</td>
+<td><strong>C-01..C-06 全 done</strong></td>
+</tr>
+<tr>
+<td>D（数据）</td>
+<td>全部 pending（数据仓只有 <code>example-</code> 样例，<strong>非交付物</strong>）</td>
+</tr>
+<tr>
+<td>I / X / S / G / F</td>
+<td>全部 pending</td>
+</tr>
+<tr>
+<td>P（产品）</td>
+<td>全部 pending</td>
+</tr>
+<tr>
+<td>V（验证）</td>
+<td>全部 pending</td>
+</tr>
+</tbody>
+</table>
+<h3 id="61-契约轨c-轨-done">6.1 契约轨（C 轨）— <strong>done</strong></h3>
+<table>
+<thead>
+<tr>
+<th>ID</th>
+<th>产物（实际）</th>
+<th>验收（可回归）</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>C-01 ✅</td>
+<td><code>qwb-registry</code> 的 K1 类型 + schemars 生成的 7×2 schema；<code>qwb-data/examples/</code> 6 个样例</td>
+<td><code>cargo run -p qwb-gen-schemas -- ../qwb-contracts/schema --check</code> 无漂移；<code>qwb data verify</code> 通过；缺 citation 的文件 → 退出码 3 且 code <code>g2.citation</code>（v2.0 的&quot;<code>data verify</code> 属 D-02&quot;矛盾已消除：C-01 只要最小 verify，D-02 扩成回归集）</td>
+</tr>
+<tr>
+<td>C-02 ✅</td>
+<td><code>qwb-contracts/engine-api</code>（<code>qwb-engine-api</code> 0.1.0，23 tests）</td>
+<td><code>cargo clippy --all-targets -- -D warnings</code>；<code>cargo doc --no-deps</code>（<code>RUSTDOCFLAGS=-D warnings</code>）；<code>Engine::new</code> 返回 <code>Unsupported</code>（单测）</td>
+</tr>
+<tr>
+<td>C-03 ✅</td>
+<td><code>task.schema.yaml</code> + <code>result.schema.yaml</code> + <code>qwb-io::task</code> 状态机（6 转移）</td>
+<td>proptest 覆盖 6×6 转移关系与 <code>LEGAL</code> 精确相等；schema 文档与 Rust 类型逐字段一致</td>
+</tr>
+<tr>
+<td>C-04 ✅</td>
+<td><code>qwb-format.md</code> + <code>qwb-io::container</code> + <code>studio/examples/example.qwb</code></td>
+<td><code>cargo test -p qwb-io --test example_container</code>；容器导出字节可复现（单测）</td>
+</tr>
+<tr>
+<td>C-05 ✅</td>
+<td><code>qwb-cli</code>（K5）+ <code>studio/cli.md</code> + <code>python/qwb_engine.pyi</code></td>
+<td>全部子命令 <code>--help</code> 退出 0；<code>mypy --strict</code> 桩 + typed consumer 均 0 issue</td>
+</tr>
+<tr>
+<td>C-06 ✅</td>
+<td><code>qwb-core</code> workspace + 根 <code>rust-toolchain.toml</code>（1.97.1）+ <code>deny.toml</code> + <code>.github/workflows/ci.yml</code> + <code>scripts/*.sh</code></td>
+<td><code>cargo fmt --all --check</code>；<code>cargo clippy --workspace --all-targets -- -D warnings</code>；<code>cargo test --workspace</code>；<code>cargo deny check</code>（四类全 ok）；三个门禁脚本退出 0</td>
+</tr>
+</tbody>
+</table>
+<h3 id="62-数据轨d-轨-项目中心详细要求见-8">6.2 数据轨（D 轨）— 项目中心（详细要求见 §8）</h3>
+<table>
+<thead>
+<tr>
+<th>ID</th>
+<th>依赖</th>
+<th>产物</th>
+<th>验收（可执行）</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>D-01</td>
+<td>C-01, C-06</td>
+<td><code>qwb-registry</code> 加载器：<code>Registry::open(root)</code>、<code>get_basis/get_functional/get_ecp/get_grid/get_solvent(name)</code>、<code>load_pair(basis, ecp)</code>、<code>features()</code></td>
+<td>① <strong>空注册表必须能 <code>open</code></strong>（<code>Ok</code>，0 条目 —— 否则工具链冷启动不可用；&quot;0 条目&quot;只是 <code>data verify</code> 的错，不是 load 的错）；② 3 个畸形文件各返回<strong>字段级</strong> <code>Data</code> 错误；③ <code>load_pair</code> 元素不匹配 → <code>Data</code></td>
+</tr>
+<tr>
+<td>D-02</td>
+<td>D-01</td>
+<td><code>qwb data verify</code> 回归集（6 坏 / 6 好）</td>
+<td>6 个坏文件分别对应：缺 <code>citation</code>、<code>citation: []</code>、缺 <code>license</code>、<code>sha256</code> 不符、拼错字段、<code>exponents</code> 非降序 → 各退出码 3，code 分别为 <code>schema.deserialize</code> / <code>g2.citation</code> / <code>schema.deserialize</code> / <code>sha256.mismatch</code> / <code>schema.deserialize</code> / <code>semantic</code>；6 个好文件退出码 0</td>
+</tr>
+<tr>
+<td>D-03</td>
+<td>D-01</td>
+<td><code>STO-3G</code>（H,C,N,O,F）正式数据</td>
+<td>① 与 BSE 导出逐项 diff &lt; 1e-12（相对）；② 每元素基函数数 H=1、C/N/O/F=5；③ 球谐；④ 至少 3 元素的指数/系数贴进 PR body 供人核对</td>
+</tr>
+<tr>
+<td>D-04</td>
+<td>D-01</td>
+<td><code>def2-SVP</code>（H,C,N,O）</td>
+<td>与 BSE 逐项 diff &lt; 1e-12；<strong>每元素基函数数写进测试断言</strong>（以 BSE 导出为准，不靠记忆）</td>
+</tr>
+<tr>
+<td>D-05</td>
+<td>D-01</td>
+<td><code>def2-TZVP</code>（H,C,N,O）</td>
+<td>同上；<strong>必须含通用收缩</strong>（一个 shell 多收缩列）</td>
+</tr>
+<tr>
+<td>D-06</td>
+<td>D-01</td>
+<td><code>cc-pVDZ</code>（H,C,N,O）</td>
+<td>同上</td>
+</tr>
+<tr>
+<td>D-07</td>
+<td>D-01</td>
+<td><code>LANL2DZ</code> + ECP（先 Cu、Zn，再 Na–Kr）</td>
+<td><code>Registry::load_pair(&quot;lanl2dz&quot;,&quot;lanl2dz&quot;)</code> 通过；<code>n_core_electrons</code> 与基组价电子一致；<code>z_eff == Z − n_core</code>（已有校验器）</td>
+</tr>
+<tr>
+<td>D-08</td>
+<td>D-01</td>
+<td><code>def2-ECP</code>（先 K–Kr）</td>
+<td>与 D-04/05/06 配对校验通过；<code>r_power_convention</code> 显式</td>
+</tr>
+<tr>
+<td>D-09</td>
+<td>D-01</td>
+<td><code>SVWN5</code>（含 <code>dε/dρ</code>、<code>dε/dσ</code>）</td>
+<td>X-02 有限差分导数 &lt; 1e-9；参数逐个带 citation</td>
+</tr>
+<tr>
+<td>D-10</td>
+<td>D-01</td>
+<td><code>PBE</code>（交换+相关，κ=0.804、μ=0.21951）</td>
+<td>同 D-09</td>
+</tr>
+<tr>
+<td>D-11</td>
+<td>D-01</td>
+<td><code>B88</code>、<code>LYP</code></td>
+<td>同 D-09</td>
+</tr>
+<tr>
+<td>D-12</td>
+<td>D-01</td>
+<td><code>B3LYP</code> 复合定义（0.8 B88 + 0.2 HF + 0.81 LYP + 0.19 VWN5）</td>
+<td>与 V-03 基准比对 &lt; 2 mHa（水/苯/CO）</td>
+</tr>
+<tr>
+<td>D-13</td>
+<td>D-01</td>
+<td>网格等级 <code>coarse/normal/fine/veryfine</code></td>
+<td>初始参数 <code>(radial,lebedev,sharpness)</code>：<code>(50,194,0.6)</code>、<code>(75,302,0.6)</code>、<code>(99,590,0.6)</code>、<code>(140,974,0.8)</code>，<code>cutoff=20 Bohr</code>；相邻等级能量差 &lt; 0.1 mHa（T2 分子上断言）</td>
+</tr>
+<tr>
+<td>D-14</td>
+<td>D-01</td>
+<td>溶剂数据（8 种）</td>
+<td>schema 通过；ε 与 NIST 一致（水 78.3553 @ 298.15 K）；半径单列并注明来源；<code>cavity_model</code> 显式</td>
+</tr>
+<tr>
+<td>D-15</td>
+<td>D-02..D-14</td>
+<td><code>scripts/gen_data_licenses.py</code> + <code>DATA_LICENSES.md</code> + 每数据 sha256</td>
+<td>脚本可重跑且输出幂等；所有数据带 license/citation/sha256</td>
+</tr>
+</tbody>
+</table>
+<h3 id="63-积分轨i-轨">6.3 积分轨（I 轨）</h3>
+<table>
+<thead>
+<tr>
+<th>ID</th>
+<th>依赖</th>
+<th>产物</th>
+<th>验收</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>I-00</td>
+<td>C-06</td>
+<td><code>qwb-linalg</code> 抽象层（<code>nalgebra</code> 默认，<code>faer</code> 可选 feature）</td>
+<td>两后端都编译；同一接口 roundtrip identical；<code>cargo bench</code> 有 baseline（V-06）</td>
+</tr>
+<tr>
+<td>I-01</td>
+<td>C-02, D-01</td>
+<td>基组加载器 → 内部 AO（<code>BasisSet</code>）</td>
+<td>H2/STO-3G AO 数 = 2；C/STO-3G AO 数 = 5；<code>angular</code> 只从数据读</td>
+</tr>
+<tr>
+<td>I-02</td>
+<td>I-01</td>
+<td>1e 积分（重叠、动能、核吸引）</td>
+<td>H2/STO-3G 的 S、T、V 与<strong>解析闭式</strong>（写进测试）逐项 &lt; 1e-10</td>
+</tr>
+<tr>
+<td>I-03</td>
+<td>I-01</td>
+<td>2e 积分（<strong>Obara-Saika 为主</strong>，R-03 已定案）</td>
+<td>H2/STO-3G `(ss</td>
+</tr>
+<tr>
+<td>I-04</td>
+<td>I-03</td>
+<td>2e 并行化（<code>rayon</code>，确定性归约）</td>
+<td>1 线程 vs 4 线程结果 <strong>byte-identical</strong>（对积分张量取 sha256 比对）</td>
+</tr>
+<tr>
+<td>I-05</td>
+<td>I-02</td>
+<td>ECP 矩阵元（局域 + 非局域）</td>
+<td>与数值积分对照 &lt; 1e-8；Cu 的 <code>l=2</code> 非局域项单独断言</td>
+</tr>
+<tr>
+<td>I-06</td>
+<td>I-03</td>
+<td>积分缓存（可选 feature）</td>
+<td>开/关结果 identical</td>
+</tr>
+</tbody>
+</table>
+<h3 id="64-xc-轨x-轨">6.4 XC 轨（X 轨）</h3>
+<table>
+<thead>
+<tr>
+<th>ID</th>
+<th>依赖</th>
+<th>产物</th>
+<th>验收</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>X-01</td>
+<td>C-02, D-01</td>
+<td><code>trait FunctionalTerm: Send + Sync</code>（<code>energy_density</code>、<code>potential_derivs</code>、<code>spin_scaling</code>、<code>requires</code>），<strong>批量切片输入</strong></td>
+<td>单测 + doc test；批量接口在 1e6 点上无逐点分配（<code>criterion</code> 粗测）</td>
+</tr>
+<tr>
+<td>X-02</td>
+<td>X-01</td>
+<td>有限差分导数校验工具</td>
+<td>D-09/10/11 的 <code>dε/dρ</code>、<code>dε/dσ</code> 与数值差 &lt; 1e-9（CI 必跑）</td>
+</tr>
+<tr>
+<td>X-03</td>
+<td>X-01, D-13</td>
+<td>Becke 分区 + Lebedev 网格（<code>rayon</code> 并行生成）</td>
+<td>均匀电子气极限通过；水 Σw 与 4π 差 &lt; 1e-10；<strong>单线程与并行 identical</strong></td>
+</tr>
+<tr>
+<td>X-04</td>
+<td>X-03</td>
+<td>网格管理（等级映射 + 缓存）</td>
+<td>切换等级释放旧网格（<code>Arc::strong_count</code> 断言）</td>
+</tr>
+<tr>
+<td>X-05</td>
+<td>X-02, X-04</td>
+<td>泛函求值集成到 SCF</td>
+<td>T1 单点能路径打通</td>
+</tr>
+</tbody>
+</table>
+<h3 id="65-scf-轨s-轨">6.5 SCF 轨（S 轨）</h3>
+<table>
+<thead>
+<tr>
+<th>ID</th>
+<th>依赖</th>
+<th>产物</th>
+<th>验收</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>S-01</td>
+<td>I-02, I-03</td>
+<td>密度矩阵 → Fock 构建（无 XC）</td>
+<td>与直接矩阵乘对照 &lt; 1e-12</td>
+</tr>
+<tr>
+<td>S-02</td>
+<td>S-01, X-05</td>
+<td>RKS SCF（Fock + XC）</td>
+<td>H2/STO-3G/SVWN5 收敛到 1e-8 Ha（T1 前置）</td>
+</tr>
+<tr>
+<td>S-03</td>
+<td>S-02</td>
+<td>DIIS + 收敛判据</td>
+<td>H2O/PBE 收敛到 1e-8；不收敛时返回 <code>ScfNotConverged{iters,max}</code></td>
+</tr>
+<tr>
+<td>S-04</td>
+<td>S-02</td>
+<td>UKS（开壳层）</td>
+<td>O2 三重态跑通；⟨S²⟩ 与理论值差 &lt; 1e-6</td>
+</tr>
+<tr>
+<td>S-05</td>
+<td>S-03</td>
+<td>SCF 检查点/重启（serde）</td>
+<td>kill 后从 checkpoint 续，结果 identical</td>
+</tr>
+<tr>
+<td><strong>S-06</strong></td>
+<td>S-03</td>
+<td><strong>性质：偶极矩、Mulliken/Löwdin 布居、轨道能级</strong>（<code>qwb-props</code>；v2.1 新增，补上 §12.1 里无主的 crate）</td>
+<td>① H2O/STO-3G/SVWN5 偶极与实验 1.85 D 差 &lt; 0.15 D；② Mulliken 与 Löwdin 电荷各自求和 == 总电荷（1e-10）；③ 写进 <code>JobResult.dipole_debye</code> / <code>mo_energies_hartree</code>；④ 两次运行 byte-identical</td>
+</tr>
+</tbody>
+</table>
+<h3 id="66-梯度--优化轨g-轨">6.6 梯度 / 优化轨（G 轨）</h3>
+<table>
+<thead>
+<tr>
+<th>ID</th>
+<th>依赖</th>
+<th>产物</th>
+<th>验收</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>G-01</td>
+<td>S-03</td>
+<td>解析梯度（Hellmann-Feynman + 基组响应 + XC 网格项）</td>
+<td>与数值梯度最大分量差 &lt; 1e-6 Ha/Bohr（H2O/def2-SVP/PBE 与 H2/STO-3G/SVWN5）</td>
+</tr>
+<tr>
+<td>G-02</td>
+<td>G-01</td>
+<td>BFGS + 冗余内坐标</td>
+<td>H2O 优化收敛：最大力 &lt; 4.5e-4 Ha/Bohr；键长误差 &lt; 0.01 Å（实验 0.9572 Å）</td>
+</tr>
+<tr>
+<td>G-03</td>
+<td>G-02</td>
+<td>多步轨迹 + 收敛报告</td>
+<td>H2O、CH4、NH3 三个分子优化全部收敛</td>
+</tr>
+</tbody>
+</table>
+<h3 id="67-频率轨f-轨">6.7 频率轨（F 轨）</h3>
+<table>
+<thead>
+<tr>
+<th>ID</th>
+<th>依赖</th>
+<th>产物</th>
+<th>验收</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>F-01</td>
+<td>G-01</td>
+<td>数值 Hessian（中心差分，<code>rayon</code> 并行位移）</td>
+<td>H2O/def2-SVP/PBE Hessian 与文献/更高精度差 &lt; 5%（相对 Frobenius 范数）</td>
+</tr>
+<tr>
+<td>F-02</td>
+<td>F-01</td>
+<td>简正模 + IR 强度 + 热化学</td>
+<td>H2O IR 峰位与实验差 &lt; 30 cm⁻¹（PBE 尺度）；ZPE、S、G 为正且量级正确；3N-6 全实（线性 3N-5）</td>
+</tr>
+</tbody>
+</table>
+<h3 id="68-产品轨p-轨-python--maturin">6.8 产品轨（P 轨）— Python + maturin</h3>
+<table>
+<thead>
+<tr>
+<th>ID</th>
+<th>依赖</th>
+<th>产物</th>
+<th>验收</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>P-01</td>
+<td>C-03</td>
+<td><code>qwb-studio/qwb_studio/models</code>：<code>Project/Molecule/Task/Result</code>（pydantic v2）</td>
+<td>单测通过；YAML/JSON roundtrip；非法状态转移抛 <code>ValueError</code>；与 <code>task.schema.yaml</code> 字段一一对应（有测试比对）</td>
+</tr>
+<tr>
+<td>P-02</td>
+<td>P-01, C-04</td>
+<td><code>.qwb</code> 读写（Python <code>zipfile</code>）</td>
+<td>与 Rust <code>QwbContainer</code> <strong>互操作</strong>：Rust 写→Python 读、Python 写→Rust 读；损坏 zip 明确报错</td>
+</tr>
+<tr>
+<td>P-03</td>
+<td>P-01, C-05</td>
+<td>本地调度器（进程池 + 队列 + 状态机 + 取消 + kill -9 恢复）</td>
+<td>10 个 mock 任务并发；取消 <code>queued</code> 与 <code>running</code> 都生效（对应 K3 两条 cancelled 边）；进程被杀后重启能恢复 <code>queued</code></td>
+</tr>
+<tr>
+<td>P-04</td>
+<td>P-01, C-02</td>
+<td><code>env.json</code> 生成器（<code>rustc --version</code>、<code>Cargo.lock</code> sha256、数据快照、threads、os、crate 版本）</td>
+<td>缺 <code>env.json</code> 时 <code>Result</code> 构造失败；生成物能被 <code>EnvInfo::validate</code> 接受</td>
+</tr>
+<tr>
+<td>P-05</td>
+<td>P-01</td>
+<td>Python 侧 <code>qwb</code> 入口（shell 转发到 Rust CLI）</td>
+<td>全部子命令 <code>--help</code> 通过；退出码与 K5 一致</td>
+</tr>
+<tr>
+<td>P-06</td>
+<td>C-02, P-04</td>
+<td><code>qwb_engine</code> pyo3（maturin，<code>abi3-py39</code>）</td>
+<td>与 <code>qwb_engine.pyi</code> 一致：<code>mypy --strict</code> 通过；并发测试证明 GIL 被释放</td>
+</tr>
+<tr>
+<td>P-07</td>
+<td>P-05, P-06</td>
+<td><code>qwb run</code> 端到端</td>
+<td>跑通 T1</td>
+</tr>
+<tr>
+<td>P-08</td>
+<td>P-03, P-04</td>
+<td><code>qwb replay</code></td>
+<td>已跑结果 replay 后能量差 &lt; 1e-10（<code>--dry-run</code> 已可用）</td>
+</tr>
+<tr>
+<td>P-09</td>
+<td>P-07, P-08</td>
+<td>GUI 骨架（PySide6：项目树 + Task Panel + Job Monitor；显示能量/偶极/电荷）</td>
+<td>创建/提交/查看 mock 任务不阻塞 UI；大日志（&gt;100 MB）滚动不卡</td>
+</tr>
+<tr>
+<td>P-10</td>
+<td>P-09, G-02, F-02</td>
+<td>GUI 3D（VTK：分子、轨道、ESP、振动）</td>
+<td>打开 H2O 结果可视化正确；ESP 用 S-06 的电荷着色</td>
+</tr>
+</tbody>
+</table>
+<h3 id="69-验证轨v-轨">6.9 验证轨（V 轨）</h3>
+<table>
+<thead>
+<tr>
+<th>ID</th>
+<th>依赖</th>
+<th>产物</th>
+<th>验收</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>V-01</td>
+<td>S-02</td>
+<td>氢原子解析解测试</td>
+<td>能量 −0.5 Ha 误差 &lt; 1e-6；SCF 收敛到 1e-8</td>
+</tr>
+<tr>
+<td>V-02</td>
+<td>G-01</td>
+<td>有限差分梯度一致性测试</td>
+<td>基准分子全自动跑，全部 &lt; 1e-6 Ha/Bohr</td>
+</tr>
+<tr>
+<td>V-03</td>
+<td>S-02..G-02</td>
+<td>基准集 + <code>tests/reference/*.csv</code>（<strong>外部引用</strong>，见 §7.0）</td>
+<td>H2、H2O、CH4、NH3、CO、N2、苯 的 CSV；每行带 <code>source_doi</code> 或 <code>source_url</code>；CI 断言与库值的差</td>
+</tr>
+<tr>
+<td>V-04</td>
+<td>全部</td>
+<td>CI 分层（PR / 每日 / 每周）</td>
+<td><code>scripts/verify.sh</code>（或 <code>verify.ps1</code>）全绿；PR 跑单元 + 小基准；每日 T3–T6；每周完整基准 + criterion 归档</td>
+</tr>
+<tr>
+<td>V-05</td>
+<td>全部</td>
+<td><code>docs/error-budget.md</code></td>
+<td>每类误差来源（基组、网格、SCF、积分、ECP）与量级；与 §7 容差一致</td>
+</tr>
+<tr>
+<td>V-06</td>
+<td>I-03, X-03, S-03</td>
+<td><code>criterion</code> 基准套 <code>benches/</code></td>
+<td>每次发布前跑；回归超 20% 报警（软门禁）</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2 id="7-垂直切片里程碑-t1t8">7. 垂直切片里程碑 T1–T8</h2>
+<blockquote>
+<p>每个 T 是&quot;项目真正向前一步&quot;的刻度。只有全部前置 WP 通过、且该 T 端到端命令通过才算完成。</p>
+</blockquote>
+<h3 id="70-参考值政策v21-新增消除文献值查不到就卡死">7.0 参考值政策（v2.1 新增，<strong>消除&quot;文献值查不到就卡死&quot;</strong>）</h3>
+<p>所有&quot;与文献对照&quot;的断言都从仓库内的 <code>qwb-core/tests/reference/*.csv</code> 读
+（下文简写为 <code>tests/reference/</code>），格式：</p>
+<pre><code class="language-csv">system,basis,method,jobtype,energy_hartree,source_doi,source_url,note
+H2,sto-3g,svwn5,sp,-1.137,10.1000/xxxx,https://cccbdb.nist.gov/,CCCBDB
+</code></pre>
+<p>规则：</p>
+<ol>
+<li><strong>优先外部引用</strong>：NIST CCCBDB、原始文献 DOI。CSV 必须有 <code>source_doi</code> 或 <code>source_url</code>。</li>
+<li><strong>允许的 fallback（仅当外部值确实取不到）</strong>：用<strong>数值独立路径</strong>交叉验证
+（如 I-03 的 Rys 路径 vs Obara-Saika、<code>faer</code> vs <code>nalgebra</code>、单线程 vs 多线程），
+在 CSV <code>note</code> 写&quot;内部独立路径，非文献值&quot;，并在 <code>docs/error-budget.md</code> 登记。
+这是<strong>允许推进</strong>的路径，不算降级验收。</li>
+<li>禁止：拿自己算的值回填当&quot;文献值&quot;且不注明。</li>
+</ol>
+<h3 id="t1--最小端到端h2--sto-3g--svwn5-单点能">T1 · 最小端到端：H2 / STO-3G / SVWN5 单点能</h3>
+<p><strong>前置 WP</strong>：C-01..C-06 ✅、D-01..D-03、D-09、D-13、I-00..I-04、X-01..X-05、S-01..S-03、P-01..P-07、V-01</p>
+<p><strong>验收命令</strong>：<code>qwb run examples/h2_sto3g_svwn5.yaml</code>（<code>qwb-core/examples/</code> 下）</p>
+<p><strong>断言</strong>：</p>
+<ul>
+<li>SCF 收敛到 1e-8 Ha；<code>JobResult.scf_converged == true</code></li>
+<li>能量与 <code>tests/reference/h2_sto3g_svwn5.csv</code> 差 &lt; 1 mHa</li>
+<li><code>env.json</code>、<code>data_snapshot.json</code> 存在且通过 <code>EnvInfo::validate</code></li>
+<li><code>qwb replay &lt;task_id&gt; --dry-run</code> 通过；完整 replay 后能量差 &lt; 1e-10</li>
+<li><code>scripts/verify.sh</code> 全绿</li>
+</ul>
+<h3 id="t2--主流计算h2o--def2-svp--pbe-单点能--性质--网格收敛">T2 · 主流计算：H2O / def2-SVP / PBE 单点能 + 性质 + 网格收敛</h3>
+<p><strong>前置 WP</strong>：T1 + D-04、D-10、D-13、S-06</p>
+<p><strong>断言</strong>：</p>
+<ul>
+<li>能量与 <code>tests/reference/h2o_def2svp_pbe.csv</code> 差 &lt; 1 mHa</li>
+<li>相邻网格等级能量差 &lt; 0.1 mHa</li>
+<li>单线程与 4 线程结果 <strong>byte-identical</strong>（G7）</li>
+<li>偶极与实验 1.85 D 差 &lt; 0.15 D；Mulliken/Löwdin 电荷和 == 总电荷</li>
+</ul>
+<h3 id="t3--几何优化">T3 · 几何优化</h3>
+<p><strong>前置 WP</strong>：T2 + G-01..G-03</p>
+<p><strong>断言</strong>：最大力 &lt; 4.5e-4 Ha/Bohr；H2O 键长 0.9572 Å 误差 &lt; 0.01 Å；解析梯度 vs 数值梯度 &lt; 1e-6 Ha/Bohr。</p>
+<h3 id="t4--频率">T4 · 频率</h3>
+<p><strong>前置 WP</strong>：T3 + F-01、F-02</p>
+<p><strong>断言</strong>：3N-6 全实（线性分子 3N-5）；H2O 的 IR 峰位与实验差 &lt; 30 cm⁻¹；ZPE &gt; 0、S &gt; 0、G 量级正确。</p>
+<h3 id="t5--ecp--重元素">T5 · ECP + 重元素</h3>
+<p><strong>前置 WP</strong>：T2 + D-07、D-08、I-05 + K2 已支持 <code>TaskOptions.ecp_name</code></p>
+<p><strong>被测体系（冻结，避免歧义）</strong>：CuH / LANL2DZ 价基 + LANL2DZ ECP；ZnO / def2-SVP + def2-ECP。</p>
+<p><strong>断言</strong>：</p>
+<ul>
+<li>Cu <code>n_core_electrons == 28</code>、<code>z_eff == 1.0</code>，与基组价电子一致</li>
+<li>两个体系各跑通单点能；ZnO 与 <code>tests/reference/zno_def2svp_pbe_ecp.csv</code> 差 &lt; 5 mHa</li>
+<li>非局域 ECP 矩阵元与数值对照 &lt; 1e-8</li>
+</ul>
+<h3 id="t6--杂化泛函-b3lyp">T6 · 杂化泛函 B3LYP</h3>
+<p><strong>前置 WP</strong>：T2 + D-11、D-12 + K 矩阵（S-02 扩充）</p>
+<p><strong>断言</strong>：水/苯/CO 总能量与基准差 &lt; 2 mHa；HF 交换混合系数 0.20 与定义一致；B3LYP 梯度有限差分一致（&lt; 1e-6）。</p>
+<h3 id="t7--工作流--调度--复现">T7 · 工作流 + 调度 + 复现</h3>
+<p><strong>前置 WP</strong>：T1–T6 + P-01..P-08</p>
+<p><strong>验收命令</strong>：<code>qwb batch jobs/*.yaml --parallel 4</code> &amp;&amp; <code>qwb replay &lt;task_id&gt;</code></p>
+<p><strong>断言</strong>：</p>
+<ul>
+<li>K3 状态机 6 条转移全部由 proptest 覆盖（含两条 <code>cancelled</code> 边）</li>
+<li><code>kill -9</code> 后重启恢复 <code>queued</code> 任务（P-03）</li>
+<li>结果目录无 <code>env.json</code> 时 <code>qwb inspect</code> 退出码 3</li>
+<li>replay 后能量差 &lt; 1e-10</li>
+</ul>
+<h3 id="t8--gui-端到端">T8 · GUI 端到端</h3>
+<p><strong>前置 WP</strong>：T7 + P-09、P-10</p>
+<p><strong>断言</strong>：</p>
+<ul>
+<li>打开项目 → 建分子 → 选 PBE/def2-SVP/opt → 提交 → Job Monitor → 3D 结果，全程不崩溃不阻塞</li>
+<li>大日志（&gt; 100 MB）UI 不卡</li>
+<li>崩溃后重启恢复未完成视图</li>
+</ul>
+<hr>
+<h2 id="8-数据层详细要求项目中心">8. 数据层详细要求（项目中心）</h2>
+<h3 id="81-基组">8.1 基组</h3>
+<p><strong>来源</strong>：BSE 导出 + 一手文献核对。每个基组追溯原始 DOI，并核对 <strong>H、C、N、O 至少 3 个元素</strong>
+的指数/系数。<strong>不得</strong>从其他项目代码仓库复制文件（BSE 网站导出可以）。</p>
+<p><strong>本地实现</strong>：</p>
+<ul>
+<li>内部统一 schema（YAML → <code>serde_yaml</code> → <code>BasisSet</code>）。</li>
+<li>加载器：<code>qwb-registry</code> → <code>Registry</code> → <code>get_basis(name) -&gt; BasisSet</code>。</li>
+<li><strong>枚举/球谐切换只有一处</strong>：<code>BasisSet.angular</code>；<code>Engine</code> 显式读取，禁止隐式默认（R-06）。</li>
+<li><strong>归一化只有一处</strong>：加载时一次性处理，运行时不转换。</li>
+<li>多元素文件用 <code>ShellBlock</code>（§4 K1），<strong>每个元素必须恰好一个块</strong>。</li>
+</ul>
+<p><strong>验证（CI）</strong>：</p>
+<ol>
+<li>schema 校验（<code>deny_unknown_fields</code>）。</li>
+<li>指数/系数与 BSE 逐项 diff（&lt; 1e-12 相对）。</li>
+<li>归一化：H2/STO-3G 重叠积分与解析闭式一致（I-02）。</li>
+<li>球谐 vs 笛卡尔：d 壳层函数数 5 vs 6（计数断言），能量差异存在且有限。</li>
+<li>ECP-pairing：有 ECP 元素必须能找到匹配基组，否则 <code>Registry::load_pair</code> 返回 <code>EngineError::Data</code>。</li>
+</ol>
+<h3 id="82-ecp">8.2 ECP</h3>
+<ul>
+<li><strong>来源</strong>：Stuttgart / def2-ECP 官方 + BSE 导出（<strong>再分发条款必须先确认</strong>，见 §14 #20）。</li>
+<li><strong>陷阱显式声明</strong>：<code>r^n</code> vs <code>r^(n-2)</code> 强制 <code>r_power_convention</code>，加载器统一转内部约定。</li>
+<li><strong>配对校验</strong>：<code>Registry::load_pair(basis, ecp)</code> 是唯一入口。</li>
+</ul>
+<h3 id="83-泛函最重本地实现">8.3 泛函（最重，本地实现）</h3>
+<p><strong>设计</strong>：每个泛函拆成 <code>FunctionalTerm</code>（X-01）；数据侧只放参数与组合，代码侧放数学形式。
+不允许参数散落；一个泛函不能在多处重写。</p>
+<table>
+<thead>
+<tr>
+<th>组件</th>
+<th>数学形式</th>
+<th>依赖</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>LdaSvwn5</code></td>
+<td>VWN5 + 自旋插值</td>
+<td>ρ</td>
+</tr>
+<tr>
+<td><code>GgaPbeX</code></td>
+<td>PBE 交换（κ=0.804, μ=0.21951）</td>
+<td>ρ, σ</td>
+</tr>
+<tr>
+<td><code>GgaPbeC</code></td>
+<td>PBE 相关</td>
+<td>ρ, σ</td>
+</tr>
+<tr>
+<td><code>GgaB88</code></td>
+<td>Becke 88</td>
+<td>ρ, σ</td>
+</tr>
+<tr>
+<td><code>GgaLyp</code></td>
+<td>LYP 相关</td>
+<td>ρ, σ</td>
+</tr>
+<tr>
+<td><code>HfExchange</code></td>
+<td>K 矩阵混合</td>
+<td>来自 S-02</td>
+</tr>
+</tbody>
+</table>
+<p><strong>验证三道门禁</strong>：① 有限差分导数 &lt; 1e-9（X-02，CI 必跑）；② 单点值 vs <code>tests/reference</code>
+（LDA/GGA &lt; 1 mHa、B3LYP &lt; 2 mHa）；③ 数值稳定性：低密度/超大梯度截断规则写进
+<code>functional.yaml</code> 的 <code>stability</code> 字段，有单元测试。</p>
+<h3 id="84-xc-网格">8.4 XC 网格</h3>
+<ul>
+<li>参数数据化：<code>grid/*.yaml</code> 存等级 → 参数；<strong>代码不含硬编码点数</strong>。</li>
+<li>收敛测试：T2 分子相邻等级能量差 &lt; 0.1 mHa，CI 断言。</li>
+<li>陷阱显式：Becke 锐度、原子半径缩放全在数据里（<code>becke_sharpness</code>、<code>radii_scale</code>）。</li>
+</ul>
+<h3 id="85-溶剂">8.5 溶剂</h3>
+<ul>
+<li>第一阶段只做接口与数据，不做完整 PCM。</li>
+<li>字段：<code>epsilon</code>、<code>temperature_K</code>、<code>atomic_radii</code>、<code>cavity_model</code>、<code>scale</code>。</li>
+<li><code>cavity_model</code> 必须显式；loader 不因不认识而报错，但 <code>Engine::run</code> 返回 <code>Unsupported</code>。</li>
+<li>验证：ε 与 NIST 一致（水 78.3553 @ 298.15 K）。</li>
+</ul>
+<h3 id="86-数据治理v21-补充-load--verify-分工">8.6 数据治理（v2.1 补充 load / verify 分工）</h3>
+<table>
+<thead>
+<tr>
+<th>规则</th>
+<th>机制</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>数据与代码分仓（逻辑上）</td>
+<td><code>qwb-data/</code> 独立目录 + 独立 semver（物理拆仓见 §14 #21）</td>
+</tr>
+<tr>
+<td>每条数据带 sha256</td>
+<td>规范化内容摘要；文件内 / <code>registry.yaml</code> / <code>data_snapshot</code> <strong>三处一致</strong></td>
+</tr>
+<tr>
+<td>每条数据带 citation</td>
+<td>schema required，缺失即拒（<code>g2.citation</code>）</td>
+</tr>
+<tr>
+<td>每条数据带 license</td>
+<td><code>commercial_ok</code> / <code>redistribute_ok</code> 显式</td>
+</tr>
+<tr>
+<td>变更必须 bump version</td>
+<td>CI 检查 <code>CHANGELOG.md</code></td>
+</tr>
+<tr>
+<td>结果快照</td>
+<td>每次计算写 <code>data_snapshot.json</code></td>
+</tr>
+<tr>
+<td>发布清单</td>
+<td><code>scripts/gen_data_licenses.py</code> 生成 <code>DATA_LICENSES.md</code></td>
+</tr>
+<tr>
+<td>cargo-deny 联动</td>
+<td><code>deny.toml</code> 的 <code>[licenses]</code> 映射依赖许可；数据许可由 <code>DATA_LICENSES.md</code> 人审</td>
+</tr>
+</tbody>
+</table>
+<p><strong>load ≠ verify</strong>（v2.1 明确，消除 v2.0 的 D-01 矛盾）：</p>
+<ul>
+<li><strong>load</strong>（<code>Registry::open</code>）：只要求文件语法/结构可解析。<strong>空注册表必须 <code>Ok</code></strong>，
+否则 <code>data list</code>/<code>show</code>/工具链在冷启动时不可用。</li>
+<li><strong>verify</strong>（<code>qwb data verify</code>）：G2 门禁。0 条目、缺 citation/license/sha256 一律退出码 3。</li>
+</ul>
+<hr>
+<h2 id="9-验证体系">9. 验证体系</h2>
+<p>三层，缺一不可：</p>
+<ol>
+<li><strong>单元层</strong>：每 WP 自带（积分对照、泛函导数、网格精度、ECP 矩阵元、状态机转移）。</li>
+<li><strong>物理极限层</strong>：氢原子解析解（V-01）、均匀电子气、HF 一致性（V-02）、网格 Σw 收敛。</li>
+<li><strong>基准集层</strong>：H2、H2O、CH4、NH3、CO、N2、苯（V-03）；对照几何/频率/高精度文献能量，
+<strong>全部经 <code>tests/reference/*.csv</code> 且带来源</strong>（§7.0）。</li>
+</ol>
+<p><strong>本地/CI 门禁（一条命令）</strong>：Windows 用 <code>scripts/verify.ps1</code>，Linux/CI/WSL 用
+<code>scripts/verify.sh</code>（两者覆盖同一清单，见 §13）。它等价于：</p>
+<ul>
+<li><code>cargo fmt --all --check</code></li>
+<li><code>cargo clippy --workspace --all-targets -- -D warnings</code>（两个 workspace）</li>
+<li><code>cargo test --workspace</code>（含 proptest）</li>
+<li><code>cargo deny check</code>（advisories/bans/licenses/sources）</li>
+<li><code>qwb-gen-schemas --check</code>（K1 不漂移）</li>
+<li><code>qwb data verify</code>（G2）</li>
+<li><code>mypy --strict</code>（K6 桩 + typed consumer）</li>
+<li><code>scripts/check_deps_centralized.sh</code>、<code>check_unsafe.sh</code>、<code>check_rayon_determinism.sh</code></li>
+</ul>
+<p><strong>CI 分层</strong>：PR 跑上面全部；每日跑 T3–T6；每周跑完整基准 + <code>cargo criterion</code> 归档 + diff 报警。</p>
+<p><strong>门禁 G</strong>：</p>
+<ul>
+<li><strong>G1 契约门禁</strong>：K1–K6 已冻结；改动只允许新增；破坏性改动需人类评审。</li>
+<li><strong>G2 数据门禁</strong>：D 轨每次合入必须有 citation + license + sha256；<code>cargo-deny</code> 许可映射一致。</li>
+<li><strong>G3 物理门禁</strong>：新增泛函必须过 X-02 有限差分导数。</li>
+<li><strong>G4 集成门禁</strong>：T 之前 WP 的验收必须全绿。</li>
+<li><strong>G5 复现门禁</strong>：UI 可见结果目录必须含 <code>env.json</code>；CI 强制（<code>inspect</code> 退出码 3）。</li>
+<li><strong>G6 Rust 门禁</strong>：<code>#![deny(unsafe_code)]</code>（例外需 SAFETY + 人类批准 + 白名单）；
+<code>Cargo.lock</code> 变更必须带 PR 说明；<code>cargo clippy -- -D warnings</code> 全绿。</li>
+<li><strong>G7 并行门禁</strong>：所有 <code>rayon</code> 归约必须确定性（按索引分块，禁止顺序依赖 <code>reduce</code>）；
+1 线程 vs N 线程 byte-identical。</li>
+</ul>
+<hr>
+<h2 id="10-agent-执行协议">10. Agent 执行协议</h2>
+<h3 id="101-开工前每个-wp">10.1 开工前（每个 WP）</h3>
+<ol>
+<li>读 <code>docs/status.yaml</code>，确认该 WP 依赖全部 <code>done</code>。</li>
+<li>读 <code>qwb-contracts/</code> 中相关 K 文件与 <code>qwb-contracts/studio/*.md</code>。</li>
+<li>检查产物是否已存在；若存在且验收通过，标 <code>done</code> 不重复做。</li>
+<li>跑全套门禁（<code>scripts/verify.ps1</code> 或 <code>scripts/verify.sh</code>）；若基线红，先修基线
+（唯一允许扩大改动范围的情形）。</li>
+<li>确认没有其它 WP 正在改同一文件（<code>docs/status.yaml</code> 的 <code>owner</code> 字段）。</li>
+</ol>
+<h3 id="102-执行中">10.2 执行中</h3>
+<ol>
+<li>只改本 WP 涉及的代码/数据。</li>
+<li>不得改 K1–K6 的语义（见 §10.4）。</li>
+<li>不得删除或修改其他 WP 的产物。</li>
+<li>每次提交附件：<code>cargo fmt --check</code> + <code>cargo clippy -- -D warnings</code> + 该 WP 验收命令输出摘要。</li>
+<li><strong>公共 API 变更</strong>（<code>pub</code> 项）必须在 PR body 里显式列出，触发 G1 复核。</li>
+<li><strong>新增 crate 依赖</strong>只能加到 <code>[workspace.dependencies]</code>，并在 PR body 说明理由（人类批准）。</li>
+</ol>
+<h3 id="103-卡住时怎么办v21默认前进不默认停下">10.3 卡住时怎么办（<strong>v2.1：默认前进，不默认停下</strong>）</h3>
+<p>v2.0 的&quot;任何不明确就停下上报&quot;会把 agent 卡死。v2.1 分级如下：</p>
+<table>
+<thead>
+<tr>
+<th>情形</th>
+<th>动作</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>验收命令的<strong>细节</strong>不明确（哪个分子、哪个容差）</td>
+<td><strong>选 §6/§7 里更严格的解释</strong>，在 <code>docs/status.yaml</code> 的 <code>note</code> 写明，继续做</td>
+</tr>
+<tr>
+<td>需要新增<strong>可选字段/新变体/新方法</strong>（不破坏既有语义）</td>
+<td>直接做，进 <code>CHANGELOG.md</code>，继续</td>
+</tr>
+<tr>
+<td>参考值查不到</td>
+<td>走 §7.0 的<strong>内部独立路径 fallback</strong>，在 CSV <code>note</code> 与 <code>docs/error-budget.md</code> 登记</td>
+</tr>
+<tr>
+<td>需要改<strong>已冻结语义</strong>（删字段、改状态机、改退出码含义）</td>
+<td><strong>停</strong>，写进 <code>docs/choices.md</code> 的&quot;待人类裁决&quot;，转做<strong>其它可并行的 WP</strong></td>
+</tr>
+<tr>
+<td>两个 WP 的验收互相冲突</td>
+<td>停，写进 <code>docs/choices.md</code>，转做其它可并行的 WP</td>
+</tr>
+<tr>
+<td>基线编译/测试红且非本 WP 引入</td>
+<td>停并报告；这是唯一允许&quot;不动手&quot;的硬阻塞</td>
+</tr>
+</tbody>
+</table>
+<p><strong>禁止</strong>：伪造结果、把未实装的功能标 <code>done</code>、用自算值冒充文献值、静默跳过失败的门禁。</p>
+<h3 id="104-契约升级流程真正需要动-k-时">10.4 契约升级流程（真正需要动 K 时）</h3>
+<ol>
+<li>在 <code>docs/choices.md</code> 登记&quot;为什么必须改&quot; + 影响面（哪些 WP 已依赖它）。</li>
+<li>改 <code>qwb-contracts/CHANGELOG.md</code>（语义变更必须 bump）。</li>
+<li>同步改：Rust 类型、生成的 schema、<code>*.md</code>、<code>*.pyi</code>、测试。</li>
+<li>人类评审通过后，<strong>同时修订本文件 §4</strong>，并把 v2.x 号 +1（§15）。</li>
+</ol>
+<h3 id="105-推荐工作顺序">10.5 推荐工作顺序</h3>
+<pre><code>（C 轨已 done）
+1. D-01, D-02, D-03, D-09, D-13          ← 数据能撑起 T1 即可
+2. I-00, I-01..I-04
+3. X-01..X-05
+4. S-01..S-03（S-06 可与 T2 并行）
+5. T1 集成通过
+6. D-04, D-10 → T2（含 S-06 性质）
+7. G-01..G-03 → T3
+8. F-01..F-02 → T4
+9. D-07, D-08, I-05 → T5
+10. D-11, D-12 + S-02 扩充 K 矩阵 → T6
+11. P-01..P-08 → T7
+12. P-09..P-10 → T8
+13. V-04, V-05, V-06 → 收尾
+</code></pre>
+<h3 id="106-进度记账">10.6 进度记账</h3>
+<p>每完成一个 WP：<code>docs/status.yaml</code> 写
+<code>{state: done, ts: &lt;ISO8601 UTC&gt;, artifact: &lt;一句话&gt;, verification: &lt;命令/断言&gt;}</code>。
+若被卡：<code>{state: blocked, reason: ..., log: ...}</code> <strong>且</strong> 在 <code>docs/choices.md</code> 登记。</p>
+<hr>
+<h2 id="11-风险与门禁对照">11. 风险与门禁对照</h2>
+<table>
+<thead>
+<tr>
+<th>ID</th>
+<th>风险</th>
+<th>缓解</th>
+<th>门禁</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>R-01</td>
+<td>契约缺陷导致返工</td>
+<td>契约已冻结 + <code>#[non_exhaustive]</code> + schema 与类型同源</td>
+<td>G1</td>
+</tr>
+<tr>
+<td>R-02</td>
+<td>数据转录错误</td>
+<td>逐项 diff BSE + 双人核对 + CI 断言</td>
+<td>G2</td>
+</tr>
+<tr>
+<td>R-03</td>
+<td>Rys vs Obara-Saika</td>
+<td><strong>已定案：Obara-Saika 为主，Rys 作数值独立交叉验证</strong>（同值 &lt; 1e-10）</td>
+<td>—</td>
+</tr>
+<tr>
+<td>R-04</td>
+<td>泛函参数笔误</td>
+<td>单点基准 + 导数有限差分双门禁</td>
+<td>G3</td>
+</tr>
+<tr>
+<td>R-05</td>
+<td>网格精度不足</td>
+<td>等级映射 + 收敛测试 + 数据化锐度参数</td>
+<td>—</td>
+</tr>
+<tr>
+<td>R-06</td>
+<td>球谐/笛卡尔隐性切换</td>
+<td><code>angular</code> 单入口 + 单元测试</td>
+<td>—</td>
+</tr>
+<tr>
+<td>R-07</td>
+<td><code>rayon</code> 竞争</td>
+<td>TSan（nightly）+ 单/多线程 identical</td>
+<td>G7</td>
+</tr>
+<tr>
+<td>R-08</td>
+<td>结果不可复现</td>
+<td><code>env.json</code> 强制 + <code>replay</code></td>
+<td>G5, G6</td>
+</tr>
+<tr>
+<td>R-09</td>
+<td>数据许可冲突</td>
+<td><code>DATA_LICENSES.md</code> + <code>cargo-deny</code> 映射</td>
+<td>G2</td>
+</tr>
+<tr>
+<td>R-10</td>
+<td>参考实现污染</td>
+<td>只允许 CI 黑盒对照，代码不得复制；<code>grep</code> 门禁</td>
+<td>CI</td>
+</tr>
+<tr>
+<td>R-11</td>
+<td>faer/nalgebra 性能不足</td>
+<td><code>qwb-linalg</code> 抽象层 + 基准守门；必要时接系统 BLAS（需批准）</td>
+<td>V-06</td>
+</tr>
+<tr>
+<td>R-12</td>
+<td>pyo3 abi3 版本错配</td>
+<td><strong>冻结 <code>abi3-py39</code></strong></td>
+<td>G1</td>
+</tr>
+<tr>
+<td>R-13</td>
+<td><code>rayon</code> 非确定归约</td>
+<td>统一 <code>DeterministicReduce</code> 辅助函数</td>
+<td>G7</td>
+</tr>
+<tr>
+<td>R-14</td>
+<td>HDF5 跨平台痛</td>
+<td>Zip + JSON 已定案；<strong>不引入 <code>ndarray-npy</code></strong></td>
+<td>—</td>
+</tr>
+<tr>
+<td>R-15</td>
+<td>编译时间过长</td>
+<td>workspace 分 crate；feature gate（<code>faer</code>、<code>python</code>）；CI <code>sccache</code></td>
+<td>—</td>
+</tr>
+<tr>
+<td>R-16</td>
+<td><code>unsafe</code> 扩散</td>
+<td><code>deny(unsafe_code)</code> + 白名单脚本</td>
+<td>G6</td>
+</tr>
+<tr>
+<td>R-17</td>
+<td>crate 生态 supply chain</td>
+<td><code>cargo deny</code>（四类）+ 依赖集中 + 新 crate 需批准</td>
+<td>G6</td>
+</tr>
+<tr>
+<td>R-18</td>
+<td>矩阵与 numpy 拷贝开销</td>
+<td>初期全部拷贝（≤500×500 可接受），接口不变</td>
+<td>—</td>
+</tr>
+<tr>
+<td>R-19</td>
+<td>llvm/toolchain 偏移影响数值</td>
+<td>根 <code>rust-toolchain.toml</code> 冻结 <code>1.97.1</code>；对比 CI 用同镜像</td>
+<td>G6</td>
+</tr>
+<tr>
+<td><strong>R-20</strong></td>
+<td><strong><code>serde_yaml</code> 已 unmaintained</strong></td>
+<td>§2.4 冻结它；<code>deny.toml</code> 只 ignore <code>RUSTSEC-2024-0449</code>；迁移为后续可选（需人类批）</td>
+<td>G6</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2 id="12-附录">12. 附录</h2>
+<h3 id="121-目录结构v21--实际布局单-git-工作树见-14-2">12.1 目录结构（v2.1 = 实际布局；<strong>单 git 工作树</strong>，见 §14 #2）</h3>
+<pre><code>project.md                 # 本文件
+README.md  rust-toolchain.toml  .gitattributes  .gitignore
+.github/workflows/ci.yml
+
+qwb-contracts/             # 契约（C 轨）
+  schema/                  # K1：7 类 × {json,yaml}，由 schemars 生成
+  engine-api/              # K2：crate qwb-engine-api（独立 workspace，自带 Cargo.lock）
+  studio/
+    task.schema.yaml  result.schema.yaml      # K3
+    qwb-format.md                             # K4
+    cli.md                                    # K5
+    examples/example.qwb                      # K4 示例容器
+    python/qwb_engine.pyi                     # K6
+    python/tests/consumer_example.py          # K6 类型门禁
+  CHANGELOG.md
+
+qwb-data/                  # 数据（D 轨）
+  registry.yaml  DATA_LICENSES.md  CHANGELOG.md
+  basis/ ecp/ functional/ grid/ solvent/      # 生产数据（D 轨交付）
+  examples/                                   # K1 样例（example- 前缀，非交付物）
+
+qwb-core/                  # Cargo workspace（引擎）
+  Cargo.toml  Cargo.lock  deny.toml
+  crates/
+    qwb-registry/          # K1 类型 + 校验（C-01）+ 加载器（D-01）
+    qwb-io/                # K3 状态机/布局 + K4 容器（C-03/C-04）
+    qwb-cli/               # K5 CLI（C-05）
+    qwb-linalg/  qwb-basis/  qwb-integrals/  qwb-xc/  qwb-grid/
+    qwb-scf/  qwb-gradient/  qwb-hessian/  qwb-opt/  qwb-freq/
+    qwb-props/             # S-06
+    qwb-engine/  qwb-python/
+  benches/  tests/  examples/
+
+qwb-studio/                # Python 产品（P 轨）
+  qwb_studio/{models,scheduler,gui}
+  examples/  tests/  pyproject.toml
+
+docs/  status.yaml  choices.md  error-budget.md
+scripts/  verify.sh  check_deps_centralized.sh  check_unsafe.sh
+          check_rayon_determinism.sh  unsafe_allowlist.txt
+          gen_data_licenses.py
+</code></pre>
+<blockquote>
+<p><code>qwb-core</code> 以 <strong>path 依赖</strong>引用 <code>qwb-contracts/engine-api</code>（单仓，§14 #2）。</p>
+</blockquote>
+<h3 id="122-命名与单位">12.2 命名与单位</h3>
+<ul>
+<li>引擎内部<strong>原子单位</strong>；边界（CLI/API/UI）用 Å/eV 且显式字段后缀。</li>
+<li>能量 <code>_hartree</code>；长度 <code>_angstrom</code>；梯度 <code>_hartree_per_bohr</code>；Hessian <code>_hartree_per_bohr2</code>；
+偶极 <code>_debye</code>；温度 <code>_K</code>；数据文件里的基组指数/ECP 指数/网格 cutoff 用 <strong>Bohr</strong>。</li>
+<li>时间戳 ISO 8601 UTC。</li>
+<li>Rust crate 名统一 <code>qwb-*</code>；类型 PascalCase；函数 snake_case。</li>
+<li>Python 绑定包 <code>qwb_engine</code>；产品包 <code>qwb_studio</code>。</li>
+</ul>
+<h3 id="123-提交规范">12.3 提交规范</h3>
+<p><code>&lt;轨道&gt;-&lt;ID&gt;: &lt;一句话&gt;</code>，例如 <code>I-02: add one-electron overlap integrals</code>。</p>
+<p>PR 必须含：WBS ID、<code>cargo fmt --check</code>、<code>cargo clippy --workspace -- -D warnings</code>、
+该 WP 验收命令输出、新增 crate 的理由 + <code>deny.toml</code> 差异、公共 API 变更清单。</p>
+<h3 id="124-状态文件格式">12.4 状态文件格式</h3>
+<pre><code class="language-yaml"><span class="hljs-attr">C-01:</span> {<span class="hljs-attr">state:</span> <span class="hljs-string">done</span>, <span class="hljs-attr">ts:</span> <span class="hljs-string">&quot;2026-10-22T22:53:00Z&quot;</span>, <span class="hljs-attr">artifact:</span> <span class="hljs-string">&quot;...&quot;</span>, <span class="hljs-attr">verification:</span> <span class="hljs-string">&quot;...&quot;</span>}
+<span class="hljs-attr">D-03:</span> {<span class="hljs-attr">state:</span> <span class="hljs-string">in_progress</span>, <span class="hljs-attr">owner:</span> <span class="hljs-string">agent-a</span>}
+<span class="hljs-attr">D-04:</span> {<span class="hljs-attr">state:</span> <span class="hljs-string">blocked</span>, <span class="hljs-attr">reason:</span> <span class="hljs-string">&quot;BSE export format changed&quot;</span>, <span class="hljs-attr">log:</span> <span class="hljs-string">&quot;logs/D-04.log&quot;</span>}
+</code></pre>
+<h3 id="125-人类决策清单">12.5 人类决策清单</h3>
+<p><strong>已全部收敛 → §14</strong>。仍未定的只有&quot;具体数据来源的许可确认&quot;与&quot;代码许可最终选择&quot;，
+两者都给了<strong>默认值且不阻塞</strong>。</p>
+<hr>
+<h2 id="13-环境事实v21-新增避免每个会话重新探测">13. 环境事实（v2.1 新增，避免每个会话重新探测）</h2>
+<p>开发机：Windows 11（当前工作目录 <code>D:\python_II\Jaguar</code>，<strong>路径含空格需引号</strong>）。</p>
+<table>
+<thead>
+<tr>
+<th>工具</th>
+<th>版本/位置</th>
+<th>备注</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>rustc / cargo</td>
+<td>1.97.1（<code>C:\Users\JYLin\.cargo\bin</code>）</td>
+<td>由根 <code>rust-toolchain.toml</code> 钉住；<code>rustup toolchain list</code> 有 <code>1.97.1</code></td>
+</tr>
+<tr>
+<td>cargo-deny</td>
+<td>0.20.2（已装）</td>
+<td><code>cargo deny check</code> 可用</td>
+</tr>
+<tr>
+<td>cargo clippy / fmt</td>
+<td>随 toolchain</td>
+<td>—</td>
+</tr>
+<tr>
+<td>Python</td>
+<td>系统 3.9.9；仓库 <code>.venv</code> = 3.12.10</td>
+<td><strong>用 <code>.venv</code></strong>：<code>.\.venv\Scripts\python.exe</code></td>
+</tr>
+<tr>
+<td>mypy / numpy</td>
+<td><code>.venv</code> 内（mypy 2.4.0、numpy 2.5.4）</td>
+<td><code>mypy --strict</code> 需要 numpy 桩</td>
+</tr>
+<tr>
+<td>bash</td>
+<td><code>C:\WINDOWS\system32\bash.exe</code>（WSL）</td>
+<td>仓库路径 = <code>/mnt/d/python_II/Jaguar</code></td>
+</tr>
+<tr>
+<td>git</td>
+<td>2.53</td>
+<td>已 init；行尾由 <code>.gitattributes</code> 统一 LF</td>
+</tr>
+<tr>
+<td>网络</td>
+<td><a href="http://crates.io">crates.io</a> 可达</td>
+<td><code>cargo add</code> / <code>cargo install</code> 可用</td>
+</tr>
+</tbody>
+</table>
+<p><strong>标准命令</strong>：</p>
+<pre><code class="language-powershell"><span class="hljs-built_in">cd</span> D:\python_II\Jaguar
+
+<span class="hljs-comment"># 全门禁（Windows 原生，含 mypy）</span>
+powershell <span class="hljs-literal">-NoProfile</span> <span class="hljs-literal">-ExecutionPolicy</span> Bypass <span class="hljs-operator">-File</span> scripts\verify.ps1
+
+<span class="hljs-comment"># 全门禁（WSL bash；CI 用同一个）</span>
+bash scripts/verify.sh
+
+<span class="hljs-comment"># 契约仓单独</span>
+<span class="hljs-built_in">cd</span> qwb<span class="hljs-literal">-contracts</span>\engine<span class="hljs-literal">-api</span>
+cargo test <span class="hljs-literal">--all-targets</span>
+<span class="hljs-built_in">cd</span> ..\..
+
+<span class="hljs-comment"># K1 schema 重新生成 / 校验</span>
+<span class="hljs-built_in">cd</span> qwb<span class="hljs-literal">-core</span>
+cargo run <span class="hljs-literal">-q</span> <span class="hljs-literal">-p</span> qwb<span class="hljs-literal">-registry</span> <span class="hljs-literal">--bin</span> qwb<span class="hljs-literal">-gen-schemas</span> <span class="hljs-literal">--</span> ..\qwb<span class="hljs-literal">-contracts</span>\schema
+cargo run <span class="hljs-literal">-q</span> <span class="hljs-literal">-p</span> qwb<span class="hljs-literal">-registry</span> <span class="hljs-literal">--bin</span> qwb<span class="hljs-literal">-gen-schemas</span> <span class="hljs-literal">--</span> ..\qwb<span class="hljs-literal">-contracts</span>\schema <span class="hljs-literal">--check</span>
+
+<span class="hljs-comment"># 数据打戳 / 校验</span>
+cargo run <span class="hljs-literal">-q</span> <span class="hljs-literal">-p</span> qwb<span class="hljs-literal">-registry</span> <span class="hljs-literal">--bin</span> qwb<span class="hljs-literal">-stamp-data</span> <span class="hljs-literal">--</span> ..\qwb<span class="hljs-literal">-data</span>\basis\&lt;file&gt;.yaml
+cargo run <span class="hljs-literal">-q</span> <span class="hljs-literal">-p</span> qwb<span class="hljs-literal">-cli</span> <span class="hljs-literal">--bin</span> qwb <span class="hljs-literal">--</span> <span class="hljs-keyword">data</span> verify
+
+<span class="hljs-comment"># K6 类型门禁</span>
+<span class="hljs-built_in">cd</span> ..
+<span class="hljs-variable">$env:MYPYPATH</span> = <span class="hljs-string">&quot;D:\python_II\Jaguar\qwb-contracts\studio\python&quot;</span>
+.\.venv\Scripts\python.exe <span class="hljs-literal">-m</span> mypy <span class="hljs-literal">--strict</span> qwb<span class="hljs-literal">-contracts</span>\studio\python\qwb_engine.pyi
+.\.venv\Scripts\python.exe <span class="hljs-literal">-m</span> mypy <span class="hljs-literal">--strict</span> qwb<span class="hljs-literal">-contracts</span>\studio\python\tests\consumer_example.py
+</code></pre>
+<p><strong>已知环境坑</strong>：<code>rustup</code> 自更新曾失败（不影响构建）；WSL 里 Windows 的 <code>cargo</code> 是
+<code>cargo.exe</code>（bash 不自动补 <code>.exe</code>），<code>scripts/verify.sh</code> 已做兜底；<code>verify.ps1</code>
+<strong>必须保持 ASCII-only</strong>（Windows PowerShell 5.1 用 ANSI 解码无 BOM 的脚本，中文会炸）；
+<code>data verify</code> 的类别推断依赖父目录名（<code>basis/</code>、<code>ecp/</code>…），样例放 <code>examples/basis/</code> 也可以。</p>
+<hr>
+<h2 id="14-决策台账已定别再重新讨论">14. 决策台账（<strong>已定，别再重新讨论</strong>）</h2>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>事项</th>
+<th>结论</th>
+<th>类别</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>K1 生成方式</td>
+<td><strong><code>schemars</code> 从 Rust 类型生成</strong>；<code>schemars</code> 进 §2.4 白名单</td>
+<td>已定</td>
+</tr>
+<tr>
+<td>2</td>
+<td>代码仓库拓扑</td>
+<td><strong>单 git 工作树</strong>：<code>qwb-contracts/</code>、<code>qwb-data/</code>、<code>qwb-core/</code> 三顶层目录；<code>qwb-core</code> 用 path 依赖引用 <code>engine-api</code></td>
+<td>已定（可后续拆仓，见 #21）</td>
+</tr>
+<tr>
+<td>3</td>
+<td><code>rust-toolchain.toml</code> 位置</td>
+<td><strong>仓库根</strong>（同时覆盖两个 workspace）</td>
+<td>已定</td>
+</tr>
+<tr>
+<td>4</td>
+<td>MSRV / toolchain</td>
+<td><strong>1.97.1</strong>（本机已装）</td>
+<td>已定</td>
+</tr>
+<tr>
+<td>5</td>
+<td><code>qwb-linalg</code> 默认后端</td>
+<td><strong><code>nalgebra</code></strong>，<code>faer</code> 为可选 feature</td>
+<td>已定</td>
+</tr>
+<tr>
+<td>6</td>
+<td>R-03 数值方案</td>
+<td><strong>Obara-Saika 为主 + Rys 数值交叉验证</strong></td>
+<td>已定</td>
+</tr>
+<tr>
+<td>7</td>
+<td><code>ndarray-npy</code></td>
+<td><strong>不引入</strong></td>
+<td>已定</td>
+</tr>
+<tr>
+<td>8</td>
+<td>pyo3 ABI</td>
+<td><strong><code>abi3-py39</code></strong></td>
+<td>已定</td>
+</tr>
+<tr>
+<td>9</td>
+<td>首版泛函清单</td>
+<td><strong>SVWN5、PBE、B88、LYP、B3LYP、HF</strong>（只这些）</td>
+<td>已定</td>
+</tr>
+<tr>
+<td>10</td>
+<td>溶剂</td>
+<td>第一阶段<strong>只做接口 + 数据</strong>，引擎返回 <code>Unsupported</code></td>
+<td>已定</td>
+</tr>
+<tr>
+<td>11</td>
+<td>ECP 元素范围</td>
+<td><strong>H–Kr</strong>（先 Cu、Zn，再 Na–Kr；def2-ECP 先 K–Kr）</td>
+<td>已定</td>
+</tr>
+<tr>
+<td>12</td>
+<td>参考实现（libxc 等）边界</td>
+<td><strong>只允许 CI 黑盒对照，不引入任何代码/数据</strong>；R-10 的 grep 门禁</td>
+<td>已定</td>
+</tr>
+<tr>
+<td>13</td>
+<td>是否允许热点 <code>unsafe</code></td>
+<td><strong>默认不允许</strong>；需人类批准 + <code>// SAFETY:</code> + 白名单</td>
+<td>已定</td>
+</tr>
+<tr>
+<td>14</td>
+<td><code>serde_yaml</code></td>
+<td>保留（§2.4 冻结）；<code>deny.toml</code> 只 ignore <code>RUSTSEC-2024-0449</code></td>
+<td>已定（可迁移，需批准）</td>
+</tr>
+<tr>
+<td>15</td>
+<td>K3 状态机</td>
+<td><strong>6 条转移</strong>（含 <code>queued→cancelled</code>）；重试 = 新 task id</td>
+<td>已定（v2.1）</td>
+</tr>
+<tr>
+<td>16</td>
+<td><code>data_snapshot</code> 摘要</td>
+<td>用<strong>规范化内容 sha256</strong>（与文件内 <code>sha256</code>、registry 条目三处一致）</td>
+<td>已定</td>
+</tr>
+<tr>
+<td>17</td>
+<td>CLI 数据根</td>
+<td><code>QWB_DATA_ROOT</code> 环境变量或向上搜索，<strong>不加命令行参数</strong></td>
+<td>已定</td>
+</tr>
+<tr>
+<td>18</td>
+<td><code>zip</code> feature</td>
+<td><strong>只 <code>deflate</code></strong>（关闭 bzip2/lzma/aes/zstd）</td>
+<td>已定</td>
+</tr>
+<tr>
+<td>19</td>
+<td>代码许可</td>
+<td><strong><code>Apache-2.0</code></strong>（所有 crate 的 <code>license</code> 字段）。人类可一次性改写；<strong>不阻塞</strong></td>
+<td>默认已采用</td>
+</tr>
+<tr>
+<td>20</td>
+<td>数据许可</td>
+<td>自研数据用 <code>Apache-2.0</code>；<strong>外部来源（Stuttgart/def2-ECP、BSE）逐条确认后再写 <code>redistribute_ok: true</code></strong> —— 这是 D-07/D-08 的前置检查，不是全项目阻塞</td>
+<td>默认 + 逐条确认</td>
+</tr>
+<tr>
+<td>21</td>
+<td>物理拆三仓</td>
+<td>暂不拆。触发条件：数据仓需要独立对外发布</td>
+<td>观察项</td>
+</tr>
+<tr>
+<td>22</td>
+<td><code>cargo-audit</code></td>
+<td><strong>不引入</strong>，<code>cargo deny check advisories</code> 覆盖</td>
+<td>已定</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2 id="15-变更记录">15. 变更记录</h2>
+<h3 id="v20--v212026-10-22">v2.0 → v2.1（2026-10-22）</h3>
+<p><strong>目标澄清</strong></p>
+<ul>
+<li>新增 §2.2：明确&quot;模仿 Jaguar&quot;= <strong>对齐产品面 + 第一阶段方法集合</strong>，并<strong>排除 PS 积分、
+PBF/RISM</strong>；把 TS/IRC/scan/NBO/EPR 加入非目标。</li>
+<li>§2.4 允许库补充 <code>schemars</code>（已批准）、<code>numpy</code>、<code>pydantic</code>、<code>mypy</code>；移除 <code>h5py</code> 残留
+与 <code>cargo-audit</code>；明确 <code>ndarray-npy</code> 不引入。</li>
+<li>新增 <strong>S-06（性质：偶极/布居电荷/轨道能级）</strong>：补上 §12.1 里存在但无 WP 的 <code>qwb-props</code>，
+并让 T2 断言&quot;Jaguar 也会报的东西&quot;。</li>
+</ul>
+<p><strong>契约与实现对齐</strong>（§4）</p>
+<ul>
+<li>K1：写实际形态 —— <code>shells: Vec&lt;ShellBlock&gt;</code>、<code>coefficients: Vec&lt;Vec&lt;f64&gt;&gt;</code>、
+<code>notes</code> 字段、规范化 sha256 规则、<code>MoleculeFile</code> 不受 G2 门禁、<code>RegistryManifest</code> 形状、
+7 类 schema 文件名与生成方式、机器可读错误 code 列表。</li>
+<li>K2：写出<strong>真实 API</strong>（<code>Registry</code> 句柄语义、<code>EngineBackend</code> + <code>with_backend</code>、
+<code>InvalidInput</code> 变体、<code>SUPPORTED_FEATURES</code> 词汇表、<code>non_exhaustive</code> 的构造方法约定、
+矩阵 list-of-list、<code>exit_code</code> 映射）。</li>
+<li>K3：状态机从 5 条扩到 <strong>6 条</strong>（新增 <code>queued→cancelled</code>）；明确<strong>重试 = 新 task id</strong>，
+不再需要 <code>failed→queued</code>。同步改了 <code>qwb-io::task</code>、<code>task.schema.yaml</code> 与测试。</li>
+<li>K4：写明&quot;只 deflate&quot;、字节可复现、结构性拒绝清单、<code>data_snapshot</code> 摘要语义。</li>
+<li>K5：把 C 轨实装时的增量<strong>写进契约</strong>（<code>batch PATTERN|DIR</code>、<code>data show NAME</code>、
+<code>data verify [PATH...]</code>、<code>QWB_DATA_ROOT</code>）。</li>
+<li>K6：固化 <code>.pyi</code> 实际签名（<code>registry_path</code> 关键字、错误类带 <code>exit_code</code>、<code>abi3-py39</code>）。</li>
+</ul>
+<p><strong>消除 v2.0 内部矛盾</strong></p>
+<ul>
+<li>C-01 的验收曾要求 <code>qwb data verify</code>（D-02 的产物）→ 改为&quot;C-01 只要最小 verify，
+D-02 扩成 6 坏/6 好回归集&quot;。</li>
+<li>D-01 的&quot;空注册表可加载&quot;与 G2 的&quot;必须有条目&quot;冲突 → §8.6 明确 <strong>load ≠ verify</strong>。</li>
+<li>T1 的&quot;与 P-04 参考值比&quot;是错引用（P-04 是 <code>env.json</code> 生成器）→ 改为 §7.0 的
+<code>tests/reference/*.csv</code>。</li>
+<li>T5 的&quot;ZnO&quot;没定基组/方法 → 冻结为 CuH/LANL2DZ 与 ZnO/def2-SVP+def2-ECP。</li>
+<li>§9 的 <code>cargo audit</code>、<code>cargo-nextest</code>（本机未装）→ 统一为 <code>scripts/verify.sh</code>。</li>
+<li>§12.1 目录与实际不符（缺 <code>qwb-io</code>、<code>rust-toolchain.toml</code> 在根、单仓）→ 按实际重写。</li>
+</ul>
+<p><strong>让 agent 不被卡住</strong></p>
+<ul>
+<li>§10.3 新增分级决策规则（默认选更严格解释并前进；只有改冻结语义才停）。</li>
+<li>§7.0 新增参考值政策（外部引用优先 + 允许&quot;内部独立路径&quot; fallback 并登记）。</li>
+<li>§13 新增<strong>环境事实</strong>（toolchain、cargo-deny、mypy、WSL bash、标准命令）。</li>
+<li>新增 <strong><code>scripts/verify.ps1</code></strong>（Windows 原生）/ <strong><code>scripts/verify.sh</code></strong>（Linux/CI）：
+一条命令跑完全部门禁，<strong>agent 不需要记住 12 条命令</strong>。</li>
+<li>§14 新增<strong>决策台账</strong>：把 v2.0 §12.5 的 13 项人类待定事项全部收敛为定论或&quot;默认 + 不阻塞&quot;。</li>
+</ul>
+
+            <script async src="https://cdn.jsdelivr.net/npm/katex-copytex@latest/dist/katex-copytex.min.js"></script>
+            
+        </body>
+        </html>

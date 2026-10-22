@@ -1,0 +1,28 @@
+sha256: 5a58ad74a6715a9c12a433565f9ca4a8e6635bb65cab484f76a7e709d5795355
+name: d02-empty-citation
+version: 1.0.0
+notes: 'D-02 bad 2/6: citation is empty -> g2.citation'
+citation: []
+license:
+  spdx: Apache-2.0
+  commercial_ok: true
+  redistribute_ok: true
+created: 2026-10-22T00:00:00Z
+elements:
+- H
+angular: spherical
+normalization: l2
+role: orbital
+shells:
+- element: H
+  shells:
+  - l: 0
+    exponents:
+    - 3.42525091
+    - 0.62391373
+    - 0.1688554
+    coefficients:
+    - - 0.15432897
+      - 0.53532814
+      - 0.44463454
+    contraction_type: segmented

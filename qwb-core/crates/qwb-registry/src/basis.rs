@@ -170,10 +170,21 @@ impl BasisSet {
         self.shells.iter().find(|b| b.element == element)
     }
 
-    /// 语义校验（G2 的基组部分）。
+    /// 完整校验（`qwb data verify` 用）：G2 门禁 + 结构检查。
     #[must_use]
     pub fn check(&self) -> Vec<String> {
         let mut issues = self.check_common();
+        issues.extend(self.check_structure());
+        issues
+    }
+
+    /// 结构性检查：**不含** G2 的 citation/license/sha256 门禁。
+    ///
+    /// 这是 `Registry::open` 使用的检查（§8.6：load 只要求文件语法/结构可解析，
+    /// 空注册表、缺 citation 的文件都不该让加载器不可用）。
+    #[must_use]
+    pub fn check_structure(&self) -> Vec<String> {
+        let mut issues = Vec::new();
 
         if self.elements.is_empty() {
             issues.push("elements must not be empty".to_string());

@@ -1,0 +1,30 @@
+sha256: aca4a3c354ae7f749940a427dad4d22b9acb9539f313c00c91a74bd4892ceddb
+name: d02-sha-mismatch
+version: 1.0.0
+notes: 'D-02 bad 4/6: content edited after stamping -> sha256.mismatch'
+citation:
+- title: fixture
+  doi: 10.1000/fixture
+license:
+  spdx: Apache-2.0
+  commercial_ok: true
+  redistribute_ok: true
+created: 2026-10-22T00:00:00Z
+elements:
+- H
+angular: spherical
+normalization: l2
+role: orbital
+shells:
+- element: H
+  shells:
+  - l: 0
+    exponents:
+    - 3.42525091
+    - 0.62391373
+    - 0.1688554
+    coefficients:
+    - - 0.15432897
+      - 0.53532815
+      - 0.44463454
+    contraction_type: segmented

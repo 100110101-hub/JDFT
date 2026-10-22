@@ -1,0 +1,30 @@
+sha256: 7e736c5d0dede46faa2f818fa507d6e049c9c0bc064a4aadcb45b2da6e448464
+name: d02-unsorted-exponents
+version: 1.0.0
+notes: 'D-02 bad 6/6: exponents ascending -> semantic'
+citation:
+- title: fixture
+  doi: 10.1000/fixture
+license:
+  spdx: Apache-2.0
+  commercial_ok: true
+  redistribute_ok: true
+created: 2026-10-22T00:00:00Z
+elements:
+- H
+angular: spherical
+normalization: l2
+role: orbital
+shells:
+- element: H
+  shells:
+  - l: 0
+    exponents:
+    - 0.1688554
+    - 0.62391373
+    - 3.42525091
+    coefficients:
+    - - 0.44463454
+      - 0.53532814
+      - 0.15432897
+    contraction_type: segmented

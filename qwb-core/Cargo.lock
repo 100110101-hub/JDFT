@@ -627,6 +627,7 @@ name = "qwb-registry"
 version = "0.1.0"
 dependencies = [
  "hex",
+ "qwb-engine-api",
  "schemars",
  "serde",
  "serde_json",

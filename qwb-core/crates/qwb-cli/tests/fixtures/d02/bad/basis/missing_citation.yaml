@@ -1,0 +1,27 @@
+sha256: 4338be3c936d75338acbdb21c9a61b2886c71ab54cea3bc21eaf96217c952ef7
+name: d02-missing-citation
+version: 1.0.0
+notes: 'D-02 bad 1/6: citation field absent -> schema.deserialize'
+license:
+  spdx: Apache-2.0
+  commercial_ok: true
+  redistribute_ok: true
+created: 2026-10-22T00:00:00Z
+elements:
+- H
+angular: spherical
+normalization: l2
+role: orbital
+shells:
+- element: H
+  shells:
+  - l: 0
+    exponents:
+    - 3.42525091
+    - 0.62391373
+    - 0.1688554
+    coefficients:
+    - - 0.15432897
+      - 0.53532814
+      - 0.44463454
+    contraction_type: segmented

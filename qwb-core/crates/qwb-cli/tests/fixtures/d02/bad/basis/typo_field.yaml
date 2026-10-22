@@ -1,0 +1,30 @@
+sha256: 1d288d362c41446e003b311c13bd4263e4ad99a08d0131575f23d3630a41bfa9
+name: d02-typo-field
+version: 1.0.0
+notes: 'D-02 bad 5/6: misspelled field name -> schema.deserialize'
+citation:
+- title: fixture
+  doi: 10.1000/fixture
+license:
+  spdx: Apache-2.0
+  commercial_ok: true
+  redistribute_ok: true
+created: 2026-10-22T00:00:00Z
+elements:
+- H
+angelar: spherical
+normalization: l2
+role: orbital
+shells:
+- element: H
+  shells:
+  - l: 0
+    exponents:
+    - 3.42525091
+    - 0.62391373
+    - 0.1688554
+    coefficients:
+    - - 0.15432897
+      - 0.53532814
+      - 0.44463454
+    contraction_type: segmented

@@ -1,0 +1,26 @@
+sha256: a19c3127d4530c767e40fd3b2896f7e3fd6eb3b61fa814f591bbf0eaceae7a67
+name: d02-missing-license
+version: 1.0.0
+notes: 'D-02 bad 3/6: license field absent -> schema.deserialize'
+citation:
+- title: fixture
+  doi: 10.1000/fixture
+created: 2026-10-22T00:00:00Z
+elements:
+- H
+angular: spherical
+normalization: l2
+role: orbital
+shells:
+- element: H
+  shells:
+  - l: 0
+    exponents:
+    - 3.42525091
+    - 0.62391373
+    - 0.1688554
+    coefficients:
+    - - 0.15432897
+      - 0.53532814
+      - 0.44463454
+    contraction_type: segmented

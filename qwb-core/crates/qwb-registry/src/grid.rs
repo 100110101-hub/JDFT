@@ -69,10 +69,18 @@ pub struct GridLevelDef {
 impl_data_common!(GridLevelDef);
 
 impl GridLevelDef {
-    /// 语义校验。
+    /// 完整校验（`qwb data verify` 用）：G2 门禁 + 结构检查。
     #[must_use]
     pub fn check(&self) -> Vec<String> {
         let mut issues = self.check_common();
+        issues.extend(self.check_structure());
+        issues
+    }
+
+    /// 结构性检查：**不含** G2 门禁（`Registry::open` 用，见 §8.6）。
+    #[must_use]
+    pub fn check_structure(&self) -> Vec<String> {
+        let mut issues = Vec::new();
 
         if self.radial_points < 10 {
             issues.push(format!(
