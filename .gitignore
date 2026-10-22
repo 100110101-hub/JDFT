@@ -1,0 +1,18 @@
+# Rust
+/target/
+target/
+*.pdb
+*.profraw
+
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+*.egg-info/
+
+# 工具输出
+/logs/
+*.log
+!qwb-data/**/log.txt

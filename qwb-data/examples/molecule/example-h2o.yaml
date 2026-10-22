@@ -1,0 +1,22 @@
+sha256: a6b37b6429d745ee536485de9114a11edf47b6bf4a72d8c295ccfc0d5dfca9cd
+created: 2026-10-22T22:53:00Z
+name: example-h2o
+notes: Geometry from experiment (approx.); input specimen, not a baseline reference.
+atoms:
+- symbol: O
+  position_angstrom:
+  - 0.0
+  - 0.0
+  - 0.0
+- symbol: H
+  position_angstrom:
+  - 0.0
+  - 0.757
+  - 0.586
+- symbol: H
+  position_angstrom:
+  - 0.0
+  - -0.757
+  - 0.586
+charge: 0
+multiplicity: 1

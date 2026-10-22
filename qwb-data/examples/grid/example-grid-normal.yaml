@@ -1,0 +1,18 @@
+sha256: 2508c561584b5243fc2542b557dba0313f85818335c04aba8c0c22dd6626bdc9
+cutoff: 20.0
+name: example-grid-normal
+version: 1.0.0
+notes: SPECIMEN only. Real level->parameter table and convergence gate is D-13.
+citation:
+- title: A multicenter numerical integration scheme for polyatomic molecules
+  doi: 10.1063/1.454033
+license:
+  spdx: Apache-2.0
+  commercial_ok: true
+  redistribute_ok: true
+created: 2026-10-22T22:53:00Z
+level: normal
+radial_points: 75
+lebedev_order: 302
+becke_sharpness: 0.6
+radii_scale: 0.8

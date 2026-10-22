@@ -1,0 +1,23 @@
+sha256: 5378a9d4909ed592acc549875383cff913c0de9376a559097e79e746a50974d0
+stability:
+  density_floor: 1e-12
+  sigma_ceiling: 100000000.0
+name: example-svwn5
+version: 1.0.0
+notes: SPECIMEN for K1 schema validation only. Real SVWN5 parameters + finite-difference derivative gate is D-09.
+citation:
+- title: Self-consistent equations including exchange and correlation effects
+  doi: 10.1103/PhysRev.140.A1133
+license:
+  spdx: Apache-2.0
+  commercial_ok: true
+  redistribute_ok: true
+created: 2026-10-22T22:53:00Z
+components:
+- id: LdaSvwn5
+  weight: 1.0
+requires:
+  rho: true
+  sigma: false
+  laplacian: false
+parameters: {}

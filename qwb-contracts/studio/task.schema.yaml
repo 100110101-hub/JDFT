@@ -1,0 +1,60 @@
+# K3 · Task schema（冻结）
+#
+# 这份文件是**产品面**的 Task 定义（project.md K3）。它与 Rust 侧
+# `qwb_io::TaskRecord`（qwb-core/crates/qwb-io/src/task.rs）逐字段对应，
+# 由 `qwb-core/crates/qwb-io/tests/k3_schema_docs.rs` 强制一致：
+# 改了 Rust 字段不改这份文件，C-03 的验收会失败。
+$schema: "https://json-schema.org/draft/2020-12/schema"
+$id: "qwb-contracts/studio/task.schema.yaml"
+title: Task
+description: 一个 task 的元数据（`tasks/<id>/task.json`，或 `.qwb` 里的任务头）
+type: object
+additionalProperties: false
+required: [id, name, state, created, updated, input]
+properties:
+  id:
+    type: string
+    pattern: "^[A-Za-z0-9][A-Za-z0-9_-]*$"
+    description: Task id；同时是 `tasks/<id>/` 的目录名。禁止路径分隔符与点。
+  name:
+    type: string
+    description: 显示名。
+  state:
+    $ref: "#/$defs/TaskState"
+  created:
+    type: string
+    description: 创建时间，ISO 8601 UTC。
+  updated:
+    type: string
+    description: 最近一次状态变更时间，ISO 8601 UTC。
+  input:
+    type: object
+    description: 作业输入；形态见 `qwb-contracts/engine-api` 的 JobInput / K4 input.yaml。
+$defs:
+  TaskState:
+    type: string
+    description: >-
+      K3 状态机状态。转移规则见本文件末尾 `x-state-machine`，
+      由 `qwb-core/crates/qwb-io/tests/k3_state_machine.rs` 用 proptest 覆盖。
+    enum: [draft, queued, running, converged, failed, cancelled]
+
+# K3 状态机（冻结）。只有这 5 条合法转移：
+#   draft -> queued
+#   queued -> running
+#   running -> converged
+#   running -> failed
+#   running -> cancelled
+# converged / failed / cancelled 是终态。
+#
+# 图上没有的转移一律非法。已知的待裁决缺口（docs/choices.md）：
+#   - `queued -> cancelled`（取消一个还没开始的任务，P-03 需要）
+#   - `failed -> queued`（重试）
+x-state-machine:
+  initial: draft
+  terminal: [converged, failed, cancelled]
+  transitions:
+    - {from: draft, to: queued}
+    - {from: queued, to: running}
+    - {from: running, to: converged}
+    - {from: running, to: failed}
+    - {from: running, to: cancelled}

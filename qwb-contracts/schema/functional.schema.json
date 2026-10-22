@@ -1,0 +1,199 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Functional",
+  "description": "泛函（`qwb-data/functional/*.yaml` 的形态）。",
+  "type": "object",
+  "properties": {
+    "citation": {
+      "description": "引用来源，至少 1 条；每条需 `title` + `doi` 或 `url`。",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Citation"
+      }
+    },
+    "components": {
+      "description": "组成项，必须非空。",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/FunctionalComponent"
+      }
+    },
+    "created": {
+      "description": "创建/修订时间，ISO 8601 UTC。",
+      "type": "string"
+    },
+    "license": {
+      "description": "许可声明。",
+      "$ref": "#/$defs/License"
+    },
+    "name": {
+      "description": "数据键名（数据目录下的标识）。",
+      "type": "string"
+    },
+    "notes": {
+      "description": "备注/来源说明（可选）。",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "parameters": {
+      "description": "参数字典（如 PBE 的 `kappa = 0.804`、`mu = 0.21951`）。",
+      "type": "object",
+      "additionalProperties": {
+        "type": "number",
+        "format": "double"
+      }
+    },
+    "requires": {
+      "description": "需要的密度量。",
+      "$ref": "#/$defs/FunctionalRequires"
+    },
+    "sha256": {
+      "description": "内容摘要（工具生成，见 [`crate::sha256`]）。",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "stability": {
+      "description": "稳定性截断规则。",
+      "$ref": "#/$defs/StabilityRules"
+    },
+    "version": {
+      "description": "数据版本（独立 semver；§8.6 要求变更即 bump）。",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "name",
+    "version",
+    "citation",
+    "license",
+    "created",
+    "components",
+    "requires",
+    "parameters",
+    "stability"
+  ],
+  "$defs": {
+    "Citation": {
+      "description": "一条引用来源（§4 K1：每项 `title` + `doi`/`url`）。",
+      "type": "object",
+      "properties": {
+        "doi": {
+          "description": "DOI（与 `url` 至少给一个）。",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "title": {
+          "description": "文献/数据标题。",
+          "type": "string"
+        },
+        "url": {
+          "description": "URL（与 `doi` 至少给一个）。",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "title"
+      ]
+    },
+    "FunctionalComponent": {
+      "description": "泛函的一个组成项（如 B3LYP 的 0.8·B88 + 0.2·HF + 0.81·LYP + 0.19·VWN5）。",
+      "type": "object",
+      "properties": {
+        "id": {
+          "description": "代码侧组件 id（如 `GgaB88`、`HfExchange`）。",
+          "type": "string"
+        },
+        "weight": {
+          "description": "混合权重。",
+          "type": "number",
+          "format": "double"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "weight"
+      ]
+    },
+    "FunctionalRequires": {
+      "description": "该泛函需要哪些密度量（决定网格与数据结构，不允许运行时猜）。",
+      "type": "object",
+      "properties": {
+        "laplacian": {
+          "description": "需要 `∇²rho`（meta-GGA 专属；§2.2 非目标）。",
+          "type": "boolean"
+        },
+        "rho": {
+          "description": "需要密度 `rho`。",
+          "type": "boolean"
+        },
+        "sigma": {
+          "description": "需要密度梯度不变量 `sigma = |∇rho|²`。",
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "rho",
+        "sigma",
+        "laplacian"
+      ]
+    },
+    "License": {
+      "description": "许可声明（§4 K1 / §8.6：`commercial_ok` / `redistribute_ok` 必须显式）。",
+      "type": "object",
+      "properties": {
+        "commercial_ok": {
+          "description": "是否允许商用。",
+          "type": "boolean"
+        },
+        "redistribute_ok": {
+          "description": "是否允许再分发。",
+          "type": "boolean"
+        },
+        "spdx": {
+          "description": "SPDX 标识（如 `Apache-2.0`、`CC-BY-4.0`）。",
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "spdx",
+        "commercial_ok",
+        "redistribute_ok"
+      ]
+    },
+    "StabilityRules": {
+      "description": "数值稳定性的截断规则（§8.3 第三道门禁）。",
+      "type": "object",
+      "properties": {
+        "density_floor": {
+          "description": "密度下限（低于此值按此值处理），单位 `e/Bohr³`。",
+          "type": "number",
+          "format": "double"
+        },
+        "sigma_ceiling": {
+          "description": "`sigma` 上限，单位 `(e/Bohr³)²`。",
+          "type": "number",
+          "format": "double"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "density_floor",
+        "sigma_ceiling"
+      ]
+    }
+  }
+}

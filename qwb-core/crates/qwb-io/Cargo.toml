@@ -1,0 +1,25 @@
+[package]
+name = "qwb-io"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "QWB 文件层：K3 Task 状态机与结果目录布局、K4 .qwb 容器"
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+serde_yaml.workspace = true
+thiserror.workspace = true
+zip.workspace = true
+sha2.workspace = true
+hex.workspace = true
+qwb-engine-api.workspace = true
+
+[dev-dependencies]
+proptest.workspace = true
+nalgebra.workspace = true
+
+[lints]
+workspace = true

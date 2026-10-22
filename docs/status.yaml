@@ -1,0 +1,114 @@
+# docs/status.yaml 的格式见 project.md §12.4。
+#
+# 状态取值：done / in_progress / blocked / pending
+# 每个 done 的包必须有可复查的验收命令（verification 字段）。
+
+C-01:
+  state: done
+  ts: "2026-10-22T22:53:00Z"
+  artifact: "qwb-core/crates/qwb-registry（K1 类型 + schemars 生成）+ qwb-contracts/schema/*.schema.{json,yaml} + qwb-data/examples（5 个样例）"
+  verification: "cargo run -p qwb-cli -- data verify  → 缺 citation 被拒（tests/verify.rs）；qwb-gen-schemas --check 无漂移"
+C-02:
+  state: done
+  ts: "2026-10-22T22:53:00Z"
+  artifact: "qwb-contracts/engine-api（qwb-engine-api 0.1.0，23 个单测）"
+  verification: "cargo clippy --all-targets -- -D warnings；cargo doc --no-deps；cargo test --all-targets；Engine::new ⇒ Unsupported"
+C-03:
+  state: done
+  ts: "2026-10-22T22:53:00Z"
+  artifact: "qwb-contracts/studio/{task,result}.schema.yaml + qwb-io::task 状态机 + qwb-io/tests/k3_*.rs"
+  verification: "proptest 覆盖 6×6 转移关系；schema 文档与 Rust 类型逐字段一致"
+C-04:
+  state: done
+  ts: "2026-10-22T22:53:00Z"
+  artifact: "qwb-contracts/studio/qwb-format.md + qwb-io::container + qwb-contracts/studio/examples/example.qwb"
+  verification: "cargo test -p qwb-io --test example_container；容器字节可复现（container 单测）"
+C-05:
+  state: done
+  ts: "2026-10-22T22:53:00Z"
+  artifact: "qwb-core/crates/qwb-cli（K5 clap）+ qwb-contracts/studio/{cli.md,python/qwb_engine.pyi}"
+  verification: "qwb --help 及全部子命令 --help；mypy --strict pyi + typed consumer 均 0 issue"
+C-06:
+  state: done
+  ts: "2026-10-22T22:53:00Z"
+  artifact: "qwb-core workspace + rust-toolchain.toml + qwb-core/deny.toml + .github/workflows/ci.yml + scripts/*.sh"
+  verification: "cargo fmt/clippy/test 全绿；cargo deny check 四类全 ok；脚本在 ubuntu CI 跑"
+
+D-01:
+  state: pending
+  depends: [C-01, C-06]
+  note: "K1 类型与校验已在 C-01 落地；D-01 还差 Registry 加载器（get_basis / get_functional）与 Registry::load_pair"
+D-02:
+  state: pending
+  depends: [D-01]
+  note: "qwb data verify 已实装（C-01 交付）；D-02 的验收是 3 坏/3 好文件的固定回归集"
+D-03:
+  state: pending
+  depends: [D-01]
+  note: "当前 qwb-data 只有 H 的 STO-3G『样例』（example- 前缀，非交付物）；D-03 需要 H/C/N/O/F + BSE 逐项 diff"
+D-04: {state: pending, depends: [D-01]}
+D-05: {state: pending, depends: [D-01]}
+D-06: {state: pending, depends: [D-01]}
+D-07: {state: pending, depends: [D-01]}
+D-08: {state: pending, depends: [D-01]}
+D-09: {state: pending, depends: [D-01]}
+D-10: {state: pending, depends: [D-01]}
+D-11: {state: pending, depends: [D-01]}
+D-12: {state: pending, depends: [D-01]}
+D-13: {state: pending, depends: [D-01]}
+D-14: {state: pending, depends: [D-01]}
+D-15: {state: pending, depends: [D-02, D-14]}
+
+I-00: {state: pending, depends: [C-06]}
+I-01: {state: pending, depends: [C-02, D-01]}
+I-02: {state: pending, depends: [I-01]}
+I-03: {state: pending, depends: [I-01]}
+I-04: {state: pending, depends: [I-03]}
+I-05: {state: pending, depends: [I-02]}
+I-06: {state: pending, depends: [I-03]}
+
+X-01: {state: pending, depends: [C-02, D-01]}
+X-02: {state: pending, depends: [X-01]}
+X-03: {state: pending, depends: [X-01, D-13]}
+X-04: {state: pending, depends: [X-03]}
+X-05: {state: pending, depends: [X-02, X-04]}
+
+S-01: {state: pending, depends: [I-02, I-03]}
+S-02: {state: pending, depends: [S-01, X-05]}
+S-03: {state: pending, depends: [S-02]}
+S-04: {state: pending, depends: [S-02]}
+S-05: {state: pending, depends: [S-03]}
+
+G-01: {state: pending, depends: [S-03]}
+G-02: {state: pending, depends: [G-01]}
+G-03: {state: pending, depends: [G-02]}
+
+F-01: {state: pending, depends: [G-01]}
+F-02: {state: pending, depends: [F-01]}
+
+P-01: {state: pending, depends: [C-03], note: "qwb-studio/（Python + pydantic v2）尚未创建"}
+P-02: {state: pending, depends: [P-01, C-04], note: "Rust 侧 .qwb 已可用；P-02 是 Python zipfile 实现"}
+P-03: {state: pending, depends: [P-01, C-05]}
+P-04: {state: pending, depends: [P-01, C-02], note: "EnvInfo 类型与 G5 校验已在 K2/K3 落地"}
+P-05: {state: pending, depends: [P-01], note: "K5 CLI 已实现；P-05 是 Python shell 转发层"}
+P-06: {state: pending, depends: [C-02, P-04], note: "K6 .pyi 已冻结并通过 mypy；P-06 是 pyo3 + maturin 实现"}
+P-07: {state: pending, depends: [P-05, P-06], note: "依赖引擎（I/X/S 轨）"}
+P-08: {state: pending, depends: [P-03, P-04], note: "replay --dry-run 已可用"}
+P-09: {state: pending, depends: [P-07, P-08]}
+P-10: {state: pending, depends: [P-09, G-02, F-02]}
+
+V-01: {state: pending, depends: [S-02]}
+V-02: {state: pending, depends: [G-01]}
+V-03: {state: pending, depends: [S-02, G-02]}
+V-04: {state: pending, depends: [all], note: "C 轨子集已在 .github/workflows/ci.yml"}
+V-05: {state: pending, depends: [all]}
+V-06: {state: pending, depends: [I-03, X-03, S-03]}
+
+T1: {state: pending, note: "前置 WP 全绿后跑 qwb run examples/h2_sto3g_svwn5.yaml"}
+T2: {state: pending}
+T3: {state: pending}
+T4: {state: pending}
+T5: {state: pending}
+T6: {state: pending}
+T7: {state: pending}
+T8: {state: pending}

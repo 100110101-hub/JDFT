@@ -1,0 +1,113 @@
+# C 轨（契约）CI 模板 —— 对应 project.md §9 / G1–G7 / V-04
+#
+# PR 门禁全绿才算完成；任何一步红都不得合入（§10.3）。
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+  # R-19: 与 rust-toolchain.toml 一致，数值结果只在该 toolchain 下比对。
+  RUST_BACKTRACE: "1"
+
+jobs:
+  contracts:
+    name: contracts + core (linux, full gates)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # 用仓库里的 rust-toolchain.toml（G6/R-19），不另钉版本。
+      - name: Install toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - uses: Swatinem/rust-cache@v2
+
+      # ---------- K2 契约 crate：独立 workspace ----------
+      - name: K2 · fmt
+        working-directory: qwb-contracts/engine-api
+        run: cargo fmt --check
+
+      - name: K2 · clippy -D warnings
+        working-directory: qwb-contracts/engine-api
+        run: cargo clippy --all-targets -- -D warnings
+
+      - name: K2 · test
+        working-directory: qwb-contracts/engine-api
+        run: cargo test --all-targets
+
+      - name: K2 · cargo doc 无 warning
+        working-directory: qwb-contracts/engine-api
+        env:
+          RUSTDOCFLAGS: -D warnings
+        run: cargo doc --no-deps
+
+      # ---------- K1/K3/K4/K5：qwb-core workspace ----------
+      - name: install cargo-deny
+        uses: taiki-e/install-action@cargo-deny
+
+      - name: G6 · deps centralized
+        run: bash scripts/check_deps_centralized.sh
+
+      - name: G6 · no unsafe outside allowlist
+        run: bash scripts/check_unsafe.sh
+
+      - name: G7 · rayon determinism guard
+        run: bash scripts/check_rayon_determinism.sh
+
+      - name: core · fmt
+        working-directory: qwb-core
+        run: cargo fmt --all --check
+
+      - name: core · clippy -D warnings
+        working-directory: qwb-core
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: core · test (含 C-03 proptest / C-04 容器)
+        working-directory: qwb-core
+        run: cargo test --workspace
+
+      - name: G2/G6 · cargo deny (advisories/bans/licenses/sources)
+        working-directory: qwb-core
+        run: cargo deny check
+
+      # ---------- C-01：schema 必须与 Rust 类型一致 ----------
+      - name: C-01 · K1 schema freshness
+        working-directory: qwb-core
+        run: cargo run -q -p qwb-registry --bin qwb-gen-schemas -- ../qwb-contracts/schema --check
+
+      - name: C-01 · data verify (registry + 全部条目)
+        working-directory: qwb-core
+        run: cargo run -q -p qwb-cli --bin qwb -- data verify
+
+      # ---------- C-05：K6 Python 桩 ----------
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: K6 · mypy --strict (stub)
+        run: |
+          python -m pip install --quiet mypy numpy
+          python -m mypy --strict qwb-contracts/studio/python/qwb_engine.pyi
+
+      - name: K6 · mypy --strict (typed consumer)
+        env:
+          MYPYPATH: qwb-contracts/studio/python
+        run: python -m mypy --strict qwb-contracts/studio/python/tests/consumer_example.py
+
+  core-windows:
+    name: core (windows, test only)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install toolchain
+        uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: core · test
+        working-directory: qwb-core
+        run: cargo test --workspace

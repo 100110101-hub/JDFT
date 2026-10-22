@@ -1,0 +1,6 @@
+# R-19 / G6: toolchain 冻结。数值结果只在本 channel 下比对。
+# 待人类裁决（project.md §12.5 “MSRV 冻结值”）：当前钉的是本机已安装版本。
+[toolchain]
+channel = "1.97.1"
+profile = "minimal"
+components = ["rustfmt", "clippy"]

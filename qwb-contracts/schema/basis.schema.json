@@ -1,0 +1,272 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "BasisSet",
+  "description": "基组（`qwb-data/basis/*.yaml` 的形态）。",
+  "type": "object",
+  "properties": {
+    "angular": {
+      "description": "球谐/笛卡尔（唯一入口，R-06）。",
+      "$ref": "#/$defs/Angular"
+    },
+    "citation": {
+      "description": "引用来源，至少 1 条；每条需 `title` + `doi` 或 `url`。",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Citation"
+      }
+    },
+    "created": {
+      "description": "创建/修订时间，ISO 8601 UTC。",
+      "type": "string"
+    },
+    "elements": {
+      "description": "覆盖的元素符号，如 `[\"H\", \"C\", \"N\", \"O\", \"F\"]`。",
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "license": {
+      "description": "许可声明。",
+      "$ref": "#/$defs/License"
+    },
+    "name": {
+      "description": "数据键名（数据目录下的标识）。",
+      "type": "string"
+    },
+    "normalization": {
+      "description": "归一化约定。",
+      "$ref": "#/$defs/Normalization"
+    },
+    "notes": {
+      "description": "备注/来源说明（可选）。",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "role": {
+      "description": "角色。",
+      "$ref": "#/$defs/BasisRole"
+    },
+    "sha256": {
+      "description": "内容摘要（工具生成，见 [`crate::sha256`]）。",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "shells": {
+      "description": "每元素一个块，必须与 `elements` 一一对应。",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/ShellBlock"
+      }
+    },
+    "version": {
+      "description": "数据版本（独立 semver；§8.6 要求变更即 bump）。",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "name",
+    "version",
+    "citation",
+    "license",
+    "created",
+    "elements",
+    "angular",
+    "normalization",
+    "role",
+    "shells"
+  ],
+  "$defs": {
+    "Angular": {
+      "description": "球谐 vs 笛卡尔（§8.1 / R-06：唯一入口就是这个字段）。",
+      "oneOf": [
+        {
+          "description": "球谐（`(2l+1)` 个函数）。",
+          "type": "string",
+          "const": "spherical"
+        },
+        {
+          "description": "笛卡尔（`(l+1)(l+2)/2` 个函数）。",
+          "type": "string",
+          "const": "cartesian"
+        }
+      ]
+    },
+    "BasisRole": {
+      "description": "基组角色（§4 K1）。",
+      "oneOf": [
+        {
+          "description": "轨道基组。",
+          "type": "string",
+          "const": "orbital"
+        },
+        {
+          "description": "RI-J 辅助基组。",
+          "type": "string",
+          "const": "ri-j"
+        },
+        {
+          "description": "RI-JK 辅助基组。",
+          "type": "string",
+          "const": "ri-jk"
+        },
+        {
+          "description": "ECP 拟合基组。",
+          "type": "string",
+          "const": "ecp-fit"
+        }
+      ]
+    },
+    "Citation": {
+      "description": "一条引用来源（§4 K1：每项 `title` + `doi`/`url`）。",
+      "type": "object",
+      "properties": {
+        "doi": {
+          "description": "DOI（与 `url` 至少给一个）。",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "title": {
+          "description": "文献/数据标题。",
+          "type": "string"
+        },
+        "url": {
+          "description": "URL（与 `doi` 至少给一个）。",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "title"
+      ]
+    },
+    "ContractionType": {
+      "description": "收缩类型。",
+      "oneOf": [
+        {
+          "description": "分段收缩：每个收缩函数只用自己的一段指数。",
+          "type": "string",
+          "const": "segmented"
+        },
+        {
+          "description": "通用收缩：多个收缩函数共享同一套指数（def2-TZVP 等）。",
+          "type": "string",
+          "const": "general"
+        }
+      ]
+    },
+    "License": {
+      "description": "许可声明（§4 K1 / §8.6：`commercial_ok` / `redistribute_ok` 必须显式）。",
+      "type": "object",
+      "properties": {
+        "commercial_ok": {
+          "description": "是否允许商用。",
+          "type": "boolean"
+        },
+        "redistribute_ok": {
+          "description": "是否允许再分发。",
+          "type": "boolean"
+        },
+        "spdx": {
+          "description": "SPDX 标识（如 `Apache-2.0`、`CC-BY-4.0`）。",
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "spdx",
+        "commercial_ok",
+        "redistribute_ok"
+      ]
+    },
+    "Normalization": {
+      "description": "收缩系数的归一化约定。",
+      "oneOf": [
+        {
+          "description": "每个收缩函数已按 L2 归一（文献与 BSE 导出的默认）。",
+          "type": "string",
+          "const": "l2"
+        },
+        {
+          "description": "未归一化，加载器负责归一。",
+          "type": "string",
+          "const": "none"
+        }
+      ]
+    },
+    "Shell": {
+      "description": "一个壳层。",
+      "type": "object",
+      "properties": {
+        "coefficients": {
+          "description": "收缩系数：**每个内层列表是一个收缩函数**，长度必须等于 `exponents.len()`。\n\n分段收缩 = 每个收缩函数只有一个非零项；通用收缩 = 多个收缩函数共享指数。\nK1 只写了 `coefficients[]`；要同时表达 def2-TZVP 的通用收缩（D-05）必须是二维。",
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "number",
+              "format": "double"
+            }
+          }
+        },
+        "contraction_type": {
+          "description": "收缩类型。",
+          "$ref": "#/$defs/ContractionType"
+        },
+        "exponents": {
+          "description": "指数（Bohr^-2），从大到小。",
+          "type": "array",
+          "items": {
+            "type": "number",
+            "format": "double"
+          }
+        },
+        "l": {
+          "description": "角量子数 `l`（0=s, 1=p, ...）。第一阶段 `l <= 4`。",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "l",
+        "exponents",
+        "coefficients",
+        "contraction_type"
+      ]
+    },
+    "ShellBlock": {
+      "description": "一个元素的全部壳层（`BasisSet::shells` 的元素类型）。",
+      "type": "object",
+      "properties": {
+        "element": {
+          "description": "元素符号（必须在 `BasisSet::elements` 里）。",
+          "type": "string"
+        },
+        "shells": {
+          "description": "该元素的壳层，按 `l` 升序。",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Shell"
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "element",
+        "shells"
+      ]
+    }
+  }
+}

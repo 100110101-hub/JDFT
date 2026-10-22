@@ -1,0 +1,171 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "GridLevelDef",
+  "description": "一个网格等级的定义（`qwb-data/grid/*.yaml` 的形态）。",
+  "type": "object",
+  "properties": {
+    "becke_sharpness": {
+      "description": "Becke 分区锐度参数（§8.4 陷阱显式化）。",
+      "type": "number",
+      "format": "double"
+    },
+    "citation": {
+      "description": "引用来源，至少 1 条；每条需 `title` + `doi` 或 `url`。",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Citation"
+      }
+    },
+    "created": {
+      "description": "创建/修订时间，ISO 8601 UTC。",
+      "type": "string"
+    },
+    "cutoff": {
+      "description": "计入网格的原子截断半径，单位 Bohr。",
+      "type": "number",
+      "format": "double"
+    },
+    "lebedev_order": {
+      "description": "Lebedev 角向阶数。",
+      "type": "integer",
+      "format": "uint32",
+      "minimum": 0
+    },
+    "level": {
+      "description": "等级。",
+      "$ref": "#/$defs/GridLevelName"
+    },
+    "license": {
+      "description": "许可声明。",
+      "$ref": "#/$defs/License"
+    },
+    "name": {
+      "description": "数据键名（数据目录下的标识）。",
+      "type": "string"
+    },
+    "notes": {
+      "description": "备注/来源说明（可选）。",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "radial_points": {
+      "description": "每个原子的径向点数。",
+      "type": "integer",
+      "format": "uint32",
+      "minimum": 0
+    },
+    "radii_scale": {
+      "description": "原子半径缩放因子；`None` 表示用代码内建表（§8.4 允许）。",
+      "type": [
+        "number",
+        "null"
+      ],
+      "format": "double"
+    },
+    "sha256": {
+      "description": "内容摘要（工具生成，见 [`crate::sha256`]）。",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "version": {
+      "description": "数据版本（独立 semver；§8.6 要求变更即 bump）。",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "name",
+    "version",
+    "citation",
+    "license",
+    "created",
+    "level",
+    "radial_points",
+    "lebedev_order",
+    "becke_sharpness",
+    "cutoff"
+  ],
+  "$defs": {
+    "Citation": {
+      "description": "一条引用来源（§4 K1：每项 `title` + `doi`/`url`）。",
+      "type": "object",
+      "properties": {
+        "doi": {
+          "description": "DOI（与 `url` 至少给一个）。",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "title": {
+          "description": "文献/数据标题。",
+          "type": "string"
+        },
+        "url": {
+          "description": "URL（与 `doi` 至少给一个）。",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "title"
+      ]
+    },
+    "GridLevelName": {
+      "description": "网格等级名（与 `engine-api::GridLevel` 对应）。",
+      "oneOf": [
+        {
+          "description": "`coarse`。",
+          "type": "string",
+          "const": "coarse"
+        },
+        {
+          "description": "`normal`。",
+          "type": "string",
+          "const": "normal"
+        },
+        {
+          "description": "`fine`。",
+          "type": "string",
+          "const": "fine"
+        },
+        {
+          "description": "`veryfine`。",
+          "type": "string",
+          "const": "veryfine"
+        }
+      ]
+    },
+    "License": {
+      "description": "许可声明（§4 K1 / §8.6：`commercial_ok` / `redistribute_ok` 必须显式）。",
+      "type": "object",
+      "properties": {
+        "commercial_ok": {
+          "description": "是否允许商用。",
+          "type": "boolean"
+        },
+        "redistribute_ok": {
+          "description": "是否允许再分发。",
+          "type": "boolean"
+        },
+        "spdx": {
+          "description": "SPDX 标识（如 `Apache-2.0`、`CC-BY-4.0`）。",
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "spdx",
+        "commercial_ok",
+        "redistribute_ok"
+      ]
+    }
+  }
+}

@@ -1,0 +1,11 @@
+# 行尾统一为 LF。
+#
+# 为什么重要：`qwb-gen-schemas --check` 与 `data verify` 都做**逐字节**比对，
+# 以及 `.qwb` 容器的“导出字节可复现”保证。如果 checkout 时被转成 CRLF，
+# 这些门禁会在新克隆上莫名变红。
+* text=auto eol=lf
+
+# 二进制产物：不要做任何行尾转换/差异行高亮。
+*.qwb binary
+*.png binary
+*.npy binary

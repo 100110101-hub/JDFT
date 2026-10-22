@@ -1,0 +1,59 @@
+# QWB 供应链门禁（G6 / R-17）
+#
+# 规则来源：project.md §2.3 的冻结库清单 + §10.4（不得 cargo add 未审批的 crate）。
+# 新增任何三方 crate 都必须同时改这里并在 PR body 说明理由（人类批准）。
+
+[graph]
+# CI 与本地都按全 feature 检查，避免“某个 feature 才引入的依赖”漏检。
+all-features = true
+
+[advisories]
+# unsafe-libyaml 是 serde_yaml 的实现细节：被 RustSec 标记 unmaintained
+# （RUSTSEC-2024-0449），但 serde_yaml 本身由 §2.3 冻结。
+# 迁移到安全的 YAML 解析器属于人类裁决项（docs/choices.md）。
+# 除这一条链之外不接受任何 advisory。
+ignore = [
+    { id = "RUSTSEC-2024-0449", reason = "unsafe-libyaml is pulled by serde_yaml, which project.md §2.3 mandates; migration is a human decision (docs/choices.md)" },
+]
+
+[licenses]
+# 只列实际出现在依赖树里的许可；出现新许可 → 门禁失败 → 人类批准后加白名单。
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-3-Clause",
+    "ISC",
+    "Unicode-3.0",
+    "Zlib",
+    "CC0-1.0",
+    "MPL-2.0",
+    "bzip2-1.0.6",
+]
+confidence-threshold = 0.9
+
+[bans]
+# 重复版本只告警（传递依赖很难避免）。
+#
+# `wildcards` 只能是 "warn"：workspace 成员用 `foo.workspace = true` 继承版本时，
+# cargo-deny 看不到版本要求，会把它误报成 `*`（cargo 的已知信息缺口）。
+# 于是“不许随手加依赖”这条规则改为**可检查的流程约束**：
+#   1. 三方依赖只能出现在 `[workspace.dependencies]`（唯一评审点）；
+#   2. 新增/改版本必须同时改本文件与 PR body 理由（§10.2.6 / §10.4）。
+# CI 里 `scripts/check_deps_centralized.sh` 校验第 1 条。
+multiple-versions = "warn"
+wildcards = "warn"
+allow = []
+deny = []
+
+[sources]
+# 只允许 crates.io；不接受未登记来源。
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+allow-git = []
+
+[sources.allow-org]
+github = []
+gitlab = []
+bitbucket = []

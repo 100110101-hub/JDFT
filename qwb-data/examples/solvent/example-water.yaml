@@ -1,0 +1,19 @@
+sha256: 63a71dbc4bf280ef6909449c2cac1e09a2a5e6d92fb3adea39138106f3293303
+scale: 1.2
+name: example-water
+version: 1.0.0
+notes: 'SPECIMEN: epsilon is the §8.5 reference value; atomic_radii are placeholders (D-14).'
+citation:
+- title: NIST Chemistry WebBook, SRD 69
+  url: https://webbook.nist.gov/chemistry/
+license:
+  spdx: Apache-2.0
+  commercial_ok: true
+  redistribute_ok: true
+created: 2026-10-22T22:53:00Z
+epsilon: 78.3553
+temperature_K: 298.15
+atomic_radii:
+  H: 1.2
+  O: 1.5
+cavity_model: pcm

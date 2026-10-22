@@ -1,0 +1,28 @@
+[package]
+name = "qwb-registry"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "QWB 数据模型（K1）：类型、schema 生成、文件校验"
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+serde_yaml.workspace = true
+schemars.workspace = true
+sha2.workspace = true
+hex.workspace = true
+thiserror.workspace = true
+
+[lints]
+workspace = true
+
+[[bin]]
+name = "qwb-gen-schemas"
+path = "src/bin/gen_schemas.rs"
+
+[[bin]]
+name = "qwb-stamp-data"
+path = "src/bin/stamp_data.rs"

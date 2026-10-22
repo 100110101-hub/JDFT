@@ -1,0 +1,90 @@
+# K3 · Result schema（冻结）
+#
+# 描述结果目录里的两个 JSON：
+#   result.json  -> $defs/JobResult（= qwb_engine_api::JobResult 的序列化，K4 定案 list-of-list）
+#   env.json     -> $defs/EnvInfo   （复现环境；G5：没有它结果视为不完整）
+#
+# 与 Rust 的一致性由 `qwb-core/crates/qwb-io/tests/k3_schema_docs.rs` 强制。
+$schema: "https://json-schema.org/draft/2020-12/schema"
+$id: "qwb-contracts/studio/result.schema.yaml"
+title: TaskResult
+description: 结果目录的 JSON 形态（K3）
+type: object
+$defs:
+  JobResult:
+    type: object
+    additionalProperties: false
+    required: [energy_hartree, scf_converged, data_snapshot, log, env]
+    properties:
+      energy_hartree:
+        type: number
+        description: 总能量，Hartree。
+      gradient_hartree_per_bohr:
+        type: [array, "null"]
+        description: 解析梯度，Hartree/Bohr，形状 3N×1，list-of-list。
+        items:
+          type: array
+          items: {type: number}
+      hessian_hartree_per_bohr2:
+        type: [array, "null"]
+        description: Hessian，Hartree/Bohr²，形状 3N×3N，list-of-list。
+        items:
+          type: array
+          items: {type: number}
+      dipole_debye:
+        type: [array, "null"]
+        description: 偶极矩，Debye，[x, y, z]。
+        items: {type: number}
+      mo_energies_hartree:
+        type: [array, "null"]
+        description: 轨道能，Hartree。
+        items: {type: number}
+      mo_coeffs:
+        type: [array, "null"]
+        description: 轨道系数（列 = MO），list-of-list。
+        items:
+          type: array
+          items: {type: number}
+      scf_converged:
+        type: boolean
+      data_snapshot:
+        $ref: "#/$defs/DataSnapshot"
+      log:
+        type: string
+        description: 引擎日志。引擎不得写 stdout（K2）。
+      env:
+        $ref: "#/$defs/EnvInfo"
+  DataSnapshot:
+    type: object
+    description: "相对路径 -> sha256（64 位小写十六进制）。用的摘要与数据文件内 `sha256`、registry 条目三者一致。"
+    additionalProperties:
+      type: string
+      pattern: "^[0-9a-f]{64}$"
+  EnvInfo:
+    type: object
+    additionalProperties: false
+    required:
+      [engine_version, rustc_version, cargo_lock_sha256, data_snapshot, threads, os, created_at_utc]
+    properties:
+      engine_version: {type: string}
+      rustc_version:
+        type: string
+        description: "`rustc --version` 原文。"
+      cargo_lock_sha256:
+        type: string
+        pattern: "^[0-9a-f]{64}$"
+      data_snapshot:
+        $ref: "#/$defs/DataSnapshot"
+      threads:
+        type: integer
+        minimum: 1
+        description: 实际生效线程数（不是请求值）。
+      os: {type: string}
+      created_at_utc: {type: string}
+      toolchain_channel:
+        type: [string, "null"]
+        description: rust-toolchain.toml 的 channel（R-19）。
+      crate_versions:
+        type: object
+        description: 依赖 crate 版本清单（§2.1 要求）。
+        additionalProperties: {type: string}

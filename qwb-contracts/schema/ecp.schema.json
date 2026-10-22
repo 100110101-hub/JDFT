@@ -1,0 +1,236 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Ecp",
+  "description": "ECP（`qwb-data/ecp/*.yaml` 的形态）。",
+  "type": "object",
+  "properties": {
+    "citation": {
+      "description": "引用来源，至少 1 条；每条需 `title` + `doi` 或 `url`。",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Citation"
+      }
+    },
+    "created": {
+      "description": "创建/修订时间，ISO 8601 UTC。",
+      "type": "string"
+    },
+    "element": {
+      "description": "元素符号。",
+      "type": "string"
+    },
+    "license": {
+      "description": "许可声明。",
+      "$ref": "#/$defs/License"
+    },
+    "local_part": {
+      "description": "局域部分。",
+      "$ref": "#/$defs/EcpLocalPart"
+    },
+    "n_core_electrons": {
+      "description": "芯电子数。",
+      "type": "integer",
+      "format": "uint32",
+      "minimum": 0
+    },
+    "name": {
+      "description": "数据键名（数据目录下的标识）。",
+      "type": "string"
+    },
+    "nonlocal_parts": {
+      "description": "非局域部分，按 `l` 升序且不重复。",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/EcpNonlocalPart"
+      }
+    },
+    "notes": {
+      "description": "备注/来源说明（可选）。",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "r_power_convention": {
+      "description": "`r` 幂次约定。",
+      "$ref": "#/$defs/RPowerConvention"
+    },
+    "sha256": {
+      "description": "内容摘要（工具生成，见 [`crate::sha256`]）。",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "version": {
+      "description": "数据版本（独立 semver；§8.6 要求变更即 bump）。",
+      "type": "string"
+    },
+    "z_eff": {
+      "description": "有效核电荷 `Z_eff = Z - n_core_electrons`。",
+      "type": "number",
+      "format": "double"
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "name",
+    "version",
+    "citation",
+    "license",
+    "created",
+    "element",
+    "n_core_electrons",
+    "z_eff",
+    "r_power_convention",
+    "local_part",
+    "nonlocal_parts"
+  ],
+  "$defs": {
+    "Citation": {
+      "description": "一条引用来源（§4 K1：每项 `title` + `doi`/`url`）。",
+      "type": "object",
+      "properties": {
+        "doi": {
+          "description": "DOI（与 `url` 至少给一个）。",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "title": {
+          "description": "文献/数据标题。",
+          "type": "string"
+        },
+        "url": {
+          "description": "URL（与 `doi` 至少给一个）。",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "title"
+      ]
+    },
+    "EcpLocalPart": {
+      "description": "局域部分。",
+      "type": "object",
+      "properties": {
+        "id": {
+          "description": "该数据块在来源中的标识（便于逐项核对）。",
+          "type": "string"
+        },
+        "terms": {
+          "description": "项列表。",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/EcpTerm"
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "terms"
+      ]
+    },
+    "EcpNonlocalPart": {
+      "description": "非局域部分（按角量子数 `l` 分组）。",
+      "type": "object",
+      "properties": {
+        "id": {
+          "description": "该数据块在来源中的标识。",
+          "type": "string"
+        },
+        "l": {
+          "description": "角量子数 `l`。",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "terms": {
+          "description": "项列表。",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/EcpTerm"
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "l",
+        "id",
+        "terms"
+      ]
+    },
+    "EcpTerm": {
+      "description": "一个 ECP 高斯项：`coefficient * r^power * exp(-exponent * r^2)`。",
+      "type": "object",
+      "properties": {
+        "coefficient": {
+          "description": "系数。",
+          "type": "number",
+          "format": "double"
+        },
+        "exponent": {
+          "description": "高斯指数，单位 Bohr^-2。",
+          "type": "number",
+          "format": "double"
+        },
+        "power": {
+          "description": "`r` 的幂次 `n`（按 `r_power_convention` 解释）。",
+          "type": "integer",
+          "format": "int32"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "power",
+        "exponent",
+        "coefficient"
+      ]
+    },
+    "License": {
+      "description": "许可声明（§4 K1 / §8.6：`commercial_ok` / `redistribute_ok` 必须显式）。",
+      "type": "object",
+      "properties": {
+        "commercial_ok": {
+          "description": "是否允许商用。",
+          "type": "boolean"
+        },
+        "redistribute_ok": {
+          "description": "是否允许再分发。",
+          "type": "boolean"
+        },
+        "spdx": {
+          "description": "SPDX 标识（如 `Apache-2.0`、`CC-BY-4.0`）。",
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "spdx",
+        "commercial_ok",
+        "redistribute_ok"
+      ]
+    },
+    "RPowerConvention": {
+      "description": "`r` 幂次约定（§8.2 显式声明的陷阱）。\n\nStuttgart 系的表格常用 `r^(n-2)`，其他来源常用 `r^n`。字符差异会直接改变\n非局域项的量级，所以必须在数据里声明，由加载器统一转成内部约定。",
+      "oneOf": [
+        {
+          "description": "表格里写的是 `r^n`。",
+          "type": "string",
+          "const": "r^n"
+        },
+        {
+          "description": "表格里写的是 `r^(n-2)`。",
+          "type": "string",
+          "const": "r^(n-2)"
+        }
+      ]
+    }
+  }
+}

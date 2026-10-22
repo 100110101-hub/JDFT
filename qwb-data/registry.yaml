@@ -1,0 +1,36 @@
+schema_version: 1.0.0
+name: qwb-data
+version: 0.1.0
+created: 2026-10-22T22:53:00Z
+features:
+  - "jobtype:sp"
+  - "jobtype:opt"
+  - "jobtype:freq"
+  - "basis:orbital"
+  - "functional:lda"
+  - "functional:gga"
+  - "functional:hybrid"
+  - grid
+  - "solvent:vacuum"
+  - "solvent:implicit"
+  - ecp
+bases:
+  - name: example-sto-3g-H
+    path: examples/basis/example-sto-3g-H.yaml
+    sha256: 68f7eaed756278740cfd1f643bab0960f0e09780c5eb862ab1a9a143054a60d6
+ecps:
+  - name: example-ecp-cu
+    path: examples/ecp/example-ecp-cu.yaml
+    sha256: cf2cccecae63bb187cef97dfe0b1b372a3c3309ddacdb5b44932b3c6ee343d9b
+functionals:
+  - name: example-svwn5
+    path: examples/functional/example-svwn5.yaml
+    sha256: 5378a9d4909ed592acc549875383cff913c0de9376a559097e79e746a50974d0
+grids:
+  - name: example-grid-normal
+    path: examples/grid/example-grid-normal.yaml
+    sha256: 2508c561584b5243fc2542b557dba0313f85818335c04aba8c0c22dd6626bdc9
+solvents:
+  - name: example-water
+    path: examples/solvent/example-water.yaml
+    sha256: 63a71dbc4bf280ef6909449c2cac1e09a2a5e6d92fb3adea39138106f3293303

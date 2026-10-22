@@ -1,0 +1,118 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "MoleculeFile",
+  "description": "分子文件（`qwb-data/molecule/*.yaml`，也用于 GUI 保存的分子）。",
+  "type": "object",
+  "properties": {
+    "atoms": {
+      "description": "原子列表。",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/MoleculeAtom"
+      }
+    },
+    "charge": {
+      "description": "总电荷。",
+      "type": "integer",
+      "format": "int32"
+    },
+    "citation": {
+      "description": "结构来源引用（可空）。",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Citation"
+      }
+    },
+    "created": {
+      "description": "创建时间，ISO 8601 UTC。",
+      "type": "string"
+    },
+    "multiplicity": {
+      "description": "自旋多重度。",
+      "type": "integer",
+      "format": "uint32",
+      "minimum": 0
+    },
+    "name": {
+      "description": "分子名。",
+      "type": "string"
+    },
+    "notes": {
+      "description": "备注。",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "sha256": {
+      "description": "内容摘要（工具生成，见 [`crate::sha256`]）。\n\n分子不是 G2 数据集，所以**不要求**它存在；但 `qwb-stamp-data` 仍会为它打戳，\n便于“这个几何文件被人改过没有”这类检查。",
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "name",
+    "atoms",
+    "charge",
+    "multiplicity",
+    "created"
+  ],
+  "$defs": {
+    "Citation": {
+      "description": "一条引用来源（§4 K1：每项 `title` + `doi`/`url`）。",
+      "type": "object",
+      "properties": {
+        "doi": {
+          "description": "DOI（与 `url` 至少给一个）。",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "title": {
+          "description": "文献/数据标题。",
+          "type": "string"
+        },
+        "url": {
+          "description": "URL（与 `doi` 至少给一个）。",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "title"
+      ]
+    },
+    "MoleculeAtom": {
+      "description": "单个原子（Å，与 `engine-api::Atom` 对齐）。",
+      "type": "object",
+      "properties": {
+        "position_angstrom": {
+          "description": "直角坐标，单位 Å。",
+          "type": "array",
+          "items": {
+            "type": "number",
+            "format": "double"
+          },
+          "maxItems": 3,
+          "minItems": 3
+        },
+        "symbol": {
+          "description": "元素符号。",
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "symbol",
+        "position_angstrom"
+      ]
+    }
+  }
+}

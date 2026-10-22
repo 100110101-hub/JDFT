@@ -1,0 +1,20 @@
+[package]
+name = "qwb-engine-api"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.97.1"
+license = "Apache-2.0"
+description = "QWB 冻结的引擎接口（契约 K2）"
+repository = "https://example.invalid/qwb-contracts"
+publish = false
+
+# 独立 workspace：本 crate 是契约仓 qwb-contracts 的产物，不被 qwb-core workspace 吸收。
+[workspace]
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+nalgebra = "0.35"
+thiserror = "2"
+
+[dev-dependencies]
+serde_json = "1"

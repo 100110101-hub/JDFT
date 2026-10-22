@@ -1,0 +1,38 @@
+[workspace]
+resolver = "3"
+members = ["crates/qwb-registry", "crates/qwb-io", "crates/qwb-cli"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.97.1"
+license = "Apache-2.0"
+repository = "https://example.invalid/qwb-core"
+publish = false
+
+[workspace.dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+serde_yaml = "0.9"
+schemars = { version = "1", features = ["derive"] }
+sha2 = "0.10"
+hex = "0.4"
+thiserror = "2"
+anyhow = "1"
+clap = { version = "4", features = ["derive"] }
+zip = { version = "9", default-features = false, features = ["deflate"] }
+nalgebra = "0.35"
+proptest = "1"
+qwb-engine-api = { path = "../qwb-contracts/engine-api" }
+qwb-registry = { path = "crates/qwb-registry" }
+qwb-io = { path = "crates/qwb-io" }
+qwb-cli = { path = "crates/qwb-cli" }
+
+# G6：workspace 级禁 unsafe、强制文档。crate 用 `[lints] workspace = true` 继承。
+[workspace.lints.rust]
+unsafe_code = "deny"
+missing_docs = "deny"
+
+[workspace.lints.clippy]
+todo = "warn"
+pedantic = { level = "allow", priority = -1 }

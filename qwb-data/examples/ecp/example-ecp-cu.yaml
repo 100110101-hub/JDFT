@@ -1,0 +1,29 @@
+sha256: cf2cccecae63bb187cef97dfe0b1b372a3c3309ddacdb5b44932b3c6ee343d9b
+nonlocal_parts:
+- l: 2
+  id: synthetic-d
+  terms:
+  - power: 2
+    exponent: 1.5
+    coefficient: 0.5
+name: example-ecp-cu
+version: 1.0.0
+notes: SPECIMEN with SYNTHETIC coefficients. Real LANL2DZ ECP data is D-07.
+citation:
+- title: Ab initio effective core potentials for molecular calculations (Cu)
+  doi: 10.1063/1.447079
+license:
+  spdx: Apache-2.0
+  commercial_ok: true
+  redistribute_ok: true
+created: 2026-10-22T22:53:00Z
+element: Cu
+n_core_electrons: 28
+z_eff: 1.0
+r_power_convention: r^(n-2)
+local_part:
+  id: synthetic-local
+  terms:
+  - power: 2
+    exponent: 1.0
+    coefficient: -1.0
