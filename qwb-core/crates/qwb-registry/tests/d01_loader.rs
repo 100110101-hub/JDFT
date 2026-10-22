@@ -432,12 +432,16 @@ fn repo_root() -> PathBuf {
 #[test]
 fn real_qwb_data_registry_loads() {
     let registry = Registry::open(repo_root().join("qwb-data")).expect("qwb-data must load");
-    assert_eq!(registry.basis_names().count(), 1);
-    assert_eq!(registry.ecp_names().count(), 1);
-    assert_eq!(registry.functional_names().count(), 1);
-    assert_eq!(registry.grid_names().count(), 1);
-    assert_eq!(registry.solvent_names().count(), 1);
 
+    // 不写死条目数（数据会随 D 轨增长）：用清单自身的条目数做交叉核对。
+    assert_eq!(
+        registry.snapshot().len(),
+        registry.manifest().all_entries().count(),
+        "snapshot 必须覆盖清单里的每一条"
+    );
+    assert!(registry.snapshot().len() >= 5, "至少还有 5 个样例条目");
+
+    // 六类样例都必须仍可加载（D 轨只会新增，不会删样例）。
     assert_eq!(
         registry
             .get_basis("example-sto-3g-H")
@@ -445,11 +449,15 @@ fn real_qwb_data_registry_loads() {
             .n_basis_functions(),
         1
     );
+    assert!(registry.get_ecp("example-ecp-cu").is_ok());
+    assert!(registry.get_functional("example-svwn5").is_ok());
+    assert!(registry.get_grid("example-grid-normal").is_ok());
+    assert!(registry.get_solvent("example-water").is_ok());
+
     let grid = registry
         .get_grid_by_level(GridLevelName::Normal)
         .expect("normal grid");
     assert_eq!(grid.lebedev_order, 302);
-    assert_eq!(registry.snapshot().len(), 5);
 
     // feature 声明要能直接喂给 K2 的引擎句柄。
     let handle = registry.engine_handle();

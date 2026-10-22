@@ -12,6 +12,12 @@
    数据许可由本文件的映射人工评审。
 5. 缺任一项 → `qwb data verify` 退出码 3 → CI 红。
 
+## 生产数据（qwb-data 0.2.0）
+
+| 数据 | 文件 | SPDX | 商用 | 再分发 | 来源与许可依据 |
+|---|---|---|---|---|---|
+| sto-3g（H,C,N,O,F） | `basis/sto-3g.yaml` | Apache-2.0 | yes | yes | 数值是 1969 年论文发表**的科学常数**（Hehre/Stewart/Pople, doi:10.1063/1.1672392），不构成受版权保护的表达；本文件是我们自己的 K1 结构 + 机器转录，故按 Apache-2.0 授权。BSE 只作导出通道（§8.1 允许），ground truth 存于 `qwb-core/crates/qwb-registry/tests/fixtures/bse/sto-3g.json`。 |
+
 ## 当前样例（qwb-data 0.1.0，全部为 SPECIMEN）
 
 | 数据 | 文件 | SPDX | 商用 | 再分发 | 备注 |

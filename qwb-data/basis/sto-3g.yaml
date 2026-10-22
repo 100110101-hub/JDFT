@@ -1,0 +1,163 @@
+sha256: fce3af14b8b3ea121844756117a2489b5f7859be452be02b54509dc20b8ff249
+name: sto-3g
+version: 1.0.0
+notes: Transcribed from the BSE export of STO-3G (revision 2018-06-19, 'Data from Gaussian09') for H/C/N/O/F; numbers are from Hehre-Stewart-Pople 1969, BSE used only as the export channel (project.md 8.1). STO-3G has max l=1, where spherical and cartesian functions coincide, so angular=spherical carries no ambiguity.
+citation:
+- title: Self-Consistent Molecular-Orbital Methods. I. Use of Gaussian Expansions of Slater-Type Atomic Orbitals
+  doi: 10.1063/1.1672392
+  url: https://www.basissetexchange.org/basis/sto-3g/
+license:
+  spdx: Apache-2.0
+  commercial_ok: true
+  redistribute_ok: true
+created: 2026-10-22T23:16:10Z
+elements:
+- H
+- C
+- N
+- O
+- F
+angular: spherical
+normalization: l2
+role: orbital
+shells:
+- element: H
+  shells:
+  - l: 0
+    exponents:
+    - 3.425250914
+    - 0.6239137298
+    - 0.168855404
+    coefficients:
+    - - 0.1543289673
+      - 0.5353281423
+      - 0.4446345422
+    contraction_type: segmented
+- element: C
+  shells:
+  - l: 0
+    exponents:
+    - 71.61683735
+    - 13.04509632
+    - 3.53051216
+    coefficients:
+    - - 0.1543289673
+      - 0.5353281423
+      - 0.4446345422
+    contraction_type: segmented
+  - l: 0
+    exponents:
+    - 2.941249355
+    - 0.6834830964
+    - 0.2222899159
+    coefficients:
+    - - -0.09996722919
+      - 0.3995128261
+      - 0.7001154689
+    contraction_type: segmented
+  - l: 1
+    exponents:
+    - 2.941249355
+    - 0.6834830964
+    - 0.2222899159
+    coefficients:
+    - - 0.155916275
+      - 0.6076837186
+      - 0.3919573931
+    contraction_type: segmented
+- element: N
+  shells:
+  - l: 0
+    exponents:
+    - 99.10616896
+    - 18.05231239
+    - 4.885660238
+    coefficients:
+    - - 0.1543289673
+      - 0.5353281423
+      - 0.4446345422
+    contraction_type: segmented
+  - l: 0
+    exponents:
+    - 3.780455879
+    - 0.8784966449
+    - 0.2857143744
+    coefficients:
+    - - -0.09996722919
+      - 0.3995128261
+      - 0.7001154689
+    contraction_type: segmented
+  - l: 1
+    exponents:
+    - 3.780455879
+    - 0.8784966449
+    - 0.2857143744
+    coefficients:
+    - - 0.155916275
+      - 0.6076837186
+      - 0.3919573931
+    contraction_type: segmented
+- element: O
+  shells:
+  - l: 0
+    exponents:
+    - 130.7093214
+    - 23.80886605
+    - 6.443608313
+    coefficients:
+    - - 0.1543289673
+      - 0.5353281423
+      - 0.4446345422
+    contraction_type: segmented
+  - l: 0
+    exponents:
+    - 5.033151319
+    - 1.169596125
+    - 0.38038896
+    coefficients:
+    - - -0.09996722919
+      - 0.3995128261
+      - 0.7001154689
+    contraction_type: segmented
+  - l: 1
+    exponents:
+    - 5.033151319
+    - 1.169596125
+    - 0.38038896
+    coefficients:
+    - - 0.155916275
+      - 0.6076837186
+      - 0.3919573931
+    contraction_type: segmented
+- element: F
+  shells:
+  - l: 0
+    exponents:
+    - 166.679134
+    - 30.36081233
+    - 8.216820672
+    coefficients:
+    - - 0.1543289673
+      - 0.5353281423
+      - 0.4446345422
+    contraction_type: segmented
+  - l: 0
+    exponents:
+    - 6.464803249
+    - 1.502281245
+    - 0.4885884864
+    coefficients:
+    - - -0.09996722919
+      - 0.3995128261
+      - 0.7001154689
+    contraction_type: segmented
+  - l: 1
+    exponents:
+    - 6.464803249
+    - 1.502281245
+    - 0.4885884864
+    coefficients:
+    - - 0.155916275
+      - 0.6076837186
+      - 0.3919573931
+    contraction_type: segmented

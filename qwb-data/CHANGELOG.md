@@ -3,6 +3,19 @@
 数据仓独立 semver（§8.6）。**任何数据改动都必须 bump version 并在此登记**，
 否则 CI 拒绝（§8.6「变更必须 bump version」）。
 
+## 0.2.0 — 2026-10-22
+
+### 新增：生产数据 `basis/sto-3g.yaml`（D-03）
+- H、C、N、O、F 五个元素的 STO-3G，**由 BSE 导出经
+  `scripts/bse_to_qwb_data.py` 机器转录**（不手抄）；BSE 原始导出存为
+  `qwb-core/crates/qwb-registry/tests/fixtures/bse/sto-3g.json` 作为 ground truth。
+- 校验：`cargo test -p qwb-registry --test d03_sto3g_bse` —— 逐元素逐系数与 BSE
+  diff < 1e-12；每元素基函数数 H=1、C/N/O/F=5；`angular: spherical`；
+  生产名 `sto-3g` 可由 `Registry::get_basis` 取到。
+- 引用：Hehre, Stewart & Pople, *J. Chem. Phys.* **51**, 2657 (1969),
+  doi:10.1063/1.1672392。
+- `registry.yaml` 版本 bump 0.1.0 → 0.2.0（§8.6：数据变更必须 bump）。
+
 ## 0.1.0 — 2026-10-22
 
 ### 新增：K1 schema 样例（`examples/`，**非生产数据**）

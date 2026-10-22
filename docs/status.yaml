@@ -53,9 +53,10 @@ D-02:
   artifact: "qwb-cli/tests/fixtures/d02/bad/basis/（6 个畸形夹具，带 notes 自述预期 code）+ tests/d02_verify_regression.rs"
   verification: "cargo test -p qwb-cli --test d02_verify_regression：6 坏各退出 3 且只报 1 条指定 code（schema.deserialize/g2.citation/schema.deserialize/sha256.mismatch/schema.deserialize/semantic）；6 好（qwb-data/examples 六类）退出 0"
 D-03:
-  state: pending
-  depends: [D-01]
-  note: "qwb-data 目前只有 H 的 STO-3G『样例』（example- 前缀，非交付物）；D-03 要 H/C/N/O/F + BSE 逐项 diff + 每元素基函数数断言"
+  state: done
+  ts: "2026-10-22T23:18:58Z"
+  artifact: "qwb-data/basis/sto-3g.yaml（H/C/N/O/F，13 shells）+ scripts/bse_to_qwb_data.py（BSE→K1 机器转录）+ fixtures/bse/sto-3g.json（ground truth）"
+  verification: "cargo test -p qwb-registry --test d03_sto3g_bse（4 例）：逐元素逐系数 vs BSE diff < 1e-12；H=1、C/N/O/F=5 基函数；spherical；Registry 按生产名 sto-3g 可取"
 D-04: {state: pending, depends: [D-01]}
 D-05: {state: pending, depends: [D-01]}
 D-06: {state: pending, depends: [D-01]}

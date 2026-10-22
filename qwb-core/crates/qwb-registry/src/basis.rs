@@ -170,6 +170,20 @@ impl BasisSet {
         self.shells.iter().find(|b| b.element == element)
     }
 
+    /// 某元素贡献的基函数数（按 `angular` 计）；元素不在本基组里返回 `None`。
+    ///
+    /// I-01 的验收（"H2/STO-3G AO 数 = 2；C/STO-3G AO 数 = 5"）就靠它。
+    #[must_use]
+    pub fn n_basis_functions_for(&self, element: &str) -> Option<usize> {
+        self.shells_for(element).map(|block| {
+            block
+                .shells
+                .iter()
+                .map(|shell| shell.n_basis_functions(self.angular))
+                .sum()
+        })
+    }
+
     /// 完整校验（`qwb data verify` 用）：G2 门禁 + 结构检查。
     #[must_use]
     pub fn check(&self) -> Vec<String> {

@@ -1,6 +1,6 @@
 schema_version: 1.0.0
 name: qwb-data
-version: 0.1.0
+version: 0.2.0
 created: 2026-10-22T22:53:00Z
 features:
   - "jobtype:sp"
@@ -15,6 +15,9 @@ features:
   - "solvent:implicit"
   - ecp
 bases:
+  - name: sto-3g
+    path: basis/sto-3g.yaml
+    sha256: fce3af14b8b3ea121844756117a2489b5f7859be452be02b54509dc20b8ff249
   - name: example-sto-3g-H
     path: examples/basis/example-sto-3g-H.yaml
     sha256: 68f7eaed756278740cfd1f643bab0960f0e09780c5eb862ab1a9a143054a60d6
