@@ -28,6 +28,8 @@
 
 pub mod boys;
 pub mod one_electron;
+pub mod two_electron;
 
 pub use boys::boys_functions;
 pub use one_electron::{OneElectronIntegrals, one_electron};
+pub use two_electron::{TwoElectronIntegrals, primitive_ssss, two_electron};
