@@ -228,11 +228,8 @@ fn mixed_cartesian_components_are_not_pure_l() {
 }
 
 #[test]
-fn nuclear_attraction_for_l_above_zero_is_reported_unsupported() {
-    // I-02 的**已知缺口**，用测试钉住而不是藏着：
-    // 完整的 Hermite Coulomb 递推（方向依赖的奇次项）还没实现，所以任何含 l>0 壳层
-    // 的基组都会被显式拒绝。等 I-05（本来就要和数值积分对照）补上后，本测试要改成
-    // 真正的数值对照。
+fn water_integrals_are_complete_and_symmetric() {
+    // l>0 的核吸引修好后，含 p 函数的基组（水：7 AO）必须能完整算出来。
     let registry = registry();
     let basis_k1 = registry.get_basis("sto-3g").expect("sto-3g");
     let water = Molecule::new(
@@ -245,13 +242,42 @@ fn nuclear_attraction_for_l_above_zero_is_reported_unsupported() {
         1,
     );
     let basis = InternalBasis::build(basis_k1, &water).expect("build");
-    let error = one_electron(&basis, &water).expect_err("l>0 核吸引尚未实现，必须显式失败");
-    let message = error.to_string();
-    assert!(message.contains("l>0"), "{message}");
-    assert!(message.contains("I-02 gap"), "{message}");
-    assert_eq!(error.exit_code(), 4, "Unsupported → K5 退出码 4");
-}
+    assert_eq!(basis.n_functions(), 7, "O(1s,2s,2p×3) + 2×H(1s)");
 
+    let integrals = one_electron(&basis, &water).expect("integrals");
+
+    for i in 0..7 {
+        assert_close(integrals.overlap[(i, i)], 1.0, "S_ii = 1（含 p 分量）");
+        assert!(integrals.kinetic[(i, i)] > 0.0, "T_ii > 0");
+        assert!(integrals.nuclear[(i, i)] < 0.0, "V_ii < 0");
+        for j in 0..7 {
+            assert!(
+                (integrals.overlap[(i, j)] - integrals.overlap[(j, i)]).abs() < 1e-13,
+                "S 不对称 ({i},{j})"
+            );
+            assert!(
+                (integrals.kinetic[(i, j)] - integrals.kinetic[(j, i)]).abs() < 1e-13,
+                "T 不对称"
+            );
+            assert!(
+                (integrals.nuclear[(i, j)] - integrals.nuclear[(j, i)]).abs() < 1e-13,
+                "V 不对称"
+            );
+            assert_close(
+                integrals.core_hamiltonian[(i, j)],
+                integrals.kinetic[(i, j)] + integrals.nuclear[(i, j)],
+                "H = T + V",
+            );
+        }
+    }
+    assert_close(integrals.overlap.trace().expect("square"), 7.0, "trace(S)");
+
+    // O 的 2p_x 与 2p_y 在同核上不等价（水不是球对称），但同壳层的三个 p
+    // 对角元都必须是有限负值（核吸引）。
+    for i in 2..5 {
+        assert!(integrals.nuclear[(i, i)] < 0.0, "O 的 p 分量 V_ii < 0");
+    }
+}
 #[test]
 fn primitive_nuclear_is_exact_for_s_functions() {
     // l = 0：<1s|−Z/r|1s> = −Z·2√(2α/π)（解析闭式）

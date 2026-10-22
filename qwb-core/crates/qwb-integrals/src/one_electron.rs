@@ -191,19 +191,48 @@ pub fn primitive_kinetic(
     0.5 * total
 }
 
-/// 两个（未归一化）原函数的核吸引 `⟨a|−Z/|r−C||b⟩`。
+/// `n!`（`n <= 12` 足够：第一阶段 `l <= 4`）。
+fn factorial(n: u32) -> f64 {
+    (1..=n).map(f64::from).product::<f64>().max(1.0)
+}
+
+/// 二项系数 `C(n,k)`。
+fn binomial(n: u32, k: u32) -> f64 {
+    if k > n {
+        0.0
+    } else {
+        factorial(n) / (factorial(k) * factorial(n - k))
+    }
+}
+
+/// 两个（未归一化）原函数的核吸引 `⟨a|−Z/|r−C||b⟩`，**任意角动量**。
 ///
-/// # 已知限制（I-02 未完成项）
+/// # 推导（不再是"凭记忆的递推"）
 ///
-/// 本函数用 `R^n = (−2p)^n F_n` 的简化 Hermite Coulomb 系数，它**只在 `l_total = 0`
-/// 时正确**。l>0 时该系数缺少方向依赖（`(P−C)` 的奇次项），例如同中心的
-/// `⟨s|1/r|p_x⟩` 本应为 0，这个公式却给出非零值 —— 由
-/// `tests/d02_one_electron.rs::nuclear_attraction_for_l_above_zero_is_reported_unsupported`
-/// 记录。正确实现需要完整的 Hermite Coulomb 递推（Helgaker 9.4 或 Rys 求积），
-/// 排在 I-05（那里本来就要和数值积分对照 < 1e-8）。
+/// 记 `α = i_a+i_b` 等三个方向的幂次之和、`x = P − C`、`u = p|x|²`。对
+/// `G(s) = ∫ e^{−p|v|²} e^{s·v}/|v−x| d³v` 做 Laplace 变换并换元 `y = t/(1+t)`，
+/// 得到生成函数
 ///
-/// 因此 [one_electron] 在遇到任何 l > 0 的壳层时返回 Unsupported，而**不会**
-/// 给出看起来像结果、其实错的值。
+/// ```text
+/// G(s) = (π/p) ∫₀¹ [ Σ_axes ... ] 即每一对 s 变量配对时给出传播子 1/(4p(1+t))，
+/// ```
+///
+/// 提取 `s_x^α s_y^β s_z^γ` 的系数后，所有 `t` 积分都化成**广义 Boys 函数**
+///
+/// ```text
+/// I(m,N;u) = ∫₀¹ y^{m−1/2}(1−y)^N e^{−uy} dy = 2 Σ_{k=0}^{N} (−1)^k C(N,k) F_{m+k}(u)
+/// ```
+///
+/// （`F_n` 是标准 Boys 函数；`y = s²` 代换给出那个因子 2）。于是
+///
+/// ```text
+/// V = −Z E_AB (π/p) Σ_{a,b,c} W · x_x^{α−2a} x_y^{β−2b} x_z^{γ−2c} (4p)^{−(a+b+c)} I(m,N;u)
+/// W = α!/((α−2a)!a!) · β!/((β−2b)!b!) · γ!/((γ−2c)!c!)
+/// N = a+b+c,  m = L − 2N,  L = α+β+γ
+/// ```
+///
+/// 两个自检：`L = 0` 时退化为 `−Z(2π/p)E_AB F₀(u)`（教科书 s-s 公式）；
+/// `x = 0` 且 `α` 为奇数时 `x_x^{α−2a}` 全部为 0 ⇒ 积分为 0（宇称）。
 #[must_use]
 #[allow(clippy::too_many_arguments)] // 数学签名：两对(指数,分量,中心) + 核位置 + 电荷
 pub fn primitive_nuclear(
@@ -216,40 +245,66 @@ pub fn primitive_nuclear(
     nucleus_center: [f64; 3],
     nucleus_charge: f64,
 ) -> f64 {
-    let (e_ab, p, p_center, hermite) =
-        gaussian_product(alpha, a_powers, a_center, beta, b_powers, b_center);
+    let p = alpha + beta;
+    let p_center = [
+        (alpha * a_center[0] + beta * b_center[0]) / p,
+        (alpha * a_center[1] + beta * b_center[1]) / p,
+        (alpha * a_center[2] + beta * b_center[2]) / p,
+    ];
+    let ab2 = (0..3)
+        .map(|axis| (a_center[axis] - b_center[axis]).powi(2))
+        .sum::<f64>();
+    let e_ab = (-alpha * beta / p * ab2).exp();
 
-    let pc2 = (p_center[0] - nucleus_center[0]).powi(2)
-        + (p_center[1] - nucleus_center[1]).powi(2)
-        + (p_center[2] - nucleus_center[2]).powi(2);
+    let powers = [
+        a_powers.0 + b_powers.0,
+        a_powers.1 + b_powers.1,
+        a_powers.2 + b_powers.2,
+    ];
+    let x = [0, 1, 2].map(|axis| p_center[axis] - nucleus_center[axis]);
+    let u = p * (x[0] * x[0] + x[1] * x[1] + x[2] * x[2]);
 
-    let l_total = a_powers.0 + a_powers.1 + a_powers.2 + b_powers.0 + b_powers.1 + b_powers.2;
-    let boys = boys_functions(l_total as usize, p * pc2);
+    let l_total = powers[0] + powers[1] + powers[2];
+    let boys = boys_functions(l_total as usize, u);
 
-    let mut sum = 0.0;
-    for (t, e_t) in hermite[0].iter().enumerate() {
-        if *e_t == 0.0 {
-            continue;
-        }
-        for (u, e_u) in hermite[1].iter().enumerate() {
-            if *e_u == 0.0 {
-                continue;
-            }
-            for (v, e_v) in hermite[2].iter().enumerate() {
-                if *e_v == 0.0 {
+    let mut total = 0.0;
+    for ka in 0..=(powers[0] / 2) {
+        for kb in 0..=(powers[1] / 2) {
+            for kc in 0..=(powers[2] / 2) {
+                let contractions = [ka, kb, kc];
+                let n_contractions = ka + kb + kc;
+                let m = l_total - 2 * n_contractions;
+
+                let mut weight = 1.0;
+                let mut spatial = 1.0;
+                for axis in 0..3 {
+                    let power = powers[axis];
+                    let k = contractions[axis];
+                    weight *= factorial(power) / (factorial(power - 2 * k) * factorial(k));
+                    spatial *= x[axis].powi(i32::try_from(power - 2 * k).expect("small"));
+                }
+                if spatial == 0.0 || weight == 0.0 {
                     continue;
                 }
-                let n = t + u + v;
-                // Hermite Coulomb 积分 R^n = (-2p)^n F_n
-                let r = (-2.0 * p).powi(i32::try_from(n).expect("n fits i32")) * boys[n];
-                sum += e_t * e_u * e_v * r;
+
+                // I(m, N; u) = 2 Σ_k (−1)^k C(N,k) F_{m+k}(u)
+                let mut generalized = 0.0;
+                for k in 0..=n_contractions {
+                    let sign = if k % 2 == 0 { 1.0 } else { -1.0 };
+                    generalized += sign * binomial(n_contractions, k) * boys[(m + k) as usize];
+                }
+                let generalized = 2.0 * generalized;
+
+                total += weight
+                    * spatial
+                    * (4.0 * p).powi(-i32::try_from(n_contractions).expect("small"))
+                    * generalized;
             }
         }
     }
 
-    -nucleus_charge * (2.0 * PI / p) * e_ab * sum
+    -nucleus_charge * (PI / p) * e_ab * total
 }
-
 /// 一个壳层的原函数数据（系数保持数据原样；归一化在积分时按分量施加）。
 struct ShellPrimitives {
     exponents: Vec<f64>,
@@ -257,7 +312,6 @@ struct ShellPrimitives {
     components: Vec<Powers>,
     first_function: usize,
     center: [f64; 3],
-    l: u32,
 }
 
 fn shell_primitives(shell: &InternalShell) -> ShellPrimitives {
@@ -267,7 +321,6 @@ fn shell_primitives(shell: &InternalShell) -> ShellPrimitives {
         components: qwb_basis::cartesian_components(shell.l),
         first_function: shell.first_function,
         center: shell.center_bohr,
-        l: shell.l,
     }
 }
 
@@ -312,16 +365,6 @@ pub fn one_electron(
     }
 
     let shells: Vec<ShellPrimitives> = basis.shells().iter().map(shell_primitives).collect();
-
-    // I-02 的已知缺口：核吸引的 l>0 项需要完整的 Hermite Coulomb 递推（见
-    // `primitive_nuclear` 的文档）。这里显式报 Unsupported，而不是返回错值。
-    if let Some(shell) = shells.iter().find(|shell| shell.l > 0) {
-        return Err(EngineError::Unsupported(format!(
-            "nuclear attraction for l>0 shells is not implemented yet (I-02 gap, \
-             planned together with I-05): the basis has an l={} shell",
-            shell.l
-        )));
-    }
 
     for (shell_a_index, shell_a) in shells.iter().enumerate() {
         for shell_b in shells.iter().skip(shell_a_index) {

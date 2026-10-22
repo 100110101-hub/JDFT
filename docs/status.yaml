@@ -95,12 +95,11 @@ I-01:
   verification: "cargo test -p qwb-basis --test d01_basis_layer（8 例）：H2 AO=2、C AO=5、H2O AO=7、angular 只来自数据、每个收缩 <f|f>=1、错误的 l2 声明被拒、未覆盖元素 → Data、球心转 Bohr"
   note: "l<=1 时球谐与直角坐标分量数相同，第一阶段用直角坐标表示；l>=2 的球谐转换在 SCF 前补（R-06 的显式入口仍是 BasisSet.angular）"
 I-02:
-  state: in_progress
-  ts: "2026-10-22T23:38:30Z"
+  state: done
+  ts: "2026-10-22T23:45:54Z"
   artifact: "qwb-core/crates/qwb-integrals：boys.rs（向下递推的 Boys 函数）+ one_electron.rs（Hermite/McMurchie-Davidson 的 S、T、V）"
-  verification: "cargo test -p qwb-integrals（4+8 例）：H2/STO-3G 的 S/T/V 与解析闭式 < 1e-10（含对角/非对角分别用 R=0 与 R=0.74Å 的闭式）；F0 对 erf 闭式 < 1e-12；同中心归一化原函数 S=1、纯 L 分量 T=(2L+3)α/2、s 型 V=−2√(2α/π)"
-  note: "**未完成项**：核吸引的 l>0 项还没实现。新增了 `tests/numerical_oracle.rs`（Golub–Welsch Gauss–Hermite，精确到多项式）作为独立对照：S/T 在 5 种角动量组合上与 oracle 一致到 1e-12；核吸引 l>0 的宇称判据以 characterization 测试钉住。用 R^n=(−2p)^n F_n 的简化 Hermite Coulomb 系数时，奇次项缺少 (P−C) 的方向依赖，同中心 ⟨s|1/r|p_x⟩ 本应为 0 却给出 0.957 —— 被测试抓到。正确实现需完整 Hermite Coulomb 递推（Helgaker 9.4 / Rys），排在 I-05（那里本来就要和数值积分对照 < 1e-8）。当前 one_electron 遇到 l>0 显式返回 Unsupported（退出码 4），不会给出错值；测试 nuclear_attraction_for_l_above_zero_is_reported_unsupported 钉住这个状态。T1（H2，全 s）不受影响，T2（含 p 函数）被它阻塞。"
-
+  verification: "cargo test -p qwb-integrals（4+8+3+5 例）：H2/STO-3G 的 S/T/V 对解析闭式 < 1e-10；S/T 对 Gauss–Hermite oracle 一致到 1e-12（5 种角动量组合）；核吸引的**任意 l** 公式由生成函数推导，宇称（⟨s|1/r|p_x⟩=0、⟨p_x|1/r|p_y⟩=0 到 1e-14）与同中心 ⟨p_x|1/r|p_x⟩=−π/(6α²) 解析值到 1e-12；水（7 AO，含 p）全矩阵对称、H=T+V"
+  note: "v2 修订：先用数值 oracle 与宇称尺子证明旧的 R^n=(−2p)^n F_n 系数在 l>0 时是错的，再用生成函数**推导**出正确形式——把 6 维/3 维积分经 Laplace 变换与 y=t/(1+t) 换元后，所有 t 积分都化成广义 Boys 函数 I(m,N;u)=∫₀¹y^{m−1/2}(1−y)^N e^{−uy}dy=2Σ(−1)^k C(N,k)F_{m+k}(u)，于是 V=−Z E_AB(π/p)Σ W·x^{α−2a}…(4p)^{−N}·I(m,N)。方向依赖来自 x^{α−2a}，同中心奇次幂自动为 0。l>0 与 s 型共用同一条路径，水/含 p 基组已可完整计算。"
 I-04: {state: pending, depends: [I-03]}
 I-05: {state: pending, depends: [I-02]}
 I-06: {state: pending, depends: [I-03]}

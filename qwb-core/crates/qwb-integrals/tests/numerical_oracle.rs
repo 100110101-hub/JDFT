@@ -197,36 +197,68 @@ fn kinetic_agrees_with_the_exact_oracle() {
     );
 }
 
-/// **核吸引的正确性判据：宇称**（当前是**已知缺口的表征**）。
+/// 核吸引：宇称 + 同中心 `p_x` 对角的解析闭式。
 ///
-/// 同中心时 `⟨s|1/r|p_x⟩` 的被积函数在 `x → −x` 下变号 ⇒ **精确为 0**。
-/// 这条判据不依赖容差，是上一轮抓出"缺方向依赖"的那把尺子。
-///
-/// 现状：`primitive_nuclear` 的简化 Hermite Coulomb 系数（`R^n = (−2p)^n F_n`）
-/// 没有 `(P−C)` 的方向依赖，因此本应为 0 的积分返回非零值。**对外不可见**：
-/// `one_electron()` 遇到任何 l>0 壳层都会返回 `Unsupported`（见
-/// `tests/d02_one_electron.rs`）。补上完整递推（I-05）后，本测试必须改成
-/// `assert!(value.abs() < 1e-12)`。
+/// 这两条都是**精确判据**，不依赖数值容差：
+/// - 同中心 `⟨s|1/r|p_x⟩` 的被积函数对 `x → −x` 是奇函数 ⇒ 精确为 0；
+/// - 同中心 `⟨p_x|1/r|p_x⟩`：`∫x²e^{−2αr²}/r dV = π/(6α²)`，
+///   归一化后 `V = −Z·N_p²·π/(6α²)`。
 #[test]
-fn nuclear_l_above_zero_is_a_characterized_gap() {
+fn nuclear_attraction_satisfies_parity_and_the_p_x_closed_form() {
     let alpha = 0.85_f64;
     let beta = 0.55_f64;
     let a = [0.0, 0.0, 0.0];
-    let b = [0.0, 0.0, 0.0]; // 同中心
-    let center = [0.2, -0.3, 0.4]; // 核在产品中心上
+    let b = [0.0, 0.0, 0.0]; // 同中心 ⇒ 产品中心在原点
+    // 核必须放在**产品中心**（原点）上，宇称判据才成立；放在别处时积分本来就不为 0。
+    let center = [0.0, 0.0, 0.0];
 
-    let value = primitive_nuclear(alpha, (0, 0, 0), a, beta, (1, 0, 0), b, center, 1.0);
+    // 宇称：⟨s|1/r|p_x⟩ = 0
+    let sp = primitive_nuclear(alpha, (0, 0, 0), a, beta, (1, 0, 0), b, center, 1.0);
+    assert!(sp.abs() < 1e-14, "⟨s|1/r|p_x⟩ 必须为 0，实际 {sp}");
 
-    // 正确值应为 0（宇称）。这里记录"当前不是 0"，并给出量级，
-    // 以便缺口被修好时这条测试立刻失败、提醒改成断言为 0。
+    // 宇称：⟨p_x|1/r|p_y⟩ = 0
+    let pxpy = primitive_nuclear(alpha, (1, 0, 0), a, beta, (0, 1, 0), b, center, 1.0);
+    assert!(pxpy.abs() < 1e-14, "⟨p_x|1/r|p_y⟩ 必须为 0，实际 {pxpy}");
+
+    // 同中心 p_x 对角：V = −Z π/(6α²)（未归一化原函数）
+    let p = alpha + beta;
+    let pxpx = primitive_nuclear(alpha, (1, 0, 0), a, beta, (1, 0, 0), b, center, 1.0);
+    let expected = -PI / (6.0 * p * p); // α 在上式里是单个原函数的指数；同中心下 p = 2α 代入后一致
+    let _ = expected;
+    let expected_exact = -PI / (6.0 * (p / 2.0) * (p / 2.0)) / 1.0;
+    let _ = expected_exact;
+    // 直接用 ∫x²e^{−p r²}/r = π/(6(p/2)²) 的等价形式：π/(6α²)，α = p/2。
+    let alpha_single = p / 2.0;
+    let analytic = -PI / (6.0 * alpha_single * alpha_single);
     assert!(
-        value.abs() > 1e-2,
-        "缺口似乎被修好了（值为 {value}）——请把本测试改成 assert!(value.abs() < 1e-12)"
+        (pxpx - analytic).abs() < 1e-12 * analytic.abs(),
+        "⟨p_x|1/r|p_x⟩: {pxpx} vs 解析 {analytic}"
     );
+}
 
-    // 顺带确认 s-s 是对的（同一函数、同一条路径）。
-    let s_value = primitive_nuclear(alpha, (0, 0, 0), a, beta, (0, 0, 0), b, center, 1.0);
-    let expected = -2.0 * (2.0 * (alpha + beta) / std::f64::consts::PI).sqrt() / 2.0;
-    let _ = expected; // s-s 的精确值已在 d02 里用闭式核对
-    assert!(s_value < 0.0 && s_value.is_finite(), "V(s,s) = {s_value}");
+/// 核吸引（s-s）：跨中心的解析闭式（教科书 `−Z(2π/p)F₀(p|P−C|²)`）。
+#[test]
+fn nuclear_s_type_matches_the_textbook_formula_off_center() {
+    let alpha = 0.85_f64;
+    let beta = 0.55_f64;
+    let a = [0.0, 0.0, 0.0];
+    let b = [0.5, 0.2, -0.4];
+    let nucleus = [1.3, -0.7, 0.9];
+    let p = alpha + beta;
+    let pc = [
+        (alpha * a[0] + beta * b[0]) / p - nucleus[0],
+        (alpha * a[1] + beta * b[1]) / p - nucleus[1],
+        (alpha * a[2] + beta * b[2]) / p - nucleus[2],
+    ];
+    let pc2 = pc[0] * pc[0] + pc[1] * pc[1] + pc[2] * pc[2];
+    let e_ab =
+        (-alpha * beta / p * (0..3).map(|axis| (a[axis] - b[axis]).powi(2)).sum::<f64>()).exp();
+    let f0 = qwb_integrals::boys_functions(0, p * pc2)[0];
+    let analytic = -(2.0 * PI / p) * e_ab * f0;
+
+    let actual = primitive_nuclear(alpha, (0, 0, 0), a, beta, (0, 0, 0), b, nucleus, 1.0);
+    assert!(
+        (actual - analytic).abs() < 1e-13 * analytic.abs(),
+        "V(s,s): {actual} vs 教科书 {analytic}"
+    );
 }
