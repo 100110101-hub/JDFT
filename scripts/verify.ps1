@@ -97,6 +97,10 @@ Step -Name 'core: clippy -D warnings' -Dir 'qwb-core' -Body {
     cargo clippy --workspace --all-targets -- -D warnings
 }
 Step -Name 'core: test' -Dir 'qwb-core' -Body { cargo test --workspace }
+Step -Name 'core: I-00 faer backend' -Dir 'qwb-core' -Body {
+    # I-00 acceptance: BOTH backends must compile and give the same numbers.
+    cargo test -p qwb-linalg --no-default-features --features faer
+}
 Step -Name 'core: cargo deny' -Dir 'qwb-core' -Body { cargo deny check }
 Step -Name 'core: K1 schema freshness' -Dir 'qwb-core' -Body {
     cargo run -q -p qwb-registry --bin qwb-gen-schemas -- ../qwb-contracts/schema --check

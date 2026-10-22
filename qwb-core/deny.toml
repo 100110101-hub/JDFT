@@ -1,19 +1,23 @@
 # QWB 供应链门禁（G6 / R-17）
 #
-# 规则来源：project.md §2.3 的冻结库清单 + §10.4（不得 cargo add 未审批的 crate）。
+# 规则来源：project.md §2.4 的冻结库清单 + §10.2.6（不得 cargo add 未审批的 crate）。
 # 新增任何三方 crate 都必须同时改这里并在 PR body 说明理由（人类批准）。
 
 [graph]
 # CI 与本地都按全 feature 检查，避免“某个 feature 才引入的依赖”漏检。
+# 代价：可选后端 faer（R-11）的依赖树也会被检查，见下面两条 ignore。
 all-features = true
 
 [advisories]
 # unsafe-libyaml 是 serde_yaml 的实现细节：被 RustSec 标记 unmaintained
-# （RUSTSEC-2024-0449），但 serde_yaml 本身由 §2.3 冻结。
+# （RUSTSEC-2024-0449），但 serde_yaml 本身由 §2.4 冻结。
 # 迁移到安全的 YAML 解析器属于人类裁决项（docs/choices.md）。
-# 除这一条链之外不接受任何 advisory。
 ignore = [
-    { id = "RUSTSEC-2024-0449", reason = "unsafe-libyaml is pulled by serde_yaml, which project.md §2.3 mandates; migration is a human decision (docs/choices.md)" },
+    { id = "RUSTSEC-2024-0449", reason = "unsafe-libyaml is pulled by serde_yaml, which project.md 2.4 mandates; migration is a human decision (docs/choices.md)" },
+    # faer（R-11 的可选后端；§14 #5 冻结为 nalgebra 默认、faer 为 feature）传递依赖 paste。
+    # paste 只是声明式宏的构建期辅助 crate，不进运行时；faer 升级后会自动消失。
+    # 除这两条之外不接受任何 advisory。
+    { id = "RUSTSEC-2024-0436", reason = "paste is a build-time macro helper pulled by the optional faer backend (R-11); no runtime surface; disappears when faer upgrades" },
 ]
 
 [licenses]
@@ -22,6 +26,7 @@ allow = [
     "MIT",
     "Apache-2.0",
     "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
     "BSD-3-Clause",
     "ISC",
     "Unicode-3.0",

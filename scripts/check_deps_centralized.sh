@@ -30,9 +30,14 @@ for manifest in "$root"/qwb-core/crates/*/Cargo.toml; do
         [ "$section" = "deps" ] || continue
         case "$line" in
             "" | "#"*) continue ;;
-            *".workspace = true"*) continue ;;
         esac
-        echo "FAIL $(realpath --relative-to="$root" "$manifest"):$lineno: dependency must use 'name.workspace = true': $line"
+        # 两种合法写法都必须继承 workspace 的版本：
+        #   name.workspace = true
+        #   name = { workspace = true, optional = true }
+        case "$line" in
+            *"workspace = true"*) continue ;;
+        esac
+        echo "FAIL $(realpath --relative-to="$root" "$manifest"):$lineno: dependency must inherit from [workspace.dependencies] (name.workspace = true): $line"
         fail=1
     done <"$manifest"
 done

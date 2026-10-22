@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/qwb-registry", "crates/qwb-io", "crates/qwb-cli"]
+members = ["crates/qwb-registry", "crates/qwb-io", "crates/qwb-cli", "crates/qwb-linalg"]
 
 [workspace.package]
 version = "0.1.0"
@@ -22,11 +22,14 @@ anyhow = "1"
 clap = { version = "4", features = ["derive"] }
 zip = { version = "9", default-features = false, features = ["deflate"] }
 nalgebra = "0.35"
+# R-11：faer 是 qwb-linalg 的可选后端（`--no-default-features --features faer`）。
+faer = "0.24"
 proptest = "1"
 qwb-engine-api = { path = "../qwb-contracts/engine-api" }
 qwb-registry = { path = "crates/qwb-registry" }
 qwb-io = { path = "crates/qwb-io" }
 qwb-cli = { path = "crates/qwb-cli" }
+qwb-linalg = { path = "crates/qwb-linalg" }
 
 # G6：workspace 级禁 unsafe、强制文档。crate 用 `[lints] workspace = true` 继承。
 [workspace.lints.rust]

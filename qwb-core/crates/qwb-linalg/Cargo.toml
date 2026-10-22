@@ -1,0 +1,21 @@
+[package]
+name = "qwb-linalg"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "QWB 线性代数抽象层（nalgebra 默认 / faer 可选后端，I-00）"
+
+[features]
+default = ["nalgebra"]
+nalgebra = ["dep:nalgebra"]
+faer = ["dep:faer"]
+
+[dependencies]
+nalgebra = { workspace = true, optional = true }
+faer = { workspace = true, optional = true }
+thiserror.workspace = true
+
+[lints]
+workspace = true
