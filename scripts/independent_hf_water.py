@@ -68,38 +68,43 @@ def double_factorial(n):
 
 
 def boys(m_max, x):
-    """F_m(x), m=0..m_max，向下递推。"""
-    out = [0.0] * (m_max + 1)
+    """F_m(x)，向下递推；起点取 F_{m_max+40+1}=0 让误差衰减掉（不这样做会严重偏低）。"""
     if x < 1e-12:
-        for m in range(m_max + 1):
-            out[m] = 1.0 / (2 * m + 1)
-        return out
-    out[m_max] = 0.0
-    for m in range(m_max, 0, -1):
-        out[m - 1] = (2 * x * out[m] + math.exp(-x)) / (2 * m - 1)
+        return [1.0 / (2 * m + 1) for m in range(m_max + 1)]
+    top = m_max + 40
+    values = [0.0] * (top + 1)
+    ex = math.exp(-x)
+    nxt = 0.0
+    for m in range(top, -1, -1):
+        cur = (2.0 * x * nxt + ex) / (2 * m + 1)
+        values[m] = cur
+        nxt = cur
+    return values[: m_max + 1]
+
+def norm(alpha, powers):
+    """笛卡尔高斯 (x^a y^b z^c) e^{-αr²} 的归一化常数。"""
+    l = sum(powers)
+    num = (2.0 * alpha / PI) ** 1.5 * (4.0 * alpha) ** l
+    den = 1.0
+    for n in powers:
+        den *= double_factorial(n)
+    return math.sqrt(num / den)
+
+
+def double_factorial(n):
+    if n <= 0:
+        return 1.0
+    out = 1.0
+    while n > 0:
+        out *= n
+        n -= 2
     return out
 
 
-def ssss(alpha, A, beta, B, gamma, C, delta, D):
-    """(ss|ss) 闭式。"""
-    p = alpha + beta
-    q = gamma + delta
-    P = [(alpha * A[i] + beta * B[i]) / p for i in range(3)]
-    Q = [(gamma * C[i] + delta * D[i]) / q for i in range(3)]
-    ab2 = sum((A[i] - B[i]) ** 2 for i in range(3))
-    cd2 = sum((C[i] - D[i]) ** 2 for i in range(3))
-    pq = p + q
-    rho = p * q / pq
-    r2 = sum((P[i] - Q[i]) ** 2 for i in range(3))
-    e = math.exp(-alpha * beta / p * ab2 - gamma * delta / q * cd2)
-    return 2.0 * PI ** 2.5 / (p * q * math.sqrt(pq)) * e * boys(0, rho * r2)[0]
-
-
-# ---- 一维重叠递推（自己的实现，不用 Hermite） ----
 def overlap_1d(i, j, alpha, beta, A, B):
+    """一维重叠递推。"""
     p = alpha + beta
     P = (alpha * A + beta * B) / p
-    # table[n][m] = 1D 重叠 <x^n on A | x^m on B>
     table = [[0.0] * (j + 1) for _ in range(i + 1)]
     table[0][0] = math.sqrt(PI / p) * math.exp(-alpha * beta * (A - B) ** 2 / p)
     for ii in range(0, i + 1):
@@ -126,11 +131,10 @@ def overlap_prim(pa, A, alpha, pb, B, beta):
 
 
 def kinetic_prim(pa, A, alpha, pb, B, beta):
-    """<pa| -1/2 ∇² |pb>，用逐轴二阶导处理 pb。"""
+    """<pa| -1/2 ∇² |pb>。"""
     total = 0.0
     for axis in range(3):
         n = pb[axis]
-        # ∂²/∂x²[ u^n e^{-βu²} ] = [n(n-1)u^{n-2} - 2β(2n+1)u^n + 4β²u^{n+2}] e
         terms = []
         if n >= 2:
             terms.append((n - 2, n * (n - 1.0)))
@@ -147,18 +151,6 @@ def kinetic_prim(pa, A, alpha, pb, B, beta):
             acc += product
         total += acc
     return -0.5 * total
-
-
-# ---- 双电子：s 型闭式 + 中心数值微分 ----
-STEP = 1.0e-2
-
-
-def deriv(f, axis, amount):
-    """对某个中心坐标做 Richardson 中心差分。"""
-    x = 0.0
-    d = lambda h: (f(h) - f(-h)) / (2 * h)
-    return (4.0 * d(STEP * 0.5) - d(STEP)) / 3.0 if amount else 0.0
-
 
 def ssss_terms(alpha, A, beta, B, gamma, C, delta, D):
     """返回 (值, 各中心一阶导所需的中间量)。"""
@@ -259,40 +251,80 @@ def v_ss(alpha, A, beta, B, C, Z):
     r2 = sum((P[i] - C[i]) ** 2 for i in range(3))
     return -Z * 2.0 * PI / p * math.exp(-alpha * beta / p * ab2) * boys(0, p * r2)[0]
 
-def primitive_nuclear(pa, A, alpha, pb, B, beta, nuclei):
-    """(ab|Σ_C −Z_C/r_C)：对 s-s 闭式做中心导数（递归复合）。"""
-    derivs = []
-    for label, powers in (("a", pa), ("b", pb)):
+
+def _apply(state, d_e, d_t):
+    """把 ∂/∂center 作用在 Σ c·F_m(T) 上（E 的对数导给 d_e，T 的导数给 d_t）。"""
+    new = {}
+    for m, c in state.items():
+        if d_e != 0.0:
+            new[m] = new.get(m, 0.0) + c * d_e
+        new[m + 1] = new.get(m + 1, 0.0) - c * d_t
+    return new
+
+
+def primitive_2e(pa, A, alpha, pb, B, beta, pc, C, gamma, pd, D, delta):
+    """任意 s/p 的 (ab|cd)：解析中心导数（状态是 Σ c_m·F_m(T)），零有限差分。"""
+    p = alpha + beta
+    q = gamma + delta
+    pq = p + q
+    rho = p * q / pq
+    P = [(alpha * A[i] + beta * B[i]) / p for i in range(3)]
+    Q = [(gamma * C[i] + delta * D[i]) / q for i in range(3)]
+    ab2 = sum((A[i] - B[i]) ** 2 for i in range(3))
+    cd2 = sum((C[i] - D[i]) ** 2 for i in range(3))
+    r2 = sum((P[i] - Q[i]) ** 2 for i in range(3))
+    pref = 2.0 * PI ** 2.5 / (p * q * math.sqrt(pq))
+
+    state = {0: 1.0}
+    scale = 1.0
+    for label, powers, exponent in (("a", pa, alpha), ("b", pb, beta),
+                                    ("c", pc, gamma), ("d", pd, delta)):
         for axis in range(3):
             for _ in range(powers[axis]):
-                derivs.append((label, axis))
-    step = 0.01
+                if label in ("a", "b"):
+                    sign = -1.0 if label == "a" else 1.0
+                    d_e = sign * 2.0 * (alpha * beta / p) * (A[axis] - B[axis])
+                    d_p = (alpha if label == "a" else beta) / p
+                    d_t = 2.0 * rho * (P[axis] - Q[axis]) * d_p
+                else:
+                    sign = -1.0 if label == "c" else 1.0
+                    d_e = sign * 2.0 * (gamma * delta / q) * (C[axis] - D[axis])
+                    d_q = (gamma if label == "c" else delta) / q
+                    d_t = -2.0 * rho * (P[axis] - Q[axis]) * d_q
+                state = _apply(state, d_e, d_t)
+                scale /= 2.0 * exponent
 
-    def base(centers):
-        return sum(v_ss(alpha, centers["a"], beta, centers["b"], C, Z) for C, Z in nuclei)
+    t = rho * r2
+    f = boys(max(state.keys()), t)
+    return pref * sum(c * f[m] for m, c in state.items()) * scale
 
-    def ev(pending, centers):
-        if not pending:
-            return base(centers)
-        (label, axis), rest = pending[0], pending[1:]
-        origin = centers[label][axis]
 
-        def moved(t):
-            c2 = {k: list(v) for k, v in centers.items()}
-            c2[label][axis] = t
-            return ev(rest, c2)
-
-        return (moved(origin - 2 * step) - 8.0 * moved(origin - step)
-                + 8.0 * moved(origin + step) - moved(origin + 2 * step)) / (12.0 * step)
-
-    centers0 = {"a": list(A), "b": list(B)}
-    raw = ev(derivs, centers0)
-    # 每个一阶导数对应 1/(2α) 或 1/(2β)
-    scale = 1.0
-    for label, powers in (("a", pa), ("b", pb)):
-        exponent = alpha if label == "a" else beta
-        scale *= (2.0 * exponent) ** (-sum(powers))
-    return raw * scale
+def primitive_nuclear(pa, A, alpha, pb, B, beta, nuclei):
+    """(ab|Σ_C −Z_C/r_C)：同一套解析导数状态。"""
+    total = 0.0
+    p = alpha + beta
+    P = [(alpha * A[i] + beta * B[i]) / p for i in range(3)]
+    ab2 = sum((A[i] - B[i]) ** 2 for i in range(3))
+    for C, Z in nuclei:
+        r2 = sum((P[i] - C[i]) ** 2 for i in range(3))
+        state = {0: 1.0}
+        scale = 1.0
+        for label, powers, exponent in (("a", pa, alpha), ("b", pb, beta)):
+            for axis in range(3):
+                for _ in range(powers[axis]):
+                    if label == "a":
+                        d_e = -2.0 * (alpha * beta / p) * (A[axis] - B[axis])
+                        d_p = alpha / p
+                    else:
+                        d_e = 2.0 * (alpha * beta / p) * (A[axis] - B[axis])
+                        d_p = beta / p
+                    d_t = 2.0 * p * (P[axis] - C[axis]) * d_p
+                    state = _apply(state, d_e, d_t)
+                    scale /= 2.0 * exponent
+        f = boys(max(state.keys()), p * r2)
+        total += -Z * 2.0 * PI / p * math.exp(-alpha * beta / p * ab2) * \
+            sum(c * f[m] for m, c in state.items()) * scale
+    return total
 
 def main():
     molecule = [("O", [0.0, 0.0, 0.0]), ("H", [0.0, 0.757, 0.586]), ("H", [0.0, -0.757, 0.586])]
