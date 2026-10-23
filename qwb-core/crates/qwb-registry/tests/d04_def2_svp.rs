@@ -203,15 +203,23 @@ fn internal_basis_handles_d_shells() {
     let carbon = Molecule::new(vec![Atom::new("C", [0.0, 0.0, 0.0])], 0, 3);
     let internal = InternalBasis::build(basis_k1, &carbon).expect("build");
 
-    // **已知缺口（R-06）**：`InternalBasis` 现在用**直角坐标**分量，d 壳层是 6 个
-    // 而不是球谐的 5 个，所以这里是 15 而不是 14。l<=1 时两者等价（STO-3G 无影响），
-    // 但 def2-SVP 有 d 函数，必须在 SCF 之前补球谐转换。
-    // 这一条**钉住**当前状态：修好后必须改成 14。
+    // `InternalBasis` 现在按数据的 `Angular` 报 AO 数（球谐 d = 5），所以 C 是
+    // 3+6+5 = 14，与数据层的 `n_basis_functions_for` 一致（R-06 的计数缺口已修）。
     assert_eq!(
         internal.n_functions(),
-        15,
-        "直角坐标表示下 C 是 3+6+6=15；若变成 14 说明球谐转换已实现，请更新本断言"
+        14,
+        "球谐下 C 是 3s + 2p(6) + 1d(5) = 14"
     );
+    assert!(
+        internal
+            .shells()
+            .iter()
+            .all(|shell| shell.n_functions() <= 5)
+    );
+
+    // 但**积分核**仍是直角坐标实现（d = 6），所以 l>=2 必须显式拒绝，
+    // 不能给出索引对不上的结果。等 cartesian->spherical 变换接上后改成正常计算。
+    // （积分层在 qwb-integrals 的测试里覆盖，这里只验证基组层。）
     // 壳层顺序由数据文件决定；这里断言**组成**（3 个 s、2 个 p、1 个 d），
     // 而不是硬编码顺序。
     let mut counts = std::collections::BTreeMap::new();

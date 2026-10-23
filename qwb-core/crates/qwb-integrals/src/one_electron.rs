@@ -366,6 +366,17 @@ pub fn one_electron(
 
     let shells: Vec<ShellPrimitives> = basis.shells().iter().map(shell_primitives).collect();
 
+    // **R-06 缺口**：`InternalBasis` 现在按 `Angular` 报 AO 数（球谐 d = 5），
+    // 但积分核是直角坐标实现（d = 6）。两者只有在 l<=1 时一致，所以 l>=2 必须
+    // 显式拒绝，等 cartesian -> spherical 变换（`qwb-basis` 的 T 矩阵）接上再放开。
+    if let Some(shell) = basis.shells().iter().find(|shell| shell.l >= 2) {
+        return Err(EngineError::Unsupported(format!(
+            "one-electron integrals for l>=2 shells need the cartesian->spherical \
+             transformation (R-06, not implemented yet): the basis has an l={} shell",
+            shell.l
+        )));
+    }
+
     for (shell_a_index, shell_a) in shells.iter().enumerate() {
         for shell_b in shells.iter().skip(shell_a_index) {
             for (component_a, powers_a) in shell_a.components.iter().enumerate() {

@@ -93,3 +93,12 @@ X-03 要求 "Becke 分区 + Lebedev 网格（order 194/302/590/974）"。Lebedev
 所以 T1 的 XC 网格这一段因此停在 X-02。
 
 已完成的 X 轨：X-01（`FunctionalTerm` + Slater/VWN5）、X-02（有限差分导数门禁，同时收尾 D-09）。
+
+### 附：R-06 球谐转换的当前进度（2026-10-23）
+
+- **基组层已修**：`InternalShell.angular` 来自数据，`n_functions()` 按球谐 `2l+1` 计数
+  （def2-SVP 的 C 现在是 14 个 AO，此前是直角坐标的 15）。
+- **积分层未修**：`one_electron` / `two_electron` 的核是直角坐标实现（d = 6），
+  所以对 `l >= 2` 显式返回 `Unsupported`。需要在 SCF 之前补
+  `qwb-basis` 的 cartesian→spherical 变换矩阵 `T`（每个壳层一块，块对角），
+  并在积分产出后做 `M_sph = Tᵀ M_cart T`。T2（def2-SVP）被它阻塞；T1（STO-3G，全 s/p）不受影响。

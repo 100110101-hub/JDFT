@@ -98,7 +98,7 @@ I-01:
   ts: "2026-10-22T23:31:53Z"
   artifact: "qwb-core/crates/qwb-basis：K1 BasisSet -> InternalBasis（每原子每收缩一个壳层，Å→Bohr，归一化在加载时完成）"
   verification: "cargo test -p qwb-basis --test d01_basis_layer（8 例）：H2 AO=2、C AO=5、H2O AO=7、angular 只来自数据、每个收缩 <f|f>=1、错误的 l2 声明被拒、未覆盖元素 → Data、球心转 Bohr"
-  note: "l<=1 时球谐与直角坐标分量数相同，第一阶段用直角坐标表示；l>=2 的球谐转换在 SCF 前补（R-06 的显式入口仍是 BasisSet.angular）"
+  note: "v2：`InternalShell` 现在带 `angular` 字段，`n_functions()` 按数据报球谐 (2l+1) 或直角坐标分量数——l<=1 时两者相同（STO-3G 无影响），def2-SVP 的 d 现在是 5 而不是 6（C 从 15 变 14，与数据层的 n_basis_functions_for 一致）。**仍缺**：积分核是直角坐标实现，所以 one_electron 对 l>=2 显式返回 Unsupported（测试钉住），需要 cartesian->spherical 的 T 矩阵变换，排在 SCF 之前。"
 I-02:
   state: done
   ts: "2026-10-22T23:45:54Z"

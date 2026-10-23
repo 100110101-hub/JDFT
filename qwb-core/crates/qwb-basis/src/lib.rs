@@ -80,6 +80,8 @@ pub struct InternalShell {
     pub l: u32,
     /// 球心，Bohr。
     pub center_bohr: [f64; 3],
+    /// 球谐还是直角坐标——**来自数据**（R-06 的唯一入口）。
+    pub angular: Angular,
     /// 指数，Bohr⁻²（已排序：大 → 小）。
     pub exponents: Vec<f64>,
     /// **已归一化**的收缩系数（与 `exponents` 同长）。
@@ -89,10 +91,18 @@ pub struct InternalShell {
 }
 
 impl InternalShell {
-    /// 本壳层贡献的 AO 个数（= 该 `l` 的直角坐标分量数）。
+    /// 本壳层贡献的 AO 个数。
+    ///
+    /// 球谐时是 `2l+1`；直角坐标时是 `(l+1)(l+2)/2`。两者在 `l <= 1` 时相同
+    /// （1 个 s、3 个 p），所以 STO-3G 不受影响；`l >= 2` 才有差别（d：5 vs 6）。
     #[must_use]
     pub fn n_functions(&self) -> usize {
-        cartesian_components(self.l).len()
+        match self.angular {
+            Angular::Spherical => 2 * self.l as usize + 1,
+            Angular::Cartesian => cartesian_components(self.l).len(),
+            // `Angular` 是 non_exhaustive：不认识就按球谐算，并在积分层显式拒绝 l>=2。
+            _ => 2 * self.l as usize + 1,
+        }
     }
 
     /// 第 `component` 个分量的角动量计数。
@@ -206,12 +216,16 @@ impl InternalBasis {
                     };
 
                     let first_function = n_functions;
-                    n_functions += cartesian_components(shell.l).len();
+                    n_functions += match basis.angular {
+                        Angular::Cartesian => cartesian_components(shell.l).len(),
+                        _ => 2 * shell.l as usize + 1,
+                    };
                     indices.push(shells.len());
                     shells.push(InternalShell {
                         atom_index,
                         l: shell.l,
                         center_bohr,
+                        angular: basis.angular,
                         exponents: shell.exponents.clone(),
                         coefficients,
                         first_function,
