@@ -21,6 +21,7 @@
 #![deny(unsafe_code)]
 #![deny(missing_docs)]
 
+pub mod analytic_gradient;
 pub mod checkpoint;
 pub mod diis;
 pub mod pulay;
