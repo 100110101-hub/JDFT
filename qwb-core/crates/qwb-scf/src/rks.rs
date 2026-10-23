@@ -267,11 +267,20 @@ pub fn evaluate_xc(
     terms: &[Box<dyn FunctionalTerm>],
 ) -> Result<(f64, Matrix), EngineError> {
     let n = basis.n_functions();
+    let needs_sigma = terms.iter().any(|term| term.requires().sigma);
+
     let mut rho_values = Vec::with_capacity(grid.len());
+    let mut sigma_values = Vec::with_capacity(grid.len());
     let mut ao_values: Vec<Vec<f64>> = Vec::with_capacity(grid.len());
+    let mut ao_gradients: Vec<Vec<[f64; 3]>> = Vec::with_capacity(grid.len());
+    let mut grad_rho: Vec<[f64; 3]> = Vec::with_capacity(grid.len());
 
     for GridPoint { position_bohr, .. } in &grid.points {
-        let values = ao_value(basis, *position_bohr)?;
+        let (values, gradients) = if needs_sigma {
+            ao_value_and_gradient(basis, *position_bohr)?
+        } else {
+            (ao_value(basis, *position_bohr)?, Vec::new())
+        };
         let mut rho = 0.0;
         for i in 0..n {
             for j in 0..n {
@@ -287,29 +296,57 @@ pub fn evaluate_xc(
                  values are corrupted"
             )));
         }
+        // ∇ρ = Σ_μν P_μν (∇φ_μ φ_ν + φ_μ ∇φ_ν)
+        let mut gradient_here = [0.0_f64; 3];
+        if needs_sigma {
+            for i in 0..n {
+                for j in 0..n {
+                    let p = density[(i, j)];
+                    if p == 0.0 {
+                        continue;
+                    }
+                    for axis in 0..3 {
+                        gradient_here[axis] +=
+                            p * (gradients[i][axis] * values[j] + values[i] * gradients[j][axis]);
+                    }
+                }
+            }
+            if !gradient_here.iter().all(|value| value.is_finite()) {
+                return Err(EngineError::Internal(
+                    "density gradient is not finite at a grid point".to_string(),
+                ));
+            }
+        }
         rho_values.push(rho.max(0.0));
+        sigma_values.push(
+            gradient_here[0] * gradient_here[0]
+                + gradient_here[1] * gradient_here[1]
+                + gradient_here[2] * gradient_here[2],
+        );
+        grad_rho.push(gradient_here);
         ao_values.push(values);
+        ao_gradients.push(gradients);
     }
 
-    let batch = DensityBatch::from_rho(&rho_values);
+    let batch = if needs_sigma {
+        DensityBatch::new(&rho_values, &sigma_values)
+    } else {
+        DensityBatch::from_rho(&rho_values)
+    };
     let mut epsilon = vec![0.0; grid.len()];
     let mut d_epsilon = vec![0.0; grid.len()];
     let mut d_sigma = vec![0.0; grid.len()];
 
     for term in terms {
-        if term.requires().sigma {
-            return Err(EngineError::Unsupported(format!(
-                "functional term `{}` needs sigma; only LDA is implemented in the grid (S-02)",
-                term.id()
-            )));
-        }
         let mut local_epsilon = vec![0.0; grid.len()];
         let mut local_d_rho = vec![0.0; grid.len()];
+        let mut local_d_sigma = vec![0.0; grid.len()];
         term.energy_density(&batch, &mut local_epsilon);
-        term.potential_derivatives(&batch, &mut local_d_rho, &mut d_sigma);
+        term.potential_derivatives(&batch, &mut local_d_rho, &mut local_d_sigma);
         for index in 0..grid.len() {
             epsilon[index] += local_epsilon[index];
             d_epsilon[index] += local_d_rho[index];
+            d_sigma[index] += local_d_sigma[index];
         }
     }
 
@@ -318,20 +355,40 @@ pub fn evaluate_xc(
     for (index, GridPoint { weight, .. }) in grid.points.iter().enumerate() {
         let rho = rho_values[index];
         energy += weight * rho * epsilon[index];
-        // v = ε + ρ dε/dρ
-        // ρ=0 时不要算 ρ·dε/dρ（0×inf = NaN）；此时势就是 ε(0)。
+        // LDA 部分：v = ε + ρ dε/dρ；ρ=0 时不乘（0×inf = NaN）。
         let potential = if rho > 0.0 {
             epsilon[index] + rho * d_epsilon[index]
         } else {
             epsilon[index]
         };
+        // GGA 部分：∫ φ_μ(−∇·(2·∂f/∂σ·∇ρ))φ_ν 用分部积分转成
+        //   + 2·∂f/∂σ·∇ρ·∇(φ_μ φ_ν)，其中 ∂f/∂σ = ρ·dε/dσ。
+        // 这样不需要在网格上做数值散度，矩阵元直接可达。
+        let sigma_coefficient = if needs_sigma && rho > 0.0 {
+            2.0 * rho * d_sigma[index]
+        } else {
+            0.0
+        };
         let values = &ao_values[index];
+        let gradients = &ao_gradients[index];
+        let gradient_rho = grad_rho[index];
         for i in 0..n {
             if values[i] == 0.0 {
                 continue;
             }
             for j in 0..n {
-                v_xc[(i, j)] += weight * values[i] * values[j] * potential;
+                let mut element = values[i] * values[j] * potential;
+                if sigma_coefficient != 0.0 {
+                    // ∇ρ · ∇(φ_μ φ_ν)
+                    let dot = (0..3)
+                        .map(|axis| {
+                            gradient_rho[axis]
+                                * (gradients[i][axis] * values[j] + values[i] * gradients[j][axis])
+                        })
+                        .sum::<f64>();
+                    element += sigma_coefficient * dot;
+                }
+                v_xc[(i, j)] += weight * element;
             }
         }
     }
@@ -640,11 +697,7 @@ pub fn rks_from_data(
                 component.id, component.weight
             )));
         }
-        if term.requires().sigma {
-            return Err(EngineError::Unsupported(format!(
-                "functional `{functional_name}` needs sigma (GGA); only LDA is implemented (S-02)"
-            )));
-        }
+        // GGA（σ 依赖）现在由 evaluate_xc 支持（D-10）。
         let _ = &mut term;
         terms.push(term);
     }
