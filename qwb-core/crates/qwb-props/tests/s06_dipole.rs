@@ -1,4 +1,5 @@
-//! S-06 验收（偶极部分）：H2 偶极为零、中性分子偶极与原点无关、量级合理。
+//! S-06 验收（偶极部分）：H2 偶极为零、中性分子偶极与原点无关、量级合理，
+//! 以及 H2O/STO-3G 与实验值 1.85 D 差 < 0.15 D。
 #![allow(clippy::needless_range_loop)] // 三个分量的断言用下标更清楚
 
 use std::path::PathBuf;
@@ -105,4 +106,38 @@ fn dipole_magnitude_is_physically_reasonable() {
     );
     // 分子在 yz 平面内 ⇒ μ_x 必须为 0（对称性）
     assert!(mu[0].abs() < 1.0e-9, "μ_x = {} 应为 0", mu[0]);
+}
+
+/// S-06 验收 ①：H2O/STO-3G 的 HF 偶极与实验值 1.85 D 差 < 0.15 D。
+///
+/// 参照是**外部**的（§7.0）：气相水的偶极矩 1.85 D。STO-3G 系统性地低估偶极
+/// （该基组没有极化函数），所以判据用 §6.2 给的 0.15 D，而不是 1e-3。
+///
+/// 这一条曾被 I-02 的 2.36 Ha 能量缺口挡住——当时偶极本身可能也是错的，不去凑数。
+/// 缺口归因到 Boys 函数的大 `T` 分支后（见 docs/choices.md §十三），一次测得 1.7257 D。
+#[test]
+fn water_dipole_matches_the_experimental_value() {
+    let molecule = Molecule::new(
+        vec![
+            Atom::new("O", [0.0, 0.0, 0.0]),
+            Atom::new("H", [0.0, 0.757, 0.586]),
+            Atom::new("H", [0.0, -0.757, 0.586]),
+        ],
+        0,
+        1,
+    );
+    let (basis, density) = solve(&molecule);
+    let mu = dipole_debye(&basis, &molecule, &density).expect("dipole");
+    let magnitude = (mu[0] * mu[0] + mu[1] * mu[1] + mu[2] * mu[2]).sqrt();
+    println!("H2O: μ = {mu:?}  |μ| = {magnitude:.4} D");
+    // 对称性：C2 轴上的分量之外都应为 0。
+    assert!(mu[0].abs() < 1.0e-9, "μ_x = {} 应为 0", mu[0]);
+    assert!(mu[1].abs() < 1.0e-9, "μ_y = {} 应为 0", mu[1]);
+    assert!(mu[2] > 0.0, "μ_z = {} 应指向 H 一侧", mu[2]);
+    let experimental = 1.85_f64;
+    let difference = (magnitude - experimental).abs();
+    assert!(
+        difference < 0.15,
+        "H2O 偶极 {magnitude:.4} D 与实验 {experimental} D 差 {difference:.3} D（要求 < 0.15）"
+    );
 }

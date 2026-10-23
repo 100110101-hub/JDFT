@@ -25,7 +25,6 @@ fn water() -> Molecule {
 }
 
 #[test]
-#[ignore = "KNOWN GAP: 水/STO-3G 的 HF 给 −72.876 Ha；NIST CCCBDB 的 HF/STO-3G 为 −75.204892（STO-3G 优化几何 O–H 1.0191 Å / 97.437°，见 cccbdb.nist.gov/energy3x.asp?method=59&basis=20&casno=7732185），实验几何下约 −74.96。差 ~2.1 Ha，且积分与能量/Fock 一致性均已逐项验证，见 docs/status.yaml I-02 的 note"]
 fn h2o_sto3g_hf_matches_the_external_reference() {
     let registry = Registry::open(data_root()).expect("qwb-data");
     let basis_k1 = registry.get_basis("sto-3g").expect("sto-3g");
@@ -49,15 +48,14 @@ fn h2o_sto3g_hf_matches_the_external_reference() {
     );
     println!("MO: {mo:?}");
 
-    // 文献 HF/STO-3G H2O = −74.963 Ha（同文献里 MO 能级约
-    // [−20.20, −1.20, −0.55, −0.42, −0.35]）。
-    // NIST CCCBDB（Release 22）：HF/STO-3G 水 = −75.204892 Ha（STO-3G 优化几何）。\n    // 实验几何下约 −74.96。这里取实验几何的近似值做判据。\n    let reference = -74.963_f64;
-    // 参照：NIST CCCBDB（Release 22）HF/STO-3G 水 = −75.204892 Ha（STO-3G 优化几何��；
-    // 实验几何下约 −74.96，这里用后者做判据。
+    // 文献 HF/STO-3G H2O = −74.963 Ha（实验几何）。同一文献的 MO 能级约
+    // [−20.20, −1.20, −0.55, −0.42, −0.35]；我们实测
+    // [−20.24, −1.27, −0.62, −0.45, −0.39]。
+    // NIST CCCBDB（Release 22）：HF/STO-3G 水 = −75.204892 Ha（STO-3G 优化几何）。
     let reference = -74.963_f64;
     let difference = (result.energy_hartree - reference).abs();
     assert!(
-        difference < 2.0e-2,
+        difference < 1.0e-3,
         "HF 能量 {:.6} 与文献 {reference} 差 {difference:.4} Ha",
         result.energy_hartree
     );

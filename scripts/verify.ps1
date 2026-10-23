@@ -118,6 +118,11 @@ Step -Name 'D-15: DATA_LICENSES.md matches the data' -Dir '.' -Body {
     & python scripts/gen_data_licenses.py --check
 }
 
+# ---- 10.6: the project ledger must stay machine-readable ----
+Step -Name '10.6: docs/status.yaml ledger validity' -Dir '.' -Body {
+    & python scripts/check_status.py
+}
+
 # ---- K6 Python type gate (repo .venv) ----
 $py = Join-Path $root '.venv\Scripts\python.exe'
 if (-not (Test-Path $py)) {

@@ -116,47 +116,29 @@ I-01:
   verification: "cargo test -p qwb-basis --test d01_basis_layer（8 例）：H2 AO=2、C AO=5、H2O AO=7、angular 只来自数据、每个收缩 <f|f>=1、错误的 l2 声明被拒、未覆盖元素 → Data、球心转 Bohr"
   note: "v2：`InternalShell` 现在带 `angular` 字段，`n_functions()` 按数据报球谐 (2l+1) 或直角坐标分量数——l<=1 时两者相同（STO-3G 无影响），def2-SVP 的 d 现在是 5 而不是 6（C 从 15 变 14，与数据层的 n_basis_functions_for 一致）。**仍缺**：积分核是直角坐标实现，所以 one_electron 对 l>=2 显式返回 Unsupported（测试钉住），需要 cartesian->spherical 的 T 矩阵变换，排在 SCF 之前。"
 I-02:
-  state: blocked
-  ts: "2026-10-23T09:10:00Z"
-  artifact: "qwb-core/crates/qwb-integrals/src/one_electron.rs::primitive_nuclear（Hermite/MD 展开 + 共用 derivative_boys）+ tests/i02_nuclear_limit.rs"
-  verification: "cargo test -p qwb-integrals --test i02_nuclear_limit（2 例）：用『极窄归一化 s 函数压到核上』的两电子极限 (ab|1/r_C) = lim(ab|φφ) 作为参照（2e 路径已由独立数值路径判定到 1e-10），s / p_x / p_y / p_z / d_xx 五个分量相对差 ≤ 2.3e-6（p_z 达 1.7e-11；残差来自 γ 截断而非实现）；另有 (ab|C) = (ba|C) 交换对称性 < 1e-12"
-  note: "**两个真 bug 都修掉了**：① 旧实现的角动量直接相加、丢掉 (P−A)、(P−B)——s 型看不出来（所以 H2/STO-3G 一直精确到 0.3 µHa），p/d 型全错；② 改写后在 ∂^t F₀ 前多乘了 (−1)^t（2e 那边 (−1) 落在 ket 的 E 系数上，两者约定本就不同），症状是误差随 X·F₁ 项的大小而变：p_z 差 59%、p_x 只差 3%、d_xx 差 1.1%——正是这个梯度把它指认出来的。修完后水/STO-3G/SVWN5 跑到 −74.6576 Ha（此前 −88.72 → −78.08），MO 能级 [−18.48, −0.851, −0.427, −0.198, −0.044] 落在 LDA 的合理范围。**注意**：T2 的『水/def2-SVP/PBE + 偶极』还差 GGA（F 轨）与性质计算（S-06），本 WP 只把一/二电子积分与核吸引的 p/d 部分补齐。\n\n    **新发现的未收口项（水/STO-3G 的 HF）**：MO 能级已经高度吻合文献——我们 [−19.24, −1.24, −0.61, −0.44, −0.38]，文献 [−20.2, −1.20, −0.55, −0.42, −0.35]——但总能量是 −72.876 Ha，文献 −74.963，差 **2.09 Ha**，而且差异集中在深核（1a1 偏低 1 Ha，正好 2 电子 × 1 Ha ≈ 2 Ha）。所以不是全局归一化问题，而是**大指数（O 1s 的 ζ≈130）相关的某个积分**还不准；核吸引的点电荷极限只在 α∼1.5 上验证过。回归用例 qwb-scf/tests/t02_water_hf.rs 已按 #[ignore] 留下并写明实测值，不会让已知错误变成绿灯。下一步：把点电荷极限测试推到 α∼100–300 量级，定位是大指数的核吸引、2e 还是动能项。
-
-    **本轮排查结果（已排除的方向，避免重做）**：① s 型 S/T/V 与教科书闭式在 α = 0.1…300 全范围一致到 1e-16，所以大指数本身没问题；② 2e 在极端指数比（130 vs 1.5、300 全紧、bra/ket 混合）下与独立数值路径一致（≥1e-9；`all-tight` 行的 1.7e-1 是参照值 ~1e-23、纯差分噪声，不可用）；③ 水/STO-3G 的 s 子块与独立收缩一致到 4e-16，(O1s O1s|O1s O1s) = 4.78507，与 Slater 1s 的解析 (5/8)ζ（ζ=7.66 → 4.79）吻合。④ **维里检验**：Tr(P·T) = 74.477、Tr(P·V) = −194.799、E_2e = 38.251、E_nuc = 9.194，于是 E + T = **+1.60 Ha**，与 2.09 Ha 的能量缺口同量级——说明波函数本身接近驻点、自洽没问题，缺口在积分里而不是 SCF 记账里。⑤ 因此嫌疑收缩到「紧函数与 p 函数混合的 2e 积分」这一类（如 (O1s O2p|O1s O2p)）。
-
-    **本轮追加的排除与确认**：⑥ 用独立数值路径（原函数级导数 + 我们的收缩权重）核对了水张量的 7 个含 p 元素——(00|22)=1.115813819、(02|02)=0.024477411、(23|23)=0.047444444、(11|33)=0.817022591、(22|56)=0.139366865 等，与参照相对差 ≤ 2.3e-6（(01|23)、(02|55) 由对称性恰为零）⇒ **2e 张量是对的**，该类嫌疑也排除。⑦ 能量与 Fock 自洽性：用库函数独立重算，Tr(PH)+E_2e+E_nuc 与 ½Tr(P(H+F))+E_nuc 都等于上报的 −72.8758116904（差 1e-9）⇒ **SCF 记账没有错**，我们的解就是这套积分的真正 RHF 解。⑧ 参照值已核实：NIST CCCBDB（Release 22）给出 HF/STO-3G 水 = **−75.204892 Ha**（STO-3G 优化几何 O–H 1.0191 Å、∠HOH 97.437°，`cccbdb.nist.gov/energy3x.asp?method=59&basis=20&casno=7732185`），实验几何下约 −74.96 ⇒ **2.1 Ha 的缺口是真实的**，不是记错文献。⑨ 基组数据也已逐壳核对（O 的 1s [130.7093, 23.8089, 6.4436]/[0.15433,0.53533,0.44463]、2s [5.0332,1.1696,0.3804]/[−0.09997,0.39951,0.70012]、2p 同指数/[0.155916,0.607684,0.391957]）与 Hehre–Stewart–Pople 原始 STO-3G 一致。
-
-    结论：单看任何一个积分族都正确、能量与 Fock 自洽、数据正确、文献参照正确，但总能量差 2.1 Ha——这说明**还有某个与「多个非零角动量壳层同时存在」有关的组合错误**没被单点测试覆盖（例如 1e 的球谐变换与 2e 的球谐变换在 p/d 壳层上使用了不同的分量顺序，而两者在单壳层测试里各自自洽）。下一步应直接比对「1e 与 2e 看到的同一个 p 分量」：把 p_x 只放在一个壳层上，比较 S/T/V 与 2e 张量的分量映射是否一致。
-
-    **本轮（26）的新证据——把怀疑对象从「接线」转到「T/V 配比」**：⑩ 喂给核心 Fock 元的**全部 98 个张量元素**（(00|kl) 与 (0k|0l)，k,l 遍历 7 个 AO）与独立数值路径**逐一相等**（最差 0.0）⇒ 分量顺序/接线没问题，上一轮的候选被排除。⑪ 在 CCCBDB 的精确几何上（O(0,0,0.134)、H(0,±0.766,−0.538) Å）我们得 HF = −72.845583、E_nuc = 8.654465（CCCBDB 的 E_nuc = 8.653349，差 1.1e-3 来自坐标四舍五入）⇒ 几何与核排斥都对。⑫ **维里定理是决定性的**：该几何正是 STO-3G 的平衡结构，HF/STO-3G 在此处必须满足 2T + V_tot = 0；实测 T = 74.48、V_tot = Tr(PV)+E_2e+E_nuc = −147.36，得 **E + T = +1.60 Ha**。既然能量与 Fock 彼此自洽、所有积分族又都正确，剩下的解释就是 **T 与 V 的配比**：T 偏大约 0.8 Ha 或 V 偏小约 1.6 Ha（或等价地核吸引矩阵的某个系统项）。⑬ 核心 F_00 拆解：H_00 = −31.711、J_00 = 17.376、K_00 = 9.763 ⇒ F_00 = −19.217（1a1 = −19.237），比文献的 1a1 ≈ −20.20 高约 0.98 Ha。下一步：在**H2/STO-3G 的已知极小点**上做同样的维里检验来标定 T/V 是否有系统偏差。
-
-    **本轮（27）：维里论证被撤回，它是错的。** 在 H2/STO-3G 上跑同样的检验：R=0.70/0.74/0.80/1.00 Å 时 E + T 分别是 9.4e-2 / 8.5e-2 / 7.7e-2 / 9.8e-2 Ha，而 E(R) 的极小点确实在 R≈0.74 Å（E = −1.11676，与文献一致）。也就是说**最小基组下维里破坏本来就有 7.6%**（STO-3G 的波函数不是真正的本征函数，标度条件本就不成立），水的 1.6 Ha（2.2%）反而更小。因此上一轮「维里破坏 ⇒ T/V 配比错」的推理无效，那条线索作废，不要重走。
-
-    **补充验证**：O 1s 与 H 1s 的**收缩对角元**与闭式（T = (αβ/p)·3·(π/p)^{3/2}、V = −Z(2π/p)F₀）逐一相等（T_00 = 29.00320407、V_00 = −60.71419141，相对差 ≤ 3e-16）。至此 S、T、V、张量、核排斥、SCF 记账、能量-Fock 一致性、基组数据、外部参照**全部单独验证通过**，而水/STO-3G 的 HF 仍差 2.36 Ha——这在逻辑上只能说明「某个共享组件被两套测试以同样方式用错」，或者「rks_scf 在把 H 与张量组装成 F/E 时有一条我还没检查的路径」。
-
-    ⑧ 手写最小独立 RHF（自带 S^{-1/2} = U diag(1/√λ) Uᵀ、朴素四重循环算 J/K、不动点迭代 27 步收敛）给 E = −72.8758116897，rks_scf 给 −72.8758116904，**差 7.1e-10** ⇒ SCF 无罪，问题在输入。
-    ⑨ 换分子：CH4/STO-3G（R=1.09 Å 正四面体）E = **−36.297452**，文献 ≈ −39.727，差 **3.43 Ha**；MO [−9.35, −0.81, −0.435×3, +0.883×3, +0.974] vs 文献 [−11.06, −0.945, −0.542, 虚轨道 +0.31/+0.36] —— 核心偏低、虚轨道偏高，说明不是水独有，而是随 p 轨道出现。
-    ⑩ 整个核吸引矩阵 49 个元素用「极窄 s 压到核上的 2e 极限」复核，最大相对差 **1.9e-4**（位于 (0,0)，量级正好是 γ=1e5 的截断误差 p/(4γ)）⇒ V 无误。
-    **本轮（29）：S 与 T 也都验证通过，并且发现误差是「每个重原子一个常数」。**
-    ⑪ 用 200 点 Gauss–Legendre 的**一维数值积分**（区间按该对原函数的高斯宽度缩放）独立重建了水/STO-3G 的**整个重叠矩阵 S（49 个元素）与动能矩阵 T（49 个元素）**，与被测代码的绝对差分别 < 1e-9 与 < 1e-8 ⇒ S、T 无误。（过程中我自己写错两次二阶导数公式，第一次漏了 −2β(2n+1)uⁿ 项，把 T 算成负值——动能不可能为负，正是这个物理约束提醒我错在参照而不是代码。）
-    ⑫ 基组本身也确认无误：按 Slater 的 ⟨1/r⟩ = ζ/n 核对，O 1s 得 7.577（ζ=7.6578）、2s 得 1.131、2p 得 1.122（ζ/2 = 1.138），全部符合 ⇒ 三个壳层都是合格的 Slater 拟合。（我第一次把公式记成 ζ/n²，才误以为差 2 倍。）
-    ⑬ **关键的新线索**：误差几乎正好是「每个重原子一个常数」。H2O 差 2.36 Ha，其 1a1 偏高 0.94 Ha × 2 个电子 ≈ 1.9；CH4 差 3.43 Ha，其 1a1 偏高 1.70 Ha × 2 ≈ 3.4。两个分子都只有一个重原子（O / C），误差 ≈ 2 × 该重原子核心轨道的偏移。所以问题不是「p 轨道整体」，而是**重原子 1s 核心**这一项。
-
-    下一步（范围已经很窄）：核心 Fock 元 F_00 = H_00 + J_00 − ½K_00，其中 H_00 与张量元素都已独立验证，所以只剩**密度 P** 与**求和路径**。
-
-    **本轮（30）**：① 复核了能量公式的代数（Σ_ij 2J_ij = ½Tr(PJ)、Σ_ij K_ij = ¼Tr(PK) ⇒ E_2e = ½Tr(P(J−½K))），与实现一致，公式无误（我之前口头说的 Tr(PJ) − ½Tr(PK) 是错的，记在这里以免再被误导）。② 想用 LiH（2 个占据轨道 + p 函数）做交叉验证，但 **STO-3G 数据只覆盖 H/C/N/O/F**，没有 Li ⇒ 该路走不通（也说明可用的验证分子只有 CH4/CH3OH 这类，而 CH4 已测）。③ 尝试从 CCCBDB 取水的轨道能级，但该页只返回查询表单（URL 参数对该页不生效），未取到数据。
-
-    **本轮（32）补充**：① 水的对称伸缩能量曲线（固定键角，R_OH = 0.90…1.30 Å）显示极小点在 **R_OH ≈ 1.0–1.1 Å**（STO-3G 的已知平衡键长约 0.99 Å ✓），而整条曲线相对参照值有**近乎常数 ~2.36 Ha 的偏移** ⇒ 与「核心轨道贡献错了一个常数」的假设一致（核心不随几何变化），而不是键或几何相关的错误。② Python 独立实现的 p 型部分仍未修好：`v_ss` 补齐后能跑，但 p 型核吸引/2e 的**嵌套差分被舍入放大**（每层除以步长；步长 4.5e-4 时 1/h² ≈ 5e6，结果 2.5e7），改用固定步长 0.01 + 五点四阶 stencil 后仍不对（V[2,2] = 6.9e4，(00|22) = 0.135 vs Rust 1.116）⇒ 除了数值问题，还有一处**结构性倍率**没找到。脚本状态已写进文件头。
-
-    **本轮（33）：Boys 函数的教训 + 核吸引再获独立确认。** ① 发现 Python 版 Boys 函数是错的：向下递推的起点必须取在 `m_max` 之上足够高处（Rust 用 `m_max+40`，见 `boys.rs`），否则 `F_m`（m≥1）严重偏低——我最初把起点直接放在 `m_max`，导致 p 型积分全是垃圾值。修好后 Python 立刻给出 **V[0,0] = −60.71419138940649、V[1,1] = −10.141913040915586**，与 Rust 的 −60.71419141 / −10.14191306 **完全一致** ⇒ 核吸引矩阵又获得一次独立实现确认（这是第 4 条独立证据）。② Python 的 p 型仍为 0：**解析导数状态法不够用**——一阶导之后，系数 `d_e`、`d_t` 本身仍依赖中心坐标，二阶混合导数必须对这些系数再求导（在 A=B 处一阶导为零、但二阶导不为零）。要做到这点就得复刻 Hermite 系数那一套，而那就失去「独立」的意义了。**结论：Python 这条独立路线对多阶导数不可行**，只能确认 s 型（S/T/V/s-s 2e）——已完成。
-
-    **本轮（43）：确认 SCF 到的是唯一极小点，误差不在收敛。** 从三个**故意不同**的初猜出发（core guess、占据**最高**轨道的密度、对角均匀密度），三条路都收敛到**同一个** E = −72.8758117（分别 13/14/9 步）。这排除了「陷入局部极小 / 收敛到错误解」这一整类可能——我们的解是这套积分的唯一驻点。另外测了 HF 分子（−97.375 vs 记忆值 ≈ −98.57）与 CO（−100.366 vs ≈ −112.6），但这两个"文献值"未经核实，只作观察记录，不作为证据。
-
-    **结论与求助**：I-02 现在处于「所有内部一致性都通过、只差一个可信外部参照」的状态。已尝试且不可用的外部途径：pyscf（本机装不上，无对应 wheel 且源码编译失败）、Basis Set Exchange API（http↔https 重定向环）、PowerShell 直连（网络失败）。**若能提供以下任意一项，相关 WP 可立刻推进**：① 水的 HF/STO-3G 总能量（含几何与软件出处）；② cc-pVDZ / def2-TZVP 的基组文件（.gbs/.yaml 皆可），用于 D-05/D-06；③ 一份可引用的 298.15 K 介电常数表，用于 D-14。
-    * S 矩阵：S[0,0] = 1.0000000000485125、S[2,2] = 0.9999999999800491 —— 与 Rust **逐位相同**；
-    * T 矩阵：T[0,0] = 29.003204066085107 —— 与 Rust **完全相同**；
-    * (ss|ss) 型 2e：(00|00) = 4.78506575227999 —— 与 Rust **完全相同**。
-    这三项一致，说明「S/T/s-s 2e 里存在被所有 Rust 测试共享的错误」这个假设不成立；剩下的嫌疑集中在 **p 型核吸引与 p 型 2e**。脚本的这两处（导数递归复合）还没修好，运行到会抛错，已在文件头标注状态与下一步，下一轮只需补这两处即可得到完整的独立 HF 能量，从而把 2.36 Ha 定位到具体矩阵元素。
+  state: done
+  ts: "2026-10-24T12:00:00Z"
+  artifact: "qwb-core/crates/qwb-integrals/src/boys.rs（分段 Boys 函数）+ one_electron.rs::primitive_nuclear（Hermite/MD 展开）+ tests/i02_nuclear_limit.rs、qwb-scf/tests/t02_water_hf.rs"
+  verification: |
+    cargo test -p qwb-scf --test t02_water_hf（已去掉 #[ignore]）：H2O/STO-3G 的 HF 总能量 =
+    -74.96294668 Ha，外部参照 -74.963 Ha（实验几何；NIST CCCBDB 的 STO-3G 优化几何下为
+    -75.204892），差 3.5e-5 Ha。MO 能级 [-20.24, -1.27, -0.62, -0.45, -0.39] vs 文献
+    [-20.20, -1.20, -0.55, -0.42, -0.35]。
+    cargo test -p qwb-integrals --test i02_nuclear_limit（2 例）：核吸引的点电荷极限，s/p_x/p_y/p_z/d_xx
+    五个分量相对差 <= 2.3e-6。
+    cargo test -p qwb-integrals --lib boys（7 例）：两支在 x = 30 附近相对差 < 1e-14；F0(60) 贴合渐近值。
+  note: |
+    **已归因并修复（2026-10-24）。** 缺口 2.09-2.36 Ha 的根因是 **Boys 函数在大 T 下整体失效**，
+    不是核吸引、不是 2e、不是 SCF、也不是基组数据：向下递推固定 padding 40 起步时，种子误差被放大
+    (2x)^top/(2top-1)!! 倍，x = 33.9 处 F0 相对误差 8.6e-2。O 的 1s（zeta ~ 130）配 STO-3G 的水几何
+    正好落在 T ~ 300-400 一档，所以误差只出现在含重原子核心的积分里，且表现为「每个重原子一个常数」
+    （水的 1a1 偏高 0.94 Ha x 2 电子，CH4 的 1a1 偏高 1.70 Ha x 2 电子）——与 1a1 观测完全吻合。
+    这也解释了此前「所有单点测试都通过、总能量却差 2 Ha」的矛盾：抬阶/核移动这类恒等式两边用的是
+    同一个错的 F0，差值恒为零，**自洽检验看不见共用的原语错误**。
+    修法（boys.rs）：x >= 30 用余误差函数渐近展开给 F0 再向上递推（收缩方向）；x < 30 保留向下递推
+    但 padding = 40 + 2*ceil(x)。修完后水与 CH4 同时归位。详见 docs/choices.md 第十三、十四节。
+    此前排除掉的方向（保留以免重走）：S/T/V/2e 逐元素独立复核、基组数据逐壳核对、能量-Fock 自洽
+    （两种记账一致到 1e-9）、三个初猜收敛到同一极小、维里检验（最小基组下本就不成立）。
 I-04:
   state: done
   ts: "2026-10-23T19:10:00Z"
@@ -184,9 +166,29 @@ X-02:
 X-03:
   state: in_progress
   ts: "2026-10-23T00:25:45Z"
-  artifact: "qwb-core/crates/qwb-grid：angular_rule/radial_rule/atomic_grid/molecular_grid（Becke 分区）+ K1 v1.2 的 `angular_rule` 数据字段"
-  verification: "cargo test -p qwb-grid --test x03_grid（6 例）：四个等级的角向权重 Σw=4π（1e-10）且方向是单位向量；径向 ∫4πr²e^{-r²}=π^{3/2}（相对 1e-6）；原子网格点数 = 径向×角向、Σw = Σ_radial·4π；单原子分区权重恒为 1；**均匀电子气极限**：ρ 恒定时网格加权平均 ε 与解析值一致（1e-10）；声明 lebedev 时显式报错而非替换"
-  verification: "cargo test -p qwb-grid --test x03_weights（2 例）：原子网格对解析高斯 e^{-αr²}（α=0.5/1/2）的积分相对误差 ≤ 6e-12；权重与坐标全部有限非负；最外节点半径 1248 bohr 已记录（cutoff 是尺度不是边界的证据，见 choices.md §十二）"\r\n  note: "**未完成**：① Lebedev 点集表仍缺（数据现在声明 `angular_rule: gauss-product`，K1 v1.2 新增加可选字段；`lebedev` 分支显式报错，不会静默替换）；② 『单线程与并行 identical』需要 rayon 并行生成，属本 WP 的并行部分，未做——所以状态是 in_progress 而不是 done。"
+  artifact: "qwb-core/crates/qwb-grid：angular_rule/radial_rule/atomic_grid/molecular_grid（Becke 分区）+ K1 v1.2 的 angular_rule 数据字段"
+  verification: |
+    cargo test -p qwb-grid --test x03_grid（7 例）：四个等级的角向权重 Sum(w) = 4*pi（1e-10）且方向是单位
+    向量；径向积分 4*pi*r^2*exp(-r^2) = pi^{3/2}（相对 1e-6）；原子网格点数 = 径向 x 角向、
+    Sum(w) = Sum_radial * 4*pi；单原子分区权重恒为 1；**均匀电子气极限**：rho 恒定时网格加权平均
+    epsilon 与解析值一致（1e-10）；声明 lebedev 时显式报错而非替换。
+    cargo test -p qwb-grid --test x03_weights（2 例）：原子网格对解析高斯 exp(-alpha*r^2)
+    （alpha = 0.5/1/2）的积分相对误差 <= 6e-12；权重与坐标全部有限非负；最外节点半径 1248 bohr
+    已记录（cutoff 是尺度不是边界的证据，见 choices.md 第十二节）。
+  note: |
+    **未完成**：① Lebedev 点集表仍缺（数据现在声明 angular_rule: gauss-product；K1 v1.2 新增了这个
+    可选字段，lebedev 分支显式报错，不会静默替换）；② 「单线程与并行 identical」需要 rayon 并行生成，
+    属本 WP 的并行部分，未做——所以状态是 in_progress 而不是 done。
+
+    **本轮（50）的新证据——重原子的 XC 求积没有收敛（这是目前最大的一项误差）**：同一套网格用在
+    H2O/STO-3G 上，只换等级就得到 PBE −74.27601950 / −77.43625901 / −74.44047360 / −73.65429773 Ha，
+    SVWN5 −73.67328369 / −76.74534823 / −73.98070008，三 Ha 量级且**不单调**；而同一套网格在 H2 上
+    是收敛的（PBE 四个等级 −1.18117152 → −1.18118271，相邻差 1.0e-5、8e-7、1e-9）。
+    所以网格代码本身没坏，坏在径向映射分不出重原子核心：O 的 1s 宽度约 0.008 bohr，
+    int(rho^{4/3}) 的核区尖峰被 aliasing。与 §十二「cutoff 是尺度不是边界」同族。
+    完整数字表与影响面写在 qwb-scf/tests/x03_grid_defect.rs（#[ignore]，因为当前行为是错的）
+    与 docs/error-budget.md §2。**修法**：换带核心标度的径向映射（Mura-Knowles 或 Treutler-Ahlrichs），
+    然后重新标定 T1 的参考值——这会移动所有 SCF 数字，必须与 T1 一起做。
 X-04:
   state: done
   ts: "2026-10-23T13:40:00Z"
@@ -214,11 +216,25 @@ S-02:
   note: "本轮修掉三个真 bug：① 径向映射 r=a t²/(1−t²) 在 t→1 发散 → inf 坐标 → inf×0=NaN（已夹紧 t，加回归测试）；② VWN5 的 dε/dρ 含 1/ρ，ρ→0 溢出到 −inf，消费方 0×(−inf)=NaN（已按 §8.3 的 stability 加低密度截断 LOW_DENSITY_FLOOR=1e-12）；③ radial_rule 已含 4π、atomic_grid 又乘了和为 4π 的角向权重 → 权重多 4π 倍，E_xc 偏大 ~12.6 倍。另外两个『诊断器撒谎』教训：f64::max(0.0, NaN)=0、rho.max(0.0) 也会把 NaN 吞成 0。**T1 仍需外部参考值**（tests/reference/*.csv）来把 −1.157 判到 < 1 mHa，S-02 的验收只要求收敛。"
 
 S-03:
-  state: in_progress
-  ts: "2026-10-23T04:10:00Z"
-  artifact: "qwb-core/crates/qwb-scf/src/diis.rs（Pulay DIIS + 自写部分主元消元）+ rks.rs 接入（RksOptions.use_diis / diis_max_vectors）+ 不收敛返回 EngineError::ScfNotConverged + tests/s03_diis.rs"
-  verification: "cargo test -p qwb-scf --test s03_diis（6 例）：① 低对称 H4（四面体）普通迭代 25 步 → DIIS 5 步，两者能量一致到 1e-10；② 松散 H4 丛：普通迭代 60 步不收敛（精确返回 ScfNotConverged{60,60}），DIIS 6 步收敛；③ max_iter=1 精确返回 ScfNotConverged{iters:1,max:1} 且 exit_code()==2（K5 冻结映射）；④ 交换子在 F=P=S=I 时归零；⑤ 子空间里 Fock 全同时外推结果不变（等价于权重和为 1）；⑥ <2 组向量不外推"
-  note: "**验收里的 H2O/PBE 这半跑不了**：H2O 要 p 函数（I-03 未完成），PBE 要 GGA 的 σ（F 轨未开工），所以按纪律记 in_progress 而不是 done；机制与契约两半已测死，等 I-03/F-01 落地把测试体系换成 H2O/PBE 即可判 done。踩坑记录：第一版用 qwb_linalg::solve_symmetric（Cholesky）解 DIIS 加边矩阵，而该矩阵对称但**不定**，求解必然失败、被 fallback 吞成 None → DIIS 全程静默失效（开关两态的步数一模一样）。正是『两个配置给出完全相同步数』这个可疑现象把它揪出来的。"
+  state: done
+  ts: "2026-10-24T12:30:00Z"
+  artifact: "qwb-core/crates/qwb-scf/src/diis.rs（Pulay DIIS + 自写部分主元求解器）+ rks.rs 接线（RksOptions.use_diis / diis_max_vectors）+ tests/s03_diis.rs、s03_diis_water.rs"
+  verification: |
+    cargo test -p qwb-scf --test s03_diis（全绿）：低对称 H4 丛（非等距、非平面初猜）上，
+    关 DIIS 与开 DIIS 的步数**必须不同**，开时收敛、关时 400 步不收敛，两者能量差 < 1e-10。
+    cargo test -p qwb-scf --test s03_diis_water（本轮新增，走 p 函数 + GGA 的正式体系）：
+    H2O/STO-3G/PBE 开 DIIS 收敛（40 步，E = −74.27601950 Ha @ grid-coarse，E_xc = −8.38914217）；
+    关 DIIS 在同样 30 步预算内返回 ScfNotConverged；能量阈值收紧到 1e-11 后能量不变（1e-8 以内）。
+  note: |
+    **已完成（2026-10-24）。** 原先缺的那一半是「加速器在含 p 函数 + GGA 的低对称体系上真的起作用」，
+    因为当时 H2O 要 p 函数（I-03）、PBE 要 GGA 的 sigma（F 轨），只能拿 H/C 的 s/p 体系顶替。
+    两件事都落地后，H2O/STO-3G/PBE 给出了比「步数更少」更硬的结果：**不开 DIIS 直接不收敛**
+    （30/30 步即 ScfNotConverged），开了 40 步收敛到 1e-10。
+    下一段文字是当初的踩坑记录，保留以免重犯：第一版用 qwb_linalg::solve_symmetric（Cholesky）
+    解 DIIS 加边矩阵，而该矩阵对称但**不定**，求解必然失败、被 fallback 吞成 None，于是 DIIS 全程
+    静默失效（开关两态的步数一模一样）。正是「两个配置给出完全相同的步数」这个可疑现象把它揪出来的。
+    **注意**：这条 WP 判的是加速器与收敛性，**不是**水的 PBE 绝对能量——后者受 X-03 的重原子网格
+    缺陷影响（见 docs/error-budget.md §2），当前不可引用。
 S-04: {state: pending, depends: [S-02]}
 S-05:
   state: done
@@ -227,14 +243,41 @@ S-05:
   verification: "cargo test -p qwb-scf --test s05_checkpoint（2 例）：① **中断→续算逐位相同**：max_iter=1 跑到 ScfNotConverged、检查点落盘（iterations=1, energy=−1.1167593082065488），load + resume 收敛后能量与不中断跑完的 **差 0.000e0（`to_bits` 相等）**，密度矩阵与迭代步数也逐位相同；② JSON 往返：密度逐位相同、能量差 < 1e-15；③ 维数与基组不符时返回 InvalidInput。"
   note: "关键点：**恢复 DIIS 子空间**才能逐位一致。只恢复密度时续算与完整跑差 8.9e-16（4 ulp），因为 DIIS 从空开始、轨迹不同；把 DIIS 的 Focks/errors 一起序列化之后差为 0.000e0。另外把 `RksResult.iterations` 改成报**总**步数（含检查点之前完成的），否则续算看起来像只跑了一步。保存用紧凑 JSON（pretty 打印会丢最后 1 ulp）。"
 S-06:
-  state: in_progress
-  ts: "2026-10-23T15:20:00Z"
-  artifact: "qwb-core/crates/qwb-props（Mulliken/Löwdin 布居 + 偶极）+ qwb-core/crates/qwb-integrals/src/dipole.rs（偶极积分 ⟨μ|x|ν⟩） + qwb-engine 写入 JobResult.dipole_debye / mo_energies_hartree"
-  verification: "① `cargo test -p qwb-props --test s06_populations`（2 例）：H2 与 CH2（含 p）的 Mulliken 和、Löwdin 和都等于电子数到 1e-10，净电荷和为 0，Löwdin 布居逐个 ∈ [0,2]，两次运行位模式完全相同。② `cargo test -p qwb-props --test s06_dipole`（3 例）：H2 偶极 = 3.2e-15 D（对称性应为 0）；CH2（水几何）|μ| = 0.6820 D 且 μ_x = 4.5e-14（分子在 yz 平面 ⇒ 应为 0）；**同分子平移到 (1,2,3) 后偶极不变到 1e-13**（中性分子偶极必须与原点无关，这是很强的自检）。③ 端到端：`qwb run examples/h2_sto3g_svwn5.yaml` 的 result.json 里出现 `dipole_debye = [0, 0, 3.27e-14]` 与 `mo_energies_hartree = [-0.3663, 0.3824]` ⇒ 判据③（写进 JobResult）达成。"
-  note: "**已完成**：② Mulliken/Löwdin 求和 = 总电荷 ✓；③ 写进 JobResult（偶极 + 轨道能级）✓；④ 两次运行 byte-identical（布居层面 + T1 的 replay 门禁）✓；新 crate `qwb-props` 建立 ✓。**未完成**：① H2O/STO-3G 偶极与实验 1.85 D 差 < 0.15 D —— **阻塞在 I-02**（水的绝对能量仍有 2.36 Ha 缺口，偶极同样不可信，不去凑一个可能错误的数）。偶极积分本身已用「对称分子为 0」「中性分子平移不变」「CH2 量级与对称性」三条独立性质验证过。"
-G-01: {state: done, depends: [S-03], verification: "① `cargo test -p qwb-scf --test g01_analytic`（H2/STO-3G，R = 0.74 与 1.10 Å）：解析梯度 vs 全弛豫中心差分，最大分量差 3.4e-9 Ha/Bohr（验收 < 1e-6）。② `g01_components`：把梯度拆成 动能 / 核吸引(AO 移动) / 核吸引(核移动) / 2e / Pulay / 核排斥 六项，逐项对固定密度差分断言 < 1e-6 —— 这是修 bug 时唯一可靠的定位手段。③ `g01_nuclear_derivative`（核移动闭式 vs primitive_nuclear 中心差分，含宇称零点）与 `g01_2e_primitive`（d_ssss 四槽位置换 vs primitive_ssss 差分，各 1e-11）通过。④ `boys::tests` 7 例全绿：两支在 x = 30 附近相对差 < 1e-14，F0(60) 贴合渐近值（旧实现错 4 倍）。", note: "**已完成**。三处真错：(a) 抬阶恒等式符号写反（应为 +2α·抬阶）；(b) 核排斥导数漏负号（E_nuc = Z_AZ_B/r ⇒ dE/dR_A = −Z_AZ_B(R_A−R_B)/r³）；(c) Boys 函数在大 T 下整体失效——向下递推固定 padding 40 时种子误差被放大 (2x)^top/(2top−1)!! 倍，x = 33.9 处 F0 相对误差 8.6e-2，STO-3G 氢最紧指数正好落在这一档。详见 docs/choices.md §十三、§十四。**范围限制（未变）**：只支持 s 型基组，l > 0 显式返回 Unsupported ⇒ H2O 的解析梯度尚不可用（O 有 2p）。**已知缺口**：qwb-engine/tests/g01_numeric_gradient.rs 的 CH2 平移不变性残差 1.0e-4（z 分量），换细网格不变小（coarse −1.007e-4 / normal −2.121e-4）⇒ 不是网格噪声；该测试已 #[ignore] 并写明数字，疑为 FD 两侧落不同 SCF 解（未验证）。下一步（G-02/T3）：把 l > 0 的 ±1 幂次组合补进积分导数，再用 H2O 接几何优化。"}
-uclear_center_derivative（其余 1e 导数都是『幂次抬一阶』的同一套路，且已通过对称性/远离极限检查）。测试 g01_analytic 已按 #[ignore] 留下并写明实测差异，不让已知错误变成绿灯。**下一步**：把 
-uclear_center_derivative 与「对 primitive_nuclear 直接做中心差分」逐点对照（一个 5 行的验证），修正后再跑 g01_analytic。"}
+  state: done
+  ts: "2026-10-24T12:00:00Z"
+  artifact: "qwb-core/crates/qwb-props（populations、dipole_debye）+ qwb-integrals/src/dipole.rs + tests/s06_populations.rs、s06_dipole.rs"
+  verification: |
+    cargo test -p qwb-props --test s06_populations（4 例）：Mulliken 与 Löwdin 布居之和等于总电子数；
+    轨道能级与偶极写进 JobResult；两次运行 byte-identical。
+    cargo test -p qwb-props --test s06_dipole（4 例）：① H2O/STO-3G 的 HF 偶极 |mu| = 1.7257 D，
+    与实验 1.85 D 差 0.124 D（验收 < 0.15 D，外部参照见第七节 §7.0）；mu_x = mu_y = 0（C2 对称）、
+    mu_z 指向 H 一侧。② H2 偶极为零。③ 中性分子偶极与坐标原点无关（< 1e-8）。④ CH2 量级与对称性。
+  note: |
+    **已完成（2026-10-24）。** ① 曾被 I-02 的 2.36 Ha 能量缺口挡住——当时偶极本身也可能是错的，
+    所以没有去凑一个可能错误的数。Boys 大 T 分支修好、水能量归位后一次测得 1.7257 D，与实验 1.85 D
+    差 0.124 D，正是 STO-3G（无极化函数）系统性低估偶极的量级。
+G-01:
+  state: done
+  depends: [S-03]
+  verification: |
+    cargo test -p qwb-scf --test g01_analytic（已去掉 #[ignore]，H2/STO-3G，R = 0.74 与 1.10 Å）：
+    解析梯度 vs 全弛豫中心差分，最大分量差 3.4e-9 Ha/Bohr（验收 < 1e-6）。
+    g01_components：把梯度拆成 动能 / 核吸引(AO 移动) / 核吸引(核移动) / 2e / Pulay / 核排斥 六项，
+    逐项对固定密度差分断言 < 1e-6 —— 这是修 bug 时唯一可靠的定位手段。
+    g01_nuclear_derivative（核移动闭式 vs primitive_nuclear 中心差分，含宇称零点）与 g01_2e_primitive
+    （d_ssss 四槽位置换 vs primitive_ssss 差分）各 1e-11 通过。
+    boys::tests 7 例：两支在 x = 30 附近相对差 < 1e-14，F0(60) 贴合渐近值（旧实现错 4 倍）。
+  note: |
+    **已完成。** 三处真错：(a) 抬阶恒等式符号写反（应为 +2*alpha*抬阶项，我写成 -2*alpha）；
+    (b) 核排斥导数漏负号（E_nuc = Z_AZ_B/r  =>  dE/dR_A = -Z_AZ_B*(R_A - R_B)/r^3）；
+    (c) Boys 函数在大 T 下整体失效（同一处修复也解决了 I-02 的 2.09 Ha 水缺口）。
+    两条符号错互相抵消了一部分，使总误差看起来只有 0.0111 而不是 1.02，白费了一轮排查；
+    结构上的对策是 gradient_components 六项逐项断言，任一项写反立刻单点报错。
+    **范围限制（未变）**：只支持 s 型基组，l > 0 显式返回 Unsupported，所以 H2O 的解析梯度尚不可用
+    （O 有 2p）。**已知缺口**：qwb-engine/tests/g01_numeric_gradient.rs 的 CH2 平移不变性残差 1.0e-4
+    （z 分量），换细网格不变小（coarse -1.007e-4 / normal -2.121e-4），Boys 修复后数字完全没变
+    => 与积分精度无关，疑为 FD 两侧落不同 SCF 解（未验证），该测试已 #[ignore] 并写明数字。
+    下一步（G-02/T3）：把 l > 0 的 +-1 幂次组合补进积分导数，再用 H2O 接几何优化。
 G-02: {state: pending, depends: [G-01]}
 G-03: {state: pending, depends: [G-02]}
 

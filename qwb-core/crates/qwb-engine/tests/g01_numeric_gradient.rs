@@ -77,7 +77,7 @@ fn gradient_of_h2_vanishes_at_the_minimum_and_points_the_right_way() {
 /// 3.4e-9，所以这条残差属于**数值梯度**这条诊断路径，不是梯度公式本身。
 /// 待办：用固定网格 + 固定初猜的 FD 复测，或对 CH2 加对称性约束后再收紧。
 #[test]
-#[ignore = "KNOWN GAP: CH2/STO-3G/SVWN5 数值梯度的平移不变性残差 1.0e-4（z），且换细网格不变小（coarse −1.007e-4 / normal −2.121e-4），不是网格噪声；疑为 FD 两侧落不同 SCF 解。见 docs/status.yaml G-01。"]
+#[ignore = "KNOWN GAP: CH2/STO-3G/SVWN5 数值梯度的平移不变性残差 1.0e-4（z），换细网格不变小（coarse −1.007e-4 / normal −2.121e-4），不是网格噪声；Boys 修复后数字**完全没变**，故与积分精度无关。疑为 FD 两侧落不同 SCF 解。见 docs/status.yaml G-01。"]
 fn gradient_is_translation_invariant_for_a_three_atom_system() {
     let registry = Registry::open(data_root()).expect("qwb-data");
     let options = GradientOptions::new("sto-3g", "svwn5", "grid-coarse");
