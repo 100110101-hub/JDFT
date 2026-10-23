@@ -267,7 +267,7 @@ fn hf_sto3g_h2_matches_the_external_reference() {
     let grid_level = registry.get_grid("grid-coarse").expect("grid");
     let grid = qwb_grid::molecular_grid(grid_level, &molecule).expect("grid");
 
-    // 空 terms ⇒ 纯 HF（F = H + 2J − K）。
+    // 空 terms ⇒ 闭壳层 HF（F = H + J − ½K）。
     let mut options = RksOptions::default();
     options.energy_threshold = 1e-10;
     options.max_iter = 200;

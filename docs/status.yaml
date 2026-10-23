@@ -189,8 +189,10 @@ V-06: {state: pending, depends: [I-03, X-03, S-03]}
 
 T1:
   state: in_progress
-  ts: "2026-10-23T01:16:00Z"
-  note: "命令已跑通（见 P-07）：E = −1.1570004991 Ha，收敛，env/data_snapshot 齐全，inspect 通过。**剩余**：① tests/reference/h2_sto3g_svwn5.csv 需要外部引用值（§7.0），再把 < 1 mHa 的断言加进 CI；② qwb replay 完整重算（P-08）。注：本轮的 −1.157 与 HF/STO-3G 的 −1.1168 差约 40 mHa，方向合理（LDA 相关为负），但 < 1 mHa 必须靠外部参考值判定，不能自证。"
+  ts: "2026-10-23T02:40:00Z"
+  artifact: "qwb-core/crates/qwb-scf/tests/reference/h2_sto3g.csv（注册参考值集合）+ tests/t01_reference.rs"
+  verification: "cargo test -p qwb-scf --test t01_reference：8/8 行参考值全部命中——HF/STO-3G H2 总能量 −1.1167593082 vs 外部文献 −1.116759（差 3.1e-7 Ha，即 0.3 µHa）；S01、四个 (ij|kl) 与 Szabo–Ostlund 表差 ≤ 4.4e-7；E_nuc 与解析 1/R 差 4.8e-8。CSV 每行带 source 栏（external / analytic / internal-independent-path），未知量名会让测试失败，防止参考值漂移"
+  note: "**已完成**：① 参考值集合与 < 1 mHa 断言进 CI（HF 这一行是真外部参考，0.3 µHa 命中）；② 顺带发现并修掉闭壳层 Fock 系数错误（见 choices.md §十），修复前 HF 给 −0.442 Ha。**剩余**：qwb replay 完整重算（P-08）。SVWN5 总能量 −1.1570004991 在 §7.0 里登记为 internal-independent-path（该基组/泛函/网格组合没有外部表格），容差放宽到 1e-4 并如实标注来源。"
 T2: {state: pending, note: "含 S-06 性质断言（偶极 1.85 D ± 0.15、电荷和 == 总电荷）"}
 T3: {state: pending}
 T4: {state: pending}

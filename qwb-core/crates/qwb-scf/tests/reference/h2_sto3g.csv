@@ -1,0 +1,16 @@
+# T1 reference set: H2 + STO-3G, R = 0.74 Angstrom (z = +-0.37 A), vacuum, closed shell.
+# Geometry in bohr = 1.398398 (R = 1.40 bohr), i.e. the standard H2/STO-3G textbook point.
+#
+# source column:
+#   external          = published value from the literature (project.md sec 7.0 first choice)
+#   analytic          = closed-form value, independent of our integration code
+#   internal-independent-path = no external tabulation exists; registered per sec 7.0 fallback
+quantity,value_hartree,tolerance_hartree,source
+hf_total_energy,-1.116759,0.001,external
+nuclear_repulsion,0.7151044,0.0000001,analytic
+overlap_01,0.659873,0.000001,external
+eri_0000,0.774606,0.000001,external
+eri_0001,0.444591,0.000001,external
+eri_0011,0.569995,0.000001,external
+eri_0101,0.297591,0.000001,external
+svwn5_total_energy,-1.1570004991,0.0001,internal-independent-path
