@@ -151,6 +151,60 @@ impl Diis {
         self.errors.push(error);
     }
 
+    /// 导出子空间（用于检查点序列化）：返回 `(Fock 们, 误差们)`，都是列主序展平。
+    #[must_use]
+    pub fn snapshot(&self) -> (Vec<Vec<f64>>, Vec<Vec<f64>>) {
+        (
+            self.focks
+                .iter()
+                .map(|f| f.as_column_major().to_vec())
+                .collect(),
+            self.errors
+                .iter()
+                .map(|e| e.as_column_major().to_vec())
+                .collect(),
+        )
+    }
+
+    /// 从检查点恢复子空间。
+    ///
+    /// # Errors
+    ///
+    /// 任意矩阵的展平长度与 `n*n` 不符，或 Fock/误差数量不一致。
+    pub fn restore(
+        max_vectors: usize,
+        n: usize,
+        focks: Vec<Vec<f64>>,
+        errors: Vec<Vec<f64>>,
+    ) -> Result<Self, LinalgError> {
+        if focks.len() != errors.len() {
+            return Err(LinalgError::Dimension {
+                context: "diis restore: focks and errors differ in count",
+                left_rows: focks.len(),
+                left_cols: 1,
+                right_rows: errors.len(),
+                right_cols: 1,
+            });
+        }
+        let mut accelerator = Self::new(max_vectors);
+        for (fock, error) in focks.into_iter().zip(errors) {
+            if fock.len() != n * n || error.len() != n * n {
+                return Err(LinalgError::Dimension {
+                    context: "diis restore: flattened vector size mismatch",
+                    left_rows: fock.len().max(error.len()),
+                    left_cols: 1,
+                    right_rows: n * n,
+                    right_cols: 1,
+                });
+            }
+            accelerator.push(
+                Matrix::from_column_major(n, n, fock)?,
+                Matrix::from_column_major(n, n, error)?,
+            );
+        }
+        Ok(accelerator)
+    }
+
     /// 最近一组误差向量的 Frobenius 范数（给调用方做诊断/收敛判据）。
     #[must_use]
     pub fn error_norm(&self) -> f64 {

@@ -198,11 +198,11 @@ S-03:
   note: "**验收里的 H2O/PBE 这半跑不了**：H2O 要 p 函数（I-03 未完成），PBE 要 GGA 的 σ（F 轨未开工），所以按纪律记 in_progress 而不是 done；机制与契约两半已测死，等 I-03/F-01 落地把测试体系换成 H2O/PBE 即可判 done。踩坑记录：第一版用 qwb_linalg::solve_symmetric（Cholesky）解 DIIS 加边矩阵，而该矩阵对称但**不定**，求解必然失败、被 fallback 吞成 None → DIIS 全程静默失效（开关两态的步数一模一样）。正是『两个配置给出完全相同步数』这个可疑现象把它揪出来的。"
 S-04: {state: pending, depends: [S-02]}
 S-05:
-  state: in_progress
-  ts: "2026-10-23T17:10:00Z"
-  artifact: "qwb-core/crates/qwb-scf/src/checkpoint.rs（ScfCheckpoint + save/load，先写临时文件再改名）+ rks.rs 的 resume_from / checkpoint_path / checkpoint_every / ScfResult.checkpoint + tests/s05_checkpoint.rs"
-  verification: "cargo test -p qwb-scf --test s05_checkpoint（2 例）：① **中断→续算**：max_iter=1 跑到 ScfNotConverged，检查点已落盘（iterations=1, energy=−1.1167593082065488），load 后 resume 收敛，能量与不中断跑完的 −1.116759308207 相差 **8.9e-16**；② JSON 往返：密度逐位相同、能量差 < 1e-15。另有不变量：检查点维数与基组不符时返回 InvalidInput。"
-  note: "**未逐位 identical**：验收原文是「结果 identical」，实测续算与完整跑差 8.9e-16（约 4 ulp）。原因是续算时 DIIS 子空间从空开始，轨迹与完整跑不同（自洽解相同、末位不同）。要做到逐位相同需要把 DIIS 子空间也序列化——未做，所以按实测记 in_progress，不写成 done。**教训记录**：这一轮在 rks.rs 上做多次字符串替换时把大括号弄坏过（`previous_energy = energy;` 有两处、`if !converged {` 也匹配错位置），最后只能按行号整段重写；以后对长函数做结构性改动应该先 `read` 目标区间再一次性整块替换，而不是逐串 Replace。"
+  state: done
+  ts: "2026-10-23T18:00:00Z"
+  artifact: "qwb-core/crates/qwb-scf/src/checkpoint.rs（ScfCheckpoint + 原子写盘）+ src/diis.rs 的 snapshot/restore + src/rks.rs 的 resume_from / checkpoint_path / checkpoint_every / RksResult.checkpoint + tests/s05_checkpoint.rs"
+  verification: "cargo test -p qwb-scf --test s05_checkpoint（2 例）：① **中断→续算逐位相同**：max_iter=1 跑到 ScfNotConverged、检查点落盘（iterations=1, energy=−1.1167593082065488），load + resume 收敛后能量与不中断跑完的 **差 0.000e0（`to_bits` 相等）**，密度矩阵与迭代步数也逐位相同；② JSON 往返：密度逐位相同、能量差 < 1e-15；③ 维数与基组不符时返回 InvalidInput。"
+  note: "关键点：**恢复 DIIS 子空间**才能逐位一致。只恢复密度时续算与完整跑差 8.9e-16（4 ulp），因为 DIIS 从空开始、轨迹不同；把 DIIS 的 Focks/errors 一起序列化之后差为 0.000e0。另外把 `RksResult.iterations` 改成报**总**步数（含检查点之前完成的），否则续算看起来像只跑了一步。保存用紧凑 JSON（pretty 打印会丢最后 1 ulp）。"
 S-06:
   state: in_progress
   ts: "2026-10-23T15:20:00Z"

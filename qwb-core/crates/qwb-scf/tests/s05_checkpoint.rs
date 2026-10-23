@@ -71,9 +71,28 @@ fn resume_from_checkpoint_reproduces_the_uninterrupted_result() {
         resumed.energy_hartree,
         (full.energy_hartree - resumed.energy_hartree).abs()
     );
-    assert!(
-        (full.energy_hartree - resumed.energy_hartree).abs() < 1.0e-10,
-        "续算结果与完整跑不同"
+    // 恢复 DIIS 子空间后，续算必须与不中断的跑法**逐位相同**（验收原文是 identical）。
+    assert_eq!(
+        full.energy_hartree.to_bits(),
+        resumed.energy_hartree.to_bits(),
+        "续算能量与完整跑不逐位相同：{} vs {}",
+        full.energy_hartree,
+        resumed.energy_hartree
+    );
+    assert_eq!(full.iterations, resumed.iterations, "迭代步数也应相同");
+    assert_eq!(
+        full.density
+            .as_column_major()
+            .iter()
+            .map(|v| v.to_bits())
+            .collect::<Vec<_>>(),
+        resumed
+            .density
+            .as_column_major()
+            .iter()
+            .map(|v| v.to_bits())
+            .collect::<Vec<_>>(),
+        "密度矩阵也应逐位相同"
     );
     assert!(resumed.scf_converged);
 

@@ -331,6 +331,38 @@ pub fn rks_scf(
         }
         completed_steps = checkpoint.iterations;
     }
+    // S-05：恢复 DIIS 子空间，否则续算的轨迹与不中断的跑法不同（末位会差几个 ulp）。
+    if let Some(checkpoint) = &options.resume_from
+        && let Some(accelerator) = diis.as_mut()
+        && !checkpoint.diis_focks.is_empty()
+    {
+        *accelerator = Diis::restore(
+            options.diis_max_vectors,
+            n,
+            checkpoint.diis_focks.clone(),
+            checkpoint.diis_errors.clone(),
+        )
+        .map_err(linalg)?;
+    }
+
+    // 统一的检查点构造（带上 DIIS 子空间）。
+    // 用嵌套 fn 而不是闭包：闭包会长期借用 `diis`，与循环里的 `diis.as_mut()` 冲突。
+    fn build_checkpoint(
+        density: &Matrix,
+        energy: f64,
+        steps: u32,
+        diis: Option<&Diis>,
+    ) -> crate::checkpoint::ScfCheckpoint {
+        let base = crate::checkpoint::ScfCheckpoint::new(density, Some(energy), steps);
+        match diis {
+            Some(accelerator) => {
+                let (focks, errors) = accelerator.snapshot();
+                base.with_diis(focks, errors)
+            }
+            None => base,
+        }
+    }
+
     let mut iterations = 0;
     let mut converged = false;
     let mut last_change = f64::INFINITY;
@@ -425,10 +457,11 @@ pub fn rks_scf(
             && options.checkpoint_every > 0
             && (step as usize + 1).is_multiple_of(options.checkpoint_every as usize)
         {
-            let snapshot = crate::checkpoint::ScfCheckpoint::new(
+            let snapshot = build_checkpoint(
                 &density,
-                Some(previous_energy),
+                previous_energy,
                 completed_steps + iterations,
+                diis.as_ref(),
             );
             crate::checkpoint::save_checkpoint(path, &snapshot)?;
         }
@@ -442,10 +475,11 @@ pub fn rks_scf(
     if !converged {
         // S-05：不收敛也落盘，否则「kill 后续算」拿不到状态。
         if let Some(path) = options.checkpoint_path.as_deref() {
-            let snapshot = crate::checkpoint::ScfCheckpoint::new(
+            let snapshot = build_checkpoint(
                 &density,
-                Some(previous_energy),
+                previous_energy,
                 completed_steps + iterations,
+                diis.as_ref(),
             );
             crate::checkpoint::save_checkpoint(path, &snapshot)?;
         }
@@ -455,16 +489,18 @@ pub fn rks_scf(
         });
     }
 
-    let checkpoint = crate::checkpoint::ScfCheckpoint::new(
+    let checkpoint = build_checkpoint(
         &density,
-        Some(previous_energy),
+        previous_energy,
         completed_steps + iterations,
+        diis.as_ref(),
     );
 
     Ok(RksResult {
         energy_hartree: previous_energy + e_nuc - e_nuc, // 保持写法对称：electronic + e_nuc
         scf_converged: converged,
-        iterations,
+        // 续算时报**总**步数（含检查点之前完成的），不是本次新增的步数。
+        iterations: completed_steps + iterations,
         electronic_hartree: electronic,
         exchange_correlation_hartree: e_xc,
         nuclear_repulsion_hartree: e_nuc,

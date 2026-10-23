@@ -25,6 +25,12 @@ pub struct ScfCheckpoint {
     pub iterations: u32,
     /// 密度矩阵维数（校验用）。
     pub n_functions: usize,
+    /// DIIS 子空间的 Fock 矩阵（列主序展平）；恢复后轨迹才能与不中断的跑法逐位一致。
+    #[serde(default)]
+    pub diis_focks: Vec<Vec<f64>>,
+    /// DIIS 子空间的误差向量（列主序展平）。
+    #[serde(default)]
+    pub diis_errors: Vec<Vec<f64>>,
 }
 
 impl ScfCheckpoint {
@@ -36,7 +42,17 @@ impl ScfCheckpoint {
             energy_hartree,
             iterations,
             n_functions: density.nrows(),
+            diis_focks: Vec::new(),
+            diis_errors: Vec::new(),
         }
+    }
+
+    /// 附带 DIIS 子空间（`ScfCheckpoint::new` 之后链式调用）。
+    #[must_use]
+    pub fn with_diis(mut self, focks: Vec<Vec<f64>>, errors: Vec<Vec<f64>>) -> Self {
+        self.diis_focks = focks;
+        self.diis_errors = errors;
+        self
     }
 
     /// 还原密度矩阵。
@@ -64,7 +80,7 @@ impl ScfCheckpoint {
 ///
 /// 序列化或写盘失败。
 pub fn save_checkpoint(path: &Path, checkpoint: &ScfCheckpoint) -> Result<(), EngineError> {
-    let json = serde_json::to_vec_pretty(checkpoint)
+    let json = serde_json::to_vec(checkpoint)
         .map_err(|err| EngineError::Internal(format!("scf checkpoint serialise: {err}")))?;
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent).map_err(|err| {
