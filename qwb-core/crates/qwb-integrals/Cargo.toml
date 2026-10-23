@@ -17,6 +17,7 @@ qwb-linalg.workspace = true
 qwb-registry.workspace = true
 qwb-engine-api.workspace = true
 thiserror.workspace = true
+rayon.workspace = true
 
 [lints]
 workspace = true

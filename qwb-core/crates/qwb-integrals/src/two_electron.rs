@@ -279,7 +279,23 @@ fn scatter(
 /// 出现 `l > 2` 的壳层（球谐变换未实现，R-06）→ [`EngineError::Unsupported`]。
 pub fn two_electron(
     basis: &InternalBasis,
+    molecule: &Molecule,
+) -> Result<TwoElectronIntegrals, EngineError> {
+    two_electron_with_threads(basis, molecule, 0)
+}
+
+/// 指定线程数的版本（I-04）：`threads = 0` 用 rayon 默认值，`1` 即单线程。
+///
+/// 并行只作用在**各壳层四元组的球谐块计算**上，散射进张量仍旧串行且顺序固定，
+/// 所以结果与线程数无关（byte-identical 的来源）。
+///
+/// # Errors
+///
+/// 球谐变换未实现，或线程池构建失败。
+pub fn two_electron_with_threads(
+    basis: &InternalBasis,
     _molecule: &Molecule,
+    threads: usize,
 ) -> Result<TwoElectronIntegrals, EngineError> {
     let shells: Vec<ShellBlock> = basis
         .shells()
@@ -289,37 +305,60 @@ pub fn two_electron(
     let n = basis.n_functions();
     let mut values = vec![0.0; n * n * n * n];
 
-    for (ia, a) in shells.iter().enumerate() {
-        for (ib, b) in shells.iter().enumerate() {
-            if ib < ia {
-                continue; // (ab|· ·) 与 (ba|· ·) 等价
-            }
-            for (ic, c) in shells.iter().enumerate() {
-                for (id, d) in shells.iter().enumerate() {
-                    if id < ic {
-                        continue;
+    // 先枚举「规范四元组」（(a,b) <= (c,d)、b>=a、d>=c），并行算好每块的球谐块，
+    // 再**串行**散射进张量。顺序固定 ⇒ 线程数不影响结果（I-04 的 byte-identical）。
+    let mut quartets: Vec<(usize, usize, usize, usize)> = Vec::new();
+    for ia in 0..shells.len() {
+        for ib in ia..shells.len() {
+            for ic in 0..shells.len() {
+                for id in ic..shells.len() {
+                    if (ia, ib) <= (ic, id) {
+                        quartets.push((ia, ib, ic, id));
                     }
-                    // 壳层对的字典序：只算 (a,b) <= (c,d) 这一半。
-                    if (ia, ib) > (ic, id) {
-                        continue;
-                    }
-                    let block = cartesian_block(a, b, c, d);
-                    let mut data = block;
-                    let mut dims = [
-                        a.components.len(),
-                        b.components.len(),
-                        c.components.len(),
-                        d.components.len(),
-                    ];
-                    for (axis, shell) in [a, b, c, d].iter().enumerate() {
-                        let (next, next_dims) = contract(&data, dims, axis, &shell.transform);
-                        data = next;
-                        dims = next_dims;
-                    }
-                    scatter(&mut values, n, &data, dims, [a, b, c, d]);
                 }
             }
         }
+    }
+
+    // 并行只经由 `DeterministicReduce`（G7/R-13）：输出顺序与 quartets 索引一致，
+    // 因此下面的串行散射与线程数无关。
+    let compute = || {
+        crate::deterministic::DeterministicReduce::map_ordered(&quartets, |quartet| {
+            let (ia, ib, ic, id) = *quartet;
+            let (a, b, c, d) = (&shells[ia], &shells[ib], &shells[ic], &shells[id]);
+            let mut data = cartesian_block(a, b, c, d);
+            let mut dims = [
+                a.components.len(),
+                b.components.len(),
+                c.components.len(),
+                d.components.len(),
+            ];
+            for (axis, shell) in [a, b, c, d].iter().enumerate() {
+                let (next, next_dims) = contract(&data, dims, axis, &shell.transform);
+                data = next;
+                dims = next_dims;
+            }
+            (data, dims)
+        })
+    };
+    let blocks = if threads == 0 {
+        compute()
+    } else {
+        rayon::ThreadPoolBuilder::new()
+            .num_threads(threads)
+            .build()
+            .map_err(|err| EngineError::Internal(format!("rayon pool: {err}")))?
+            .install(compute)
+    };
+
+    for ((ia, ib, ic, id), (data, dims)) in quartets.iter().zip(blocks.iter()) {
+        scatter(
+            &mut values,
+            n,
+            data,
+            *dims,
+            [&shells[*ia], &shells[*ib], &shells[*ic], &shells[*id]],
+        );
     }
 
     Ok(TwoElectronIntegrals {

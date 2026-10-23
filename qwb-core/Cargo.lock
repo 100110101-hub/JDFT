@@ -1367,6 +1367,7 @@ dependencies = [
  "qwb-engine-api",
  "qwb-linalg",
  "qwb-registry",
+ "rayon",
  "thiserror 2.0.21",
 ]
 

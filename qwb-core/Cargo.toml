@@ -18,6 +18,7 @@ schemars = { version = "1", features = ["derive"] }
 sha2 = "0.10"
 hex = "0.4"
 thiserror = "2"
+rayon = "1"
 anyhow = "1"
 clap = { version = "4", features = ["derive"] }
 zip = { version = "9", default-features = false, features = ["deflate"] }

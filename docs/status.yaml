@@ -139,7 +139,12 @@ I-02:
     * T 矩阵：T[0,0] = 29.003204066085107 —— 与 Rust **完全相同**；
     * (ss|ss) 型 2e：(00|00) = 4.78506575227999 —— 与 Rust **完全相同**。
     这三项一致，说明「S/T/s-s 2e 里存在被所有 Rust 测试共享的错误」这个假设不成立；剩下的嫌疑集中在 **p 型核吸引与 p 型 2e**。脚本的这两处（导数递归复合）还没修好，运行到会抛错，已在文件头标注状态与下一步，下一轮只需补这两处即可得到完整的独立 HF 能量，从而把 2.36 Ha 定位到具体矩阵元素。
-I-04: {state: pending, depends: [I-03]}
+I-04:
+  state: done
+  ts: "2026-10-23T19:10:00Z"
+  artifact: "qwb-core/crates/qwb-integrals/src/deterministic.rs（DeterministicReduce：按索引映射/求和的确定性并行原语）+ two_electron_with_threads()（并行算球谐块、串行散射）+ tests/i04_threads.rs"
+  verification: "cargo test -p qwb-integrals --test i04_threads（2 例）：① H2 与 CH2（含 p）在 **1 / 2 / 4 线程**下，张量全部 f64 的 `to_bits` 序列**逐位相同**，FNV-1a 哈希也相同（H2: 0x50f26e0bfa3112a9；CH2: 0x6d450d020574274d）；② 默认入口 `two_electron()`（rayon 默认线程数）与显式 1 线程逐位相同。`scripts/check_rayon_determinism.sh`（G7/R-13）两条规则通过。"
+  note: "**顺带补上了一个一直悬空的契约**：`check_rayon_determinism.sh` 的规则 2 要求『凡 par_iter 必配 DeterministicReduce』，但那个类型此前在代码里根本不存在（脚本注释也写着『C 轨还没有 rayon 使用』）。本轮实现了 `deterministic::DeterministicReduce`（`map_ordered` 保证输出顺序与索引一致；`sum_ordered` 串行累加），并把 `two_electron` 的并行映射收进它，使这条门禁真正有对象可查。实现策略也符合规则本意：并行只做『按索引映射』，散射进张量仍是串行且顺序固定，所以不需要任何归约顺序假设。"
 I-05: {state: pending, depends: [I-02]}
 I-06:
   state: done
