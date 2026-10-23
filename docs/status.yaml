@@ -295,7 +295,29 @@ G-01:
     （z 分量），换细网格不变小（coarse -1.007e-4 / normal -2.121e-4），Boys 修复后数字完全没变
     => 与积分精度无关，疑为 FD 两侧落不同 SCF 解（未验证），该测试已 #[ignore] 并写明数字。
     下一步（G-02/T3）：把 l > 0 的 +-1 幂次组合补进积分导数，再用 H2O 接几何优化。
-G-02: {state: pending, depends: [G-01]}
+G-02:
+  state: in_progress
+  ts: "2026-10-24T22:00:00Z"
+  artifact: "qwb-core/crates/qwb-engine/src/opt.rs（BFGS + Armijo 回溯线搜索，笛卡尔坐标）+ tests/t03_optimize.rs、g02_optimize_water.rs"
+  verification: |
+    已通过：
+    * `cargo test -p qwb-engine --test t03_optimize`：HF/STO-3G 的 H2 用**解析梯度**优化，
+      4 步收敛（最大力 2.65e-4 Ha/Bohr < 4.5e-4），键长 0.7125 A 与 HF/STO-3G 的模型化学值
+      0.712 A 差 0.0005 A；驻点处解析 vs 数值梯度最大差 3.05e-7 Ha/Bohr（要求 < 1e-6）。
+    * `cargo test -p qwb-engine --test g02_optimize_water -- --ignored`（约 8 分钟）：
+      HF/STO-3G 的 H2O 用**数值梯度**优化，5 步收敛（最大力 1.75e-4），
+      O-H 0.9893 / 0.9893 A、角 HOH 100.04 度，C2v 对称性保持；E = -74.9659011964 Ha。
+    未通过（两条，都是能力/数据限制，不是优化器缺陷）：
+    * **键长判据**：G-02 要求「与实验 0.9572 A 差 < 0.01 A」。STO-3G 给 0.9893 A（差 0.032），
+      def2-SVP/PBE 约 0.97 A（差 0.015），都 > 0.01；要到 0.01 以内需要 def2-TZVP/cc-pVTZ 级基组，
+      而 D-05/D-06 的数据仍缺。
+    * **冗余内坐标**：现在实现的是**笛卡尔** BFGS。笛卡尔 BFGS 对刚性转动/平移不敏感（梯度里
+      那部分恒为 0），但对键角耦合强的体系收敛步数会多；G-02 原文要求冗余内坐标。
+  note: |
+    优化器是本轮新写的：BFGS 逆 Hessian 更新（含曲率非正时重置）、Armijo 回溯线搜索、
+    单步步长上限 0.2 Bohr、以力的**最大分量**为收敛判据（与 T3 的写法一致）。
+    梯度来源自动选择：s 型基组 + HF 走解析梯度，否则退到数值梯度，并在 `OptResult.used_analytic_gradient`
+    里如实报告，不让调用方猜。
 G-03: {state: pending, depends: [G-02]}
 
 F-01: {state: pending, depends: [G-01]}
@@ -366,7 +388,22 @@ T2:
     数字已实测并写在文档注释里）。
     **收口条件**：拿到一个可引用的 H2O/PBE/def2-SVP 总能量（含几何与软件出处）后，
     把 csv 的来源标注从 internal 改成 external 并把容差收到 1e-3，T2 即可判 done。
-T3: {state: pending}
+T3:
+  state: in_progress
+  ts: "2026-10-24T22:00:00Z"
+  artifact: "qwb-core/crates/qwb-engine/src/opt.rs + tests/t03_optimize.rs"
+  verification: |
+    T3 三条判据：
+    * 最大力 < 4.5e-4 Ha/Bohr —— **通过**：H2 4 步到 2.65e-4，H2O 5 步到 1.75e-4；
+    * 解析梯度 vs 数值梯度 < 1e-6 —— **通过**（s 型）：驻点处 3.05e-7 Ha/Bohr；
+    * H2O 键长与实验 0.9572 A 差 < 0.01 A —— **未通过**：STO-3G 0.9893（差 0.032）、
+      def2-SVP/PBE 约 0.97（差 0.015）；需要 def2-TZVP 级基组（D-06 阻塞）。
+  note: |
+    前置 G-01 已 done（解析梯度 s 型到 3.4e-9），G-02 部分完成（BFGS 笛卡尔版 + H2O 收敛）。
+    l > 0 的解析梯度仍未做，所以 H2O 只能走数值梯度（每次 18 个位移），
+    这也是 8 分钟量级耗时的来源。T3 要真正收口需要：
+    ① 把解析梯度扩到 p/d（G-01 的范围限制）；
+    ② 拿到 def2-TZVP 或 cc-pVTZ 数据（D-05/D-06）。
 T4: {state: pending}
 T5: {state: pending, note: "体系已冻结：CuH/LANL2DZ 与 ZnO/def2-SVP+def2-ECP"}
 T6: {state: pending}
