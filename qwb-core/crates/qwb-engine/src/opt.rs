@@ -121,7 +121,8 @@ fn energy_and_gradient(
     let mut scf_options = RksOptions::default();
     scf_options.max_iter = 400;
 
-    // 解析路径：只有 HF + 全 s 基组能走通（否则 analytic_gradient 会返回 Unsupported）
+    // 解析路径目前只对 **HF** 成立：KS 还缺一项「XC 能量的显式基组运动项」
+    // `∫ v_xc·(∂ρ/∂R)|_{P 固定}`（见 tests/g01_analytic_pbe.rs 与 status.yaml 的 G-01）。
     if options.functional.is_empty() {
         let basis_k1 = registry.get_basis(&options.basis)?;
         let basis = qwb_basis::InternalBasis::build(basis_k1, molecule)?;
@@ -129,10 +130,20 @@ fn energy_and_gradient(
         let tensor = qwb_integrals::two_electron::two_electron(&basis, molecule)?;
         let grid = qwb_grid::molecular_grid(registry.get_grid(&options.grid)?, molecule)
             .map_err(|err| EngineError::Data(format!("grid: {err}")))?;
-        let result = rks_scf(&basis, molecule, &tensor, &grid, &[], scf_options)?;
-        let fock = qwb_scf::build_fock(&one.core_hamiltonian, &tensor, &result.density)
+        let terms = functional_terms(registry, options)?;
+        let result = rks_scf(&basis, molecule, &tensor, &grid, &terms, scf_options)?;
+        let mut fock = qwb_scf::build_fock(&one.core_hamiltonian, &tensor, &result.density)
             .map_err(|err| EngineError::Internal(format!("build_fock: {err}")))?
             .fock;
+        if !terms.is_empty() {
+            // KS：Pulay 项要求 F 是**完整的** Kohn–Sham Fock，即 H + J + v_xc
+            let (_, v_xc) = qwb_scf::rks::evaluate_xc(&basis, &grid, &result.density, &terms)?;
+            for mu in 0..fock.nrows() {
+                for nu in 0..fock.ncols() {
+                    fock.set(mu, nu, fock.get(mu, nu) + v_xc.get(mu, nu));
+                }
+            }
+        }
         if let Ok(gradient) =
             qwb_scf::analytic_gradient::analytic_gradient(&basis, molecule, &result.density, &fock)
         {
@@ -179,6 +190,23 @@ fn single_point(
     }
 }
 
+/// 从注册表构造泛函项（空名字表示 HF）。
+fn functional_terms(
+    registry: &qwb_registry::Registry,
+    options: &OptOptions,
+) -> Result<Vec<Box<dyn qwb_xc::FunctionalTerm>>, EngineError> {
+    let mut terms: Vec<Box<dyn qwb_xc::FunctionalTerm>> = Vec::new();
+    if options.functional.is_empty() {
+        return Ok(terms);
+    }
+    let functional = registry.get_functional(&options.functional)?;
+    for component in &functional.components {
+        let term = qwb_xc::build_term(&component.id, &functional.parameters)
+            .map_err(|err| EngineError::Data(format!("functional `{}`: {err}", functional.name)))?;
+        terms.push(qwb_xc::scale_term(term, component.weight));
+    }
+    Ok(terms)
+}
 fn max_force(gradient: &[f64]) -> f64 {
     gradient
         .iter()

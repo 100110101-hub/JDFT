@@ -513,3 +513,11 @@ I-03:
     **正式记录的偏差（R-03）**：project.md 指定 2e 以 Obara–Saika 为主，本实现走的是
     McMurchie–Davidson（Hermite 展开）+ 精确符号导数。功能与精度判据都已满足（逐分量 1e-9），
     但**递推族与规格不同**，因此在此显式记为偏差而不是悄悄换掉。详见 docs/choices.md 十九节。
+
+    **本轮（59）发现一个 known-gap**：把 v_xc 加进 Fock 之后 KS 的解析梯度仍然错
+    1.42e-1（H2/STO-3G/PBE：解析 0.0158541 vs 数值 −0.1262239）。原因是 KS 的能量多一项
+    **显式 XC 基组运动项** int(v_xc · (drho/dR)|_{P 固定})，它在 HF 里恒为零，所以 HF 分支
+    一直是对的。补法：让 evaluate_xc 额外给出势值，构造
+    V'_{mu nu} = sum_p w_p v(r_p)(dphi_mu phi_nu + phi_mu dphi_nu)，再取 Tr(P V')。
+    测试 g01_analytic_pbe.rs 已按 known-gap 写死数字并 #[ignore]；优化器退回 HF-only。
+    详见 docs/choices.md 二十四节与 docs/unblock.md 第四节第一项。
