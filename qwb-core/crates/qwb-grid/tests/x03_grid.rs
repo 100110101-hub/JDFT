@@ -160,3 +160,51 @@ fn uniform_electron_gas_limit_passes() {
         "UEG 极限：加权平均 {average} vs 解析 {analytic}"
     );
 }
+
+/// **回归测试**：径向映射 `r = a t²/(1−t²)` 在 t→1 时发散，曾产生 inf 坐标，
+/// 而 `inf × 0`（方向分量为 0）会变成 NaN，污染密度与积分。
+/// 现在 t 被夹到 1−1e-3，所有坐标与权重必须有限。
+#[test]
+fn all_grid_coordinates_and_weights_are_finite() {
+    let molecule = Molecule::new(
+        vec![
+            Atom::new("O", [0.0, 0.0, 0.0]),
+            Atom::new("H", [0.0, 0.757, 0.586]),
+            Atom::new("H", [0.0, -0.757, 0.586]),
+        ],
+        0,
+        1,
+    );
+    for name in [
+        GridLevelName::Coarse,
+        GridLevelName::Normal,
+        GridLevelName::Fine,
+        GridLevelName::VeryFine,
+    ] {
+        let definition = level(name);
+        let grid = molecular_grid(&definition, &molecule).expect("grid");
+        for point in &grid.points {
+            assert!(
+                point.position_bohr.iter().all(|v| v.is_finite()),
+                "{name:?}: 非有限坐标 {:?}",
+                point.position_bohr
+            );
+            assert!(point.weight.is_finite(), "{name:?}: 非有限权重");
+        }
+        // 最大半径必须有限（t 夹紧的直接后果）。
+        let max_radius = grid
+            .points
+            .iter()
+            .map(|p| {
+                (p.position_bohr[0].powi(2)
+                    + p.position_bohr[1].powi(2)
+                    + p.position_bohr[2].powi(2))
+                .sqrt()
+            })
+            .fold(0.0_f64, f64::max);
+        assert!(
+            max_radius.is_finite() && max_radius > 1.0,
+            "{name:?}: max_r = {max_radius}"
+        );
+    }
+}

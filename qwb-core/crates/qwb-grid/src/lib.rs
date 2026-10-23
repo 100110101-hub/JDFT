@@ -159,7 +159,9 @@ pub fn radial_rule(level: &GridLevelDef) -> Result<(Vec<f64>, Vec<f64>), GridErr
     let mut radii = Vec::with_capacity(n);
     let mut radial_weights = Vec::with_capacity(n);
     for (node, weight) in nodes.iter().zip(&weights) {
-        let t = 0.5 * (node + 1.0);
+        // t 必须严格小于 1：否则 r = a t²/(1−t²) 发散，坐标变成 inf/NaN，
+        // 而 inf×0 会污染后续所有积分（S-02 就是被这个坑住的）。
+        let t = (0.5 * (node + 1.0)).min(1.0 - 1.0e-3);
         let one_minus = 1.0 - t * t;
         if one_minus <= 0.0 {
             continue;

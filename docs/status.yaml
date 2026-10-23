@@ -142,7 +142,7 @@ S-01:
 S-02:
   state: blocked
   ts: "2026-10-23T00:35:00Z"
-  reason: "RKS SCF 实现有已知 bug：Fock 矩阵装配结果恒为 0（max|F| = 0），而对角化零矩阵得到 NaN 本征值，密度随即变 NaN（E_xc 被 max(0.0) 夹成 0，E = NaN）。已确认输入全部健康：S = [[1.0000,0.6599],[0.6599,1.0000]]、H = [[-1.1210,-0.9594],[-0.9594,-1.1210]]、(00|00)=0.77461、(01|01)=0.29759、网格 19600 点、E_nuc=0.71510 全部正确。"
+  reason: "RKS SCF 仍有一个 NaN 未定位。**已解决的问题**：① 诊断本身会骗人——`f64::max(0.0, NaN) = 0.0` 与 `rho.max(0.0)` 都会把 NaN 静默变成 0，所以最初看到的 『max|F| = 0』其实是 NaN；② 根因之一已确认并修好：`qwb-grid` 的径向映射 `r = a t²/(1−t²)` 在 t→1 时发散，产生 inf 坐标，`inf × 0`（方向分量为 0）变 NaN，污染密度与积分——现在 t 夹到 1−1e-3（max_r ≈ 1249 Bohr），四个等级的坐标/权重全部有限（有回归测试）。**仍待解决**：RKS 内部仍有某处产生非有限密度（`evaluate_xc` 的 rho 现在是硬报错而非静默），说明还有第二个来源。"
   log: "crates/qwb-scf/src/rks.rs（在 feature `rks-wip` 后面，默认不参与门禁）；tests/s02_rks.rs 同样 gated"
   note: "**没有伪造**：默认门禁不含 RKS，status 明确写 blocked 而不是 done。下一步排错线索：在同一输入上自检 `build_fock` 与 `evaluate_xc` 的非零性（S-01 的单测已证明 build_fock 对该张量正常，所以嫌疑在 rks.rs 内部把两个返回值合成 F 的那几行，或 evaluate_xc 的 v_xc 累加）。"
 S-03: {state: pending, depends: [S-02]}

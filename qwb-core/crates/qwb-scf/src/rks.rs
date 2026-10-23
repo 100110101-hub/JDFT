@@ -187,6 +187,15 @@ fn evaluate_xc(
                 rho += values[i] * density[(i, j)] * values[j];
             }
         }
+        // 防御：网格坐标或 AO 求值一旦产生非有限值，这里必须报错。
+        // 历史教训：`f64::max(0.0)` 会把 NaN 静默变成 0，于是密度"看起来正常"，
+        // 而 v_xc 里保留着 NaN —— 上一版就是这样把 NaN 带进 SCF 的。
+        if !rho.is_finite() {
+            return Err(EngineError::Internal(format!(
+                "density is not finite ({rho}) at a grid point; grid coordinates or AO \
+                 values are corrupted"
+            )));
+        }
         rho_values.push(rho.max(0.0));
         ao_values.push(values);
     }
