@@ -158,6 +158,45 @@ fn d_type_integrals_match() {
 }
 
 #[test]
+fn extreme_exponent_ratios_match_the_oracle() {
+    // 深核（O 1s 的 ζ≈130）与价层（ζ≈0.5）混在一起时，Hermite 系数里的指数比
+    // 最悬殊。水/STO-3G 的 2 Ha 缺口就在这个方向，所以单独钉住。
+    let cases: [([f64; 4], &str); 4] = [
+        ([130.0, 130.0, 1.5, 1.5], "tight-tight"),
+        ([130.0, 1.5, 1.5, 0.5], "tight-valence"),
+        ([300.0, 300.0, 300.0, 300.0], "all-tight"),
+        ([1.5, 0.5, 130.0, 1.5], "mixed-bra-ket"),
+    ];
+    let centers = [
+        [0.0, 0.0, 0.0],
+        [0.0, 0.0, 0.28],
+        [0.0, 0.0, -0.28],
+        [0.1, 0.2, 0.0],
+    ];
+    for (exponents, label) in cases {
+        for powers in [
+            [[0, 0, 0]; 4],
+            [[1, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0]],
+            [[0, 0, 1], [0, 0, 0], [1, 0, 0], [0, 0, 0]],
+            [[2, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0]],
+        ] {
+            let functions = quartet(centers, exponents, powers);
+            let expected = reference(functions);
+            let actual = production(functions);
+            let absolute = (actual - expected).abs();
+            let relative = absolute / expected.abs().max(1e-30);
+            println!(
+                "{label:<14} {powers:?} oracle {expected:>14.8e} prod {actual:>14.8e} rel {relative:.2e}"
+            );
+            assert!(
+                absolute < 1.0e-9 || relative < 1.0e-7,
+                "{label} {powers:?}: oracle {expected} vs production {actual}，相对差 {relative:.2e}"
+            );
+        }
+    }
+}
+
+#[test]
 fn production_satisfies_the_pair_symmetry() {
     // (ab|cd) = (cd|ab)，用生产路径自身验证（与独立路径无关的一条额外约束）。
     for (name, centers, exponents) in geometries() {
