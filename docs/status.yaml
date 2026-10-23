@@ -146,7 +146,12 @@ S-02:
   verification: "cargo test -p qwb-scf --test s02_rks（7 例）：**HF/STO-3G H2 = −1.116759 Ha，与文献值差 < 1 mHa（外部参考，§7.0）**；H2/STO-3G/SVWN5 收敛（iters=2），E = −1.1570005 Ha；收紧阈值到 1e-11 后能量不变（< 1e-7）；normal vs fine 网格差 1.14e-8 Ha；Tr(P·S)=2；AO 值在全网格有限；奇电子数被拒"
   note: "本轮修掉三个真 bug：① 径向映射 r=a t²/(1−t²) 在 t→1 发散 → inf 坐标 → inf×0=NaN（已夹紧 t，加回归测试）；② VWN5 的 dε/dρ 含 1/ρ，ρ→0 溢出到 −inf，消费方 0×(−inf)=NaN（已按 §8.3 的 stability 加低密度截断 LOW_DENSITY_FLOOR=1e-12）；③ radial_rule 已含 4π、atomic_grid 又乘了和为 4π 的角向权重 → 权重多 4π 倍，E_xc 偏大 ~12.6 倍。另外两个『诊断器撒谎』教训：f64::max(0.0, NaN)=0、rho.max(0.0) 也会把 NaN 吞成 0。**T1 仍需外部参考值**（tests/reference/*.csv）来把 −1.157 判到 < 1 mHa，S-02 的验收只要求收敛。"
 
-S-03: {state: pending, depends: [S-02]}
+S-03:
+  state: in_progress
+  ts: "2026-10-23T04:10:00Z"
+  artifact: "qwb-core/crates/qwb-scf/src/diis.rs（Pulay DIIS + 自写部分主元消元）+ rks.rs 接入（RksOptions.use_diis / diis_max_vectors）+ 不收敛返回 EngineError::ScfNotConverged + tests/s03_diis.rs"
+  verification: "cargo test -p qwb-scf --test s03_diis（6 例）：① 低对称 H4（四面体）普通迭代 25 步 → DIIS 5 步，两者能量一致到 1e-10；② 松散 H4 丛：普通迭代 60 步不收敛（精确返回 ScfNotConverged{60,60}），DIIS 6 步收敛；③ max_iter=1 精确返回 ScfNotConverged{iters:1,max:1} 且 exit_code()==2（K5 冻结映射）；④ 交换子在 F=P=S=I 时归零；⑤ 子空间里 Fock 全同时外推结果不变（等价于权重和为 1）；⑥ <2 组向量不外推"
+  note: "**验收里的 H2O/PBE 这半跑不了**：H2O 要 p 函数（I-03 未完成），PBE 要 GGA 的 σ（F 轨未开工），所以按纪律记 in_progress 而不是 done；机制与契约两半已测死，等 I-03/F-01 落地把测试体系换成 H2O/PBE 即可判 done。踩坑记录：第一版用 qwb_linalg::solve_symmetric（Cholesky）解 DIIS 加边矩阵，而该矩阵对称但**不定**，求解必然失败、被 fallback 吞成 None → DIIS 全程静默失效（开关两态的步数一模一样）。正是『两个配置给出完全相同步数』这个可疑现象把它揪出来的。"
 S-04: {state: pending, depends: [S-02]}
 S-05: {state: pending, depends: [S-03]}
 S-06: {state: pending, depends: [S-03], note: "v2.1 新增：偶极 / Mulliken+Löwdin 布居 / 轨道能级（qwb-props）"}

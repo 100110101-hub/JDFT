@@ -37,6 +37,7 @@ use qwb_linalg::{LinalgError, Matrix, Vector, matmul, symmetric_eigen};
 use qwb_registry::elements::atomic_number;
 use qwb_xc::{DensityBatch, FunctionalTerm};
 
+use crate::diis::Diis;
 use crate::{FockMatrices, build_fock};
 
 /// SCF 控制参数。
@@ -49,6 +50,10 @@ pub struct RksOptions {
     pub energy_threshold: f64,
     /// 密度矩阵收敛阈值。
     pub density_threshold: f64,
+    /// 是否用 Pulay DIIS 加速（默认开）。
+    pub use_diis: bool,
+    /// DIIS 子空间最多保留多少组向量。
+    pub diis_max_vectors: usize,
 }
 
 impl Default for RksOptions {
@@ -57,6 +62,8 @@ impl Default for RksOptions {
             max_iter: 128,
             energy_threshold: 1.0e-8,
             density_threshold: 1.0e-6,
+            use_diis: true,
+            diis_max_vectors: 8,
         }
     }
 }
@@ -290,6 +297,11 @@ pub fn rks_scf(
     let hcore = &integrals.core_hamiltonian;
     let x = inverse_sqrt_symmetric(overlap)?;
     let e_nuc = nuclear_repulsion(molecule)?;
+    let mut diis = if options.use_diis {
+        Some(Diis::new(options.diis_max_vectors))
+    } else {
+        None
+    };
 
     // 用 Xᵀ H X 对角化得到初猜。
     let mut density = core_guess(hcore, &x, n_occ)?;
@@ -322,9 +334,19 @@ pub fn rks_scf(
             }
         }
 
+        // DIIS：把当步 Fock 与交换子误差推入子空间，用外推的 Fock 去对角化。
+        let mut fock_used = fock.clone();
+        if let Some(accelerator) = diis.as_mut() {
+            let error = Diis::commutator(&fock, &density, overlap).map_err(linalg)?;
+            accelerator.push(fock.clone(), error);
+            if let Some(extrapolated) = accelerator.extrapolate().map_err(linalg)? {
+                fock_used = extrapolated;
+            }
+        }
+
         // F' = Xᵀ F X，对角化，C = X C'
         let xt = x.transpose();
-        let f_prime = matmul(&matmul(&xt, &fock).map_err(linalg)?, &x).map_err(linalg)?;
+        let f_prime = matmul(&matmul(&xt, &fock_used).map_err(linalg)?, &x).map_err(linalg)?;
         let (values, vectors) = symmetric_eigen(&f_prime).map_err(linalg)?;
         mo_energies = values;
         let coefficients = matmul(&x, &vectors).map_err(linalg)?;
@@ -377,6 +399,13 @@ pub fn rks_scf(
             converged = true;
             break;
         }
+    }
+
+    if !converged {
+        return Err(EngineError::ScfNotConverged {
+            iters: iterations,
+            max: options.max_iter,
+        });
     }
 
     Ok(RksResult {

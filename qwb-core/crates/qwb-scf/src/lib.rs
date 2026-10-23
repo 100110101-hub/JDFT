@@ -21,6 +21,7 @@
 #![deny(unsafe_code)]
 #![deny(missing_docs)]
 
+pub mod diis;
 pub mod rks;
 
 use qwb_integrals::two_electron::TwoElectronIntegrals;
