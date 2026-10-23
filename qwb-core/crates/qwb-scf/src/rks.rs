@@ -686,19 +686,11 @@ pub fn rks_from_data(
     let parameters: BTreeMap<String, f64> = functional.parameters.clone();
     let mut terms: Vec<Box<dyn FunctionalTerm>> = Vec::new();
     for component in &functional.components {
-        let mut term = qwb_xc::build_term(&component.id, &parameters)
+        let term = qwb_xc::build_term(&component.id, &parameters)
             .map_err(|err| EngineError::Data(format!("functional `{functional_name}`: {err}")))?;
-        // 权重不为 1 时（如 B3LYP）需要缩放，第一阶段只支持 1。用包装器不划算，
-        // 先显式拒绝，避免算错。
-        if (component.weight - 1.0).abs() > 1e-12 {
-            return Err(EngineError::Unsupported(format!(
-                "functional `{functional_name}` component `{}` has weight {}; weighted \
-                 components are not implemented yet (needed for B3LYP, T6)",
-                component.id, component.weight
-            )));
-        }
+        // 权重 ≠ 1（复合泛函）由 qwb-xc 的 ScaledTerm 处理：能量与两个导数用同一权重。
+        let term = qwb_xc::scale_term(term, component.weight);
         // GGA（σ 依赖）现在由 evaluate_xc 支持（D-10）。
-        let _ = &mut term;
         terms.push(term);
     }
 

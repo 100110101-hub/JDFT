@@ -352,11 +352,75 @@ pub(crate) fn parameter(
         })
 }
 
-/// 按数据里的组件 id 造出一个泛函项。
+// ───────────────────────── 带权重的组件 ─────────────────────────
+
+/// 给一个泛函项乘上权重（`functional.yaml` 的 `components[].weight`）。
 ///
-/// # Errors
-///
-/// 组件 id 不认识，或缺少它需要的参数。
+/// 复合泛函（如 B3LYP 的 `0.8 B88 + 0.2 HF + 0.81 LYP + 0.19 VWN5`）里每个组件的
+/// 能量与导数都要乘自己的系数。把缩放放在这一层，而不是让每个泛函自己记权重，
+/// 可以保证 `energy_density` 与 `potential_derivatives` 用的是**同一个**系数
+/// （分别传参是这类代码最容易出的错）。
+pub struct ScaledTerm {
+    /// 被缩放的项。
+    pub inner: Box<dyn FunctionalTerm>,
+    /// 权重。
+    pub weight: f64,
+}
+
+impl ScaledTerm {
+    /// 包装。
+    #[must_use]
+    pub fn new(inner: Box<dyn FunctionalTerm>, weight: f64) -> Self {
+        Self { inner, weight }
+    }
+}
+
+impl FunctionalTerm for ScaledTerm {
+    fn id(&self) -> &'static str {
+        self.inner.id()
+    }
+
+    fn requires(&self) -> Requirements {
+        self.inner.requires()
+    }
+
+    fn spin_scaling(&self) -> f64 {
+        self.inner.spin_scaling()
+    }
+
+    fn energy_density(&self, batch: &DensityBatch<'_>, out: &mut [f64]) {
+        self.inner.energy_density(batch, out);
+        for slot in out.iter_mut() {
+            *slot *= self.weight;
+        }
+    }
+
+    fn potential_derivatives(
+        &self,
+        batch: &DensityBatch<'_>,
+        d_rho: &mut [f64],
+        d_sigma: &mut [f64],
+    ) {
+        self.inner.potential_derivatives(batch, d_rho, d_sigma);
+        for slot in d_rho.iter_mut() {
+            *slot *= self.weight;
+        }
+        for slot in d_sigma.iter_mut() {
+            *slot *= self.weight;
+        }
+    }
+}
+
+/// 按权重包装（权重为 1 时原样返回，不引入额外一层虚调用）。
+#[must_use]
+pub fn scale_term(term: Box<dyn FunctionalTerm>, weight: f64) -> Box<dyn FunctionalTerm> {
+    if (weight - 1.0).abs() <= 1e-12 {
+        term
+    } else {
+        Box::new(ScaledTerm::new(term, weight))
+    }
+}
+/// 由数据里的组件 id 与参数构造泛函项。
 pub fn build_term(
     id: &str,
     parameters: &BTreeMap<String, f64>,

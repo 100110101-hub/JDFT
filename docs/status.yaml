@@ -79,8 +79,8 @@ D-10:
   artifact: "qwb-core/crates/qwb-xc/src/gga.rs（PbeExchange `GgaPbeX` + PbeCorrelation `GgaPbeC`，对偶数自动求导）+ qwb-scf 的 evaluate_xc GGA 支持（σ 与散度项）+ qwb-data/functional/pbe.yaml + tests/d10_pbe.rs、tests/d10_pbe_scf.rs"
   verification: "① `cargo test -p qwb-xc --test d10_pbe`（3 例）：σ→0 时 PBE 交换/相关与 LdaSlaterX/LdaSvwn5 **逐位一致**（<1e-12）；s=1 处 F_x = 1.1724321599 与解析式差 <1e-10；**dε/dρ、dε/dσ 与五点四阶差分相对差 ≤ 9.7e-11**（验收 < 1e-9）。② `cargo test -p qwb-scf --test d10_pbe_scf`：**PBE 端到端跑通**——H2/STO-3G/PBE 收敛（iters=2），E = −1.1811818847、E_xc = −0.7391785074；同一轮 SVWN5 仍是 −1.1570004991（**GGA 的引入没有改变 LDA 结果**，回归钉住）。③ `qwb data verify` 9/9（pbe.yaml 带 sha256 与逐参数 citation：PBE 1996 DOI + VWN5 DOI）。"
   note: "**GGA 的关键实现选择**：不做网格上的数值散度。GGA 势里的 −∇·(2·∂f/∂σ·∇ρ) 用**分部积分**转成矩阵元 `+ 2·∂f/∂σ·∇ρ·∇(φ_μ φ_ν)`，只需要 AO 值与 AO 梯度（`ao_value_and_gradient`，上一轮已用有限差分验证过），避免了在离散网格上算二阶导。导数由对偶数一次求值得到（值 + ∂ρ + ∂σ），VWN5 段复用解析的 `vwn_g_prime`。物理合理性：PBE 的 E_xc 比 LDA 更负 0.024 Ha（梯度修正增强交换），总能量 −1.181 vs −1.157，方向正确。"
-D-11: {state: pending, depends: [D-01]}
-D-12: {state: pending, depends: [D-01]}
+D-11: {state: pending, depends: [D-01], note: "B88 是纯 GGA 闭式、现有对偶数机制可直接套用；LYP 的标准实现需要 ∇²ρ（本构建的 Requirements 有 laplacian 位但没有网格上的 ∇²ρ 计算），所以 D-11 需要先补 laplacian 或改用分部积分形式。"}
+D-12: {state: pending, depends: [D-01], note: "**前置已完成**（2026-10-23）：加权组件。此前引擎对 weight≠1 的组件直接报 Unsupported；现在 qwb-xc::ScaledTerm/scale_term 对**能量与两个导数**施加同一权重，ks_from_data 已改为包装而不是拒绝，测试 d12_weights.rs 验证 0.5/0.8 权重下三者按同一比例缩放、权重为 1 时逐位不变。仍缺：B88、LYP、以及 20% 的 HF 交换混入（hybrid，属新机制）。"}
 D-13:
   state: done
   ts: "2026-10-22T23:23:27Z"
