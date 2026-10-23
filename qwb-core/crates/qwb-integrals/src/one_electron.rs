@@ -5,8 +5,6 @@ use qwb_engine_api::{EngineError, Molecule};
 use qwb_linalg::Matrix;
 use qwb_registry::elements::atomic_number;
 
-use crate::boys::boys_functions;
-
 const PI: f64 = std::f64::consts::PI;
 
 /// 直角坐标分量 `(lx, ly, lz)`。
@@ -192,11 +190,13 @@ pub fn primitive_kinetic(
 }
 
 /// `n!`（`n <= 12` 足够：第一阶段 `l <= 4`）。
+#[allow(dead_code)]
 fn factorial(n: u32) -> f64 {
     (1..=n).map(f64::from).product::<f64>().max(1.0)
 }
 
 /// 二项系数 `C(n,k)`。
+#[allow(dead_code)]
 fn binomial(n: u32, k: u32) -> f64 {
     if k > n {
         0.0
@@ -256,54 +256,65 @@ pub fn primitive_nuclear(
         .sum::<f64>();
     let e_ab = (-alpha * beta / p * ab2).exp();
 
-    let powers = [
-        a_powers.0 + b_powers.0,
-        a_powers.1 + b_powers.1,
-        a_powers.2 + b_powers.2,
+    // Hermite（McMurchie–Davidson）展开：把 (r−A)^a (r−B)^b 展成 Hermite 高斯，
+    // 势的对角元于是变成「Boys 函数对 P 的高阶导数」——这正是 hermite2e 里那份
+    // 按定义求导的 derivative_boys。
+    //
+    // 旧实现把两中心的角动量直接相加、并假定多项式中心就在 P 上，等于丢掉了
+    // (P−A)、(P−B) 的信息：s 型（a=b=0）看不出来，p/d 型会全错。
+    let factors: Vec<Vec<f64>> = (0..3)
+        .map(|axis| {
+            hermite_1d(
+                a_powers_axis(a_powers, axis),
+                a_powers_axis(b_powers, axis),
+                p,
+                p_center[axis] - a_center[axis],
+                p_center[axis] - b_center[axis],
+            )
+        })
+        .collect();
+
+    let r = [
+        p_center[0] - nucleus_center[0],
+        p_center[1] - nucleus_center[1],
+        p_center[2] - nucleus_center[2],
     ];
-    let x = [0, 1, 2].map(|axis| p_center[axis] - nucleus_center[axis]);
-    let u = p * (x[0] * x[0] + x[1] * x[1] + x[2] * x[2]);
 
-    let l_total = powers[0] + powers[1] + powers[2];
-    let boys = boys_functions(l_total as usize, u);
-
+    let n_x = a_powers.0 + b_powers.0;
+    let n_y = a_powers.1 + b_powers.1;
+    let n_z = a_powers.2 + b_powers.2;
     let mut total = 0.0;
-    for ka in 0..=(powers[0] / 2) {
-        for kb in 0..=(powers[1] / 2) {
-            for kc in 0..=(powers[2] / 2) {
-                let contractions = [ka, kb, kc];
-                let n_contractions = ka + kb + kc;
-                let m = l_total - 2 * n_contractions;
-
-                let mut weight = 1.0;
-                let mut spatial = 1.0;
-                for axis in 0..3 {
-                    let power = powers[axis];
-                    let k = contractions[axis];
-                    weight *= factorial(power) / (factorial(power - 2 * k) * factorial(k));
-                    spatial *= x[axis].powi(i32::try_from(power - 2 * k).expect("small"));
-                }
-                if spatial == 0.0 || weight == 0.0 {
+    for tx in 0..=n_x {
+        let fx = factors[0][tx as usize];
+        if fx == 0.0 {
+            continue;
+        }
+        for ty in 0..=n_y {
+            let fy = factors[1][ty as usize];
+            if fy == 0.0 {
+                continue;
+            }
+            for tz in 0..=n_z {
+                let fz = factors[2][tz as usize];
+                if fz == 0.0 {
                     continue;
                 }
-
-                // I(m, N; u) = 2 Σ_k (−1)^k C(N,k) F_{m+k}(u)
-                let mut generalized = 0.0;
-                for k in 0..=n_contractions {
-                    let sign = if k % 2 == 0 { 1.0 } else { -1.0 };
-                    generalized += sign * binomial(n_contractions, k) * boys[(m + k) as usize];
-                }
-                let generalized = 2.0 * generalized;
-
-                total += weight
-                    * spatial
-                    * (4.0 * p).powi(-i32::try_from(n_contractions).expect("small"))
-                    * generalized;
+                let sign = if (tx + ty + tz) % 2 == 0 { 1.0 } else { -1.0 };
+                total += fx * fy * fz * sign * crate::hermite2e::derivative_boys(tx, ty, tz, p, r);
             }
         }
     }
 
-    -nucleus_charge * (PI / p) * e_ab * total
+    -nucleus_charge * 2.0 * PI / p * e_ab * total
+}
+
+/// 取幂次的第 `axis` 个分量。
+fn a_powers_axis(powers: Powers, axis: usize) -> u32 {
+    match axis {
+        0 => powers.0,
+        1 => powers.1,
+        _ => powers.2,
+    }
 }
 /// 一个壳层的原函数数据（系数保持数据原样；归一化在积分时按分量施加）。
 struct ShellPrimitives {

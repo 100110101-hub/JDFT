@@ -115,19 +115,23 @@ impl Kernel {
     }
 }
 
-/// `S_{lmn} = ∂^l_x∂^m_y∂^n_z C_0`，不含 `K`、不含 `E_AB E_CD`。
-fn hermite_coulomb(l: u32, m: u32, n: u32, rho: f64, r: [f64; 3]) -> f64 {
+/// `∂^l_x∂^m_y∂^n_z F_0(scale·|R|²)`——核吸引与 2e 积分共用的「Hermite Coulomb」导数核。
+///
+/// 一电子核吸引用的是 `scale = p`、`R = P − C`；两电子积分用的是 `scale = ρ`、
+/// `R = P − Q`。两条路径共享这份**按定义求导**的实现，避免再出现「凭记忆写递推」
+/// 的风险。
+pub(crate) fn derivative_boys(l: u32, m: u32, n: u32, scale: f64, r: [f64; 3]) -> f64 {
     let mut kernel = Kernel::fundamental();
     for _ in 0..l {
-        kernel = kernel.differentiate(0, rho);
+        kernel = kernel.differentiate(0, scale);
     }
     for _ in 0..m {
-        kernel = kernel.differentiate(1, rho);
+        kernel = kernel.differentiate(1, scale);
     }
     for _ in 0..n {
-        kernel = kernel.differentiate(2, rho);
+        kernel = kernel.differentiate(2, scale);
     }
-    let t = rho * (0..3).map(|axis| r[axis] * r[axis]).sum::<f64>();
+    let t = scale * (0..3).map(|axis| r[axis] * r[axis]).sum::<f64>();
     let boys = boys_functions(kernel.max_boys_index() as usize, t);
     kernel.evaluate(r, &boys)
 }
@@ -219,7 +223,7 @@ pub fn primitive_component(
                             total += bra
                                 * ket
                                 * sign
-                                * hermite_coulomb(tx + ux, ty + uy, tz + uz, rho, r);
+                                * derivative_boys(tx + ux, ty + uy, tz + uz, rho, r);
                         }
                     }
                 }

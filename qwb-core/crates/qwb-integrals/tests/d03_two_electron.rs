@@ -256,7 +256,10 @@ fn h2_sto3g_two_electron_matches_the_analytic_value() {
 }
 
 #[test]
-fn two_electron_refuses_l_above_zero() {
+fn two_electron_handles_p_shells() {
+    // I-03 的 l>0 支持：水/STO-3G 在 O 上有 p 壳层（7 个 AO）。这里不比对具体
+    // 数值（交叉验证在 i03_general_l.rs 的逐分量级别做），而是钉住整体性质：
+    // 置换对称、(ii|ii) > 0、全部有限。这些性质对"装配/散射"特别灵敏。
     let registry = Registry::open(repo_root().join("qwb-data")).expect("qwb-data");
     let basis_k1 = registry.get_basis("sto-3g").expect("sto-3g");
     let water = Molecule::new(
@@ -269,9 +272,116 @@ fn two_electron_refuses_l_above_zero() {
         1,
     );
     let basis = InternalBasis::build(basis_k1, &water).expect("build");
-    let error = two_electron(&basis, &water).expect_err("l>0 尚未实现");
-    let message = error.to_string();
-    assert!(message.contains("l>0"), "{message}");
-    assert!(message.contains("Obara-Saika"), "{message}");
-    assert_eq!(error.exit_code(), 4);
+    let tensor = two_electron(&basis, &water).expect("2e for l>0");
+    let n = basis.n_functions();
+    assert_eq!(tensor.n_functions, n);
+    assert_eq!(n, 7, "水/STO-3G 应有 7 个 AO（O: 1s 2s 2p×3, H: 1s×2）");
+
+    assert!(
+        tensor.values.iter().all(|value| value.is_finite()),
+        "出现非有限值"
+    );
+    for i in 0..n {
+        for j in 0..n {
+            for k in 0..n {
+                for l in 0..n {
+                    let value = tensor.get(i, j, k, l);
+                    let tolerance = 1.0e-12 * value.abs().max(1.0);
+                    assert!(
+                        (value - tensor.get(j, i, k, l)).abs() < tolerance,
+                        "bra 交换不对称 ({i}{j}|{k}{l})"
+                    );
+                    assert!(
+                        (value - tensor.get(i, j, l, k)).abs() < tolerance,
+                        "ket 交换不对称 ({i}{j}|{k}{l})"
+                    );
+                    assert!(
+                        (value - tensor.get(k, l, i, j)).abs() < tolerance,
+                        "两对交换不对称 ({i}{j}|{k}{l})"
+                    );
+                }
+            }
+        }
+    }
+    for i in 0..n {
+        assert!(
+            tensor.get(i, i, i, i) > 0.0,
+            "({i}{i}|{i}{i}) 必须为正，实得 {}",
+            tensor.get(i, i, i, i)
+        );
+    }
+    // p 壳层的对角元量级检查：同一原子的 (pp|pp) 应在 0.1–1 Ha 之间，
+    // 数量级错了（比如归一化漏乘）会把能量带偏几个 Ha。
+    let oxygen_p = 2; // O 的 2p_x 是第 3 个 AO（0:1s, 1:2s, 2..4:2p）
+    let value = tensor.get(oxygen_p, oxygen_p, oxygen_p, oxygen_p);
+    assert!(
+        (0.1..1.0).contains(&value),
+        "O 2p 的 (pp|pp) = {value} 量级可疑"
+    );
+    println!("水/STO-3G: (2p_x 2p_x|2p_x 2p_x) = {value:.8} Ha");
+}
+
+#[test]
+fn two_electron_s_shells_match_the_independent_contraction() {
+    // H2/STO-3G 全是 s 壳层：张量里的每个值都必须等于「闭式 (ss|ss) 直接收缩」
+    // 的结果——这条路径不经过新装配代码，因此能单独判定归一化与收缩。
+    let registry = Registry::open(repo_root().join("qwb-data")).expect("qwb-data");
+    let basis_k1 = registry.get_basis("sto-3g").expect("sto-3g");
+    let h2 = Molecule::new(
+        vec![
+            Atom::new("H", [0.0, 0.0, -0.37]),
+            Atom::new("H", [0.0, 0.0, 0.37]),
+        ],
+        0,
+        1,
+    );
+    let basis = InternalBasis::build(basis_k1, &h2).expect("build");
+    let tensor = two_electron(&basis, &h2).expect("2e");
+    let n = basis.n_functions();
+    assert_eq!(n, 2);
+
+    let shells = basis.shells();
+    for i in 0..n {
+        for j in 0..n {
+            for k in 0..n {
+                for l in 0..n {
+                    let (shell_i, shell_j, shell_k, shell_l) =
+                        (&shells[i], &shells[j], &shells[k], &shells[l]);
+                    let mut expected = 0.0;
+                    for (ia, &alpha) in shell_i.exponents.iter().enumerate() {
+                        for (ib, &beta) in shell_j.exponents.iter().enumerate() {
+                            for (ic, &gamma) in shell_k.exponents.iter().enumerate() {
+                                for (id, &delta) in shell_l.exponents.iter().enumerate() {
+                                    let weight = shell_i.coefficients[ia]
+                                        * primitive_norm((0, 0, 0), alpha)
+                                        * shell_j.coefficients[ib]
+                                        * primitive_norm((0, 0, 0), beta)
+                                        * shell_k.coefficients[ic]
+                                        * primitive_norm((0, 0, 0), gamma)
+                                        * shell_l.coefficients[id]
+                                        * primitive_norm((0, 0, 0), delta);
+                                    expected += weight
+                                        * primitive_ssss(
+                                            alpha,
+                                            shell_i.center_bohr,
+                                            beta,
+                                            shell_j.center_bohr,
+                                            gamma,
+                                            shell_k.center_bohr,
+                                            delta,
+                                            shell_l.center_bohr,
+                                        );
+                                }
+                            }
+                        }
+                    }
+                    let actual = tensor.get(i, j, k, l);
+                    assert!(
+                        (actual - expected).abs() < 1.0e-12 * expected.abs().max(1.0),
+                        "({i}{j}|{k}{l}) = {actual} vs 独立收缩 {expected}"
+                    );
+                }
+            }
+        }
+    }
 }

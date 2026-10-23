@@ -1,0 +1,26 @@
+# T2 的前置验证：H2O / STO-3G / SVWN5 单点能（O 上有 p 壳层）。
+molecule:
+  atoms:
+    - symbol: O
+      position_angstrom: [0.0, 0.0, 0.0]
+    - symbol: H
+      position_angstrom: [0.0, 0.757, 0.586]
+    - symbol: H
+      position_angstrom: [0.0, -0.757, 0.586]
+  charge: 0
+  multiplicity: 1
+basis_name: sto-3g
+method_name: svwn5
+grid_level: normal
+solvent: vacuum
+jobtype: sp
+options:
+  scf_max_iter: 128
+  scf_energy_threshold_hartree: 1.0e-8
+  scf_density_threshold: 1.0e-6
+  diis_history: 8
+  threads: 0
+  max_opt_steps: 100
+  opt_gradient_threshold_hartree_per_bohr: 4.5e-4
+  freq_step_angstrom: 0.01
+  ecp_name: null

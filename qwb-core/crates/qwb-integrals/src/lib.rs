@@ -25,6 +25,7 @@
 
 #![deny(unsafe_code)]
 #![deny(missing_docs)]
+#![allow(clippy::too_many_arguments)] // 积分内核的签名由数学决定（四中心 + 指数 + 分量）
 
 pub mod boys;
 #[cfg(feature = "integral-cache")]

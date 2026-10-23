@@ -100,11 +100,11 @@ I-01:
   verification: "cargo test -p qwb-basis --test d01_basis_layer（8 例）：H2 AO=2、C AO=5、H2O AO=7、angular 只来自数据、每个收缩 <f|f>=1、错误的 l2 声明被拒、未覆盖元素 → Data、球心转 Bohr"
   note: "v2：`InternalShell` 现在带 `angular` 字段，`n_functions()` 按数据报球谐 (2l+1) 或直角坐标分量数——l<=1 时两者相同（STO-3G 无影响），def2-SVP 的 d 现在是 5 而不是 6（C 从 15 变 14，与数据层的 n_basis_functions_for 一致）。**仍缺**：积分核是直角坐标实现，所以 one_electron 对 l>=2 显式返回 Unsupported（测试钉住），需要 cartesian->spherical 的 T 矩阵变换，排在 SCF 之前。"
 I-02:
-  state: done
-  ts: "2026-10-22T23:45:54Z"
-  artifact: "qwb-core/crates/qwb-integrals：boys.rs（向下递推的 Boys 函数）+ one_electron.rs（Hermite/McMurchie-Davidson 的 S、T、V）"
-  verification: "cargo test -p qwb-integrals（4+8+3+5 例）：H2/STO-3G 的 S/T/V 对解析闭式 < 1e-10；S/T 对 Gauss–Hermite oracle 一致到 1e-12（5 种角动量组合）；核吸引的**任意 l** 公式由生成函数推导，宇称（⟨s|1/r|p_x⟩=0、⟨p_x|1/r|p_y⟩=0 到 1e-14）与同中心 ⟨p_x|1/r|p_x⟩=−π/(6α²) 解析值到 1e-12；水（7 AO，含 p）全矩阵对称、H=T+V"
-  note: "v2 修订：先用数值 oracle 与宇称尺子证明旧的 R^n=(−2p)^n F_n 系数在 l>0 时是错的，再用生成函数**推导**出正确形式——把 6 维/3 维积分经 Laplace 变换与 y=t/(1+t) 换元后，所有 t 积分都化成广义 Boys 函数 I(m,N;u)=∫₀¹y^{m−1/2}(1−y)^N e^{−uy}dy=2Σ(−1)^k C(N,k)F_{m+k}(u)，于是 V=−Z E_AB(π/p)Σ W·x^{α−2a}…(4p)^{−N}·I(m,N)。方向依赖来自 x^{α−2a}，同中心奇次幂自动为 0。l>0 与 s 型共用同一条路径，水/含 p 基组已可完整计算。"
+  state: in_progress
+  ts: "2026-10-23T08:05:00Z"
+  artifact: "qwb-core/crates/qwb-integrals/src/one_electron.rs::primitive_nuclear（改用 Hermite/MD 展开 + hermite2e::derivative_boys）+ src/hermite2e.rs（derivative_boys 共用）+ tests/i02_derivative_identities.rs"
+  verification: "① cargo test -p qwb-integrals --test i02_derivative_identities（1 例，当前 #[ignore]）：S、T 的 p 型与中心导数恒等式**逐位一致**（1e-12）；V 的 p 型与恒等式差约 3%（3.0e-2）。② s 型路径未被破坏：cargo test -p qwb-scf 全绿，HF/STO-3G H2 = −1.116759（外部参考 < 1 mHa）、T1 的 8 行注册参考值全部命中"
+  note: "**发现并修掉一个真 bug**：旧的 primitive_nuclear 把两中心的角动量直接相加、并假定多项式中心就在 P 上，等于丢掉了 (P−A)、(P−B) 信息——s 型（a=b=0）完全看不出来，所以 H2/STO-3G 一直是精确的；一含 p 就全错（水/STO-3G 的 HF 被打到 −86.64 Ha，误差异常地落在总能量上而不是某个小项）。改用 Hermite/MD 展开后：水/STO-3G HF 从 −86.64 变成 −78.08 Ha（文献 −74.96），MO 能级也从 [−19.0, −5.1, −3.0, −1.06, −0.41] 变成 [−19.5, −2.06, −1.76, −1.32, −0.52]（文献约 [−20.2, −1.20, −0.55, −0.42, −0.35]）。**仍未收口**：p 型核吸引与中心导数恒等式差 3%，所以 I-02 回退成 in_progress——之前标 done 时只覆盖到 s 型，属于记账过宽。下一步：把 V 的 Hermite 展开逐项与恒等式比对（怀疑是 (−1)^{t} 约定或 hermite_1d 的归一化约定在 V 与 2e 之间不一致）。"
 I-04: {state: pending, depends: [I-03]}
 I-05: {state: pending, depends: [I-02]}
 I-06:
