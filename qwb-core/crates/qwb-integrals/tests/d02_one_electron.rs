@@ -352,3 +352,46 @@ fn conversion_factor_is_the_expected_one() {
     // 0.74 Å 的 H2 键长对应 1.3984… Bohr；间接确认 Å→Bohr 只转一次。
     assert!((BOHR_PER_ANGSTROM - 1.889_726_089_838_572).abs() < 1e-15);
 }
+
+#[test]
+fn def2_svp_d_shells_work_through_the_spherical_transform() {
+    // l>=2 走 cartesian -> spherical 变换（R-06）：C/def2-SVP 应是 14 个 AO，
+    // 且球谐 d 的正交归一组合必须让 S 的 d 块仍是 5x5 单位阵（S_ii = 1）。
+    let registry = registry();
+    let basis_k1 = registry.get_basis("def2-svp").expect("def2-svp");
+    let carbon = Molecule::new(vec![Atom::new("C", [0.0, 0.0, 0.0])], 0, 3);
+    let basis = InternalBasis::build(basis_k1, &carbon).expect("build");
+    assert_eq!(basis.n_functions(), 14);
+
+    let integrals = one_electron(&basis, &carbon).expect("integrals");
+
+    // 每个 AO 归一 → 对角为 1（对 d 块来说是 T^T I T = I 的直接后果）。
+    for i in 0..14 {
+        assert_close(integrals.overlap[(i, i)], 1.0, "S_ii = 1（含球谐 d）");
+        assert!(integrals.kinetic[(i, i)] > 0.0, "T_ii > 0");
+        assert!(integrals.nuclear[(i, i)] < 0.0, "V_ii < 0");
+    }
+    assert_close(integrals.overlap.trace().expect("square"), 14.0, "trace(S)");
+
+    // 对称性。
+    for i in 0..14 {
+        for j in 0..14 {
+            assert!(
+                (integrals.overlap[(i, j)] - integrals.overlap[(j, i)]).abs() < 1e-13,
+                "S 不对称 ({i},{j})"
+            );
+        }
+    }
+
+    // d 壳层是最后 5 个 AO：同壳层内它们标准正交 → 5x5 单位块。
+    for i in 9..14 {
+        for j in 9..14 {
+            let expected = if i == j { 1.0 } else { 0.0 };
+            assert!(
+                (integrals.overlap[(i, j)] - expected).abs() < 1e-12,
+                "d 块 S({i},{j}) = {} 应为 {expected}",
+                integrals.overlap[(i, j)]
+            );
+        }
+    }
+}

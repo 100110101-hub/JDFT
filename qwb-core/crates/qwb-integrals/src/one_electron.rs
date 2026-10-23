@@ -310,7 +310,6 @@ struct ShellPrimitives {
     exponents: Vec<f64>,
     coefficients: Vec<f64>,
     components: Vec<Powers>,
-    first_function: usize,
     center: [f64; 3],
 }
 
@@ -319,7 +318,6 @@ fn shell_primitives(shell: &InternalShell) -> ShellPrimitives {
         exponents: shell.exponents.clone(),
         coefficients: shell.coefficients.clone(),
         components: qwb_basis::cartesian_components(shell.l),
-        first_function: shell.first_function,
         center: shell.center_bohr,
     }
 }
@@ -347,7 +345,27 @@ pub fn one_electron(
     basis: &InternalBasis,
     molecule: &Molecule,
 ) -> Result<OneElectronIntegrals, EngineError> {
-    let n = basis.n_functions();
+    // 每个壳层一个变换（l<=1 是单位阵；l=2 是 6x5；l>=3 未实现 → 显式报错）。
+    let mut transforms = Vec::with_capacity(basis.shells().len());
+    for shell in basis.shells() {
+        let transform = qwb_basis::spherical::spherical_transform(shell.l, shell.angular)
+            .ok_or_else(|| {
+                EngineError::Unsupported(format!(
+                    "spherical transformation for l={} is not implemented (R-06; \
+                     first phase covers s/p/d)",
+                    shell.l
+                ))
+            })?;
+        transforms.push(transform);
+    }
+    // 直角坐标索引空间（d 是 6 个），球谐空间是 basis.n_functions()。
+    let mut cart_offsets = Vec::with_capacity(transforms.len());
+    let mut n_cartesian = 0usize;
+    for transform in &transforms {
+        cart_offsets.push(n_cartesian);
+        n_cartesian += transform.n_cartesian;
+    }
+    let n = n_cartesian;
     let mut overlap = Matrix::zeros(n, n);
     let mut kinetic = Matrix::zeros(n, n);
     let mut nuclear = Matrix::zeros(n, n);
@@ -366,19 +384,8 @@ pub fn one_electron(
 
     let shells: Vec<ShellPrimitives> = basis.shells().iter().map(shell_primitives).collect();
 
-    // **R-06 缺口**：`InternalBasis` 现在按 `Angular` 报 AO 数（球谐 d = 5），
-    // 但积分核是直角坐标实现（d = 6）。两者只有在 l<=1 时一致，所以 l>=2 必须
-    // 显式拒绝，等 cartesian -> spherical 变换（`qwb-basis` 的 T 矩阵）接上再放开。
-    if let Some(shell) = basis.shells().iter().find(|shell| shell.l >= 2) {
-        return Err(EngineError::Unsupported(format!(
-            "one-electron integrals for l>=2 shells need the cartesian->spherical \
-             transformation (R-06, not implemented yet): the basis has an l={} shell",
-            shell.l
-        )));
-    }
-
     for (shell_a_index, shell_a) in shells.iter().enumerate() {
-        for shell_b in shells.iter().skip(shell_a_index) {
+        for (shell_b_index, shell_b) in shells.iter().enumerate().skip(shell_a_index) {
             for (component_a, powers_a) in shell_a.components.iter().enumerate() {
                 for (component_b, powers_b) in shell_b.components.iter().enumerate() {
                     // 按分量归一（xy 型与 x² 型的归一化常数不同）。
@@ -443,8 +450,8 @@ pub fn one_electron(
                         }
                     }
 
-                    let row = shell_a.first_function + component_a;
-                    let column = shell_b.first_function + component_b;
+                    let row = cart_offsets[shell_a_index] + component_a;
+                    let column = cart_offsets[shell_b_index] + component_b;
                     overlap[(row, column)] = s;
                     kinetic[(row, column)] = t;
                     nuclear[(row, column)] = v;
@@ -458,9 +465,28 @@ pub fn one_electron(
         }
     }
 
-    let mut core_hamiltonian = Matrix::zeros(n, n);
-    for i in 0..n {
-        for j in 0..n {
+    // 组装块对角的 T_g（直角坐标 × 球谐），然后 M_sph = T_gᵀ M_cart T_g。
+    let n_spherical = basis.n_functions();
+    let mut global_transform = Matrix::zeros(n_cartesian, n_spherical);
+    for (shell_index, shell) in basis.shells().iter().enumerate() {
+        let transform = &transforms[shell_index];
+        for row in 0..transform.n_cartesian {
+            for column in 0..transform.n_spherical {
+                global_transform[(
+                    cart_offsets[shell_index] + row,
+                    shell.first_function + column,
+                )] = transform.get(row, column);
+            }
+        }
+    }
+
+    let overlap = transform_matrix(&overlap, &global_transform)?;
+    let kinetic = transform_matrix(&kinetic, &global_transform)?;
+    let nuclear = transform_matrix(&nuclear, &global_transform)?;
+
+    let mut core_hamiltonian = Matrix::zeros(n_spherical, n_spherical);
+    for i in 0..n_spherical {
+        for j in 0..n_spherical {
             core_hamiltonian[(i, j)] = kinetic[(i, j)] + nuclear[(i, j)];
         }
     }
@@ -471,4 +497,13 @@ pub fn one_electron(
         nuclear,
         core_hamiltonian,
     })
+}
+
+/// `Tᵀ M T`（`T` 是 `n_cart × n_sph`）。
+fn transform_matrix(m: &Matrix, transform: &Matrix) -> Result<Matrix, EngineError> {
+    let transposed = transform.transpose();
+    let left = qwb_linalg::matmul(&transposed, m)
+        .map_err(|err| EngineError::Internal(format!("transform T^T M: {err}")))?;
+    qwb_linalg::matmul(&left, transform)
+        .map_err(|err| EngineError::Internal(format!("transform (T^T M) T: {err}")))
 }
