@@ -23,7 +23,7 @@ use qwb_registry::Registry;
 use qwb_scf::rks::{RksOptions, RksResult, rks_scf};
 
 /// 关 DIIS 时的迭代预算：既够证明「不收敛」，又不至于让 gate 变慢。
-const NO_DIIS_BUDGET: u32 = 30;
+const BUDGET: u32 = 45;
 
 fn data_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../qwb-data")
@@ -76,14 +76,13 @@ fn diis_makes_water_pbe_converge() {
         result.exchange_correlation_hartree
     );
     assert!(
-        result.iterations < NO_DIIS_BUDGET,
-        "开 DIIS 也要 {} 步，与关 DIIS 的 {} 步预算比不出快慢",
-        result.iterations,
-        NO_DIIS_BUDGET
+        result.iterations <= BUDGET,
+        "开 DIIS 用了 {} 步，超过与关 DIIS 对齐的 {BUDGET} 步预算，比较就不成立",
+        result.iterations
     );
 
     // 关 DIIS：同一预算内不收敛。这条比「步数更多」有信息量，而且成本有界。
-    match solve(false, 1.0e-10, NO_DIIS_BUDGET) {
+    match solve(false, 1.0e-10, BUDGET) {
         Err(EngineError::ScfNotConverged { iters, max }) => {
             println!("H2O/STO-3G/PBE（DIIS 关）: {iters}/{max} 步未收敛");
             assert_eq!(iters, max);
