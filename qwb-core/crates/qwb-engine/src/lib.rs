@@ -15,6 +15,7 @@
 
 pub mod env;
 pub mod gradient;
+pub mod hessian;
 pub mod opt;
 
 use qwb_engine_api::{EngineBackend, EngineError, JobInput, JobResult, JobType, Reporter};

@@ -363,11 +363,44 @@ G-03:
     运行时间说明：单个梯度的 2e 项是 n_cart^4 × 原函数组合，CH4（n_cart = 9）在 debug
     构建里约 1-2 分钟一次，所以三个分子共 25 分钟。这也解释了为什么这条测试进不了 gate
     （门禁里只放冒烟版）。要让完整三分子进 gate，得先把 2e 梯度按壳层分块/预筛，属另一个 WP。
-F-01: {state: pending, depends: [G-01]}
-F-02: {state: pending, depends: [F-01]}
-
-# ─────────────────────────── P 轨（产品）───────────────────────────
-
+F-01:
+  state: in_progress
+  ts: "2026-10-25T03:00:00Z"
+  artifact: "qwb-core/crates/qwb-engine/src/hessian.rs（数值 Hessian：中心差分 + rayon 并行位移 + 对称化 + 质量加权对角化）+ tests/f01_hessian_h2.rs、f01_hessian_water.rs"
+  verification: |
+    已通过（不依赖外部参照的四条）：
+    * **对称性**：对称化后不对称度 0.0（H2 与 H2O 都是）；
+    * **曲率一致性**（H2/STO-3G/HF）：Hessian 的 H[z0,z0] = 0.57209803 Ha/Bohr² 与
+      「只移动原子 0 的能量三点拟合」0.57204881 差 5e-5（两条完全独立的路）；
+    * **模数**：H2 只有 1 个振动模（5476.8 cm⁻¹），H2O 有 3N-6 = 3 个
+      （2169.4 / 4140.8 / 4392.0 cm⁻¹，弯曲/对称/反对称的顺序正确），
+      其余平移转动模 |nu| <= 49.5 cm⁻¹；
+    * **ZPE > 0 且量级正确**：H2 2738.4 cm⁻¹（= 5476.8/2），H2O 5351.1 cm⁻¹。
+    未通过（外部参照）：F-01 原文要求「H2O/def2-SVP/PBE Hessian 与文献差 < 5%（相对 Frobenius）」，
+    需要可引用的 Hessian/频率表，目前没有；而且本实现只在 HF 分支上跑（KS 的解析梯度要
+    Pulay 项含 v_xc，尚未做）。
+  note: |
+    实现要点：位移之间互相独立，所以用 rayon 对 18 个（H2O）位移并行；每一步用**解析梯度**
+    （l > 0 已支持），拿不到时退回数值梯度。质量加权的本征值 nu = sqrt(lambda) * 5140.49 cm⁻¹。
+    **数据纪律的欠账**：原子质量表目前硬编码在 hessian.rs（IUPAC 2021 标准原子量），按项目约定
+    应该进 qwb-data 并带引用——记为待迁移。
+    本轮还修了自己测试里的两个理解错误（都写进 docs/choices.md 二十三节）：
+    ① 三点拟合曲率与 Hessian 元的因子关系（只移动一个原子时二者相等，对称移动时差 4 倍）；
+    ② ZPE 要把平移/转动模排除（否则 H2 的 110 cm⁻¹ 假转动会给 ZPE 加上 110 cm⁻¹）。
+F-02:
+  state: in_progress
+  ts: "2026-10-25T03:00:00Z"
+  artifact: "hessian.rs 的 NormalMode（质量加权本征向量 + 波数 + ZPE）+ is_linear 判定"
+  verification: |
+    已实现并验证：
+    * 简正模：H2 1 个（5476.8 cm⁻¹）、H2O 3 个（2169.4 / 4140.8 / 4392.0 cm⁻¹），
+      全部为实（极小点）；线性分子按 3N-5 计（is_linear 用共线判定，H2 走这一支）；
+    * ZPE：只统计振动模，H2 2738.4、H2O 5351.1 cm⁻¹，均为正。
+    未实现：IR 强度（需要偶极对坐标的导数，即 (dmu/dQ)^2）、热化学（S、G，需要配分函数与
+    标准态约定）。所以 F-02 的「IR 峰位与实验差 < 30 cm⁻¹」「S、G 为正且量级正确」两条判不了。
+  note: |
+    本模块给出的波数是**谐振近似**下的值。STO-3G 会系统性高估（H2 5477 vs 实验 4401，
+    高 24%），这是基组与谐振近似的双重结果，不是实现错误——所以没有拿它去凑实验值。
 P-01: {state: pending, depends: [C-03], note: "qwb-studio/（Python + pydantic v2）尚未创建"}
 P-02: {state: pending, depends: [P-01, C-04], note: "Rust 侧 .qwb 已可用；P-02 = Python zipfile 实现 + 与 Rust 互操作"}
 P-03: {state: pending, depends: [P-01, C-05], note: "取消 queued/running 依赖 K3 的两条 cancelled 边（已冻结）"}

@@ -1334,6 +1334,7 @@ dependencies = [
  "qwb-registry",
  "qwb-scf",
  "qwb-xc",
+ "rayon",
  "serde",
  "serde_json",
  "sha2",
