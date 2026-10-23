@@ -172,7 +172,12 @@ P-07:
   artifact: "qwb-core/crates/qwb-engine（RksBackend 实现 K2 EngineBackend + env.rs 真实 env.json）+ qwb-cli 的 `run` 写 K3 结果目录 + examples/h2_sto3g_svwn5.yaml"
   verification: "cargo run -q -p qwb-cli --bin qwb -- run examples/h2_sto3g_svwn5.yaml --out <dir> → 退出 0，energy = −1.1570004991 Ha，scf converged；结果目录含 input.yaml/result.json/env.json/log.txt/data_snapshot.json（artifacts/ 空目录）；随后 qwb inspect 该目录 → status ok，env 显示真实 rustc 1.97.1、7 个数据文件快照"
   note: "**未完成**：P-06（pyo3 绑定）没做，所以 P-07 里『Python 侧也能跑』这半没有；CLI 路径已端到端可用。env.json 的 cargo_lock_sha256 是编译期嵌入的 qwb-core/Cargo.lock 的真实 sha256，toolchain_channel 从 rust-toolchain.toml 读，created_at_utc 用手写历法（不引入时间库）。"
-P-08: {state: pending, depends: [P-03, P-04], note: "replay --dry-run 已可用"}
+P-08:
+  state: done
+  ts: "2026-10-23T03:05:00Z"
+  artifact: "qwb-core/crates/qwb-cli/src/main.rs::cmd_replay（读回 input.yaml → 真重算 → 与 result.json 比对）+ tests/p08_replay.rs"
+  verification: "cargo test -p qwb-cli --test p08_replay（2 例）：① H2/STO-3G/SVWN5 结果目录 replay 后 delta = 0.000e0 Ha（< 1e-10），退出码 0 且打印 reproduced；② 把 result.json 的能量改 1 µHa 后 replay 必须失败（stderr 含『不可复现』）——证明这不是只读退出码的假门禁。手工端到端：qwb run → qwb replay 输出 recorded/replay 两行能量 + delta"
+  note: "阈值 REPLAY_TOLERANCE_HARTREE = 1e-10 Ha，与 project.md 的 P-08 验收一致。replay 用 QWB_DATA_ROOT 解析数据根，与 run 走同一条 find_data_root 路径。"
 P-09: {state: pending, depends: [P-07, P-08]}
 P-10: {state: pending, depends: [P-09, G-02, F-02]}
 
@@ -188,11 +193,11 @@ V-06: {state: pending, depends: [I-03, X-03, S-03]}
 # ─────────────────────────── 垂直切片 ───────────────────────────
 
 T1:
-  state: in_progress
+  state: done
   ts: "2026-10-23T02:40:00Z"
   artifact: "qwb-core/crates/qwb-scf/tests/reference/h2_sto3g.csv（注册参考值集合）+ tests/t01_reference.rs"
   verification: "cargo test -p qwb-scf --test t01_reference：8/8 行参考值全部命中——HF/STO-3G H2 总能量 −1.1167593082 vs 外部文献 −1.116759（差 3.1e-7 Ha，即 0.3 µHa）；S01、四个 (ij|kl) 与 Szabo–Ostlund 表差 ≤ 4.4e-7；E_nuc 与解析 1/R 差 4.8e-8。CSV 每行带 source 栏（external / analytic / internal-independent-path），未知量名会让测试失败，防止参考值漂移"
-  note: "**已完成**：① 参考值集合与 < 1 mHa 断言进 CI（HF 这一行是真外部参考，0.3 µHa 命中）；② 顺带发现并修掉闭壳层 Fock 系数错误（见 choices.md §十），修复前 HF 给 −0.442 Ha。**剩余**：qwb replay 完整重算（P-08）。SVWN5 总能量 −1.1570004991 在 §7.0 里登记为 internal-independent-path（该基组/泛函/网格组合没有外部表格），容差放宽到 1e-4 并如实标注来源。"
+  note: "**已完成**：① 参考值集合与 < 1 mHa 断言进 CI（HF 这一行是真外部参考，0.3 µHa 命中）；② 顺带发现并修掉闭壳层 Fock 系数错误（见 choices.md §十），修复前 HF 给 −0.442 Ha。③ qwb replay 真重算已接通（P-08 done），端到端 delta = 0.000e0 Ha。**T1 完成**：qwb run 跑通、能量对上外部参考、replay 可复现。SVWN5 总能量 −1.1570004991 在 §7.0 里登记为 internal-independent-path（该基组/泛函/网格组合没有外部表格），容差放宽到 1e-4 并如实标注来源。"
 T2: {state: pending, note: "含 S-06 性质断言（偶极 1.85 D ± 0.15、电荷和 == 总电荷）"}
 T3: {state: pending}
 T4: {state: pending}

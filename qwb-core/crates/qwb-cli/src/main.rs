@@ -15,10 +15,9 @@
 //! 本 crate 在 C 轨只负责**契约与结构**。真正的数值执行（积分/XC/SCF/优化）来自
 //! I/X/S/G 轨与顶层 `qwb-engine`，`P-07` 才把 `run` 接到引擎上。因此：
 //!
-//! - `run` / `batch`：**完整做输入解析与校验**（这一步是真的），然后在“没有引擎后端”
-//!   处返回退出码 `4`。不会假装算过。
-//! - `inspect` / `replay --dry-run`：完全实装（结构性检查 + G5 复现门禁）。
-//! - `replay`（不带 `--dry-run`）：需要引擎重算，属 P-08，返回 `4`。
+//! - `run` / `batch`：完整实装（解析 → 校验 → 引擎重算 → 写 K3 结果目录）。
+//! - `inspect` / `replay --dry-run`：结构性检查 + G5 复现门禁。
+//! - `replay`：读回 `input.yaml` 真正重算，并与 `result.json` 的能量比对（P-08）。
 //! - `data list|show|verify`：完全实装。
 #![deny(unsafe_code)]
 #![deny(missing_docs)]
@@ -427,9 +426,54 @@ fn cmd_replay(args: &ReplayArgs) -> CliResult<()> {
         println!("status  reproducible environment recorded (dry-run, nothing recomputed)");
         return Ok(());
     }
-    Err(CliError::internal(
-        "recompute-on-replay needs the engine backend (P-08); use --dry-run to check the record",
-    ))
+
+    // 完整重算（P-08）：读回记录的 input.yaml，用同一个 data 根重跑引擎，
+    // 再把新能量与 result.json 里记录的能量比对。差 > 1e-10 Ha 就判定不可复现。
+    let input = load_input(&layout.root().join("input.yaml"))?;
+    let root = find_data_root()?;
+    let registry = qwb_registry::Registry::open(&root).map_err(|e| CliError::from_engine(&e))?;
+    let handle = registry.engine_handle();
+    let backend = Box::new(qwb_engine::RksBackend::new(registry));
+    let engine = qwb_engine_api::Engine::with_backend(&handle, backend)
+        .map_err(|e| CliError::from_engine(&e))?;
+    let reporter = CliReporter::new();
+    let replayed = engine
+        .run(&input, &reporter)
+        .map_err(|e| CliError::from_engine(&e))?;
+
+    let recorded = read_recorded_energy(layout.root())?;
+    let difference = (replayed.energy_hartree - recorded).abs();
+    println!("energy  recorded {recorded:.12} Ha");
+    println!("energy  replay   {:.12} Ha", replayed.energy_hartree);
+    println!("delta   {difference:.3e} Ha");
+    if difference > REPLAY_TOLERANCE_HARTREE {
+        return Err(CliError::internal(format!(
+            "replay 不可复现：能量差 {difference:.3e} Ha 超过阈值 {REPLAY_TOLERANCE_HARTREE:.0e} Ha"
+        )));
+    }
+    println!("status  reproduced (delta < {REPLAY_TOLERANCE_HARTREE:.0e} Ha)");
+    Ok(())
+}
+
+/// replay 判定的能量阈值（Hartree）。
+const REPLAY_TOLERANCE_HARTREE: f64 = 1.0e-10;
+
+/// 读取 K3 目录里 `result.json` 记录的能量。
+fn read_recorded_energy(dir: &Path) -> CliResult<f64> {
+    let path = dir.join("result.json");
+    let bytes = std::fs::read(&path)
+        .map_err(|e| CliError::input(format!("cannot read {}: {e}", path.display())))?;
+    let value: serde_json::Value = serde_json::from_slice(&bytes)
+        .map_err(|e| CliError::data(format!("{} is not valid JSON: {e}", path.display())))?;
+    value
+        .get("energy_hartree")
+        .and_then(serde_json::Value::as_f64)
+        .ok_or_else(|| {
+            CliError::data(format!(
+                "{} has no numeric energy_hartree field",
+                path.display()
+            ))
+        })
 }
 
 // ----------------------------------------------------------------- data verbs
