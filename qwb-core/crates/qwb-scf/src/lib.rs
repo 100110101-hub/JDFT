@@ -23,6 +23,7 @@
 
 pub mod checkpoint;
 pub mod diis;
+pub mod pulay;
 pub mod rks;
 
 use qwb_integrals::two_electron::TwoElectronIntegrals;
