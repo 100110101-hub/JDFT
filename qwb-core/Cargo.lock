@@ -1395,9 +1395,11 @@ version = "0.1.0"
 dependencies = [
  "qwb-basis",
  "qwb-engine-api",
+ "qwb-grid",
  "qwb-integrals",
  "qwb-linalg",
  "qwb-registry",
+ "qwb-xc",
  "thiserror 2.0.21",
 ]
 

@@ -7,11 +7,23 @@ license.workspace = true
 publish.workspace = true
 description = "QWB SCF：Fock 构建（S-01）与 RKS 迭代（S-02/S-03）"
 
+[features]
+default = []
+# WIP：RKS SCF 目前有已知 bug（F 装配为 0），见 docs/status.yaml S-02。
+# 默认关闭，避免把未完成代码混进默认门禁。
+rks-wip = []
+
 [dependencies]
+qwb-basis.workspace = true
+qwb-registry.workspace = true
+qwb-xc.workspace = true
+qwb-grid.workspace = true
 qwb-linalg.workspace = true
 qwb-integrals.workspace = true
 qwb-engine-api.workspace = true
 thiserror.workspace = true
+
+
 
 [dev-dependencies]
 qwb-registry.workspace = true

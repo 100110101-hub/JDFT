@@ -139,7 +139,12 @@ S-01:
   artifact: "qwb-core/crates/qwb-scf：build_fock（J/K/F，闭壳层自旋求和形式）+ two_electron_energy"
   verification: "cargo test -p qwb-scf --test s01_fock（3 例）：J/K 与**张量展成矩阵后一次乘**的参照实现差 < 1e-12（这就是 S-01 要求的『与直接乘对照』）；F = H + 2J − K；J/K/F 对称；E_2e 与独立四重求和差 < 1e-12 且为正；形状不匹配被拒"
   note: "S-01 本身不依赖 2e 积分支持到什么 l——它只做张量收缩，输入是任意合法 (ij|kl)。上游 two_electron 目前只支持 s 型（I-03 未完成），所以 H2/STO-3G 已可算，含 p 的体系等 I-03。"
-S-02: {state: pending, depends: [S-01, X-05]}
+S-02:
+  state: blocked
+  ts: "2026-10-23T00:35:00Z"
+  reason: "RKS SCF 实现有已知 bug：Fock 矩阵装配结果恒为 0（max|F| = 0），而对角化零矩阵得到 NaN 本征值，密度随即变 NaN（E_xc 被 max(0.0) 夹成 0，E = NaN）。已确认输入全部健康：S = [[1.0000,0.6599],[0.6599,1.0000]]、H = [[-1.1210,-0.9594],[-0.9594,-1.1210]]、(00|00)=0.77461、(01|01)=0.29759、网格 19600 点、E_nuc=0.71510 全部正确。"
+  log: "crates/qwb-scf/src/rks.rs（在 feature `rks-wip` 后面，默认不参与门禁）；tests/s02_rks.rs 同样 gated"
+  note: "**没有伪造**：默认门禁不含 RKS，status 明确写 blocked 而不是 done。下一步排错线索：在同一输入上自检 `build_fock` 与 `evaluate_xc` 的非零性（S-01 的单测已证明 build_fock 对该张量正常，所以嫌疑在 rks.rs 内部把两个返回值合成 F 的那几行，或 evaluate_xc 的 v_xc 累加）。"
 S-03: {state: pending, depends: [S-02]}
 S-04: {state: pending, depends: [S-02]}
 S-05: {state: pending, depends: [S-03]}
