@@ -89,8 +89,11 @@ fn numeric(registry: &Registry, molecule: &Molecule, delta: f64) -> Vec<[f64; 3]
     gradient
 }
 
+/// 解析梯度 vs 全弛豫数值梯度。
+///
+/// 这条测试是 G-01 的验收：两个键长上最大分量差都 < 1e-6 Ha/Bohr。分项定位
+/// （`g01_components.rs`）单独把每一项对固定密度的差分钉住，所以这里失败时不必再猜。
 #[test]
-#[ignore = "KNOWN GAP: 解析梯度在 H2/STO-3G 上给 −0.016536，数值梯度 −0.027680（差 0.0111）。拆解已定位：2e 项与核排斥项与差分完全一致（+0.38250 / +0.51137），**1e 部分**偏了 0.0111，首要嫌疑是核吸引的『核本身移动』闭式 nuclear_center_derivative。见 docs/status.yaml G-01。"]
 fn analytic_gradient_matches_numerical_for_h2() {
     let registry = Registry::open(data_root()).expect("qwb-data");
     for bond in [0.74_f64, 1.10] {

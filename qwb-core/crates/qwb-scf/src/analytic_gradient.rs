@@ -18,12 +18,26 @@
 //!
 //! ```text
 //! ∂/∂A_x [ u_x^a u_y^b u_z^c e^{−α|u|²} ]
-//!     = a·u_x^{a−1}(…) − 2α·u_x^{a+1}(…)
+//!     = −a·u_x^{a−1}(…) + 2α·u_x^{a+1}(…)
 //! ```
+//!
+//! 两个符号都容易写反（`u = r − A`，所以 `∂u/∂A = −1`）。`tests/g01_components.rs`
+//! 用固定密度的中心差分把每一项单独钉住，写反时立刻暴露，不必等总分对不上再去猜。
 //!
 //! 所以 s 型（`a = b = c = 0`）的导数只需要**同一套积分例程在幂次抬高一阶时的值**，
 //! 不需要任何新的积分实现。核吸引还多一项：**原子核本身也在动**，
-//! 那一项有独立闭式（`nuclear_center_derivative`）。
+//! 那一项有独立闭式（[`nuclear_center_derivative`]）。
+//!
+//! # 分项与自检
+//!
+//! [`gradient_components`] 把结果按物理来源拆成六组，`tests/g01_*` 用它做分项对照；
+//! [`analytic_gradient`] 只是六项之和。分项对照是这里唯一可靠的调试手段：
+//! 总和差一点点时，必须先定位到**哪一项**，否则只能靠猜。每一项都能对
+//! 固定密度的中心差分单独验证（`tests/g01_components.rs`）：
+//!
+//! * `kinetic` ↔ `Tr(P T)` 的差分
+//! * `nuclear_ao` + `nuclear_center` ↔ `Tr(P V)` 的差分
+//! * `two_electron` ↔ `½ Σ P P [(μν|λσ) − ½(μλ|νσ)]` 的差分
 //!
 //! # 目前的范围
 //!
@@ -44,16 +58,25 @@ use crate::pulay::pulay_w;
 const PI: f64 = std::f64::consts::PI;
 
 /// 一个 s 型 AO 的描述。
-struct SAo {
-    center: [f64; 3],
-    center_index: usize,
-    exponents: Vec<f64>,
-    coefficients: Vec<f64>,
+pub struct SAo {
+    /// 壳层中心（Bohr）。
+    pub center: [f64; 3],
+    /// 中心对应的原子下标。
+    pub center_index: usize,
+    /// 原函数指数。
+    pub exponents: Vec<f64>,
+    /// 收缩系数（与指数一一对应）。
+    pub coefficients: Vec<f64>,
 }
 
-fn s_orbitals(basis: &InternalBasis, molecule: &Molecule) -> Result<Vec<SAo>, EngineError> {
+/// 按基组给出所有 s 型 AO；含 `l > 0` 时返回 `Unsupported`。
+///
+/// # Errors
+///
+/// 基组含 `l > 0` 壳层，或匹配到的 AO 数与基组不符。
+pub fn s_orbitals(basis: &InternalBasis, molecule: &Molecule) -> Result<Vec<SAo>, EngineError> {
     let mut out = Vec::with_capacity(basis.n_functions());
-    let mut offset = 0usize;
+    let mut matched = 0usize;
     for (atom_index, atom) in molecule.atoms.iter().enumerate() {
         let atom_positions = atom.position_bohr();
         for shell in basis.shells() {
@@ -66,7 +89,6 @@ fn s_orbitals(basis: &InternalBasis, molecule: &Molecule) -> Result<Vec<SAo>, En
                     shell.l
                 )));
             }
-            let _ = atom_index;
             for _ in 0..shell.n_functions() {
                 out.push(SAo {
                     center: shell.center_bohr,
@@ -74,24 +96,25 @@ fn s_orbitals(basis: &InternalBasis, molecule: &Molecule) -> Result<Vec<SAo>, En
                     exponents: shell.exponents.clone(),
                     coefficients: shell.coefficients.clone(),
                 });
-                offset += 1;
+                matched += 1;
             }
         }
     }
-    if offset != basis.n_functions() {
+    if matched != basis.n_functions() {
         return Err(EngineError::Internal(format!(
-            "analytic gradient: matched {offset} AOs but the basis has {}",
+            "analytic gradient: matched {matched} AOs but the basis has {}",
             basis.n_functions()
         )));
     }
-    out.sort_by_key(|orbital| orbital.center_index);
     Ok(out)
 }
 
 /// 核吸引里「核本身移动」那一项的闭式：
 /// `∂/∂C_x ⟨ss|−Z/r_C⟩ = −(−Z)(2π/p)·F₀'(T)·∂T/∂C_x`
 /// 其中 `T = p|P−C|²`，`F₀'(T) = −F₁(T)`，`∂T/∂C_x = −2p(P_x−C_x)`。
-fn nuclear_center_derivative(
+///
+/// 与 `primitive_nuclear` 的中心差分逐点对照过（`tests/g01_nuclear_derivative.rs`）。
+pub fn nuclear_center_derivative(
     alpha: f64,
     a: [f64; 3],
     beta: f64,
@@ -120,7 +143,7 @@ fn nuclear_center_derivative(
 fn d_overlap(alpha: f64, a: [f64; 3], beta: f64, b: [f64; 3], axis: usize) -> f64 {
     let mut raised = [0u32; 3];
     raised[axis] = 1;
-    -2.0 * alpha
+    2.0 * alpha
         * primitive_overlap(
             alpha,
             (raised[0], raised[1], raised[2]),
@@ -135,7 +158,7 @@ fn d_overlap(alpha: f64, a: [f64; 3], beta: f64, b: [f64; 3], axis: usize) -> f6
 fn d_kinetic(alpha: f64, a: [f64; 3], beta: f64, b: [f64; 3], axis: usize) -> f64 {
     let mut raised = [0u32; 3];
     raised[axis] = 1;
-    -2.0 * alpha
+    2.0 * alpha
         * primitive_kinetic(
             alpha,
             (raised[0], raised[1], raised[2]),
@@ -147,7 +170,7 @@ fn d_kinetic(alpha: f64, a: [f64; 3], beta: f64, b: [f64; 3], axis: usize) -> f6
 }
 
 /// 同上，但换成核吸引（只含 AO 移动那一项）。
-fn d_nuclear_ao(
+pub fn d_nuclear_ao(
     alpha: f64,
     a: [f64; 3],
     beta: f64,
@@ -158,7 +181,7 @@ fn d_nuclear_ao(
 ) -> f64 {
     let mut raised = [0u32; 3];
     raised[axis] = 1;
-    -2.0 * alpha
+    2.0 * alpha
         * primitive_nuclear(
             alpha,
             (raised[0], raised[1], raised[2]),
@@ -171,9 +194,11 @@ fn d_nuclear_ao(
         )
 }
 
-/// 2e 原函数对 A 中心求导（s 型）。
+/// 2e 原函数对槽位 0 所在中心求导（s 型）。
+///
+/// 闭式直接对展开式求导：`E_AB` 与 `F₀(T)` 各一项。
 #[allow(clippy::too_many_arguments)]
-fn d_ssss(
+pub fn d_ssss(
     alpha: f64,
     a: [f64; 3],
     beta: f64,
@@ -190,8 +215,6 @@ fn d_ssss(
         (alpha * a[1] + beta * b[1]) / p,
         (alpha * a[2] + beta * b[2]) / p,
     ];
-    // 用 FD 之外的方式：直接对展开式求导。这里复用闭式：把 A 中心替换成「抬高一阶」不可行
-    // （primitive_ssss 只接受 s），所以用中心导数恒等式在展开式上做：
     let q = gamma + delta;
     let q_center = [
         (gamma * c[0] + delta * d[0]) / q,
@@ -214,7 +237,379 @@ fn d_ssss(
     let boys = boys_functions(1, rho * r2);
     let d_f0 = -boys[1] * d_t;
     prefactor * e * (d_e * boys[0] + d_f0)
-    // 注：`raised` 只是占位，避免未使用告警；s 型的抬阶形式在闭式里已体现。
+}
+
+/// 四个原函数按 `(μ ν | λ σ)` 的槽位排列，求对 `slot` 所在中心的导数。
+///
+/// `d_ssss` 只对槽位 0 求导；这里借积分自身的对称性把目标槽位换到 0：
+/// 同一对内的两个成员互换、或整体把两对互换，积分值都不变。
+///
+/// 与 `primitive_ssss` 的四中心差分逐槽位对照过（`tests/g01_2e_primitive.rs`）。
+pub fn d_ssss_slot(prims: &[(f64, [f64; 3]); 4], slot: usize, axis: usize) -> f64 {
+    let order: [usize; 4] = match slot {
+        0 => [0, 1, 2, 3],
+        1 => [1, 0, 2, 3],
+        2 => [2, 3, 0, 1],
+        _ => [3, 2, 0, 1],
+    };
+    let a = prims[order[0]];
+    let b = prims[order[1]];
+    let c = prims[order[2]];
+    let d = prims[order[3]];
+    d_ssss(a.0, a.1, b.0, b.1, c.0, c.1, d.0, d.1, axis)
+}
+
+/// 梯度按物理来源拆分的结果（诊断与分项回归用）。
+#[derive(Clone, Debug, Default)]
+pub struct GradientComponents {
+    /// `Tr(P dT/dR)`（动能）。
+    pub kinetic: Vec<[f64; 3]>,
+    /// `Tr(P dV/dR)` 里 AO 移动的那一半。
+    pub nuclear_ao: Vec<[f64; 3]>,
+    /// `Tr(P dV/dR)` 里「核本身在动」的那一半。
+    pub nuclear_center: Vec<[f64; 3]>,
+    /// 2e 项 `½ Σ P P [d(μν|λσ) − ½ d(μλ|νσ)]`。
+    pub two_electron: Vec<[f64; 3]>,
+    /// `−Tr(W dS)`。
+    pub pulay: Vec<[f64; 3]>,
+    /// 核排斥导数。
+    pub nuclear_repulsion: Vec<[f64; 3]>,
+}
+
+impl GradientComponents {
+    /// 某项在某原子某方向上的总和（1e 的三半 + 2e + Pulay + 核排斥）。
+    fn total(&self, atom: usize, axis: usize) -> f64 {
+        self.kinetic[atom][axis]
+            + self.nuclear_ao[atom][axis]
+            + self.nuclear_center[atom][axis]
+            + self.two_electron[atom][axis]
+            + self.pulay[atom][axis]
+            + self.nuclear_repulsion[atom][axis]
+    }
+}
+
+/// `Tr(P dT/dR_A)`：动能项（只有 AO 在动）。
+fn kinetic_axis(aos: &[SAo], density: &Matrix, atom: usize, axis: usize) -> f64 {
+    let n = aos.len();
+    let mut value = 0.0;
+    for mu in 0..n {
+        for nu in 0..n {
+            let p_mu_nu = density[(mu, nu)];
+            if p_mu_nu == 0.0 {
+                continue;
+            }
+            for (i, &alpha) in aos[mu].exponents.iter().enumerate() {
+                let norm_mu = primitive_norm((0, 0, 0), alpha);
+                for (j, &beta) in aos[nu].exponents.iter().enumerate() {
+                    let norm_nu = primitive_norm((0, 0, 0), beta);
+                    let weight =
+                        aos[mu].coefficients[i] * aos[nu].coefficients[j] * norm_mu * norm_nu;
+                    if aos[mu].center_index == atom {
+                        value += p_mu_nu
+                            * weight
+                            * d_kinetic(alpha, aos[mu].center, beta, aos[nu].center, axis);
+                    }
+                    if aos[nu].center_index == atom {
+                        value += p_mu_nu
+                            * weight
+                            * d_kinetic(beta, aos[nu].center, alpha, aos[mu].center, axis);
+                    }
+                }
+            }
+        }
+    }
+    value
+}
+
+/// `Tr(P dV/dR_A)` 里 AO 移动的那一半：`∂/∂A_x ⟨μν|−Z_C/r_C⟩`。
+fn nuclear_ao_axis(
+    aos: &[SAo],
+    nuclei: &[([f64; 3], f64)],
+    density: &Matrix,
+    atom: usize,
+    axis: usize,
+) -> f64 {
+    let n = aos.len();
+    let mut value = 0.0;
+    for mu in 0..n {
+        for nu in 0..n {
+            let p_mu_nu = density[(mu, nu)];
+            if p_mu_nu == 0.0 {
+                continue;
+            }
+            for (i, &alpha) in aos[mu].exponents.iter().enumerate() {
+                let norm_mu = primitive_norm((0, 0, 0), alpha);
+                for (j, &beta) in aos[nu].exponents.iter().enumerate() {
+                    let norm_nu = primitive_norm((0, 0, 0), beta);
+                    let weight =
+                        aos[mu].coefficients[i] * aos[nu].coefficients[j] * norm_mu * norm_nu;
+                    if aos[mu].center_index == atom {
+                        value += p_mu_nu
+                            * weight
+                            * nuclei
+                                .iter()
+                                .map(|(c, z)| {
+                                    d_nuclear_ao(
+                                        alpha,
+                                        aos[mu].center,
+                                        beta,
+                                        aos[nu].center,
+                                        *c,
+                                        *z,
+                                        axis,
+                                    )
+                                })
+                                .sum::<f64>();
+                    }
+                    if aos[nu].center_index == atom {
+                        value += p_mu_nu
+                            * weight
+                            * nuclei
+                                .iter()
+                                .map(|(c, z)| {
+                                    d_nuclear_ao(
+                                        beta,
+                                        aos[nu].center,
+                                        alpha,
+                                        aos[mu].center,
+                                        *c,
+                                        *z,
+                                        axis,
+                                    )
+                                })
+                                .sum::<f64>();
+                    }
+                }
+            }
+        }
+    }
+    value
+}
+
+/// `Tr(P dV/dR_A)` 里「核本身在动」的那一半。
+///
+/// 这一项与 AO 落点无关：原子核 C 的位置出现在**每一个** `⟨μν|−Z_C/r_C⟩` 里，
+/// 所以对 μν 全求和，而不是只对落在 C 上的 AO 求和。
+fn nuclear_center_axis(
+    aos: &[SAo],
+    nuclei: &[([f64; 3], f64)],
+    density: &Matrix,
+    atom: usize,
+    axis: usize,
+) -> f64 {
+    let n = aos.len();
+    let (own_position, own_charge) = nuclei[atom];
+    let mut value = 0.0;
+    for mu in 0..n {
+        for nu in 0..n {
+            let p_mu_nu = density[(mu, nu)];
+            for (i, &alpha) in aos[mu].exponents.iter().enumerate() {
+                let norm_mu = primitive_norm((0, 0, 0), alpha);
+                for (j, &beta) in aos[nu].exponents.iter().enumerate() {
+                    let norm_nu = primitive_norm((0, 0, 0), beta);
+                    let weight =
+                        aos[mu].coefficients[i] * aos[nu].coefficients[j] * norm_mu * norm_nu;
+                    value += p_mu_nu
+                        * weight
+                        * nuclear_center_derivative(
+                            alpha,
+                            aos[mu].center,
+                            beta,
+                            aos[nu].center,
+                            own_position,
+                            own_charge,
+                            axis,
+                        );
+                }
+            }
+        }
+    }
+    value
+}
+
+/// `−Tr(W dS/dR_A)`。
+fn pulay_axis(aos: &[SAo], w: &Matrix, atom: usize, axis: usize) -> f64 {
+    let n = aos.len();
+    let mut value = 0.0;
+    for mu in 0..n {
+        for nu in 0..n {
+            let w_mu_nu = w[(mu, nu)];
+            if w_mu_nu == 0.0 {
+                continue;
+            }
+            for (i, &alpha) in aos[mu].exponents.iter().enumerate() {
+                let norm_mu = primitive_norm((0, 0, 0), alpha);
+                for (j, &beta) in aos[nu].exponents.iter().enumerate() {
+                    let norm_nu = primitive_norm((0, 0, 0), beta);
+                    let weight =
+                        aos[mu].coefficients[i] * aos[nu].coefficients[j] * norm_mu * norm_nu;
+                    if aos[mu].center_index == atom {
+                        value -= w_mu_nu
+                            * weight
+                            * d_overlap(alpha, aos[mu].center, beta, aos[nu].center, axis);
+                    }
+                    if aos[nu].center_index == atom {
+                        value -= w_mu_nu
+                            * weight
+                            * d_overlap(beta, aos[nu].center, alpha, aos[mu].center, axis);
+                    }
+                }
+            }
+        }
+    }
+    value
+}
+
+/// 2e 项：`½ Σ P P [d(μν|λσ) − ½ d(μλ|νσ)]`。
+fn two_electron_axis(aos: &[SAo], density: &Matrix, atom: usize, axis: usize) -> f64 {
+    let n = aos.len();
+    let mut d_2e = 0.0;
+    for mu in 0..n {
+        for nu in 0..n {
+            let p_mu_nu = density[(mu, nu)];
+            if p_mu_nu == 0.0 {
+                continue;
+            }
+            for lambda in 0..n {
+                for sigma in 0..n {
+                    let p_lambda_sigma = density[(lambda, sigma)];
+                    if p_lambda_sigma == 0.0 {
+                        continue;
+                    }
+                    let mut d_coulomb = 0.0;
+                    let mut d_exchange = 0.0;
+                    for (i, &alpha) in aos[mu].exponents.iter().enumerate() {
+                        let norm_mu = primitive_norm((0, 0, 0), alpha);
+                        for (j, &beta) in aos[nu].exponents.iter().enumerate() {
+                            let norm_nu = primitive_norm((0, 0, 0), beta);
+                            for (k, &gamma) in aos[lambda].exponents.iter().enumerate() {
+                                let norm_lambda = primitive_norm((0, 0, 0), gamma);
+                                for (l, &delta) in aos[sigma].exponents.iter().enumerate() {
+                                    let norm_sigma = primitive_norm((0, 0, 0), delta);
+                                    let weight = aos[mu].coefficients[i]
+                                        * aos[nu].coefficients[j]
+                                        * aos[lambda].coefficients[k]
+                                        * aos[sigma].coefficients[l]
+                                        * norm_mu
+                                        * norm_nu
+                                        * norm_lambda
+                                        * norm_sigma;
+                                    // 库仑 (μν|λσ)：槽位 0..3 依次是 μ, ν, λ, σ
+                                    let coulomb = [
+                                        (alpha, aos[mu].center),
+                                        (beta, aos[nu].center),
+                                        (gamma, aos[lambda].center),
+                                        (delta, aos[sigma].center),
+                                    ];
+                                    let coulomb_owner = [mu, nu, lambda, sigma];
+                                    for slot in 0..4 {
+                                        if aos[coulomb_owner[slot]].center_index == atom {
+                                            d_coulomb +=
+                                                weight * d_ssss_slot(&coulomb, slot, axis);
+                                        }
+                                    }
+                                    // 交换 (μλ|νσ)：槽位 0..3 依次是 μ, λ, ν, σ
+                                    let exchange = [
+                                        (alpha, aos[mu].center),
+                                        (gamma, aos[lambda].center),
+                                        (beta, aos[nu].center),
+                                        (delta, aos[sigma].center),
+                                    ];
+                                    let exchange_owner = [mu, lambda, nu, sigma];
+                                    for slot in 0..4 {
+                                        if aos[exchange_owner[slot]].center_index == atom {
+                                            d_exchange +=
+                                                weight * d_ssss_slot(&exchange, slot, axis);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    d_2e += 0.5 * p_mu_nu * p_lambda_sigma * (d_coulomb - 0.5 * d_exchange);
+                }
+            }
+        }
+    }
+    d_2e
+}
+
+/// 核排斥导数：`−Σ_B Z_A Z_B (R_A − R_B)_axis / |R_A − R_B|³`（`E_nuc = Z_AZ_B/r`）。
+fn nuclear_repulsion_axis(nuclei: &[([f64; 3], f64)], atom: usize, axis: usize) -> f64 {
+    let (own_position, own_charge) = nuclei[atom];
+    let mut d_nuc = 0.0;
+    for (other, (other_position, other_charge)) in nuclei.iter().enumerate() {
+        if other == atom {
+            continue;
+        }
+        let delta = [
+            own_position[0] - other_position[0],
+            own_position[1] - other_position[1],
+            own_position[2] - other_position[2],
+        ];
+        let r = (delta[0] * delta[0] + delta[1] * delta[1] + delta[2] * delta[2]).sqrt();
+        d_nuc -= own_charge * other_charge * delta[axis] / (r * r * r);
+    }
+    d_nuc
+}
+
+fn nuclei_of(molecule: &Molecule) -> Result<Vec<([f64; 3], f64)>, EngineError> {
+    molecule
+        .atoms
+        .iter()
+        .map(|atom| {
+            let z = atomic_number(&atom.symbol)
+                .map(f64::from)
+                .ok_or_else(|| EngineError::Internal(format!("unknown element {}", atom.symbol)))?;
+            Ok((atom.position_bohr(), z))
+        })
+        .collect::<Result<_, EngineError>>()
+}
+
+/// 把解析梯度按物理来源拆开。`fock` 必须是**收敛后的** Fock 矩阵。
+///
+/// # Errors
+///
+/// 基组含 `l > 0` 壳层，或 `density` / `fock` 形状与基组不符。
+pub fn gradient_components(
+    basis: &InternalBasis,
+    molecule: &Molecule,
+    density: &Matrix,
+    fock: &Matrix,
+) -> Result<GradientComponents, EngineError> {
+    let aos = s_orbitals(basis, molecule)?;
+    let n = aos.len();
+    if density.nrows() != n || fock.nrows() != n {
+        return Err(EngineError::Internal(
+            "analytic_gradient: density/fock size mismatch".to_string(),
+        ));
+    }
+    let w = pulay_w(density, fock)?;
+    let nuclei = nuclei_of(molecule)?;
+    let natoms = molecule.atoms.len();
+
+    let mut components = GradientComponents {
+        kinetic: vec![[0.0; 3]; natoms],
+        nuclear_ao: vec![[0.0; 3]; natoms],
+        nuclear_center: vec![[0.0; 3]; natoms],
+        two_electron: vec![[0.0; 3]; natoms],
+        pulay: vec![[0.0; 3]; natoms],
+        nuclear_repulsion: vec![[0.0; 3]; natoms],
+    };
+    for atom in 0..natoms {
+        for axis in 0..3 {
+            components.kinetic[atom][axis] = kinetic_axis(&aos, density, atom, axis);
+            components.nuclear_ao[atom][axis] =
+                nuclear_ao_axis(&aos, &nuclei, density, atom, axis);
+            components.nuclear_center[atom][axis] =
+                nuclear_center_axis(&aos, &nuclei, density, atom, axis);
+            components.two_electron[atom][axis] = two_electron_axis(&aos, density, atom, axis);
+            components.pulay[atom][axis] = pulay_axis(&aos, &w, atom, axis);
+            components.nuclear_repulsion[atom][axis] =
+                nuclear_repulsion_axis(&nuclei, atom, axis);
+        }
+    }
+    Ok(components)
 }
 
 /// 闭壳层 HF/KS 的解析梯度（仅 s 型基组）。
@@ -230,304 +625,14 @@ pub fn analytic_gradient(
     density: &Matrix,
     fock: &Matrix,
 ) -> Result<Vec<[f64; 3]>, EngineError> {
-    let aos = s_orbitals(basis, molecule)?;
-    let n = aos.len();
-    if density.nrows() != n || fock.nrows() != n {
-        return Err(EngineError::Internal(
-            "analytic_gradient: density/fock size mismatch".to_string(),
-        ));
-    }
-    let w = pulay_w(density, fock)?;
-
-    // 核电荷与位置
-    let nuclei: Vec<([f64; 3], f64)> = molecule
-        .atoms
-        .iter()
+    let components = gradient_components(basis, molecule, density, fock)?;
+    Ok((0..molecule.atoms.len())
         .map(|atom| {
-            let z = atomic_number(&atom.symbol)
-                .map(f64::from)
-                .ok_or_else(|| EngineError::Internal(format!("unknown element {}", atom.symbol)))?;
-            Ok((atom.position_bohr(), z))
+            let mut grad = [0.0_f64; 3];
+            for (axis, slot) in grad.iter_mut().enumerate() {
+                *slot = components.total(atom, axis);
+            }
+            grad
         })
-        .collect::<Result<_, EngineError>>()?;
-
-    // 2e 张量（s 型）与其导数都需要；这里按需重算原函数级，避免存储 N^4 的导数。
-    let mut gradient = vec![[0.0_f64; 3]; molecule.atoms.len()];
-
-    for atom in 0..molecule.atoms.len() {
-        for axis in 0..3 {
-            let mut value = 0.0;
-
-            // ① Tr(P dH) − Tr(W dS)
-            for mu in 0..n {
-                for nu in 0..n {
-                    let p_mu_nu = density[(mu, nu)];
-                    let w_mu_nu = w[(mu, nu)];
-                    let mut d_h = 0.0;
-                    let mut d_s = 0.0;
-                    for (i, &alpha) in aos[mu].exponents.iter().enumerate() {
-                        let norm_mu = primitive_norm((0, 0, 0), alpha);
-                        for (j, &beta) in aos[nu].exponents.iter().enumerate() {
-                            let norm_nu = primitive_norm((0, 0, 0), beta);
-                            let weight = aos[mu].coefficients[i]
-                                * aos[nu].coefficients[j]
-                                * norm_mu
-                                * norm_nu;
-                            // A 侧的 AO 在动
-                            if aos[mu].center_index == atom {
-                                d_s += weight
-                                    * d_overlap(alpha, aos[mu].center, beta, aos[nu].center, axis);
-                                d_h += weight
-                                    * (d_kinetic(
-                                        alpha,
-                                        aos[mu].center,
-                                        beta,
-                                        aos[nu].center,
-                                        axis,
-                                    ) + nuclei
-                                        .iter()
-                                        .map(|(c, z)| {
-                                            d_nuclear_ao(
-                                                alpha,
-                                                aos[mu].center,
-                                                beta,
-                                                aos[nu].center,
-                                                *c,
-                                                *z,
-                                                axis,
-                                            )
-                                        })
-                                        .sum::<f64>());
-                            }
-                            // B 侧的 AO 在动
-                            if aos[nu].center_index == atom {
-                                d_s += weight
-                                    * d_overlap(beta, aos[nu].center, alpha, aos[mu].center, axis);
-                                d_h += weight
-                                    * (d_kinetic(
-                                        beta,
-                                        aos[nu].center,
-                                        alpha,
-                                        aos[mu].center,
-                                        axis,
-                                    ) + nuclei
-                                        .iter()
-                                        .map(|(c, z)| {
-                                            d_nuclear_ao(
-                                                beta,
-                                                aos[nu].center,
-                                                alpha,
-                                                aos[mu].center,
-                                                *c,
-                                                *z,
-                                                axis,
-                                            )
-                                        })
-                                        .sum::<f64>());
-                            }
-                        }
-                    }
-                    value += p_mu_nu * d_h - w_mu_nu * d_s;
-                }
-            }
-
-            // ② 核本身移动（核吸引 + 核排斥）
-            //    核吸引：只有 atom 自己的核在动
-            let (own_position, own_charge) = nuclei[atom];
-            let mut d_v_nucleus = 0.0;
-            for mu in 0..n {
-                for nu in 0..n {
-                    let p_mu_nu = density[(mu, nu)];
-                    for (i, &alpha) in aos[mu].exponents.iter().enumerate() {
-                        let norm_mu = primitive_norm((0, 0, 0), alpha);
-                        for (j, &beta) in aos[nu].exponents.iter().enumerate() {
-                            let norm_nu = primitive_norm((0, 0, 0), beta);
-                            let weight = aos[mu].coefficients[i]
-                                * aos[nu].coefficients[j]
-                                * norm_mu
-                                * norm_nu;
-                            d_v_nucleus += weight
-                                * p_mu_nu
-                                * nuclear_center_derivative(
-                                    alpha,
-                                    aos[mu].center,
-                                    beta,
-                                    aos[nu].center,
-                                    own_position,
-                                    own_charge,
-                                    axis,
-                                );
-                        }
-                    }
-                }
-            }
-            value += d_v_nucleus;
-
-            // 核排斥导数：Σ_B Z_A Z_B (R_A − R_B)_axis / |R_A − R_B|³
-            let mut d_nuc = 0.0;
-            for (other, (other_position, other_charge)) in nuclei.iter().enumerate() {
-                if other == atom {
-                    continue;
-                }
-                let delta = [
-                    own_position[0] - other_position[0],
-                    own_position[1] - other_position[1],
-                    own_position[2] - other_position[2],
-                ];
-                let r = (delta[0] * delta[0] + delta[1] * delta[1] + delta[2] * delta[2]).sqrt();
-                d_nuc += own_charge * other_charge * delta[axis] / (r * r * r);
-            }
-            value += d_nuc;
-
-            // ③ 2e 项：½ Σ P P [d(μν|λσ) − ½ d(μλ|νσ)]
-            let mut d_2e = 0.0;
-            for mu in 0..n {
-                for nu in 0..n {
-                    let p_mu_nu = density[(mu, nu)];
-                    if p_mu_nu == 0.0 {
-                        continue;
-                    }
-                    for lambda in 0..n {
-                        for sigma in 0..n {
-                            let p_lambda_sigma = density[(lambda, sigma)];
-                            if p_lambda_sigma == 0.0 {
-                                continue;
-                            }
-                            // 只有落在 atom 上的 AO 才会动
-                            let mut d_coulomb = 0.0;
-                            let mut d_exchange = 0.0;
-                            for (i, &alpha) in aos[mu].exponents.iter().enumerate() {
-                                let norm_mu = primitive_norm((0, 0, 0), alpha);
-                                for (j, &beta) in aos[nu].exponents.iter().enumerate() {
-                                    let norm_nu = primitive_norm((0, 0, 0), beta);
-                                    for (k, &gamma) in aos[lambda].exponents.iter().enumerate() {
-                                        let norm_lambda = primitive_norm((0, 0, 0), gamma);
-                                        for (l, &delta) in aos[sigma].exponents.iter().enumerate() {
-                                            let norm_sigma = primitive_norm((0, 0, 0), delta);
-                                            let weight = aos[mu].coefficients[i]
-                                                * aos[nu].coefficients[j]
-                                                * aos[lambda].coefficients[k]
-                                                * aos[sigma].coefficients[l]
-                                                * norm_mu
-                                                * norm_nu
-                                                * norm_lambda
-                                                * norm_sigma;
-                                            if aos[mu].center_index == atom {
-                                                d_coulomb += weight
-                                                    * d_ssss(
-                                                        alpha,
-                                                        aos[mu].center,
-                                                        beta,
-                                                        aos[nu].center,
-                                                        gamma,
-                                                        aos[lambda].center,
-                                                        delta,
-                                                        aos[sigma].center,
-                                                        axis,
-                                                    );
-                                                d_exchange += weight
-                                                    * d_ssss(
-                                                        alpha,
-                                                        aos[mu].center,
-                                                        gamma,
-                                                        aos[lambda].center,
-                                                        beta,
-                                                        aos[nu].center,
-                                                        delta,
-                                                        aos[sigma].center,
-                                                        axis,
-                                                    );
-                                            }
-                                            if aos[nu].center_index == atom {
-                                                d_coulomb += weight
-                                                    * d_ssss(
-                                                        beta,
-                                                        aos[nu].center,
-                                                        alpha,
-                                                        aos[mu].center,
-                                                        gamma,
-                                                        aos[lambda].center,
-                                                        delta,
-                                                        aos[sigma].center,
-                                                        axis,
-                                                    );
-                                                d_exchange += weight
-                                                    * d_ssss(
-                                                        beta,
-                                                        aos[nu].center,
-                                                        delta,
-                                                        aos[sigma].center,
-                                                        alpha,
-                                                        aos[mu].center,
-                                                        gamma,
-                                                        aos[lambda].center,
-                                                        axis,
-                                                    );
-                                            }
-                                            if aos[lambda].center_index == atom {
-                                                d_coulomb += weight
-                                                    * d_ssss(
-                                                        gamma,
-                                                        aos[lambda].center,
-                                                        delta,
-                                                        aos[sigma].center,
-                                                        alpha,
-                                                        aos[mu].center,
-                                                        beta,
-                                                        aos[nu].center,
-                                                        axis,
-                                                    );
-                                                d_exchange += weight
-                                                    * d_ssss(
-                                                        alpha,
-                                                        aos[mu].center,
-                                                        beta,
-                                                        aos[nu].center,
-                                                        gamma,
-                                                        aos[lambda].center,
-                                                        delta,
-                                                        aos[sigma].center,
-                                                        axis,
-                                                    );
-                                            }
-                                            if aos[sigma].center_index == atom {
-                                                d_coulomb += weight
-                                                    * d_ssss(
-                                                        delta,
-                                                        aos[sigma].center,
-                                                        gamma,
-                                                        aos[lambda].center,
-                                                        alpha,
-                                                        aos[mu].center,
-                                                        beta,
-                                                        aos[nu].center,
-                                                        axis,
-                                                    );
-                                                d_exchange += weight
-                                                    * d_ssss(
-                                                        delta,
-                                                        aos[sigma].center,
-                                                        beta,
-                                                        aos[nu].center,
-                                                        alpha,
-                                                        aos[mu].center,
-                                                        gamma,
-                                                        aos[lambda].center,
-                                                        axis,
-                                                    );
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                            d_2e += 0.5 * p_mu_nu * p_lambda_sigma * (d_coulomb - 0.5 * d_exchange);
-                        }
-                    }
-                }
-            }
-            value += d_2e;
-            gradient[atom][axis] = value;
-        }
-    }
-    Ok(gradient)
+        .collect())
 }
