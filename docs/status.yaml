@@ -94,7 +94,12 @@ D-14:
   artifact: "（未落地）qwb-data/solvent/*.yaml + manifest 的 solvents 段；K1 的 Solvent 类型与校验器已存在（`qwb-registry/src/solvent.rs`）"
   verification: "阻塞前的检查：K1 的 `Solvent` schema（epsilon / temperature_K / atomic_radii / cavity_model / scale）与 `check()` 校验器已经实现并通过单测，loader 会从 `qwb-data/solvent/` 与 manifest 的 `solvents` 段读取；缺的只是**数据本身**。"
   note: "**阻塞原因：找不到可引用的 298.15 K 数据源**。验收要求「ε 与 NIST 一致（水 78.3553 @ 298.15 K）」。我尝试的路径：① 含「Dielectric Constant of Solvents at 298.15K」表格的专利 PDF（US20060031053A1）——`web_fetch` 不支持 application/pdf，取不到；② 能取到的 HTML 表格（如 Oregon State 的溶剂性质页）温度约 20 °C、且该表自称 ε 引用的是 Wikipedia，作为数据出处不可接受；③ NIST Chemistry WebBook 是逐化合物页面，8 个溶剂要 8 次抓取且每个的温度点不一致。**按「不得伪造结果」，我不会凭记忆写这 8 个介电常数**。解锁方式：人类提供一份可引用的 298.15 K 表（CSV/PDF 皆可），或授权使用 CRC/Landolt 的 DOI 引用 + 直接给出数值。"
-D-15: {state: pending, depends: [D-02, D-14]}
+D-15:
+  state: done
+  ts: "2026-10-23T23:40:00Z"
+  artifact: "scripts/gen_data_licenses.py + DATA_LICENSES.md（自动生成）+ verify.ps1 / verify.sh 里的 `--check` 门禁"
+  verification: "① `python scripts/gen_data_licenses.py` 生成 DATA_LICENSES.md，**重跑两次的 sha256 完全相同**（ADFF9063…：排序固定、无时间戳 ⇒ 幂等）。② `python scripts/gen_data_licenses.py --check` 与门禁实际比对：文档与当前数据一致；任一数据文件缺 license/citation/sha256 时脚本以非零退出。③ 摘要**不自己算**——规则是「YAML 去掉顶层 sha256 后规范化再 hash」（自引用），Python 复刻规范化不现实，所以脚本调用权威工具 `qwb-stamp-data --check` 校验，避免两份实现分叉。④ `scripts/verify.ps1` 与 `verify.sh` 都加了这条检查（项目规则：两边同步）。"
+  note: "**过程中修掉两个自己的 bug**：① 最初想对原始文件字节取 hash——但 sha256 字段是自引用的，必然对不上，暴露后改为委托 Rust 工具；② `parse_scalar` 只按前缀匹配，把 manifest 里**嵌套**的 sha256（第一条数据的）当成了 manifest 自己的，于是文档里 registry.yaml 的摘要显示成 sto-3g 的值——已改为只认顶层（不缩进）键。scope 说明：`qwb-data/examples/` 的 SPECIMEN 不在 manifest，不计入；manifest 本身不承载 license/citation（许可在各数据文件里），这两项对它豁免。"
 
 # ─────────────────────────── I / X / S / G / F 轨 ───────────────────────────
 

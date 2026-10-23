@@ -113,6 +113,11 @@ Step -Name 'core: G2 data verify' -Dir 'qwb-core' -Body {
     cargo run -q -p qwb-cli --bin qwb -- data verify
 }
 
+# ---- D-15: data licenses ----
+Step -Name 'D-15: DATA_LICENSES.md matches the data' -Dir '.' -Body {
+    & python scripts/gen_data_licenses.py --check
+}
+
 # ---- K6 Python type gate (repo .venv) ----
 $py = Join-Path $root '.venv\Scripts\python.exe'
 if (-not (Test-Path $py)) {
