@@ -24,6 +24,33 @@ pub enum GridLevelName {
     VeryFine,
 }
 
+/// 角向求积规则（K1 增量，v1.2：**可选字段** `angular_rule`，默认 `lebedev`）。
+///
+/// Lebedev 点集没有闭式生成法、需要按阶数制表；在表引入 qwb-data 之前，
+/// 等级可以显式声明用 `gauss-product`（Gauss–Legendre(cosθ) × 均匀 φ），
+/// 它同样满足 `Σw = 4π`，且不需要外部数据。**规则写在数据里**，不在代码里猜。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+#[non_exhaustive]
+pub enum AngularRule {
+    /// Lebedev 球面求积（需要 `lebedev_order` 对应的点集表）。
+    #[default]
+    Lebedev,
+    /// Gauss–Legendre(cosθ) × 均匀 φ 乘积规则（无需外部表）。
+    GaussProduct,
+}
+
+impl AngularRule {
+    /// 数据里的字符串形式。
+    #[must_use]
+    pub fn as_str(self) -> &'static str {
+        match self {
+            AngularRule::Lebedev => "lebedev",
+            AngularRule::GaussProduct => "gauss-product",
+        }
+    }
+}
+
 /// 合法的 Lebedev 阶数（§8.4：点数必须来自数据，但这些是数学上存在的阶数）。
 pub const LEBEDEV_ORDERS: [u32; 32] = [
     6, 14, 26, 38, 50, 74, 86, 110, 146, 170, 194, 230, 266, 302, 350, 434, 590, 770, 974, 1202,
@@ -55,7 +82,10 @@ pub struct GridLevelDef {
     pub level: GridLevelName,
     /// 每个原子的径向点数。
     pub radial_points: u32,
-    /// Lebedev 角向阶数。
+    /// 角向求积规则（默认 `lebedev`）。
+    #[serde(default)]
+    pub angular_rule: AngularRule,
+    /// Lebedev 角向阶数（`angular_rule: gauss-product` 时作为角向点数的预算）。
     pub lebedev_order: u32,
     /// Becke 分区锐度参数（§8.4 陷阱显式化）。
     pub becke_sharpness: f64,
@@ -126,6 +156,7 @@ mod tests {
             created: "2025-01-10T08:00:00Z".into(),
             sha256: Some("d".repeat(64)),
             notes: None,
+            angular_rule: super::AngularRule::GaussProduct,
             level: GridLevelName::Normal,
             radial_points: 75,
             lebedev_order: 302,

@@ -4,6 +4,11 @@
   "description": "一个网格等级的定义（`qwb-data/grid/*.yaml` 的形态）。",
   "type": "object",
   "properties": {
+    "angular_rule": {
+      "description": "角向求积规则（默认 `lebedev`）。",
+      "$ref": "#/$defs/AngularRule",
+      "default": "lebedev"
+    },
     "becke_sharpness": {
       "description": "Becke 分区锐度参数（§8.4 陷阱显式化）。",
       "type": "number",
@@ -26,7 +31,7 @@
       "format": "double"
     },
     "lebedev_order": {
-      "description": "Lebedev 角向阶数。",
+      "description": "Lebedev 角向阶数（`angular_rule: gauss-product` 时作为角向点数的预算）。",
       "type": "integer",
       "format": "uint32",
       "minimum": 0
@@ -90,6 +95,21 @@
     "cutoff"
   ],
   "$defs": {
+    "AngularRule": {
+      "description": "角向求积规则（K1 增量，v1.2：**可选字段** `angular_rule`，默认 `lebedev`）。\n\nLebedev 点集没有闭式生成法、需要按阶数制表；在表引入 qwb-data 之前，\n等级可以显式声明用 `gauss-product`（Gauss–Legendre(cosθ) × 均匀 φ），\n它同样满足 `Σw = 4π`，且不需要外部数据。**规则写在数据里**，不在代码里猜。",
+      "oneOf": [
+        {
+          "description": "Lebedev 球面求积（需要 `lebedev_order` 对应的点集表）。",
+          "type": "string",
+          "const": "lebedev"
+        },
+        {
+          "description": "Gauss–Legendre(cosθ) × 均匀 φ 乘积规则（无需外部表）。",
+          "type": "string",
+          "const": "gauss-product"
+        }
+      ]
+    },
     "Citation": {
       "description": "一条引用来源（§4 K1：每项 `title` + `doi`/`url`）。",
       "type": "object",

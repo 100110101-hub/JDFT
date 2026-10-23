@@ -1,4 +1,5 @@
-sha256: ffb6d485fb393dafb89d50d139fa09282b78075619ac9492cd93209c5504fb17
+sha256: 5c630f5a1ec0688de0682e38f6baeed11c475439bd122edaa4196c8c60fabff2
+cutoff: 20.0
 name: grid-veryfine
 version: 1.0.0
 notes: Very fine XC grid level. (radial, lebedev, sharpness) = (140, 974, 0.8) is the initial parameter set frozen in project.md 6.2 (D-13); note the sharpness differs from the other levels (0.8 vs 0.6). The convergence gate (adjacent levels < 0.1 mHa) is asserted at T2.
@@ -12,8 +13,8 @@ license:
   commercial_ok: true
   redistribute_ok: true
 created: 2026-10-22T23:30:00Z
+angular_rule: gauss-product
 level: veryfine
 radial_points: 140
 lebedev_order: 974
 becke_sharpness: 0.8
-cutoff: 20.0

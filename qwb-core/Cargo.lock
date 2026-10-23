@@ -1328,6 +1328,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "qwb-grid"
+version = "0.1.0"
+dependencies = [
+ "qwb-engine-api",
+ "qwb-linalg",
+ "qwb-registry",
+ "qwb-xc",
+ "thiserror 2.0.21",
+]
+
+[[package]]
 name = "qwb-integrals"
 version = "0.1.0"
 dependencies = [

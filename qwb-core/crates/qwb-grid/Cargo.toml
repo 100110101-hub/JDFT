@@ -1,0 +1,20 @@
+[package]
+name = "qwb-grid"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "QWB XC 网格：角向/径向求积规则 + Becke 分区（X-03）"
+
+[dependencies]
+qwb-linalg.workspace = true
+qwb-registry.workspace = true
+qwb-engine-api.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+qwb-xc.workspace = true
+
+[lints]
+workspace = true

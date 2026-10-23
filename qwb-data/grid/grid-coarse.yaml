@@ -1,4 +1,5 @@
-sha256: f7293e270dbfe866526afbffe7e7efb5c0500a8a9d992e7b5bd62a4f57b8801d
+sha256: 48eaeaa2d73acd4520e7020c3ae09c6912ef640da7b7a2fbb947f1bf41cc7027
+cutoff: 20.0
 name: grid-coarse
 version: 1.0.0
 notes: 'Coarse XC grid level. (radial, lebedev, sharpness) = (50, 194, 0.6) is the initial parameter set frozen in project.md 6.2 (D-13); the convergence gate (adjacent levels < 0.1 mHa) is asserted at T2. radii_scale is intentionally unset: the atomic-radii table lives in the code (X-03) until a scaling factor is needed, at which point it becomes data here (8.4).'
@@ -12,8 +13,8 @@ license:
   commercial_ok: true
   redistribute_ok: true
 created: 2026-10-22T23:30:00Z
+angular_rule: gauss-product
 level: coarse
 radial_points: 50
 lebedev_order: 194
 becke_sharpness: 0.6
-cutoff: 20.0

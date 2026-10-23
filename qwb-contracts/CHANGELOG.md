@@ -2,6 +2,17 @@
 
 语义化版本。**任何破坏性变更必须在此登记并经人类评审**（§4 契约前置要求）。
 
+## 1.2.0 — 2026-10-23（D 轨增量：K1 新增一个可选字段）
+
+### K1 · `GridLevelDef.angular_rule`（**新增可选字段，非破坏**）
+- 类型：枚举 `AngularRule { Lebedev, GaussProduct }`，序列化为 `lebedev` / `gauss-product`；
+  `#[serde(default)]`，缺省 = `lebedev`。
+- 动机：X-03 的验收要求 Lebedev 网格，但 Lebedev 点集**没有闭式生成法**，必须逐阶数制表，
+  而仓库里还没有表。把"用哪条角向规则"写进数据（而不是在代码里替换），既保持契约诚实，
+  又让 `lebedev` 可以在表到位后原样接入。
+- 当前数据：四个等级都声明 `gauss-product`（Gauss–Legendre(cosθ) × 均匀 φ，
+  `Σw = 4π` 精确成立）；`lebedev_order` 保留其含义（gauss-product 下作为角向点数预算）。
+- 兼容性：旧数据（无此字段）默认走 `lebedev`，行为对已有文件不变；schema 已重新生成。
 ## 1.1.0 — 2026-10-22（D 轨增量：K1 新增一个可选字段）
 
 ### K1 · `Functional.parameter_sources`（**新增可选字段，非破坏**）

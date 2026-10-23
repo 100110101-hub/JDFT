@@ -1,4 +1,5 @@
-sha256: 435ea45ebeb5f72b3d9413ff5e916ef502d7ba21ae832ef946f9bf4cd238b0e5
+sha256: 25080b62b80416b17bd90990d1a9c050fc0fda9b1b5d6afe7864fe48cab6f142
+cutoff: 20.0
 name: grid-fine
 version: 1.0.0
 notes: Fine XC grid level. (radial, lebedev, sharpness) = (99, 590, 0.6) is the initial parameter set frozen in project.md 6.2 (D-13); the convergence gate (adjacent levels < 0.1 mHa) is asserted at T2.
@@ -12,8 +13,8 @@ license:
   commercial_ok: true
   redistribute_ok: true
 created: 2026-10-22T23:30:00Z
+angular_rule: gauss-product
 level: fine
 radial_points: 99
 lebedev_order: 590
 becke_sharpness: 0.6
-cutoff: 20.0
