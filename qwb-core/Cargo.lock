@@ -1395,6 +1395,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "qwb-props"
+version = "0.1.0"
+dependencies = [
+ "qwb-basis",
+ "qwb-engine-api",
+ "qwb-grid",
+ "qwb-integrals",
+ "qwb-linalg",
+ "qwb-registry",
+ "qwb-scf",
+ "thiserror 2.0.21",
+]
+
+[[package]]
 name = "qwb-registry"
 version = "0.1.0"
 dependencies = [

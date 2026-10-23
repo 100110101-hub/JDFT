@@ -193,7 +193,12 @@ S-03:
   note: "**验收里的 H2O/PBE 这半跑不了**：H2O 要 p 函数（I-03 未完成），PBE 要 GGA 的 σ（F 轨未开工），所以按纪律记 in_progress 而不是 done；机制与契约两半已测死，等 I-03/F-01 落地把测试体系换成 H2O/PBE 即可判 done。踩坑记录：第一版用 qwb_linalg::solve_symmetric（Cholesky）解 DIIS 加边矩阵，而该矩阵对称但**不定**，求解必然失败、被 fallback 吞成 None → DIIS 全程静默失效（开关两态的步数一模一样）。正是『两个配置给出完全相同步数』这个可疑现象把它揪出来的。"
 S-04: {state: pending, depends: [S-02]}
 S-05: {state: pending, depends: [S-03]}
-S-06: {state: pending, depends: [S-03], note: "v2.1 新增：偶极 / Mulliken+Löwdin 布居 / 轨道能级（qwb-props）"}
+S-06:
+  state: in_progress
+  ts: "2026-10-23T14:30:00Z"
+  artifact: "**新 crate** qwb-core/crates/qwb-props（v2.1 §12.1 里原先无主）：`populations()` 做 Mulliken + Löwdin 布居，逐 AO 与逐原子，附净电荷 + tests/s06_populations.rs"
+  verification: "cargo test -p qwb-props（2 例）：① H2 与 CH2（水几何，含 p）：Mulliken 和与 Löwdin 和都等于电子数到 **1e-10**（H2: 2.000000000000 / CH2: 8.000000000000），净电荷和为 0；Löwdin 布居逐个落在 [0,2] 内（Mulliken 允许越界，故不查）；H2 的原子布居对称地各为 1.0000000000000009/0.9999999999999991；CH2 的 Mulliken 为 C 6.206/H 0.897、Löwdin 为 C 6.121/H 0.940（碳电负性大、带正电，方向正确）。② 两次独立运行得到的布居对象与位模式完全相同（S-06 的「两次运行 byte-identical」判据）。"
+  note: "**已完成**：② Mulliken/Löwdin 求和 = 总电荷（1e-10）✓；④ 两次运行 byte-identical（布居层面）✓；新 crate 建立 ✓。**未完成**：① H2O/STO-3G 偶极与实验 1.85 D 差 < 0.15 D——**阻塞在 I-02**（水的绝对能量仍有 2.36 Ha 缺口，偶极同样不可信；且偶极还需要新增 ⟨μ|r|ν⟩ 积分，尚未实现）；③ 把偶极与轨道能级写进 `JobResult.dipole_debye` / `mo_energies_hartree` 需要改 qwb-engine 的结果装配，未做。"
 
 G-01: {state: pending, depends: [S-03]}
 G-02: {state: pending, depends: [G-01]}
