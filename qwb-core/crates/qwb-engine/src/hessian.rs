@@ -23,7 +23,6 @@
 
 use qwb_engine_api::{EngineError, Molecule};
 use qwb_registry::Registry;
-use rayon::prelude::*;
 
 use crate::gradient::{GradientOptions, numerical_gradient};
 use crate::opt::OptOptions;
@@ -184,32 +183,35 @@ pub fn numerical_hessian(
     // 每个位移需要 ±δ 两个几何的梯度
     let displacements: Vec<(usize, usize)> = (0..dof).map(|k| (k / 3, k % 3)).collect();
 
-    let results: Vec<Result<Vec<f64>, EngineError>> = displacements
-        .par_iter()
-        .map(|(atom, axis)| {
-            let plus = analytic_gradient_flat_for(
-                registry,
-                molecule,
-                options,
-                *atom,
-                *axis,
-                HESSIAN_DELTA_BOHR,
-            )?;
-            let minus = analytic_gradient_flat_for(
-                registry,
-                molecule,
-                options,
-                *atom,
-                *axis,
-                -HESSIAN_DELTA_BOHR,
-            )?;
-            let mut row = Vec::with_capacity(dof);
-            for k in 0..dof {
-                row.push((plus[k] - minus[k]) / (2.0 * HESSIAN_DELTA_BOHR));
-            }
-            Ok(row)
-        })
-        .collect();
+    // 位移之间互相独立，所以并行；用项目的 `DeterministicReduce::map_ordered` 保证
+    // 结果顺序与串行一致（gate 的 rayon 检查要求凡并行必须配它）。
+    let results: Vec<Result<Vec<f64>, EngineError>> =
+        qwb_integrals::deterministic::DeterministicReduce::map_ordered(
+            &displacements,
+            |(atom, axis)| {
+                let plus = analytic_gradient_flat_for(
+                    registry,
+                    molecule,
+                    options,
+                    *atom,
+                    *axis,
+                    HESSIAN_DELTA_BOHR,
+                )?;
+                let minus = analytic_gradient_flat_for(
+                    registry,
+                    molecule,
+                    options,
+                    *atom,
+                    *axis,
+                    -HESSIAN_DELTA_BOHR,
+                )?;
+                let mut row = Vec::with_capacity(dof);
+                for k in 0..dof {
+                    row.push((plus[k] - minus[k]) / (2.0 * HESSIAN_DELTA_BOHR));
+                }
+                Ok(row)
+            },
+        );
 
     let mut hessian = vec![0.0_f64; dof * dof];
     for (column, result) in results.into_iter().enumerate() {
