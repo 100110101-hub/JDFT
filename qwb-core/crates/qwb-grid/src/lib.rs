@@ -27,6 +27,8 @@
 
 use qwb_engine_api::Molecule;
 use qwb_linalg::{Matrix, symmetric_eigen};
+pub mod manager;
+
 use qwb_registry::grid::{AngularRule, GridLevelDef};
 use thiserror::Error;
 
