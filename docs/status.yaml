@@ -77,7 +77,7 @@ D-10:
   state: done
   ts: "2026-10-23T22:40:00Z"
   artifact: "qwb-core/crates/qwb-xc/src/gga.rs（PbeExchange `GgaPbeX` + PbeCorrelation `GgaPbeC`，对偶数自动求导）+ qwb-scf 的 evaluate_xc GGA 支持（σ 与散度项）+ qwb-data/functional/pbe.yaml + tests/d10_pbe.rs、tests/d10_pbe_scf.rs"
-  verification: "① `cargo test -p qwb-xc --test d10_pbe`（3 例）：σ→0 时 PBE 交换/相关与 LdaSlaterX/LdaSvwn5 **逐位一致**（<1e-12）；s=1 处 F_x = 1.1724321599 与解析式差 <1e-10；**dε/dρ、dε/dσ 与五点四阶差分相对差 ≤ 9.7e-11**（验收 < 1e-9）。② `cargo test -p qwb-scf --test d10_pbe_scf`：**PBE 端到端跑通**——H2/STO-3G/PBE 收敛（iters=2），E = −1.1811818847、E_xc = −0.7391785074；同一轮 SVWN5 仍是 −1.1570004991（**GGA 的引入没有改变 LDA 结果**，回归钉住）。③ `qwb data verify` 9/9（pbe.yaml 带 sha256 与逐参数 citation：PBE 1996 DOI + VWN5 DOI）。"
+  verification: "① `cargo test -p qwb-xc --test d10_pbe`（3 例）：σ→0 时 PBE 交换/相关与 LdaSlaterX/LdaSvwn5 **逐位一致**（<1e-12）；s=1 处 F_x = 1.1724321599 与解析式差 <1e-10；**dε/dρ、dε/dσ 与五点四阶差分相对差 ≤ 9.7e-11**（验收 < 1e-9）。② `cargo test -p qwb-scf --test d10_pbe_scf`：**PBE 端到端跑通**——H2/STO-3G/PBE 收敛（iters=2），E = −1.1811827115、E_xc = −0.7391793342；同一轮 SVWN5 是 −1.1570005105（三者都在 Boys 与网格分区修复后重钉，见 §十三/§十八）（**GGA 的引入没有改变 LDA 结果**，回归钉住）。③ `qwb data verify` 9/9（pbe.yaml 带 sha256 与逐参数 citation：PBE 1996 DOI + VWN5 DOI）。"
   note: "**GGA 的关键实现选择**：不做网格上的数值散度。GGA 势里的 −∇·(2·∂f/∂σ·∇ρ) 用**分部积分**转成矩阵元 `+ 2·∂f/∂σ·∇ρ·∇(φ_μ φ_ν)`，只需要 AO 值与 AO 梯度（`ao_value_and_gradient`，上一轮已用有限差分验证过），避免了在离散网格上算二阶导。导数由对偶数一次求值得到（值 + ∂ρ + ∂σ），VWN5 段复用解析的 `vwn_g_prime`。物理合理性：PBE 的 E_xc 比 LDA 更负 0.024 Ha（梯度修正增强交换），总能量 −1.181 vs −1.157，方向正确。"
 D-11: {state: pending, depends: [D-01], note: "B88 是纯 GGA 闭式、现有对偶数机制可直接套用；LYP 的标准实现需要 ∇²ρ（本构建的 Requirements 有 laplacian 位但没有网格上的 ∇²ρ 计算），所以 D-11 需要先补 laplacian 或改用分部积分形式。"}
 D-12: {state: pending, depends: [D-01], note: "**前置已完成**（2026-10-23）：加权组件。此前引擎对 weight≠1 的组件直接报 Unsupported；现在 qwb-xc::ScaledTerm/scale_term 对**能量与两个导数**施加同一权重，
@@ -197,6 +197,15 @@ X-03:
     **修法（三件缺项，都是算法/数据层，不是调参）**：① 真 Lebedev 角向表（现在是 n=⌈√order⌉ 的
     Gauss 乘积，阶数语义名不副实）；② Becke 尺寸调整 ν = μ + a_ij(1−μ²)；③ Treutler–Ahlrichs
     类核心标度径向映射。会移动所有 SCF 数字，必须与 T1 参考值一起重新标定。
+    **本轮（52）已修复核心缺陷**：`smoothed_step` 的符号写反（`½(1 + p^k(ν))` 应为 `½(1 − p^k(ν))`），
+    于是分区权重「离谁近就不归谁」。按半径分箱一眼可见：分子网格在 O 核 0.1 bohr 以内积出**精确的 0**，
+    而那里有 0.44 个电子。修复后 `∫ρ dr` = 9.99999998，H2O/SVWN5 四个等级
+    −74.9282545 / −74.9281445 / −74.9281498 / −74.9281495（相邻差 5.3e-6 / 3.1e-7 Ha，进入 §6.2 的
+    0.1 mHa），H2 相邻差 5.5e-10 / 4.7e-12。新验收测试：`qwb-scf/tests/s02_grid_convergence.rs`
+    （∫ρ = 电子数 + H2 分级能量）。详见 docs/choices.md §十八。
+    **仍缺（不影响上面的判据，但名实不符）**：① 真 Lebedev 点集表（现在是 `n=⌈√order⌉` 的 Gauss 乘积）；
+    ② Becke 尺寸调整 `ν = μ + a_ij(1−μ²)`；③ Treutler–Ahlrichs 径向映射；④ 单线程与并行 identical。
+
 X-04:
   state: done
   ts: "2026-10-23T13:40:00Z"
@@ -207,7 +216,7 @@ X-05:
   state: done
   ts: "2026-10-23T16:00:00Z"
   artifact: "qwb-core/crates/qwb-scf/src/rks.rs::rks_scf 里的泛函求值（每轮 evaluate_xc → E_xc + v_xc，F = H + J + v_xc）+ 引擎/CLI 的 T1 端到端路径"
-  verification: "① `cargo test -p qwb-scf --test s02_rks`（7 例全绿）：H2/STO-3G/SVWN5 收敛（iters=2），E = −1.1570004991、E_xc = −0.7149971（非零 ⇒ 泛函确实在 SCF 里被求值并进入 Fock）；收紧阈值能量不变；grid-normal vs grid-fine 差 1.1e-8 Ha；HF 分支与外部参考差 0.3 µHa。② T1 端到端：`qwb run examples/h2_sto3g_svwn5.yaml` → 能量 −1.1570004991、converged=true；`qwb replay` → delta 0.000e0 Ha、reproduced。**这正是 §6.2 写明的判据「T1 单点能路径打通」**。③ X-02 的 dε/dρ 有限差分校验（1e-9）已在 CI 里随 `cargo test -p qwb-xc` 常跑。"
+  verification: "① `cargo test -p qwb-scf --test s02_rks`（7 例全绿）：H2/STO-3G/SVWN5 收敛（iters=2），E = −1.1570005105（Boys 与网格分区修复后重钉）、E_xc = −0.7149971（非零 ⇒ 泛函确实在 SCF 里被求值并进入 Fock）；收紧阈值能量不变；grid-normal vs grid-fine 差 1.1e-8 Ha；HF 分支与外部参考差 0.3 µHa。② T1 端到端：`qwb run examples/h2_sto3g_svwn5.yaml` → 能量 −1.1570004991、converged=true；`qwb replay` → delta 0.000e0 Ha、reproduced。**这正是 §6.2 写明的判据「T1 单点能路径打通」**。③ X-02 的 dε/dρ 有限差分校验（1e-9）已在 CI 里随 `cargo test -p qwb-xc` 常跑。"
   note: "本 WP 是把 X-01/X-02（泛函及其导数）与 S-02（RKS 循环）**接起来**的集成项，不新增算法。关闭理由是判据本身：T1 路径已打通并有外部参考（HF/STO-3G H2 0.3 µHa）+ 复现门禁（replay delta 0）支撑。"
 
 S-01:

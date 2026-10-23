@@ -88,12 +88,12 @@ fn replay_rejects_a_tampered_result() {
     // 把记录的能量改掉 1 µHa——远大于 1e-10 的阈值。
     let result_path = task_dir.join("result.json");
     let text = std::fs::read_to_string(&result_path).expect("read result.json");
-    let original = "-1.1570004991435379";
+    let original = "-1.1570005110367827";
     assert!(
         text.contains(original),
         "result.json 里的能量写法变了，请更新本测试"
     );
-    std::fs::write(&result_path, text.replace(original, "-1.1570014991435379"))
+    std::fs::write(&result_path, text.replace(original, "-1.1570015110367827"))
         .expect("write result.json");
 
     let output = qwb().arg("replay").arg(&task_dir).output().expect("spawn");

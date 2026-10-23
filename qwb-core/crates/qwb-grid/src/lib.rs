@@ -185,7 +185,7 @@ fn smoothed_step(mut nu: f64, iterations: u32) -> f64 {
     for _ in 0..iterations {
         nu = 1.5 * nu - 0.5 * nu * nu * nu;
     }
-    0.5 * (1.0 + nu)
+    0.5 * (1.0 - nu)
 }
 
 /// 单中心网格（不分区）：`Σ w = Σ_radial w · 4π`。
