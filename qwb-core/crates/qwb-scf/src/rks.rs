@@ -154,17 +154,14 @@ fn nuclear_repulsion(molecule: &Molecule) -> Result<f64, EngineError> {
 }
 
 /// 一个 AO 在给定点处的值（只支持 l <= 1）。pub 是为了让测试能直接查有限性。
+#[allow(clippy::needless_range_loop)] // 分量下标与 components 一一对应，比迭代器更清楚
 pub fn ao_value(basis: &InternalBasis, point: [f64; 3]) -> Result<Vec<f64>, EngineError> {
     let n = basis.n_functions();
     let mut values = vec![0.0; n];
+    // 热路径：网格上每个点都要调用，所以这里**不做任何堆分配**（`MAX_CARTESIAN` 够 l ≤ 3）。
     for shell in basis.shells() {
-        if shell.l > 1 {
-            return Err(EngineError::Unsupported(format!(
-                "grid evaluation of l={} AO needs the spherical AO transform (not implemented)",
-                shell.l
-            )));
-        }
         let components = cartesian_components(shell.l);
+        let mut cartesian = [0.0_f64; MAX_CARTESIAN];
         for (component, powers) in components.iter().enumerate() {
             let mut value = 0.0;
             for (alpha, coefficient) in shell.exponents.iter().zip(&shell.coefficients) {
@@ -180,10 +177,55 @@ pub fn ao_value(basis: &InternalBasis, point: [f64; 3]) -> Result<Vec<f64>, Engi
                     * d[2].powi(i32::try_from(powers.2).expect("small"));
                 value += coefficient * norm * polynomial * (-alpha * r2).exp();
             }
-            values[shell.first_function + component] = value;
+            cartesian[component] = value; // 显式下标：与 components 一一对应
         }
+        write_transformed(
+            &mut values,
+            shell.first_function,
+            &cartesian[..components.len()],
+            shell.l,
+            shell.angular,
+        )?;
     }
     Ok(values)
+}
+
+/// 把直角分量写进 AO 数组：`Cartesian` 直接抄，`Spherical` 乘球谐变换矩阵。
+///
+/// `l ≤ 1` 时直角与球谐是同一组函数（`T` 是单位阵），所以这个函数对 STO-3G 完全不改行为。
+#[allow(clippy::needless_range_loop)] // 矩阵收缩：两个下标各有含义，range 最直观
+fn write_transformed(
+    values: &mut [f64],
+    first: usize,
+    cartesian: &[f64],
+    l: u32,
+    angular: qwb_registry::Angular,
+) -> Result<(), EngineError> {
+    let count = cartesian.len();
+    match qwb_basis::spherical::spherical_transform(l, angular) {
+        None => {
+            for (component, value) in cartesian.iter().enumerate() {
+                values[first + component] = *value;
+            }
+            Ok(())
+        }
+        Some(transform) => {
+            if transform.n_spherical > count {
+                return Err(EngineError::Internal(format!(
+                    "球谐变换维度 {} 超过直角分量数 {count}",
+                    transform.n_spherical
+                )));
+            }
+            for spherical in 0..transform.n_spherical {
+                let mut sum = 0.0;
+                for component in 0..count {
+                    sum += transform.get(component, spherical) * cartesian[component];
+                }
+                values[first + spherical] = sum;
+            }
+            Ok(())
+        }
+    }
 }
 
 /// AO 值 + 梯度（GGA 的前置）。
@@ -207,12 +249,6 @@ pub fn ao_value_and_gradient(
     let mut values = vec![0.0; n];
     let mut gradients = vec![[0.0_f64; 3]; n];
     for shell in basis.shells() {
-        if shell.l > 1 {
-            return Err(EngineError::Unsupported(format!(
-                "grid evaluation of l={} AO needs the spherical AO transform (not implemented)",
-                shell.l
-            )));
-        }
         let components = cartesian_components(shell.l);
         let d = [
             point[0] - shell.center_bohr[0],
@@ -220,6 +256,8 @@ pub fn ao_value_and_gradient(
             point[2] - shell.center_bohr[2],
         ];
         let r2 = d[0] * d[0] + d[1] * d[1] + d[2] * d[2];
+        let mut cartesian_values = [0.0_f64; MAX_CARTESIAN];
+        let mut cartesian_gradients = [[0.0_f64; 3]; MAX_CARTESIAN];
         for (component, powers) in components.iter().enumerate() {
             let powers = [powers.0, powers.1, powers.2];
             let mut value = 0.0;
@@ -248,11 +286,49 @@ pub fn ao_value_and_gradient(
                     gradient[axis] += weight * derivative;
                 }
             }
-            values[shell.first_function + component] = value;
-            gradients[shell.first_function + component] = gradient;
+            cartesian_values[component] = value;
+            cartesian_gradients[component] = gradient;
+        }
+        write_transformed(
+            &mut values,
+            shell.first_function,
+            &cartesian_values[..components.len()],
+            shell.l,
+            shell.angular,
+        )?;
+        // 梯度是对**函数**逐分量线性组合，所以同一个变换矩阵作用在三个分量上。
+        let range = if shell.angular == qwb_registry::Angular::Spherical {
+            spherical_count(shell.l)
+        } else {
+            components.len()
+        };
+        let mut slice = [0.0_f64; MAX_CARTESIAN];
+        for axis in 0..3 {
+            for component in 0..components.len() {
+                slice[component] = cartesian_gradients[component][axis];
+            }
+            let mut flat = [0.0_f64; MAX_CARTESIAN];
+            write_transformed(
+                &mut flat,
+                0,
+                &slice[..components.len()],
+                shell.l,
+                shell.angular,
+            )?;
+            for slot in 0..range {
+                gradients[shell.first_function + slot][axis] = flat[slot];
+            }
         }
     }
     Ok((values, gradients))
+}
+
+/// 球谐函数个数：`l ≤ 1` 与直角相同，`l = 2` 是 5。
+const MAX_CARTESIAN: usize = 10;
+
+/// 球谐函数个数：l ≤ 1 与直角相同，l = 2 是 5。
+fn spherical_count(l: u32) -> usize {
+    (2 * l as usize + 1).min(6)
 }
 
 /// 在网格上求密度与 XC 能量/v_xc。

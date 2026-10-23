@@ -346,7 +346,26 @@ T1:
   artifact: "qwb-core/crates/qwb-scf/tests/reference/h2_sto3g.csv（注册参考值集合）+ tests/t01_reference.rs"
   verification: "cargo test -p qwb-scf --test t01_reference：8/8 行参考值全部命中——HF/STO-3G H2 总能量 −1.1167593082 vs 外部文献 −1.116759（差 3.1e-7 Ha，即 0.3 µHa）；S01、四个 (ij|kl) 与 Szabo–Ostlund 表差 ≤ 4.4e-7；E_nuc 与解析 1/R 差 4.8e-8。CSV 每行带 source 栏（external / analytic / internal-independent-path），未知量名会让测试失败，防止参考值漂移"
   note: "**已完成**：① 参考值集合与 < 1 mHa 断言进 CI（HF 这一行是真外部参考，0.3 µHa 命中）；② 顺带发现并修掉闭壳层 Fock 系数错误（见 choices.md §十），修复前 HF 给 −0.442 Ha。③ qwb replay 真重算已接通（P-08 done），端到端 delta = 0.000e0 Ha。**T1 完成**：qwb run 跑通、能量对上外部参考、replay 可复现。SVWN5 总能量 −1.1570004991 在 §7.0 里登记为 internal-independent-path（该基组/泛函/网格组合没有外部表格），容差放宽到 1e-4 并如实标注来源。"
-T2: {state: pending, note: "含 S-06 性质断言（偶极 1.85 D ± 0.15、电荷和 == 总电荷）"}
+T2:
+  state: in_progress
+  ts: "2026-10-24T18:00:00Z"
+  artifact: "qwb-core/crates/qwb-scf/tests/t02_h2o_def2svp.rs + tests/reference/h2o_def2svp_pbe.csv"
+  verification: |
+    已通过（四条真判据）：
+    * 相邻网格等级：coarse -76.4496675241 / normal -76.4495733131，差 9.42e-5 Ha（< 0.1 mHa）；
+    * 1 线程 vs 4 线程：能量与密度指纹**逐位相同**（129364e77400c84f）；
+    * 偶极 1.9544 D vs 实验 1.85 D（差 0.104 D，要求 < 0.15）；
+    * Tr(P*S) = 10.00000000（电荷守恒）。
+    未通过（一条外部参考）：T2 规定「能量与参考 csv 差 < 1 mHa」，但参考文件
+    `tests/reference/h2o_def2svp_pbe.csv` 的来源是 **internal-independent-path**——即本项目自己算的
+    回归钉，不是外部表值。PBE/def2-SVP 的水在 CCCBDB 一类可引用表里查不到，pyscf 本机装不上
+    （无 wheel、源码构建失败），所以这一条**只能证明可复现，不能证明正确**。
+  note: |
+    gate 里的 `h2o_def2svp_pbe_single_point` 只跑一次 grid-coarse SCF（约 3 分钟）；
+    全等级收敛与线程比较放在 `#[ignore]` 的 `h2o_def2svp_pbe_grid_and_threads`（约 16 分钟，
+    数字已实测并写在文档注释里）。
+    **收口条件**：拿到一个可引用的 H2O/PBE/def2-SVP 总能量（含几何与软件出处）后，
+    把 csv 的来源标注从 internal 改成 external 并把容差收到 1e-3，T2 即可判 done。
 T3: {state: pending}
 T4: {state: pending}
 T5: {state: pending, note: "体系已冻结：CuH/LANL2DZ 与 ZnO/def2-SVP+def2-ECP"}
@@ -354,8 +373,26 @@ T6: {state: pending}
 T7: {state: pending}
 T8: {state: pending}
 I-03:
-  state: in_progress
-  ts: "2026-10-23T06:20:00Z"
-  artifact: "qwb-core/crates/qwb-integrals/src/hermite2e.rs（任意角动量原函数积分，McMurchie–Davidson Hermite 展开）+ src/two_electron.rs（s-only 装配与张量）+ tests/i03_general_l.rs + tests/common/oracle.rs（独立数值路径）+ tests/i03_oracle.rs（路径自证）"
-  verification: "① cargo test -p qwb-integrals --test i03_general_l（4 例）：生产路径 vs 独立数值路径逐分量对照，覆盖 s/p/d 共 12 个分量 × 3 组几何——s 型逐位相同、p 型相对差 ≤ 1e-9、d 型 ≤ 1e-9（三阶以上导数按 1e-8 绝对判据，因为参照路径本身是嵌套差分）；另有不依赖参照路径的 (ab|cd)=(cd|ab) 约束。② tests/i03_oracle（5 例）：独立路径自证——l=0 与闭式差 < 1e-15、交叉对称、刚体平移下 Σ2α_k(p_k s|ss)=0、共线体系奇分量 < 1e-10、绕轴各向同性。③ 原有 d03_two_electron 的 9 例（含 erf 卷积独立路径）仍全绿"
-  note: "**本轮突破**：Hermite Coulomb 族不再依赖记忆里的递推——hermite2e.rs 用两条初等事实做精确符号求导（∂R^p = p·R^(p−1)、∂F_s = −2ρR·F_{s+1}），把 S_lmn = ∂^l_x∂^m_y∂^n_z C_0 表示成『R 的多项式 × Boys 指标』再求值；这是恒等式级别的推导，且被独立数值路径逐分量判定。**顺带抓到参照路径自己的 bug**：二阶导数有边界项 (x−A)²e = (1/2α)∂[ue] + (1/2α)e，早期内联 oracle 少了它，d_xx 给出 −0.2104（生产路径 +0.2057，补上边界项 0.4161 后一致到 1e-12）。**未完成**：① 把 hermite2e 接进 two_electron() 的完整装配（壳层收缩含归一化、笛卡尔→球谐变换、n⁴ 张量 8 重对称填装仍是 s-only 老代码）；② R-03 指定的『OS 为主』目前实现的是 MD，若严格遵循需另写 OS 或在文档正式改记；③ Rys 路径现由『闭式导数』这条数值路径替代（已满足数值独立的要求）。"
+  state: done
+  ts: "2026-10-24T18:00:00Z"
+  artifact: "qwb-core/crates/qwb-integrals/src/hermite2e.rs（精确符号导数的 Hermite Coulomb）+ two_electron.rs（壳层收缩、笛卡尔→球谐变换、8 重对称填装）+ tests/i03_general_l.rs、i03_oracle.rs"
+  verification: |
+    cargo test -p qwb-integrals --test i03_general_l（覆盖 s/p/d 共 12 个分量 x 3 组几何）：
+    生产路径 vs 独立数值路径，s 型逐位相同、p/d 型相对差 <= 1e-9（三阶以上导数用 1e-8 绝对判据）。
+    cargo test -p qwb-integrals --test i03_oracle（5 例）：独立路径自证（l=0 闭式 < 1e-15、
+    交叉对称、刚体平移下 sum 2*alpha_k*(p_k s|ss) = 0、共线体系奇分量 < 1e-10、绕轴各向同性）。
+    cargo test -p qwb-scf --test t02_h2o_def2svp：**def2-SVP 的水端到端跑通**（24 个函数，含 5 个
+    d 函数）：PBE 收敛、E = -76.4496675241 Ha（grid-coarse），Tr(P*S) = 10.00000000，偶极 1.9542 D。
+  note: |
+    **已完成（2026-10-24）。** 本轮抓到并修掉两个真 bug，它们正是「def2-SVP 一跑就炸」的原因：
+    ① `two_electron.rs::contract` 在做笛卡尔→球谐变换时，用**输入的**线性偏移 `base` 配**输出的**
+    stride，只要被变换的不是最后一根轴就越界 panic（d 壳层在 A/B 位置上必炸）。改成先解码四个下标、
+    再按输出布局重新编码。
+    ② `rks.rs::ao_value` / `ao_value_and_gradient` 对 l >= 2 直接报 Unsupported——网格上的 AO 求值
+    没有球谐变换。现在两个函数都按 `shell.angular` 调 `spherical_transform`，并且为热路径改成
+    栈上定长缓冲（`MAX_CARTESIAN = 10`）零堆分配。
+    新验证：`t02_h2o_def2svp` 里对 def2-SVP 的 24 个 AO 做 AO 梯度 vs 中心差分，最大差 3.95e-10
+    （球谐 d 的梯度是这次新写的，必须自证）。
+    **正式记录的偏差（R-03）**：project.md 指定 2e 以 Obara–Saika 为主，本实现走的是
+    McMurchie–Davidson（Hermite 展开）+ 精确符号导数。功能与精度判据都已满足（逐分量 1e-9），
+    但**递推族与规格不同**，因此在此显式记为偏差而不是悄悄换掉。详见 docs/choices.md 十九节。

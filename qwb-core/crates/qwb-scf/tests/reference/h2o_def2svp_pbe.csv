@@ -1,0 +1,16 @@
+# T2 参考值：H2O / def2-SVP / PBE 单点能
+#
+# 几何：实验几何（O 在原点，O–H 0.757 Å，∠HOH ≈ 104.5°，H 在 y-z 平面）
+# 泛函：PBE（qwb-data/functional/pbe.yaml）
+# 网格：grid-normal
+#
+# 来源标注（重要）：
+#   internal-independent-path —— 这个值是**本项目自己算的**，用于回归钉住，不是外部表值。
+#   PBE/def2-SVP 的水在 CCCBDB 一类可直接引用的表里查不到，pyscf 本机也装不上
+#   （无 wheel、源码构建失败），所以「与外部参考差 < 1 mHa」这一条 T2 判据**尚未满足**。
+#   详见 docs/status.yaml 的 T2 与 docs/error-budget.md 第 0 节。
+#
+# 附带实测（同一几何）：coarse 与 normal 差 9.4e-5 Ha；1 线程与 4 线程逐位相同；
+# |μ| = 1.9544 D（实验 1.85 D）；Tr(P·S) = 10.000000。
+pbe_total_energy_coarse,-76.4496675241,0.001,internal-independent-path
+pbe_total_energy,-76.4495733131,0.001,internal-independent-path

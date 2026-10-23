@@ -195,6 +195,11 @@ fn cartesian_block(a: &ShellBlock, b: &ShellBlock, c: &ShellBlock, d: &ShellBloc
 
 #[allow(clippy::needless_range_loop)] // flat 同时用于算 axis 下标与写回
 /// 对第 `axis` 个指标做一次球谐变换（`T` 的列数即该壳层的球谐维数）。
+///
+/// 关键：输入与输出的**布局不同**（`dims[axis]` 从 `2l+1` 直角分量变成球谐维数），
+/// 所以「除轴以外的其余下标」必须按各自的 stride 重新编码一次。早期实现复用了输入的
+/// 线性偏移 `base` 再加输出 stride，只要变换的不是最后一根轴就会越界——
+/// def2-SVP 的水（d 壳层）正是这样炸掉的。
 fn contract(
     data: &[f64],
     dims: [usize; 4],
@@ -213,12 +218,17 @@ fn contract(
         if value == 0.0 {
             continue;
         }
-        let cartesian_index = (flat / in_stride[axis]) % dims[axis];
-        let base = flat - cartesian_index * in_stride[axis];
+        let mut index = [0usize; 4];
+        for k in 0..4 {
+            index[k] = (flat / in_stride[k]) % dims[k];
+        }
+        let mut out_index = index;
+        out_index[axis] = 0;
+        let out_base: usize = (0..4).map(|k| out_index[k] * out_stride[k]).sum();
         for spherical_index in 0..n_spherical {
-            let weight = transform.get(cartesian_index, spherical_index);
+            let weight = transform.get(index[axis], spherical_index);
             if weight != 0.0 {
-                out[base + spherical_index * out_stride[axis]] += weight * value;
+                out[out_base + spherical_index * out_stride[axis]] += weight * value;
             }
         }
     }
