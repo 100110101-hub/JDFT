@@ -44,7 +44,7 @@ pub fn primitive_norm(powers: Powers, alpha: f64) -> f64 {
 /// 递推（McMurchie–Davidson）：
 /// `E_t^{i+1,j} = (1/2p)E_{t-1}^{i,j} + (P−A)_x E_t^{i,j} + (t+1)E_{t+1}^{i,j}`，
 /// `j` 方向同理（用 `(P−B)_x`）。
-fn hermite_1d(i: u32, j: u32, p: f64, pa: f64, pb: f64) -> Vec<f64> {
+pub(crate) fn hermite_1d(i: u32, j: u32, p: f64, pa: f64, pb: f64) -> Vec<f64> {
     let i_max = i as usize;
     let j_max = j as usize;
     let t_max = i_max + j_max;

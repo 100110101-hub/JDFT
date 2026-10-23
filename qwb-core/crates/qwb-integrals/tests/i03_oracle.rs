@@ -51,50 +51,27 @@ impl Function {
     }
 }
 
-const STEP: f64 = 1.0e-2;
+#[path = "common/oracle.rs"]
+mod corrected;
 
-/// 把 `pending` 里的导数逐条施加在「四中心 s 型闭式」上。
-fn evaluate(functions: &[Function; 4], pending: &[(usize, usize)]) -> f64 {
-    let Some((&(which, axis), rest)) = pending.split_first() else {
-        return primitive_ssss(
-            functions[0].exponent,
-            functions[0].center,
-            functions[1].exponent,
-            functions[1].center,
-            functions[2].exponent,
-            functions[2].center,
-            functions[3].exponent,
-            functions[3].center,
-        );
-    };
-    let target = functions[which];
-    let origin = target.center[axis];
-    let shifted = |t: f64| {
-        let mut moved = *functions;
-        moved[which].center[axis] = t;
-        evaluate(&moved, rest)
-    };
-    let central = |step: f64| (shifted(origin + step) - shifted(origin - step)) / (2.0 * step);
-    let raw = (4.0 * central(STEP * 0.5) - central(STEP)) / 3.0;
-    raw / (2.0 * target.exponent)
-}
-
-/// 任意角动量的参照值 `(a b|c d)`。
+/// 参照值：走共享的**修正**实现。
+///
+/// 早期版本在这里内联了「连续施加 n 次一阶差分」的写法，它对二阶导数是错的
+/// （少了 `(1/(2α))·(s 型)` 边界项，d_xx 会得到 −0.2104 而不是 +0.2057）。
+/// 正确算法见 `tests/common/oracle.rs` 里的递归注释。本文件的自证用例只用它
+/// 检查零/非零与对称性，不受影响，但实现必须换成共享版本。
 fn reference(functions: [Function; 4]) -> f64 {
-    let mut pending = Vec::new();
-    for (which, function) in functions.iter().enumerate() {
-        for (axis, order) in [function.powers.0, function.powers.1, function.powers.2]
-            .iter()
-            .enumerate()
-        {
-            for _ in 0..*order {
-                pending.push((which, axis));
-            }
-        }
-    }
-    evaluate(&functions, &pending)
+    let mapped: [corrected::Function; 4] = std::array::from_fn(|index| corrected::Function {
+        center: functions[index].center,
+        exponent: functions[index].exponent,
+        powers: [
+            functions[index].powers.0,
+            functions[index].powers.1,
+            functions[index].powers.2,
+        ],
+    });
+    corrected::reference(mapped)
 }
-
 fn exponents() -> [f64; 4] {
     [1.2, 0.9, 1.1, 0.8]
 }
