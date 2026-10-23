@@ -504,8 +504,7 @@ fn two_electron_axis(aos: &[SAo], density: &Matrix, atom: usize, axis: usize) ->
                                     let coulomb_owner = [mu, nu, lambda, sigma];
                                     for slot in 0..4 {
                                         if aos[coulomb_owner[slot]].center_index == atom {
-                                            d_coulomb +=
-                                                weight * d_ssss_slot(&coulomb, slot, axis);
+                                            d_coulomb += weight * d_ssss_slot(&coulomb, slot, axis);
                                         }
                                     }
                                     // 交换 (μλ|νσ)：槽位 0..3 依次是 μ, λ, ν, σ
@@ -599,14 +598,12 @@ pub fn gradient_components(
     for atom in 0..natoms {
         for axis in 0..3 {
             components.kinetic[atom][axis] = kinetic_axis(&aos, density, atom, axis);
-            components.nuclear_ao[atom][axis] =
-                nuclear_ao_axis(&aos, &nuclei, density, atom, axis);
+            components.nuclear_ao[atom][axis] = nuclear_ao_axis(&aos, &nuclei, density, atom, axis);
             components.nuclear_center[atom][axis] =
                 nuclear_center_axis(&aos, &nuclei, density, atom, axis);
             components.two_electron[atom][axis] = two_electron_axis(&aos, density, atom, axis);
             components.pulay[atom][axis] = pulay_axis(&aos, &w, atom, axis);
-            components.nuclear_repulsion[atom][axis] =
-                nuclear_repulsion_axis(&nuclei, atom, axis);
+            components.nuclear_repulsion[atom][axis] = nuclear_repulsion_axis(&nuclei, atom, axis);
         }
     }
     Ok(components)

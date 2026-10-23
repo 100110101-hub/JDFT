@@ -83,65 +83,75 @@ fn energy_2e(registry: &Registry, molecule: &Molecule, density: &Matrix) -> f64 
 #[test]
 fn diag_gradient_components() {
     let registry = Registry::open(data_root()).expect("qwb-data");
-    for bond in [0.74_f64, 1.1] { let molecule = h2(bond); println!("=== R = {bond} ===");
+    for bond in [0.74_f64, 1.1] {
+        let molecule = h2(bond);
+        println!("=== R = {bond} ===");
 
-    let basis = build(&registry, &molecule);
-    let tensor = two_electron(&basis, &molecule).expect("2e");
-    let one = one_electron(&basis, &molecule).expect("1e");
-    let grid_level = registry.get_grid("grid-coarse").expect("grid");
-    let grid = qwb_grid::molecular_grid(grid_level, &molecule).expect("grid");
-    let mut options = RksOptions::default();
-    options.max_iter = 400;
-    options.energy_threshold = 1.0e-12;
-    options.density_threshold = 1.0e-10;
-    let result = rks_scf(&basis, &molecule, &tensor, &grid, &[], options).expect("scf");
-    let fock = build_fock(&one.core_hamiltonian, &tensor, &result.density)
-        .expect("fock")
-        .fock;
+        let basis = build(&registry, &molecule);
+        let tensor = two_electron(&basis, &molecule).expect("2e");
+        let one = one_electron(&basis, &molecule).expect("1e");
+        let grid_level = registry.get_grid("grid-coarse").expect("grid");
+        let grid = qwb_grid::molecular_grid(grid_level, &molecule).expect("grid");
+        let mut options = RksOptions::default();
+        options.max_iter = 400;
+        options.energy_threshold = 1.0e-12;
+        options.density_threshold = 1.0e-10;
+        let result = rks_scf(&basis, &molecule, &tensor, &grid, &[], options).expect("scf");
+        let fock = build_fock(&one.core_hamiltonian, &tensor, &result.density)
+            .expect("fock")
+            .fock;
 
-    let components = gradient_components(&basis, &molecule, &result.density, &fock).expect("comp");
-    let mut worst_1e = 0.0_f64;
-    let mut worst_2e = 0.0_f64;
+        let components =
+            gradient_components(&basis, &molecule, &result.density, &fock).expect("comp");
+        let mut worst_1e = 0.0_f64;
+        let mut worst_2e = 0.0_f64;
 
-    let delta = 1.0e-4_f64;
-    for atom in 0..molecule.atoms.len() {
-        for axis in 0..3 {
-            let plus = displaced(&molecule, atom, axis, delta);
-            let minus = displaced(&molecule, atom, axis, -delta);
-            let (kin_plus, nuc_plus) = trace_split(&registry, &plus, &result.density);
-            let (kin_minus, nuc_minus) = trace_split(&registry, &minus, &result.density);
-            let fd_kin = (kin_plus - kin_minus) / (2.0 * delta);
-            let fd_nuc = (nuc_plus - nuc_minus) / (2.0 * delta);
-            let fd_2e = (energy_2e(&registry, &plus, &result.density)
-                - energy_2e(&registry, &minus, &result.density))
-                / (2.0 * delta);
+        let delta = 1.0e-4_f64;
+        for atom in 0..molecule.atoms.len() {
+            for axis in 0..3 {
+                let plus = displaced(&molecule, atom, axis, delta);
+                let minus = displaced(&molecule, atom, axis, -delta);
+                let (kin_plus, nuc_plus) = trace_split(&registry, &plus, &result.density);
+                let (kin_minus, nuc_minus) = trace_split(&registry, &minus, &result.density);
+                let fd_kin = (kin_plus - kin_minus) / (2.0 * delta);
+                let fd_nuc = (nuc_plus - nuc_minus) / (2.0 * delta);
+                let fd_2e = (energy_2e(&registry, &plus, &result.density)
+                    - energy_2e(&registry, &minus, &result.density))
+                    / (2.0 * delta);
 
-            worst_1e = worst_1e
-                .max((components.kinetic[atom][axis] - fd_kin).abs())
-                .max((components.nuclear_ao[atom][axis] + components.nuclear_center[atom][axis] - fd_nuc).abs());
-            worst_2e = worst_2e.max((components.two_electron[atom][axis] - fd_2e).abs());
-            let a_kin = components.kinetic[atom][axis];
-            let a_vao = components.nuclear_ao[atom][axis];
-            let a_vc = components.nuclear_center[atom][axis];
-            println!("atom {atom} axis {axis}");
-            println!("  动能:   解析 {a_kin:>14.9}  差分 {fd_kin:>14.9}  差 {:>10.3e}", (a_kin - fd_kin).abs());
-            println!(
-                "  核吸引: 解析 {a_vao:>14.9}（AO 移动）/ {a_vc:>14.9}（核移动）  差分 {fd_nuc:>14.9}  差 {:>10.3e}",
-                (a_vao + a_vc - fd_nuc).abs()
-            );
-            println!(
-                "  2e:     解析 {:>14.9}  差分 {fd_2e:>14.9}  差 {:>10.3e}",
-                components.two_electron[atom][axis],
-                (components.two_electron[atom][axis] - fd_2e).abs()
-            );
-            println!(
-                "  Pulay {:>14.9}  核排斥 {:>14.9}",
-                components.pulay[atom][axis], components.nuclear_repulsion[atom][axis]
-            );
+                worst_1e = worst_1e
+                    .max((components.kinetic[atom][axis] - fd_kin).abs())
+                    .max(
+                        (components.nuclear_ao[atom][axis] + components.nuclear_center[atom][axis]
+                            - fd_nuc)
+                            .abs(),
+                    );
+                worst_2e = worst_2e.max((components.two_electron[atom][axis] - fd_2e).abs());
+                let a_kin = components.kinetic[atom][axis];
+                let a_vao = components.nuclear_ao[atom][axis];
+                let a_vc = components.nuclear_center[atom][axis];
+                println!("atom {atom} axis {axis}");
+                println!(
+                    "  动能:   解析 {a_kin:>14.9}  差分 {fd_kin:>14.9}  差 {:>10.3e}",
+                    (a_kin - fd_kin).abs()
+                );
+                println!(
+                    "  核吸引: 解析 {a_vao:>14.9}（AO 移动）/ {a_vc:>14.9}（核移动）  差分 {fd_nuc:>14.9}  差 {:>10.3e}",
+                    (a_vao + a_vc - fd_nuc).abs()
+                );
+                println!(
+                    "  2e:     解析 {:>14.9}  差分 {fd_2e:>14.9}  差 {:>10.3e}",
+                    components.two_electron[atom][axis],
+                    (components.two_electron[atom][axis] - fd_2e).abs()
+                );
+                println!(
+                    "  Pulay {:>14.9}  核排斥 {:>14.9}",
+                    components.pulay[atom][axis], components.nuclear_repulsion[atom][axis]
+                );
+            }
         }
-    }
-    println!("逐项最大偏差：1e {:>9.2e}，2e {:>9.2e}", worst_1e, worst_2e);
-    assert!(worst_1e < 1e-6, "1e 分项与差分不符：{worst_1e:.2e}");
-    assert!(worst_2e < 1e-6, "2e 分项与差分不符：{worst_2e:.2e}");
+        println!("逐项最大偏差：1e {:>9.2e}，2e {:>9.2e}", worst_1e, worst_2e);
+        assert!(worst_1e < 1e-6, "1e 分项与差分不符：{worst_1e:.2e}");
+        assert!(worst_2e < 1e-6, "2e 分项与差分不符：{worst_2e:.2e}");
     }
 }

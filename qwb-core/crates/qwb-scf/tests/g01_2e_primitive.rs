@@ -23,15 +23,22 @@ fn diag_d_ssss_slots() {
             lo[slot].1[axis] -= h;
             hi[slot].1[axis] += h;
             let f = |q: &[(f64, [f64; 3]); 4]| {
-                primitive_ssss(q[0].0, q[0].1, q[1].0, q[1].1, q[2].0, q[2].1, q[3].0, q[3].1)
+                primitive_ssss(
+                    q[0].0, q[0].1, q[1].0, q[1].1, q[2].0, q[2].1, q[3].0, q[3].1,
+                )
             };
             let numeric = (f(&hi) - f(&lo)) / (2.0 * h);
             let diff = (analytic - numeric).abs();
             worst = worst.max(diff);
-            println!("slot={slot} axis={axis}: 解析 {analytic:>15.10}  差分 {numeric:>15.10}  差 {diff:.3e}");
+            println!(
+                "slot={slot} axis={axis}: 解析 {analytic:>15.10}  差分 {numeric:>15.10}  差 {diff:.3e}"
+            );
         }
     }
     println!("最大差 {worst:.3e}");
     let direct = d_ssss(alpha, a, beta, b, gamma, c, delta, d, 1);
-    println!("d_ssss 原样(axis=1) {direct:>15.10} vs slot0 {:.10}", d_ssss_slot(&prims, 0, 1));
+    println!(
+        "d_ssss 原样(axis=1) {direct:>15.10} vs slot0 {:.10}",
+        d_ssss_slot(&prims, 0, 1)
+    );
 }

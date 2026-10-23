@@ -5,9 +5,30 @@ use qwb_scf::analytic_gradient::nuclear_center_derivative;
 #[test]
 fn diag_nuclear_center_derivative() {
     let cases = [
-        (1.2_f64, [0.0, 0.0, 0.0], 0.9_f64, [0.0, 0.0, 1.4], [0.2, -0.1, 0.0], 1.0_f64),
-        (1.5, [0.3, 0.1, -0.2], 0.8, [0.0, 0.4, 1.1], [0.1, 0.2, 0.3], 8.0),
-        (0.6, [0.0, 0.0, 0.0], 0.6, [0.0, 0.0, 1.0], [0.0, 0.0, 0.5], 1.0),
+        (
+            1.2_f64,
+            [0.0, 0.0, 0.0],
+            0.9_f64,
+            [0.0, 0.0, 1.4],
+            [0.2, -0.1, 0.0],
+            1.0_f64,
+        ),
+        (
+            1.5,
+            [0.3, 0.1, -0.2],
+            0.8,
+            [0.0, 0.4, 1.1],
+            [0.1, 0.2, 0.3],
+            8.0,
+        ),
+        (
+            0.6,
+            [0.0, 0.0, 0.0],
+            0.6,
+            [0.0, 0.0, 1.0],
+            [0.0, 0.0, 0.5],
+            1.0,
+        ),
     ];
     let h = 1.0e-6_f64;
     for (alpha, a, beta, b, c, z) in cases {
@@ -22,7 +43,11 @@ fn diag_nuclear_center_derivative() {
             let numeric = (plus - minus) / (2.0 * h);
             println!(
                 "α={alpha} β={beta} axis={axis}: 解析 {analytic:>14.9}  差分 {numeric:>14.9}  比 {:.6}",
-                if numeric != 0.0 { analytic / numeric } else { f64::NAN }
+                if numeric != 0.0 {
+                    analytic / numeric
+                } else {
+                    f64::NAN
+                }
             );
         }
     }
