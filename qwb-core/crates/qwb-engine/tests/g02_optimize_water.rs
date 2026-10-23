@@ -85,9 +85,11 @@ fn h2o_optimises_to_a_stationary_point() {
         result.used_analytic_gradient
     );
     println!("实验：O–H 0.9572 Å，∠HOH 104.5°（STO-3G 的模型化学值约 0.99 Å / 100°）");
+    // 本轮把解析梯度推广到任意角动量之后，H2O 也走解析梯度了；数值梯度只在
+    // l > 0 的实现出问题时才应该被用到，所以这里**要求**走解析梯度。
     assert!(
-        !result.used_analytic_gradient,
-        "H2O 有 p 函数，解析梯度还不支持，这里应当走数值梯度"
+        result.used_analytic_gradient,
+        "H2O 现在应当走解析梯度（l > 0 已支持）"
     );
     assert!(result.converged, "H2O 优化没有收敛");
     assert!(
