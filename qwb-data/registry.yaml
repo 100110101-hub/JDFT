@@ -24,6 +24,12 @@ bases:
   - name: def2-svp
     path: basis/def2-svp.yaml
     sha256: 177675559ef883e087c3ead49936369dfc74357d4795ed92b02aa49bbe310021
+  - name: def2-tzvp
+    path: basis/def2-tzvp.yaml
+    sha256: 263b684f8c936200116743732e6dc0af32de781818a4f0808732d720193db702
+  - name: 6-311g(d,p)
+    path: basis/6-311g-dp.yaml
+    sha256: cfda92e209fe870532c32df9680cba1c8a3f087bf09ac768a3525ad9f8dd6cb9
 functionals:
   - name: pbe
     path: functional/pbe.yaml

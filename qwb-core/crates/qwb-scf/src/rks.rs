@@ -113,19 +113,48 @@ fn linalg(err: LinalgError) -> EngineError {
 fn inverse_sqrt_symmetric(s: &Matrix) -> Result<Matrix, EngineError> {
     let (values, vectors) = symmetric_eigen(s).map_err(linalg)?;
     let n = s.nrows();
+    let largest = (0..n).map(|i| values.get(i)).fold(0.0_f64, f64::max);
+    if !(largest.is_finite() && largest > 0.0) {
+        return Err(EngineError::Internal(format!(
+            "overlap matrix is degenerate (largest eigenvalue {largest})"
+        )));
+    }
+    // 秩截断的规范正交化：近线性相关的基组（6-311G(d,p) 这类共享指数的三重分裂）
+    // 会出现 ~1e-16 的本征值。标准做法是**丢弃**它们（对应的方向不进正交化基），
+    // 而不是断言矩阵正定——断言只会让这类基组直接不可用。
+    let threshold = largest * 1.0e-10;
+    let mut dropped = 0usize;
     for i in 0..n {
         let lambda = values.get(i);
-        if lambda <= 0.0 || !lambda.is_finite() {
+        if !lambda.is_finite() || lambda < -threshold {
             return Err(EngineError::Internal(format!(
-                "overlap matrix is not positive definite (eigenvalue {lambda})"
+                "overlap matrix is not positive semidefinite (eigenvalue {lambda})"
             )));
         }
+        if lambda < threshold {
+            dropped += 1;
+        }
     }
-    // X = U Λ^{-1/2} Uᵀ
+    if dropped > 0 {
+        // 每个进程只提示一次：SCF 每次迭代都会调这个函数，逐次打印会把真正的输出淹掉。
+        static WARNED: std::sync::Once = std::sync::Once::new();
+        WARNED.call_once(|| {
+            eprintln!(
+                "warning: overlap matrix has {dropped} near-zero eigenvalue(s) below {threshold:.2e}; \
+using rank-truncated orthogonalization (basis is nearly linearly dependent)"
+            );
+        });
+    }
+    // X = U Λ^{-1/2} Uᵀ，被截断的方向取 0
     let mut scaled = Matrix::zeros(n, n);
     for i in 0..n {
         for j in 0..n {
-            scaled[(i, j)] = vectors[(i, j)] / values.get(j).sqrt();
+            let lambda = values.get(j);
+            scaled[(i, j)] = if lambda < threshold {
+                0.0
+            } else {
+                vectors[(i, j)] / lambda.sqrt()
+            };
         }
     }
     let vectors_t = vectors.transpose();
