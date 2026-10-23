@@ -186,6 +186,75 @@ pub fn ao_value(basis: &InternalBasis, point: [f64; 3]) -> Result<Vec<f64>, Engi
     Ok(values)
 }
 
+/// AO 值 + 梯度（GGA 的前置）。
+///
+/// 对笛卡尔高斯 `x^a y^b z^c e^{−α|r−A|²}`（`u = r − A`）：
+///
+/// ```text
+/// ∂/∂x = [ a·u_x^{a−1} − 2α·u_x^{a+1} ] · u_y^b · u_z^c · e^{−α|u|²}
+/// ```
+///
+/// 也就是说梯度的每个分量仍是「同一族单项式」，只是 x 方向的幂次减一或加二。
+///
+/// # Errors
+///
+/// 与 [`ao_value`] 相同：遇到 `l ≥ 2`。
+pub fn ao_value_and_gradient(
+    basis: &InternalBasis,
+    point: [f64; 3],
+) -> Result<(Vec<f64>, Vec<[f64; 3]>), EngineError> {
+    let n = basis.n_functions();
+    let mut values = vec![0.0; n];
+    let mut gradients = vec![[0.0_f64; 3]; n];
+    for shell in basis.shells() {
+        if shell.l > 1 {
+            return Err(EngineError::Unsupported(format!(
+                "grid evaluation of l={} AO needs the spherical AO transform (not implemented)",
+                shell.l
+            )));
+        }
+        let components = cartesian_components(shell.l);
+        let d = [
+            point[0] - shell.center_bohr[0],
+            point[1] - shell.center_bohr[1],
+            point[2] - shell.center_bohr[2],
+        ];
+        let r2 = d[0] * d[0] + d[1] * d[1] + d[2] * d[2];
+        for (component, powers) in components.iter().enumerate() {
+            let powers = [powers.0, powers.1, powers.2];
+            let mut value = 0.0;
+            let mut gradient = [0.0_f64; 3];
+            for (alpha, coefficient) in shell.exponents.iter().zip(&shell.coefficients) {
+                let norm = primitive_norm((powers[0], powers[1], powers[2]), *alpha);
+                let weight = coefficient * norm * (-alpha * r2).exp();
+                let monomial = |exponents: [u32; 3]| {
+                    d[0].powi(i32::try_from(exponents[0]).expect("small"))
+                        * d[1].powi(i32::try_from(exponents[1]).expect("small"))
+                        * d[2].powi(i32::try_from(exponents[2]).expect("small"))
+                };
+                value += weight * monomial(powers);
+                for axis in 0..3 {
+                    // a·u^(a−1) 项（a ≥ 1 才有）
+                    let mut derivative = 0.0;
+                    if powers[axis] >= 1 {
+                        let mut lowered = powers;
+                        lowered[axis] -= 1;
+                        derivative += f64::from(powers[axis]) * monomial(lowered);
+                    }
+                    // −2α·u^(a+1) 项
+                    let mut raised = powers;
+                    raised[axis] += 1;
+                    derivative -= 2.0 * alpha * monomial(raised);
+                    gradient[axis] += weight * derivative;
+                }
+            }
+            values[shell.first_function + component] = value;
+            gradients[shell.first_function + component] = gradient;
+        }
+    }
+    Ok((values, gradients))
+}
+
 /// 在网格上求密度与 XC 能量/v_xc。
 ///
 /// # Errors

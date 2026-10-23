@@ -73,7 +73,7 @@ D-09:
   artifact: "qwb-data/functional/svwn5.yaml（LdaSlaterX + LdaSvwn5，13 参数逐个带 parameter_sources）"
   verification: "cargo test -p qwb-registry --test d09_svwn5（4 例）：13 常数逐位相等、每参数有来源且无悬空、rs=1 复现 C-A 相关能（含 VWN3 负对照）、Q² 指纹、Registry 按 svwn5 可取"
   note: "D-09 原文的『X-02 有限差分导数 < 1e-9』依赖 X-01 的 FunctionalTerm，属 X 轨；数据侧可做项已全做，该门禁在 X-02 落地后回填"
-D-10: {state: pending, depends: [D-01]}
+D-10: {state: pending, depends: [D-01], note: "**GGA 前置已就绪**（2026-10-23）：qwb-scf::rks::ao_value_and_gradient 给出 AO 值 + 解析梯度（l ≤ 1），并用有限差分验证——AO 梯度最大绝对误差 1.7e-10，密度梯度 ∇ρ 与差分差 ≤ 5.5e-11（qwb-scf/tests/gga_ao_gradient.rs）。下一步是 PBE 交换/相关的 ε(ρ,σ) 与 dε/dρ、dε/dσ，再按 D-09 的方式用 X-02 的有限差分校验器判 < 1e-9。"}
 D-11: {state: pending, depends: [D-01]}
 D-12: {state: pending, depends: [D-01]}
 D-13:
@@ -82,7 +82,12 @@ D-13:
   artifact: "qwb-data/grid/grid-{coarse,normal,fine,veryfine}.yaml（§6.2 冻结参数，cutoff=20 Bohr）"
   verification: "cargo test -p qwb-registry --test d13_grids（4 例）：四等级参数逐一相等、单调加密、每等级恰好一个定义、缺等级/等级重复 → Data"
   note: "『相邻等级能量差 < 0.1 mHa』是 T2 断言（需 SCF + 网格求值），未在 D-13 内伪造"
-D-14: {state: pending, depends: [D-01]}
+D-14:
+  state: blocked
+  ts: "2026-10-23T20:00:00Z"
+  artifact: "（未落地）qwb-data/solvent/*.yaml + manifest 的 solvents 段；K1 的 Solvent 类型与校验器已存在（`qwb-registry/src/solvent.rs`）"
+  verification: "阻塞前的检查：K1 的 `Solvent` schema（epsilon / temperature_K / atomic_radii / cavity_model / scale）与 `check()` 校验器已经实现并通过单测，loader 会从 `qwb-data/solvent/` 与 manifest 的 `solvents` 段读取；缺的只是**数据本身**。"
+  note: "**阻塞原因：找不到可引用的 298.15 K 数据源**。验收要求「ε 与 NIST 一致（水 78.3553 @ 298.15 K）」。我尝试的路径：① 含「Dielectric Constant of Solvents at 298.15K」表格的专利 PDF（US20060031053A1）——`web_fetch` 不支持 application/pdf，取不到；② 能取到的 HTML 表格（如 Oregon State 的溶剂性质页）温度约 20 °C、且该表自称 ε 引用的是 Wikipedia，作为数据出处不可接受；③ NIST Chemistry WebBook 是逐化合物页面，8 个溶剂要 8 次抓取且每个的温度点不一致。**按「不得伪造结果」，我不会凭记忆写这 8 个介电常数**。解锁方式：人类提供一份可引用的 298.15 K 表（CSV/PDF 皆可），或授权使用 CRC/Landolt 的 DOI 引用 + 直接给出数值。"
 D-15: {state: pending, depends: [D-02, D-14]}
 
 # ─────────────────────────── I / X / S / G / F 轨 ───────────────────────────
