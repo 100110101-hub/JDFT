@@ -78,7 +78,7 @@ fn lebedev_is_refused_instead_of_substituted() {
 
 #[test]
 fn radial_rule_integrates_a_gaussian_accurately() {
-    // ∫₀^∞ 4π r² e^{-r²} dr = π^{3/2}
+    // ∫₀^∞ r² e^{-r²} dr = √π/4（径向权重不含 4π）
     let definition = level(GridLevelName::VeryFine);
     let (radii, weights) = radial_rule(&definition).expect("radial");
     assert_eq!(radii.len(), definition.radial_points as usize);
@@ -87,11 +87,11 @@ fn radial_rule_integrates_a_gaussian_accurately() {
         .zip(&weights)
         .map(|(r, w)| w * (-r * r).exp())
         .sum();
-    let expected = PI.powf(1.5);
+    let expected = PI.sqrt() / 4.0;
     let relative = (total - expected).abs() / expected;
     assert!(
         relative < 1e-6,
-        "径向求积 ∫4πr²e^{{-r²}} = {total} vs {expected}（相对差 {relative:e}）"
+        "径向求积 ∫r²e^{{-r²}} = {total} vs {expected}（相对差 {relative:e}）"
     );
 }
 
@@ -111,7 +111,7 @@ fn atomic_grid_has_radial_times_angular_points() {
     let expected = radial_weights.iter().sum::<f64>() * angular_weights.iter().sum::<f64>();
     assert!(
         (grid.weight_sum() - expected).abs() < 1e-10 * expected.abs(),
-        "Σw = {} vs Σ_radial·4π = {expected}",
+        "Σw = {} vs Σ_radial·Σ_angular = {expected}",
         grid.weight_sum()
     );
 }

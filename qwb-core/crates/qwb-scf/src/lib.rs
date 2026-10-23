@@ -21,7 +21,6 @@
 #![deny(unsafe_code)]
 #![deny(missing_docs)]
 
-#[cfg(feature = "rks-wip")]
 pub mod rks;
 
 use qwb_integrals::two_electron::TwoElectronIntegrals;

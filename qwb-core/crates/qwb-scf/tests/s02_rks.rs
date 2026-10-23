@@ -1,6 +1,4 @@
-//! S-02 的 WIP 测试（`--features rks-wip`）。当前有已知 bug（F 装配为 0），
-//! 默认不参与门禁，见 docs/status.yaml 的 S-02 记录。
-#![cfg(feature = "rks-wip")]
+//! S-02 验收（project.md §6.5）：**H2/STO-3G/SVWN5 单点能收敛到 1e-8 Ha**。
 
 //! S-02 验收（project.md §6.5）：**H2/STO-3G/SVWN5 单点能收敛到 1e-8 Ha**。
 //!
@@ -65,6 +63,39 @@ fn inputs_are_finite() {
 }
 
 #[test]
+fn ao_values_are_finite_on_every_grid_point() {
+    let registry = registry();
+    let basis_k1 = registry.get_basis("sto-3g").expect("sto-3g");
+    let molecule = h2();
+    let basis = qwb_basis::InternalBasis::build(basis_k1, &molecule).expect("build");
+    let grid_level = registry.get_grid("grid-coarse").expect("grid");
+    let grid = qwb_grid::molecular_grid(grid_level, &molecule).expect("grid");
+
+    let mut bad = 0;
+    let mut first_bad: Option<(usize, [f64; 3], Vec<f64>)> = None;
+    let mut max_abs: f64 = 0.0;
+    for (index, point) in grid.points.iter().enumerate() {
+        let values = qwb_scf::rks::ao_value(&basis, point.position_bohr).expect("ao");
+        if values.iter().any(|v| !v.is_finite()) {
+            bad += 1;
+            if first_bad.is_none() {
+                first_bad = Some((index, point.position_bohr, values.clone()));
+            }
+        }
+        for v in &values {
+            if v.is_finite() {
+                max_abs = max_abs.max(v.abs());
+            }
+        }
+    }
+    println!(
+        "ao diag: points={} bad={bad} max|phi|={max_abs:e} first_bad={first_bad:?}",
+        grid.len()
+    );
+    assert_eq!(bad, 0, "AO 值在网格点上必须有限");
+}
+
+#[test]
 fn h2_sto3g_svwn5_converges_to_eight_digits() {
     let result = rks_from_data(
         &registry(),
@@ -92,6 +123,10 @@ fn h2_sto3g_svwn5_converges_to_eight_digits() {
         result.density[(1, 1)],
         result.mo_energies_hartree.as_slice(),
         result.last_energy_change
+    );
+    println!(
+        "converged = {}, iters = {}",
+        result.scf_converged, result.iterations
     );
     assert!(result.scf_converged, "SCF 必须收敛");
     assert!(
@@ -122,12 +157,21 @@ fn h2_sto3g_svwn5_converges_to_eight_digits() {
 
     // 闭壳层：2 个电子占 1 个 MO，HOMO 必须为负（成键）。
     assert!(result.mo_energies_hartree.get(0) < 0.0, "HOMO 应为负");
-    // 密度矩阵迹 = 电子数。
-    let mut trace = 0.0;
+    // 电子数 = Tr(P·S)（**不是** Tr(P)：AO 基不是正交基，Tr(P) = 2Σc² < 2 是正常的）。
+    let registry = registry();
+    let basis_k1 = registry.get_basis("sto-3g").expect("sto-3g");
+    let basis = qwb_basis::InternalBasis::build(basis_k1, &h2()).expect("build");
+    let one = qwb_integrals::one_electron::one_electron(&basis, &h2()).expect("1e");
+    let mut electrons = 0.0;
     for i in 0..result.density.nrows() {
-        trace += result.density[(i, i)];
+        for j in 0..result.density.ncols() {
+            electrons += result.density[(i, j)] * one.overlap[(j, i)];
+        }
     }
-    assert!((trace - 2.0).abs() < 1e-6, "Tr(P) = {trace} 应为 2");
+    assert!(
+        (electrons - 2.0).abs() < 1e-6,
+        "Tr(P·S) = {electrons} 应为 2（电子数）"
+    );
 }
 
 #[test]

@@ -97,7 +97,7 @@ fn inverse_sqrt_symmetric(s: &Matrix) -> Result<Matrix, EngineError> {
     let n = s.nrows();
     for i in 0..n {
         let lambda = values.get(i);
-        if !(lambda > 0.0) {
+        if lambda <= 0.0 || !lambda.is_finite() {
             return Err(EngineError::Internal(format!(
                 "overlap matrix is not positive definite (eigenvalue {lambda})"
             )));
@@ -135,8 +135,8 @@ fn nuclear_repulsion(molecule: &Molecule) -> Result<f64, EngineError> {
     Ok(energy)
 }
 
-/// 一个 AO 在给定点处的值（只支持 l <= 1）。
-fn ao_value(basis: &InternalBasis, point: [f64; 3]) -> Result<Vec<f64>, EngineError> {
+/// 一个 AO 在给定点处的值（只支持 l <= 1）。pub 是为了让测试能直接查有限性。
+pub fn ao_value(basis: &InternalBasis, point: [f64; 3]) -> Result<Vec<f64>, EngineError> {
     let n = basis.n_functions();
     let mut values = vec![0.0; n];
     for shell in basis.shells() {
@@ -169,7 +169,11 @@ fn ao_value(basis: &InternalBasis, point: [f64; 3]) -> Result<Vec<f64>, EngineEr
 }
 
 /// 在网格上求密度与 XC 能量/v_xc。
-fn evaluate_xc(
+///
+/// # Errors
+///
+/// AO 求值遇到 l>=2，或密度出现非有限值。
+pub fn evaluate_xc(
     basis: &InternalBasis,
     grid: &Grid,
     density: &Matrix,
@@ -228,7 +232,12 @@ fn evaluate_xc(
         let rho = rho_values[index];
         energy += weight * rho * epsilon[index];
         // v = ε + ρ dε/dρ
-        let potential = epsilon[index] + rho * d_epsilon[index];
+        // ρ=0 时不要算 ρ·dε/dρ（0×inf = NaN）；此时势就是 ε(0)。
+        let potential = if rho > 0.0 {
+            epsilon[index] + rho * d_epsilon[index]
+        } else {
+            epsilon[index]
+        };
         let values = &ao_values[index];
         for i in 0..n {
             if values[i] == 0.0 {
@@ -371,7 +380,12 @@ pub fn rks_scf(
     })
 }
 
-fn core_guess(hcore: &Matrix, x: &Matrix, n_occ: usize) -> Result<Matrix, EngineError> {
+/// 初猜密度：对角化 `H_core` 并占据前 `n_occ` 个轨道（`P = 2 sum c c^T`）。
+///
+/// # Errors
+///
+/// 线性代数失败。
+pub fn core_guess(hcore: &Matrix, x: &Matrix, n_occ: usize) -> Result<Matrix, EngineError> {
     let n = hcore.nrows();
     let xt = x.transpose();
     let h_prime = matmul(&matmul(&xt, hcore).map_err(linalg)?, x).map_err(linalg)?;

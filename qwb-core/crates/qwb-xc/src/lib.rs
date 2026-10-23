@@ -26,6 +26,9 @@ use thiserror::Error;
 
 /// `(3/π)^{1/3}` —— 用表达式算，不手抄字面量（上一版手抄错成 0.90036，
 /// 被 `slater_exchange_matches_the_analytic_formula` 立刻抓到）。
+/// 低密度截断阈值（e/Bohr³）：低于它 VWN5 的相关势按平坦处理。
+pub const LOW_DENSITY_FLOOR: f64 = 1.0e-12;
+
 fn three_over_pi_cbrt() -> f64 {
     (3.0 / std::f64::consts::PI).cbrt()
 }
@@ -304,11 +307,22 @@ impl FunctionalTerm for LdaSvwn5 {
         check_shape(batch, d_sigma, "LdaSvwn5::d_sigma").expect("shape");
         let (a, x0, b, c) = self.para;
         for (slot, rho) in d_rho.iter_mut().zip(batch.rho) {
-            let rho = rho.max(1e-300);
+            // 低密度截断（§8.3 的 stability）：dε/dρ 里有 1/ρ，ρ→0 时解析式会溢出到
+            // −inf；消费方算 ρ·dε/dρ 就成了 0×(−inf)=NaN。密度低于阈值的区域相关能
+            // 已经平坦，导数取 0 既物理又数值安全。
+            if *rho <= LOW_DENSITY_FLOOR {
+                *slot = 0.0;
+                continue;
+            }
+            let rho = *rho;
             let rs = (3.0 / (4.0 * std::f64::consts::PI * rho)).cbrt();
             let x = rs.sqrt();
-            // dε/dρ = dG/dx · dx/dρ，dx/dρ = −x/(6ρ)
-            *slot = vwn_g_prime(x, a, x0, b, c) * (-x / (6.0 * rho));
+            let derivative = vwn_g_prime(x, a, x0, b, c) * (-x / (6.0 * rho));
+            *slot = if derivative.is_finite() {
+                derivative
+            } else {
+                0.0
+            };
         }
         for slot in d_sigma.iter_mut() {
             *slot = 0.0;

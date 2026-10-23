@@ -134,7 +134,7 @@ pub fn angular_rule(level: &GridLevelDef) -> Result<(Vec<[f64; 3]>, Vec<f64>), G
     }
 }
 
-/// 径向规则：返回 `(r, w)`，满足 `Σ w·f(r) ≈ ∫₀^∞ 4π r² f dr`。
+/// 径向规则：返回 `(r, w)`，满足 `Σ w·f(r) ≈ ∫₀^∞ r² f dr`（**不含 4π**：\\n/// 角向权重之和已经是 4π，两者相乘才是完整的体积元）。
 ///
 /// # Errors
 ///
@@ -169,7 +169,9 @@ pub fn radial_rule(level: &GridLevelDef) -> Result<(Vec<f64>, Vec<f64>), GridErr
         let r = a * t * t / one_minus;
         // dr/dt = a·2t/(1−t²)²；Jacobian 4πr²·dr/dt·dt/dx，dt/dx = 1/2
         let dr_dt = a * 2.0 * t / (one_minus * one_minus);
-        let jacobian = 4.0 * std::f64::consts::PI * r * r * dr_dt * 0.5;
+        // **不要在这里乘 4π**：角向权重之和已经是 4π（∫dΩ），再乘一次就是 4π²。
+        // 这里只给 ∫ r² f dr 的径向权重。
+        let jacobian = r * r * dr_dt * 0.5;
         radii.push(r);
         radial_weights.push(weight * jacobian);
     }
