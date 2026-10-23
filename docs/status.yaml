@@ -148,9 +148,9 @@ I-02:
   artifact: "qwb-core/crates/qwb-integrals/src/boys.rs（分段 Boys 函数）+ one_electron.rs::primitive_nuclear（Hermite/MD 展开）+ tests/i02_nuclear_limit.rs、qwb-scf/tests/t02_water_hf.rs"
   verification: |
     cargo test -p qwb-scf --test t02_water_hf（已去掉 #[ignore]）：H2O/STO-3G 的 HF 总能量 =
-    -74.96294668 Ha，外部参照 -74.963 Ha（实验几何；NIST CCCBDB 的 STO-3G 优化几何下为
-    -75.204892），差 3.5e-5 Ha。MO 能级 [-20.24, -1.27, -0.62, -0.45, -0.39] vs 文献
-    [-20.20, -1.20, -0.55, -0.42, -0.35]。
+    -74.96294668 Ha，外部参照 -74.963 Ha（实验几何；原始文献值，不经 CCCBDB 的 URL 取数——
+    那条 -75.204892 的引用已标记为待更正：页面实际返回 B2PLYP=FULL/STO-3G，见 choices 二十六节），差 3.5e-5 Ha。
+    MO 能级 [-20.24, -1.27, -0.62, -0.45, -0.39] vs 文献 [-20.20, -1.20, -0.55, -0.42, -0.35]。
     cargo test -p qwb-integrals --test i02_nuclear_limit（2 例）：核吸引的点电荷极限，s/p_x/p_y/p_z/d_xx
     五个分量相对差 <= 2.3e-6。
     cargo test -p qwb-integrals --lib boys（7 例）：两支在 x = 30 附近相对差 < 1e-14；F0(60) 贴合渐近值。
@@ -493,24 +493,26 @@ T2:
     把 csv 的来源标注从 internal 改成 external 并把容差收到 1e-3，T2 即可判 done。
 T3:
   state: in_progress
-  ts: "2026-10-24T22:00:00Z"
-  artifact: "qwb-core/crates/qwb-engine/src/opt.rs + tests/t03_optimize.rs"
+  ts: "2026-10-25T10:00:00Z"
+  artifact: "qwb-core/crates/qwb-engine/src/opt.rs + tests/t03_optimize.rs、t03_water_geometry.rs"
   verification: |
-    T3 三条判据：
-    * 最大力 < 4.5e-4 Ha/Bohr —— **通过**：H2 4 步到 2.65e-4，H2O 5 步到 1.75e-4；
-    * 解析梯度 vs 数值梯度 < 1e-6 —— **通过**（s 型）：驻点处 3.05e-7 Ha/Bohr；
-    * H2O 键长与实验 0.9572 A 差 < 0.01 A —— **未通过**：STO-3G 0.9893（差 0.032）、
-      def2-SVP/PBE 约 0.97（差 0.015）；需要 def2-TZVP 级基组（D-06 阻塞）。
+    T3 三条判据的现状：
+    * 最大力 < 4.5e-4 Ha/Bohr —— **通过**（H2 4 步 2.65e-4；H2O/STO-3G 5 步 1.75e-4；
+      CH4 1.7e-4；NH3 3.5e-5，见 G-03）；
+    * 解析梯度 vs 数值梯度 < 1e-6 —— **通过**（s 型 3.4e-9、p 型 6.7e-7，
+      见 qwb-scf/tests/g01_analytic.rs 与 qwb-engine/tests/g01_analytic_water.rs）；
+    * H2O 键长与实验 0.9572 A 差 < 0.01 A —— **未通过，差 0.0110**：
+      本轮补上 6-311G(d,p)（三 zeta、无 f）后实测 PBE/6-311G(d,p) 的 O-H = **0.9682 A**、
+      角 HOH = **103.34 度**（角误差 1.16 度，达标）。键长差 0.0110 比判据差 0.001 A。
+    可落实的下一步：def2-TZVP（O/C/N 带 f）能把键长压到 ~0.966，但需要先实现
+    f 函数（l=3）的球谐变换（R-06 第一阶段只到 d）；见 D-06。
   note: |
-    前置 G-01 已 done（解析梯度 s 型到 3.4e-9），G-02 部分完成（BFGS 笛卡尔版 + H2O 收敛）。
-    l > 0 的解析梯度仍未做，所以 H2O 只能走数值梯度（每次 18 个位移），
-    这也是 8 分钟量级耗时的来源。T3 要真正收口需要：
-    ① 把解析梯度扩到 p/d（G-01 的范围限制）；
-    ② 拿到 def2-TZVP 或 cc-pVTZ 数据（D-05/D-06）。
-
-    本轮（55）：解析梯度已扩到任意角动量，所以「解析 vs 数值 < 1e-6」这一条现在**对 p 型也成立**
-    （H2O/STO-3G：6.7e-7，见 qwb-engine/tests/g01_analytic_water.rs）。剩下的唯一缺口仍是
-    键长基组判据（需要 def2-TZVP 级数据，D-06 阻塞）。
+    **几何判据是基组判据，不是优化器判据**（choices 二十节有对照表）：HF/STO-3G 给 0.9893
+    （差 0.032）、PBE/def2-SVP 约 0.97（差 0.015）、PBE/6-311G(d,p) 实测 0.9682（差 0.0110）、
+    PBE/def2-TZVP 约 0.966（差 0.009，需要 f 变换）。
+    本轮同时还修了一个**把非问题当成问题**的隐患：测试的角度公式混用了 A 与 Bohr，恒报 180 度，
+    差点据此把「KS 弯曲模式坏了」写进账本。用两次单点能直接比弯曲/线性（差 0.051 Ha，
+    弯曲更低）立刻证伪了那个怀疑——记录在 choices 二十六节。
 T4: {state: pending}
 T5: {state: pending, note: "体系已冻结：CuH/LANL2DZ 与 ZnO/def2-SVP+def2-ECP"}
 T6: {state: pending}
