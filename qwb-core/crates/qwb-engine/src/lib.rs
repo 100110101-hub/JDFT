@@ -146,24 +146,30 @@ impl EngineBackend for RksBackend {
         reporter.progress("done", 100.0);
 
         let env = env::build(&self.registry);
+        // S-06：偶极矩（Debye）——中性分子对原点不变，`qwb-props` 的测试里有这条自检。
+        let dipole = qwb_props::dipole_debye(&basis, &input.molecule, &result.density)?;
         Ok(JobResult::new(
             result.energy_hartree,
             result.scf_converged,
             self.registry.snapshot(),
             env,
         )
+        .with_dipole(nalgebra::DVector::from_column_slice(&dipole))
         .with_orbitals(
             nalgebra::DVector::from_column_slice(result.mo_energies_hartree.as_slice()),
             density_to_api(&result.density),
         )
         .with_log(format!(
-            "method = {}, basis = {}, grid = {}, iterations = {}, E_elec = {:.10}, E_xc = {:.10}",
+            "method = {}, basis = {}, grid = {}, iterations = {}, E_elec = {:.10}, E_xc = {:.10}, dipole = [{:.4}, {:.4}, {:.4}] D",
             functional.name,
             basis_k1.name,
             grid_level.name,
             result.iterations,
             result.electronic_hartree,
-            result.exchange_correlation_hartree
+            result.exchange_correlation_hartree,
+            dipole[0],
+            dipole[1],
+            dipole[2]
         )))
     }
 

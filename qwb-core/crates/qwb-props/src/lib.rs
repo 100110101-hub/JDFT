@@ -146,3 +146,36 @@ pub fn populations(
         lowdin_charges,
     })
 }
+
+/// 偶极矩，单位 Debye（原子单位 → Debye 用 2.5417466320311）。
+///
+/// `μ = Σ_A Z_A R_A − Tr(P · D)`，其中 `D` 是偶极积分矩阵（原子单位 `e·bohr`）。
+/// 对**中性**分子，`μ` 必须与原点无关——这是一条很强的自检，见测试。
+///
+/// # Errors
+///
+/// 偶极积分计算失败（球谐变换未实现等）。
+pub fn dipole_debye(
+    basis: &InternalBasis,
+    molecule: &Molecule,
+    density: &Matrix,
+) -> Result<[f64; 3], qwb_engine_api::EngineError> {
+    let dipoles = qwb_integrals::dipole::dipole_integrals(basis, molecule)?;
+    let n = basis.n_functions();
+    let mut out = [0.0_f64; 3];
+    for axis in 0..3 {
+        let mut electronic = 0.0;
+        for i in 0..n {
+            for j in 0..n {
+                electronic += density[(i, j)] * dipoles[axis][(i, j)];
+            }
+        }
+        let mut nuclear = 0.0;
+        for atom in &molecule.atoms {
+            let z = f64::from(atomic_number(&atom.symbol).unwrap_or(0));
+            nuclear += z * atom.position_bohr()[axis];
+        }
+        out[axis] = (nuclear - electronic) * 2.541_746_632_031_1;
+    }
+    Ok(out)
+}

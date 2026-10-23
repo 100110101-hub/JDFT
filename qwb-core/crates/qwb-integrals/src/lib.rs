@@ -30,6 +30,7 @@
 pub mod boys;
 #[cfg(feature = "integral-cache")]
 pub mod cache;
+pub mod dipole;
 pub mod hermite2e;
 pub mod one_electron;
 pub mod two_electron;

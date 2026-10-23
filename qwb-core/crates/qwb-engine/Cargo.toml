@@ -18,6 +18,7 @@ qwb-integrals.workspace = true
 qwb-registry.workspace = true
 qwb-engine-api.workspace = true
 qwb-scf.workspace = true
+qwb-props.workspace = true
 qwb-grid.workspace = true
 qwb-xc.workspace = true
 nalgebra.workspace = true

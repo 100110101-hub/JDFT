@@ -12,10 +12,10 @@ qwb-basis.workspace = true
 qwb-linalg.workspace = true
 qwb-engine-api.workspace = true
 qwb-registry.workspace = true
+qwb-integrals.workspace = true
 thiserror.workspace = true
 
 [dev-dependencies]
-qwb-integrals.workspace = true
 qwb-scf.workspace = true
 qwb-grid.workspace = true
 
