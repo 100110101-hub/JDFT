@@ -252,3 +252,38 @@ fn odd_electron_count_is_rejected() {
         qwb_engine_api::EngineError::InvalidInput(_)
     ));
 }
+
+/// **外部验证**：不带任何泛函项时，RKS 就是闭壳层 Hartree–Fock。
+/// HF/STO-3G 的 H2 总能量是广泛列在文献/数据库里的值（NIST CCCBDB）。
+/// 这条测试把**整条链**（基组数据 → 1e/2e 积分 → Fock → SCF）对外部数值钉住，
+/// 因此 SVWN5 的 −1.157 才有可信度。
+#[test]
+fn hf_sto3g_h2_matches_the_external_reference() {
+    let registry = registry();
+    let basis_k1 = registry.get_basis("sto-3g").expect("sto-3g");
+    let molecule = h2();
+    let basis = qwb_basis::InternalBasis::build(basis_k1, &molecule).expect("build");
+    let tensor = qwb_integrals::two_electron::two_electron(&basis, &molecule).expect("2e");
+    let grid_level = registry.get_grid("grid-coarse").expect("grid");
+    let grid = qwb_grid::molecular_grid(grid_level, &molecule).expect("grid");
+
+    // 空 terms ⇒ 纯 HF（F = H + 2J − K）。
+    let mut options = RksOptions::default();
+    options.energy_threshold = 1e-10;
+    options.max_iter = 200;
+    let result = rks_scf(&basis, &molecule, &tensor, &grid, &[], options).expect("hf");
+
+    println!(
+        "HF/STO-3G H2: E = {:.10} Ha (iters = {})",
+        result.energy_hartree, result.iterations
+    );
+    assert!(result.scf_converged);
+    // NIST CCCBDB / 文献：HF/STO-3G H2 at r = 0.74 Å = −1.116759 Ha。
+    let reference = -1.116_759_f64;
+    let difference = (result.energy_hartree - reference).abs();
+    assert!(
+        difference < 1.0e-3,
+        "HF 能量 {:.6} 与外部参考 {reference} 差 {difference:e} Ha（> 1 mHa）",
+        result.energy_hartree
+    );
+}

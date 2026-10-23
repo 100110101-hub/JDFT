@@ -3,7 +3,7 @@
 //! ```text
 //! J_ij = Σ_kl (ij|kl) P_kl        库仑
 //! K_ij = Σ_kl (ik|jl) P_kl        交换
-//! F    = H_core + 2J − K          （闭壳层 RHF/RKS 的自旋求和形式）
+//! F    = H_core + J − ½K          （闭壳层 HF：P 是自旋求和的密度）
 //! ```
 //!
 //! # 为什么 S-01 能独立于"2e 积分支持到什么 l"
@@ -34,11 +34,11 @@ pub struct FockMatrices {
     pub coulomb: Matrix,
     /// 交换矩阵 `K`。
     pub exchange: Matrix,
-    /// `F = H_core + 2J − K`。
+    /// `F = H_core + J − ½K`。
     pub fock: Matrix,
 }
 
-/// 由 2e 张量与密度矩阵构建 J、K、F（闭壳层自旋求和形式）。
+/// 由 2e 张量与密度矩阵构建 J、K、F（闭壳层 HF 形式）。`P` 是自旋求和密度
 ///
 /// # Errors
 ///
@@ -90,7 +90,7 @@ pub fn build_fock(
     let mut fock = Matrix::zeros(n, n);
     for i in 0..n {
         for j in 0..n {
-            fock[(i, j)] = hcore[(i, j)] + 2.0 * coulomb[(i, j)] - exchange[(i, j)];
+            fock[(i, j)] = hcore[(i, j)] + coulomb[(i, j)] - 0.5 * exchange[(i, j)];
         }
     }
 
@@ -101,7 +101,7 @@ pub fn build_fock(
     })
 }
 
-/// 双电子能量贡献 `E_2e = ½ Σ_ij P_ij (2J_ij − K_ij)`。
+/// 双电子能量贡献 `E_2e = ½ Σ_ij P_ij (J_ij − ½K_ij)`（闭壳层 HF）。
 ///
 /// # Panics
 ///
@@ -112,7 +112,7 @@ pub fn two_electron_energy(density: &Matrix, fock: &FockMatrices) -> f64 {
     let mut total = 0.0;
     for i in 0..n {
         for j in 0..n {
-            total += density[(i, j)] * (2.0 * fock.coulomb[(i, j)] - fock.exchange[(i, j)]);
+            total += density[(i, j)] * (fock.coulomb[(i, j)] - 0.5 * fock.exchange[(i, j)]);
         }
     }
     0.5 * total

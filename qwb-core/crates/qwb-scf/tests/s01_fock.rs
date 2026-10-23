@@ -128,7 +128,7 @@ fn fock_matches_the_matrix_multiply_reference() {
     // F = H + 2J − K
     for i in 0..2 {
         for j in 0..2 {
-            let expected = one.core_hamiltonian[(i, j)] + 2.0 * j_ref[(i, j)] - k_ref[(i, j)];
+            let expected = one.core_hamiltonian[(i, j)] + j_ref[(i, j)] - 0.5 * k_ref[(i, j)];
             assert!((fock.fock[(i, j)] - expected).abs() < 1e-12, "F({i},{j})");
         }
     }
@@ -172,7 +172,7 @@ fn two_electron_energy_satisfies_the_rf_identity() {
                     let p_ij = density[(i, j)];
                     let p_kl = density[(k, l)];
                     expected +=
-                        0.5 * p_ij * p_kl * (2.0 * tensor.get(i, j, k, l) - tensor.get(i, k, j, l));
+                        0.5 * p_ij * p_kl * (tensor.get(i, j, k, l) - 0.5 * tensor.get(i, k, j, l));
                 }
             }
         }

@@ -4,7 +4,7 @@
 //!
 //! ```text
 //! E = Tr(P H_core) + ½ Tr(P G) + E_xc + E_nuc
-//! G = 2J − K,  E_xc = Σ_g w_g ρ_g ε(ρ_g)
+//! G = J（纯库仑；交换关联全部在 E_xc/v_xc 里）,  E_xc = Σ_g w_g ρ_g ε(ρ_g)
 //! v_xc[i,j] = Σ_g w_g φ_i φ_j (ε + ρ dε/dρ)
 //! ```
 //!
@@ -307,10 +307,18 @@ pub fn rks_scf(
         let (xc_energy, v_xc) = evaluate_xc(basis, grid, &density, terms)?;
         e_xc = xc_energy;
 
+        // 两种约定：
+        //  * Kohn–Sham（有 XC 泛函）：F = h + J + v_xc，交换关联全部经 E_xc/v_xc 进入；
+        //  * Hartree–Fock（terms 为空）：F = h + J − ½K，即 build_fock 给出的 HF Fock。
+        let hf_mode = terms.is_empty();
         let mut fock = Matrix::zeros(n, n);
         for i in 0..n {
             for j in 0..n {
-                fock[(i, j)] = fock_data.fock[(i, j)] + v_xc[(i, j)];
+                fock[(i, j)] = if hf_mode {
+                    fock_data.fock[(i, j)]
+                } else {
+                    hcore[(i, j)] + fock_data.coulomb[(i, j)] + v_xc[(i, j)]
+                };
             }
         }
 
@@ -339,8 +347,13 @@ pub fn rks_scf(
         for i in 0..n {
             for j in 0..n {
                 tr_ph += new_density[(i, j)] * hcore[(i, j)];
-                tr_pg += new_density[(i, j)] * fock_data.fock[(i, j)]
-                    - new_density[(i, j)] * hcore[(i, j)];
+                // KS 的 2e 项是纯库仑 J；HF 的 2e 项才是 J − ½K。
+                tr_pg += new_density[(i, j)]
+                    * if hf_mode {
+                        fock_data.fock[(i, j)] - hcore[(i, j)]
+                    } else {
+                        fock_data.coulomb[(i, j)]
+                    };
             }
         }
         electronic = tr_ph + 0.5 * tr_pg + xc_energy;
