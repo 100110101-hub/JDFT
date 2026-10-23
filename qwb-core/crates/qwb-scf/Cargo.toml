@@ -16,6 +16,8 @@ qwb-linalg.workspace = true
 qwb-integrals.workspace = true
 qwb-engine-api.workspace = true
 thiserror.workspace = true
+serde.workspace = true
+serde_json.workspace = true
 
 
 

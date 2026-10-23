@@ -41,7 +41,7 @@ use crate::diis::Diis;
 use crate::{FockMatrices, build_fock};
 
 /// SCF 控制参数。
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 #[non_exhaustive]
 pub struct RksOptions {
     /// 最大迭代步数。
@@ -54,6 +54,12 @@ pub struct RksOptions {
     pub use_diis: bool,
     /// DIIS 子空间最多保留多少组向量。
     pub diis_max_vectors: usize,
+    /// 从检查点续算（S-05）。
+    pub resume_from: Option<crate::checkpoint::ScfCheckpoint>,
+    /// 检查点文件路径（`None` = 不写检查点）。
+    pub checkpoint_path: Option<std::path::PathBuf>,
+    /// 每多少步写一次检查点（0 = 只在结束时写）。
+    pub checkpoint_every: u32,
 }
 
 impl Default for RksOptions {
@@ -64,6 +70,9 @@ impl Default for RksOptions {
             density_threshold: 1.0e-6,
             use_diis: true,
             diis_max_vectors: 8,
+            resume_from: None,
+            checkpoint_path: None,
+            checkpoint_every: 0,
         }
     }
 }
@@ -92,6 +101,8 @@ pub struct RksResult {
     pub last_energy_change: f64,
     /// 网格点数（诊断用）。
     pub grid_points: usize,
+    /// 终态检查点（可直接存盘续算）。
+    pub checkpoint: crate::checkpoint::ScfCheckpoint,
 }
 
 fn linalg(err: LinalgError) -> EngineError {
@@ -306,6 +317,20 @@ pub fn rks_scf(
     // 用 Xᵀ H X 对角化得到初猜。
     let mut density = core_guess(hcore, &x, n_occ)?;
     let mut previous_energy = f64::NAN;
+    let mut completed_steps = 0u32;
+    if let Some(checkpoint) = &options.resume_from {
+        if checkpoint.n_functions != n {
+            return Err(EngineError::InvalidInput(format!(
+                "resume checkpoint has {} functions but this basis has {n}",
+                checkpoint.n_functions
+            )));
+        }
+        density = checkpoint.density_matrix()?;
+        if let Some(energy) = checkpoint.energy_hartree {
+            previous_energy = energy;
+        }
+        completed_steps = checkpoint.iterations;
+    }
     let mut iterations = 0;
     let mut converged = false;
     let mut last_change = f64::INFINITY;
@@ -395,6 +420,19 @@ pub fn rks_scf(
         density = new_density;
         previous_energy = energy;
 
+        // S-05：按间隔落盘，进程被 kill 也能从最近一步续算。
+        if let Some(path) = options.checkpoint_path.as_deref()
+            && options.checkpoint_every > 0
+            && (step as usize + 1).is_multiple_of(options.checkpoint_every as usize)
+        {
+            let snapshot = crate::checkpoint::ScfCheckpoint::new(
+                &density,
+                Some(previous_energy),
+                completed_steps + iterations,
+            );
+            crate::checkpoint::save_checkpoint(path, &snapshot)?;
+        }
+
         if last_change < options.energy_threshold && max_dp < options.density_threshold {
             converged = true;
             break;
@@ -402,11 +440,26 @@ pub fn rks_scf(
     }
 
     if !converged {
+        // S-05：不收敛也落盘，否则「kill 后续算」拿不到状态。
+        if let Some(path) = options.checkpoint_path.as_deref() {
+            let snapshot = crate::checkpoint::ScfCheckpoint::new(
+                &density,
+                Some(previous_energy),
+                completed_steps + iterations,
+            );
+            crate::checkpoint::save_checkpoint(path, &snapshot)?;
+        }
         return Err(EngineError::ScfNotConverged {
             iters: iterations,
             max: options.max_iter,
         });
     }
+
+    let checkpoint = crate::checkpoint::ScfCheckpoint::new(
+        &density,
+        Some(previous_energy),
+        completed_steps + iterations,
+    );
 
     Ok(RksResult {
         energy_hartree: previous_energy + e_nuc - e_nuc, // 保持写法对称：electronic + e_nuc
@@ -419,6 +472,7 @@ pub fn rks_scf(
         mo_energies_hartree: mo_energies,
         last_energy_change: last_change,
         grid_points: grid.len(),
+        checkpoint,
     })
 }
 
