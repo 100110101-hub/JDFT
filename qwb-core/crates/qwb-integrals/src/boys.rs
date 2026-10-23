@@ -105,6 +105,56 @@ fn f0_asymptotic(x: f64, exp_neg_x: f64) -> f64 {
     0.5 * (std::f64::consts::PI / x).sqrt() * (1.0 - erfc)
 }
 
+/// 栈上版本：把 `F_0(x) .. F_{m_max}(x)` 写进 `out`，**不分配堆内存**。
+///
+/// 原函数级的 2e 导数要对每个四元组调一次 Boys，热路径上每次分配一个 `Vec` 在
+/// debug 构建里能占到一半以上的时间。`out.len()` 必须大于 `m_max`。
+///
+/// # Panics
+///
+/// `x < 0`，或 `out` 太短。
+pub fn boys_functions_into(m_max: usize, x: f64, out: &mut [f64]) {
+    assert!(x >= 0.0, "Boys function requires x >= 0, got {x}");
+    assert!(
+        out.len() > m_max,
+        "boys_functions_into: 缓冲区 {} 不足以装下 {} 阶",
+        out.len(),
+        m_max + 1
+    );
+
+    if x < SMALL_X {
+        for (m, slot) in out.iter_mut().enumerate().take(m_max + 1) {
+            *slot = 1.0 / (2.0 * m as f64 + 1.0);
+        }
+        return;
+    }
+
+    let exp_neg_x = (-x).exp();
+    if x >= CROSSOVER {
+        out[0] = f0_asymptotic(x, exp_neg_x);
+        for m in 0..m_max {
+            out[m + 1] = ((2.0 * m as f64 + 1.0) * out[m] - exp_neg_x) / (2.0 * x);
+        }
+        return;
+    }
+
+    let top = m_max + RECURSION_PADDING + 2 * x.ceil() as usize;
+    // 沿着 `out` 逐级向下写不通（需要从 top 往下），所以用一个小的栈数组兜住 top+1
+    const STACK: usize = 320;
+    assert!(
+        top < STACK,
+        "boys_functions_into: 栈缓冲 {STACK} 不足（top = {top}）"
+    );
+    let mut buffer = [0.0_f64; STACK];
+    let mut next = 0.0_f64;
+    for m in (0..=top).rev() {
+        let current = (2.0 * x * next + exp_neg_x) / (2.0 * m as f64 + 1.0);
+        buffer[m] = current;
+        next = current;
+    }
+    out[..=m_max].copy_from_slice(&buffer[..=m_max]);
+}
+
 #[cfg(test)]
 mod tests {
     use super::boys_functions;

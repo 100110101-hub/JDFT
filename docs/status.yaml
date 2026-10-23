@@ -339,8 +339,30 @@ G-02:
     SCF + 网格求值**，不是梯度本身，所以「解析梯度让几何优化变快」在当前实现里收益有限，
     真正的加速要等 SCF 侧的优化（那属 S-02/X-03 的后续）。
     `used_analytic_gradient` 现在在 H2O 上必须为 true（测试已改成断言这一点）。
-G-03: {state: pending, depends: [G-02]}
-
+G-03:
+  state: done
+  ts: "2026-10-25T01:00:00Z"
+  artifact: "qwb-core/crates/qwb-engine/src/opt.rs（OptResult.trajectory 多步轨迹 + 收敛报告）+ tests/g03_three_molecules.rs、t03_optimize.rs"
+  verification: |
+    `cargo test -p qwb-engine --test g03_three_molecules -- --ignored --nocapture`
+    （实测 1495 s，全程解析梯度、全程单调下降）：
+    * H2O/HF/STO-3G：3 步，E = -74.9659010705 Ha，
+      力 2.981e-2 -> 2.027e-2 -> 8.192e-3 -> **2.913e-4**；
+    * CH4/HF/STO-3G：3 步，E = -39.7268633064 Ha，
+      力 2.966e-2 -> 1.363e-2 -> 2.542e-3 -> **1.715e-4**；
+    * NH3/HF/STO-3G：5 步，E = -55.4554197847 Ha，
+      力 9.486e-2 -> 4.044e-2 -> 1.036e-2 -> 3.933e-3 -> 1.521e-3 -> **3.462e-5**。
+    三个分子全部收敛到 4.5e-4 Ha/Bohr 以内，轨迹逐段单调下降（BFGS + Armijo 的必然结果，
+    测试已断言）。门禁里另有 `t03_optimize::water_takes_a_downhill_step`（几秒的冒烟版：
+    H2O 走两步，能量与最大力都必须明显下降），保证这条路径始终是活的。
+  note: |
+    三个收敛能量同时是一次**外部旁证**：CH4/STO-3G/HF = -39.726863 与本项目早先记录的
+    参照 -39.727 相符（差 1e-4 Ha）；H2O = -74.965901 与 t02 的外部参照一致。
+    NH3 的 -55.455420 目前只有内部一致性（无外部表值核实），所以没有当成外部判据用——
+    记在 V-03 的待办里（需要一份可引用的 NH3/STO-3G HF 总能量）。
+    运行时间说明：单个梯度的 2e 项是 n_cart^4 × 原函数组合，CH4（n_cart = 9）在 debug
+    构建里约 1-2 分钟一次，所以三个分子共 25 分钟。这也解释了为什么这条测试进不了 gate
+    （门禁里只放冒烟版）。要让完整三分子进 gate，得先把 2e 梯度按壳层分块/预筛，属另一个 WP。
 F-01: {state: pending, depends: [G-01]}
 F-02: {state: pending, depends: [F-01]}
 

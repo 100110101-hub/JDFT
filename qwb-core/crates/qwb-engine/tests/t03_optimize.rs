@@ -139,3 +139,36 @@ fn numeric_gradient_optimisation_agrees() {
         "解析与数值梯度在驻点处差 {worst:.2e}（要求 < 1e-6）"
     );
 }
+
+/// 门禁里的冒烟版：H2O 从偏离平衡的几何走 2 步，必须**能量下降、最大力下降**。
+///
+/// 完整的三个分子收敛证据在 `g03_three_molecules.rs`（25 分钟，`#[ignore]`）；
+/// 这条只需要几秒（纯 HF 现在不碰网格），用来保证优化器这条路始终是活的。
+#[test]
+fn water_takes_a_downhill_step() {
+    let registry = Registry::open(data_root()).expect("qwb-data");
+    let start = Molecule::new(
+        vec![
+            Atom::new("O", [0.0, 0.0, 0.0]),
+            Atom::new("H", [0.0, 0.80, 0.62]),
+            Atom::new("H", [0.0, -0.80, 0.62]),
+        ],
+        0,
+        1,
+    );
+    let mut options = OptOptions::new("sto-3g", "", "grid-coarse");
+    options.max_iterations = 2;
+    let result = optimize(&registry, &start, &options).expect("optimize");
+    println!("轨迹：{:?}", result.trajectory);
+    assert!(result.used_analytic_gradient, "H2O 应当走解析梯度");
+    let (first_energy, first_force) = result.trajectory[0];
+    let (last_energy, last_force) = *result.trajectory.last().expect("trajectory");
+    assert!(
+        last_energy < first_energy,
+        "能量没有下降：{first_energy} -> {last_energy}"
+    );
+    assert!(
+        last_force < first_force * 0.5,
+        "最大力没有明显下降：{first_force:.2e} -> {last_force:.2e}"
+    );
+}

@@ -36,7 +36,7 @@
 //! `(−1)^{τ+υ+φ}` 与「`S` 用不用 (−1)^{l+m+n}`」两种约定在 l=0 时重合，l>0 时
 //! 会差整体符号，因此这条约定由测试对照独立路径来确定，不靠记忆。
 
-use crate::boys::boys_functions;
+use crate::boys::boys_functions_into;
 use crate::one_electron::hermite_1d;
 
 const PI: f64 = std::f64::consts::PI;
@@ -132,8 +132,12 @@ pub(crate) fn derivative_boys(l: u32, m: u32, n: u32, scale: f64, r: [f64; 3]) -
         kernel = kernel.differentiate(2, scale);
     }
     let t = scale * (0..3).map(|axis| r[axis] * r[axis]).sum::<f64>();
-    let boys = boys_functions(kernel.max_boys_index() as usize, t);
-    kernel.evaluate(r, &boys)
+    // 热路径：栈上缓冲。原函数级 2e 导数每个四元组都要调一次 Boys，
+    // 每次分配一个 Vec 在 debug 构建里能占掉一半以上的时间。
+    let m_max = kernel.max_boys_index() as usize;
+    let mut boys = [0.0_f64; 20];
+    boys_functions_into(m_max, t, &mut boys[..=m_max]);
+    kernel.evaluate(r, &boys[..=m_max])
 }
 
 /// 一个笛卡尔分量 `(a b|c d)` 的原函数积分（未归一化、未收缩）。

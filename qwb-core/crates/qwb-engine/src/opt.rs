@@ -78,6 +78,8 @@ pub struct OptResult {
     pub converged: bool,
     /// 本次是否用了解析梯度（false = 数值梯度）。
     pub used_analytic_gradient: bool,
+    /// 每一步的 `(能量, 最大力)`，第 0 项是初值（G-03 的「多步轨迹」）。
+    pub trajectory: Vec<(f64, f64)>,
 }
 
 /// 把几何摊成 `[x1, y1, z1, x2, …]`（单位 Bohr）。
@@ -219,6 +221,7 @@ pub fn optimize(
 
     let mut iterations = 0;
     let mut converged = max_force(&flat_gradient) < options.force_threshold;
+    let mut trajectory = vec![(energy, max_force(&flat_gradient))];
 
     while !converged && iterations < options.max_iterations {
         iterations += 1;
@@ -318,6 +321,7 @@ pub fn optimize(
         gradient = new_gradient;
         flat_gradient = new_flat;
         converged = max_force(&flat_gradient) < options.force_threshold;
+        trajectory.push((energy, max_force(&flat_gradient)));
     }
 
     Ok(OptResult {
@@ -327,5 +331,6 @@ pub fn optimize(
         iterations,
         converged,
         used_analytic_gradient: used_analytic,
+        trajectory,
     })
 }

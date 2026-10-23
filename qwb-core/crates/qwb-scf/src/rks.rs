@@ -575,7 +575,14 @@ pub fn rks_scf(
     for step in 0..options.max_iter {
         iterations = step + 1;
         let fock_data: FockMatrices = build_fock(hcore, tensor, &density).map_err(linalg)?;
-        let (xc_energy, v_xc) = evaluate_xc(basis, grid, &density, terms)?;
+        // 纯 HF（terms 为空）**不碰网格**：E_xc = 0、v_xc = 0 是精确结果，
+        // 而走一遍网格要按点求 AO 值与密度（H2O/STO-3G 的 grid-coarse 是 29400 点 × 7 个 AO，
+        // 每步都算一次会让 HF 的 SCF 慢两个数量级——实测每个 SCF 约 30 秒）。
+        let (xc_energy, v_xc) = if terms.is_empty() {
+            (0.0, Matrix::zeros(basis.n_functions(), basis.n_functions()))
+        } else {
+            evaluate_xc(basis, grid, &density, terms)?
+        };
         e_xc = xc_energy;
 
         // 两种约定：
