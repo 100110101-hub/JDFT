@@ -299,8 +299,9 @@ pub fn primitive_nuclear(
                 if fz == 0.0 {
                     continue;
                 }
-                let sign = if (tx + ty + tz) % 2 == 0 { 1.0 } else { -1.0 };
-                total += fx * fy * fz * sign * crate::hermite2e::derivative_boys(tx, ty, tz, p, r);
+                // 核吸引：V_t = ∂^t F_0(p|P−C|²)，**不带** (−1)^t。
+                // （2e 那边是 (−1) 落在 ket 的 E 系数上，两者约定不同，别混用。）
+                total += fx * fy * fz * crate::hermite2e::derivative_boys(tx, ty, tz, p, r);
             }
         }
     }
