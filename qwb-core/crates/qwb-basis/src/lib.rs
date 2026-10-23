@@ -29,6 +29,8 @@
 #![deny(unsafe_code)]
 #![deny(missing_docs)]
 
+pub mod spherical;
+
 use qwb_engine_api::{EngineError, Molecule};
 use qwb_registry::basis::{Angular, BasisSet, Normalization};
 

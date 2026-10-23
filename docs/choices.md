@@ -102,3 +102,12 @@ X-03 要求 "Becke 分区 + Lebedev 网格（order 194/302/590/974）"。Lebedev
   所以对 `l >= 2` 显式返回 `Unsupported`。需要在 SCF 之前补
   `qwb-basis` 的 cartesian→spherical 变换矩阵 `T`（每个壳层一块，块对角），
   并在积分产出后做 `M_sph = Tᵀ M_cart T`。T2（def2-SVP）被它阻塞；T1（STO-3G，全 s/p）不受影响。
+
+### R-06 进展（2026-10-23，第二轮）
+
+- **变换矩阵已实现并验证**：`qwb-basis::spherical::{Transform, spherical_transform}`。
+  `l<=1` 是单位阵（球谐与直角坐标一一对应）；`l=2` 是 6×5 的实球谐变换，
+  测试断言 ① 五列标准正交（`TᵀT = I₅`，1e-15）、② 每列与 `s` 方向 `r²/√3` 正交
+  （"球谐 d 里没有 s 成分"）、③ 形状 6→5、④ `l>=3` 返回 `None`（系数不猜）。
+- **还差最后一步**：把 `T` 接进积分层（`M_sph = Tᵀ M_cart T`）。`one_electron`
+  目前对 `l>=2` 显式 `Unsupported`，所以不会出错值；接上后 T2 的 def2-SVP 才可算。
