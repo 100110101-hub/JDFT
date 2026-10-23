@@ -180,32 +180,110 @@ fn dispatch(cli: &Cli) -> CliResult<()> {
 
 // ---------------------------------------------------------------- run / batch
 
-fn cmd_run(args: &RunArgs) -> CliResult<()> {
-    let input = load_input(&args.input_yaml)?;
-    println!(
-        "input   {} atoms, charge {}, multiplicity {}, basis {}, method {}, grid {:?}, solvent {}, jobtype {:?}",
-        input.molecule.n_atoms(),
-        input.molecule.charge,
-        input.molecule.multiplicity,
-        input.basis_name,
-        input.method_name,
-        input.grid_level.as_str(),
-        input.solvent,
-        input.jobtype.as_str()
-    );
-    if let Some(threads) = args.threads {
-        println!("threads {threads} (requested)");
-    }
-    if let Some(out) = &args.out {
-        println!("out     {}", out.display());
-    }
-    // 数值执行属 I/X/S/G 轨 + P-07；这里显式失败，不伪造结果。
-    Err(CliError::internal(
-        "no engine backend linked in this build (contract phase C); \
-         numerical execution arrives with the I/X/S/G tracks and P-07",
-    ))
+/// 收集日志的最小 `Reporter` 实现（CLI 不做进度动画）。
+struct CliReporter {
+    // `Reporter: Send + Sync`（K2）：必须用线程安全的容器。
+    lines: std::sync::Mutex<Vec<String>>,
 }
 
+impl CliReporter {
+    fn new() -> Self {
+        Self {
+            lines: std::sync::Mutex::new(Vec::new()),
+        }
+    }
+}
+
+impl qwb_engine_api::Reporter for CliReporter {
+    fn progress(&self, stage: &str, pct: f64) {
+        if let Ok(mut lines) = self.lines.lock() {
+            lines.push(format!("[{pct:5.1}%] {stage}"));
+        }
+    }
+
+    fn log(&self, line: &str) {
+        if let Ok(mut lines) = self.lines.lock() {
+            lines.push(line.to_string());
+        }
+    }
+
+    fn is_cancelled(&self) -> bool {
+        false
+    }
+}
+
+impl CliReporter {
+    fn into_lines(self) -> Vec<String> {
+        self.lines.into_inner().unwrap_or_default()
+    }
+}
+
+fn cmd_run(args: &RunArgs) -> CliResult<()> {
+    let input = load_input(&args.input_yaml)?;
+    if let Some(threads) = args.threads {
+        eprintln!(
+            "qwb: note: --threads {threads} is recorded but this build is single-threaded (I-04)"
+        );
+    }
+
+    let root = find_data_root()?;
+    let registry = qwb_registry::Registry::open(&root).map_err(|e| CliError::from_engine(&e))?;
+    let handle = registry.engine_handle();
+    let backend = Box::new(qwb_engine::RksBackend::new(registry));
+    let engine = qwb_engine_api::Engine::with_backend(&handle, backend)
+        .map_err(|e| CliError::from_engine(&e))?;
+
+    let reporter = CliReporter::new();
+    let result = engine
+        .run(&input, &reporter)
+        .map_err(|e| CliError::from_engine(&e))?;
+    let lines = reporter.into_lines();
+
+    // 结果目录（K3 布局）。任务 id：输入文件名（去扩展名）。
+    let task_id = args
+        .input_yaml
+        .file_stem()
+        .and_then(|stem| stem.to_str())
+        .unwrap_or("task")
+        .to_string();
+    let out_root = args.out.clone().unwrap_or_else(|| PathBuf::from("results"));
+    let task_dir = out_root.join(&task_id);
+    std::fs::create_dir_all(task_dir.join("artifacts"))
+        .map_err(|e| CliError::internal(format!("cannot create {}: {e}", task_dir.display())))?;
+
+    let write = |name: &str, bytes: Vec<u8>| -> CliResult<()> {
+        std::fs::write(task_dir.join(name), bytes)
+            .map_err(|e| CliError::internal(format!("cannot write {name}: {e}")))
+    };
+    let input_yaml = serde_yaml::to_string(&input)
+        .map_err(|e| CliError::internal(format!("cannot serialise input: {e}")))?;
+    write("input.yaml", input_yaml.into_bytes())?;
+    write(
+        "result.json",
+        serde_json::to_vec_pretty(&result)
+            .map_err(|e| CliError::internal(format!("cannot serialise result: {e}")))?,
+    )?;
+    write(
+        "env.json",
+        serde_json::to_vec_pretty(&result.env)
+            .map_err(|e| CliError::internal(format!("cannot serialise env: {e}")))?,
+    )?;
+    write(
+        "data_snapshot.json",
+        serde_json::to_vec_pretty(&result.data_snapshot)
+            .map_err(|e| CliError::internal(format!("cannot serialise snapshot: {e}")))?,
+    )?;
+    let mut log = lines.join("\n");
+    log.push('\n');
+    log.push_str(&result.log);
+    log.push('\n');
+    write("log.txt", log.into_bytes())?;
+
+    println!("energy  {:.10} Ha", result.energy_hartree);
+    println!("scf     converged = {}", result.scf_converged);
+    println!("task    {}", task_dir.display());
+    Ok(())
+}
 fn cmd_batch(args: &BatchArgs) -> CliResult<()> {
     let files = expand_pattern(&args.pattern)?;
     if files.is_empty() {

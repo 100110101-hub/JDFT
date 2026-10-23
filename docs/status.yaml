@@ -166,7 +166,12 @@ P-03: {state: pending, depends: [P-01, C-05], note: "取消 queued/running 依�
 P-04: {state: pending, depends: [P-01, C-02], note: "EnvInfo 类型与 G5 校验已在 K2/K3 落地"}
 P-05: {state: pending, depends: [P-01], note: "K5 CLI 已实现；P-05 = Python shell 转发层"}
 P-06: {state: pending, depends: [C-02, P-04], note: "K6 .pyi 已冻结并通过 mypy；P-06 = pyo3 + maturin（abi3-py39）"}
-P-07: {state: pending, depends: [P-05, P-06], note: "依赖引擎（I/X/S 轨）"}
+P-07:
+  state: in_progress
+  ts: "2026-10-23T01:16:00Z"
+  artifact: "qwb-core/crates/qwb-engine（RksBackend 实现 K2 EngineBackend + env.rs 真实 env.json）+ qwb-cli 的 `run` 写 K3 结果目录 + examples/h2_sto3g_svwn5.yaml"
+  verification: "cargo run -q -p qwb-cli --bin qwb -- run examples/h2_sto3g_svwn5.yaml --out <dir> → 退出 0，energy = −1.1570004991 Ha，scf converged；结果目录含 input.yaml/result.json/env.json/log.txt/data_snapshot.json（artifacts/ 空目录）；随后 qwb inspect 该目录 → status ok，env 显示真实 rustc 1.97.1、7 个数据文件快照"
+  note: "**未完成**：P-06（pyo3 绑定）没做，所以 P-07 里『Python 侧也能跑』这半没有；CLI 路径已端到端可用。env.json 的 cargo_lock_sha256 是编译期嵌入的 qwb-core/Cargo.lock 的真实 sha256，toolchain_channel 从 rust-toolchain.toml 读，created_at_utc 用手写历法（不引入时间库）。"
 P-08: {state: pending, depends: [P-03, P-04], note: "replay --dry-run 已可用"}
 P-09: {state: pending, depends: [P-07, P-08]}
 P-10: {state: pending, depends: [P-09, G-02, F-02]}
@@ -182,7 +187,10 @@ V-06: {state: pending, depends: [I-03, X-03, S-03]}
 
 # ─────────────────────────── 垂直切片 ───────────────────────────
 
-T1: {state: pending, note: "前置 WP 全绿后跑 qwb run examples/h2_sto3g_svwn5.yaml"}
+T1:
+  state: in_progress
+  ts: "2026-10-23T01:16:00Z"
+  note: "命令已跑通（见 P-07）：E = −1.1570004991 Ha，收敛，env/data_snapshot 齐全，inspect 通过。**剩余**：① tests/reference/h2_sto3g_svwn5.csv 需要外部引用值（§7.0），再把 < 1 mHa 的断言加进 CI；② qwb replay 完整重算（P-08）。注：本轮的 −1.157 与 HF/STO-3G 的 −1.1168 差约 40 mHa，方向合理（LDA 相关为负），但 < 1 mHa 必须靠外部参考值判定，不能自证。"
 T2: {state: pending, note: "含 S-06 性质断言（偶极 1.85 D ± 0.15、电荷和 == 总电荷）"}
 T3: {state: pending}
 T4: {state: pending}

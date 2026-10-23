@@ -1,0 +1,26 @@
+[package]
+name = "qwb-engine"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "QWB 引擎顶层：把注册表数据接到 SCF 上，实现 K2 的 EngineBackend"
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+hex.workspace = true
+qwb-basis.workspace = true
+qwb-linalg.workspace = true
+qwb-integrals.workspace = true
+qwb-registry.workspace = true
+qwb-engine-api.workspace = true
+qwb-scf.workspace = true
+qwb-grid.workspace = true
+qwb-xc.workspace = true
+nalgebra.workspace = true
+
+[lints]
+workspace = true
