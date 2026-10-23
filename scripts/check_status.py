@@ -22,6 +22,7 @@ Exit code 0 = ledger is fine, 1 = at least one problem.
 from __future__ import annotations
 
 import io
+import os
 import re
 import sys
 
@@ -148,6 +149,34 @@ def main() -> int:
                         problems.append("{}: unknown state '{}' (parsed)".format(key, state))
             done = sum(1 for value in parsed.values() if isinstance(value, dict) and value.get("state") == "done")
             notes.append("YAML parses; {} items marked done".format(done))
+
+    # ---- 5. every artifact named by a `done` WP must exist ----------------
+    # 账本最怕的是「写着 done、引用的测试却不在了」。按 basename 全树查一次，
+    # 这样删测试、改文件名都会在这里立刻暴露。
+    if isinstance(parsed, dict):
+        index: dict[str, str] = {}
+        for root, dirs, files in os.walk("."):
+            dirs[:] = [d for d in dirs if d not in ("target", ".git", ".venv", "node_modules")]
+            for name in files:
+                index.setdefault(name, os.path.join(root, name))
+        artifact = re.compile(
+            r"(?:tests|scripts)/[A-Za-z0-9_./-]+\.(?:rs|py|sh|ps1)|crates/[A-Za-z0-9_./-]+\.rs"
+        )
+        referenced = 0
+        for key, value in parsed.items():
+            if not isinstance(value, dict) or value.get("state") != "done":
+                continue
+            blob = " ".join(
+                str(value.get(field, "")) for field in ("artifact", "verification", "note")
+            )
+            for match in artifact.findall(blob):
+                referenced += 1
+                basename = match.rsplit("/", 1)[-1]
+                if basename not in index:
+                    problems.append(
+                        "{} cites a missing file: {}".format(key, match)
+                    )
+        notes.append("{} artifact references from done WPs checked".format(referenced))
 
     return report(problems, notes)
 
