@@ -14,6 +14,7 @@
 #![deny(missing_docs)]
 
 pub mod env;
+pub mod gradient;
 
 use qwb_engine_api::{EngineBackend, EngineError, JobInput, JobResult, JobType, Reporter};
 

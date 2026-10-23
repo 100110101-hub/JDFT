@@ -1,0 +1,118 @@
+//! 数值梯度（G-01 的前置，也是 T3 的基础）。
+//!
+//! 解析梯度的验收是「与**数值**梯度最大分量差 < 1e-6 Ha/Bohr」，所以先把数值梯度做成
+//! 可靠的一等公民：
+//!
+//! * 中心差分 `dE/dR_a[k] = (E(R+δ) − E(R−δ)) / (2δ)`，`δ` 以 Bohr 计，默认 1e-3；
+//! * 每次位移都**重建**基组、2e 张量与网格并重跑 SCF——不做任何几何假设；
+//! * 结果可被三条与参照无关的不变量检验（见 `qwb-engine/tests/g01_numeric_gradient.rs`）：
+//!   平移不变 `Σ_A dE/dR_A = 0`、H2 在极小点的梯度为零、力方向正确。
+//!
+//! 注意：数值梯度的精度受 `δ` 与 SCF 收敛阈值共同限制。做解析梯度比对时要给解析侧
+//! 留 ~1e-6 的余地（§6.2 的判据就是这个量级）。
+
+use qwb_engine_api::{EngineError, Molecule};
+use qwb_registry::Registry;
+
+use qwb_scf::rks::{RksOptions, rks_from_data, rks_scf};
+
+/// 数值梯度的选项。
+#[derive(Debug, Clone)]
+#[non_exhaustive]
+pub struct GradientOptions {
+    /// 基组名。
+    pub basis: String,
+    /// 泛函名（空字符串表示 HF）。
+    pub functional: String,
+    /// 网格等级名。
+    pub grid: String,
+    /// 差分步长，单位 **Bohr**。
+    pub delta_bohr: f64,
+}
+
+impl GradientOptions {
+    /// 默认值（`delta = 1e-3` Bohr）。
+    #[must_use]
+    pub fn new(
+        basis: impl Into<String>,
+        functional: impl Into<String>,
+        grid: impl Into<String>,
+    ) -> Self {
+        Self {
+            basis: basis.into(),
+            functional: functional.into(),
+            grid: grid.into(),
+            delta_bohr: 1.0e-3,
+        }
+    }
+}
+
+/// 把分子的第 `atom` 个原子沿 `axis` 移动 `shift_bohr`。
+fn displaced(molecule: &Molecule, atom: usize, axis: usize, shift_bohr: f64) -> Molecule {
+    const ANGSTROM_PER_BOHR: f64 = 0.529_177_210_903;
+    let mut moved = molecule.clone();
+    let mut position = moved.atoms[atom].position_angstrom;
+    position[axis] += shift_bohr * ANGSTROM_PER_BOHR;
+    moved.atoms[atom].position_angstrom = position;
+    moved
+}
+
+/// 给定几何的总能量（单点 SCF）。空 functional 名表示走 HF 分支。
+fn single_point_energy(
+    registry: &Registry,
+    molecule: &Molecule,
+    options: &GradientOptions,
+) -> Result<f64, EngineError> {
+    let mut scf_options = RksOptions::default();
+    scf_options.max_iter = 400;
+    if options.functional.is_empty() {
+        // HF：空 terms
+        let basis_k1 = registry.get_basis(&options.basis)?;
+        let basis = qwb_basis::InternalBasis::build(basis_k1, molecule)?;
+        let tensor = qwb_integrals::two_electron::two_electron(&basis, molecule)?;
+        let level = registry.get_grid(&options.grid)?;
+        let grid = qwb_grid::molecular_grid(level, molecule)
+            .map_err(|err| EngineError::Data(format!("grid: {err}")))?;
+        let result = rks_scf(&basis, molecule, &tensor, &grid, &[], scf_options)?;
+        Ok(result.energy_hartree)
+    } else {
+        let result = rks_from_data(
+            registry,
+            molecule,
+            &options.basis,
+            &options.functional,
+            &options.grid,
+            scf_options,
+        )?;
+        Ok(result.energy_hartree)
+    }
+}
+
+/// 数值梯度 `dE/dR_A[k]`，单位 Ha/Bohr，形状 `[natoms][3]`。
+///
+/// # Errors
+///
+/// 任何一次位移的单点计算失败。
+pub fn numerical_gradient(
+    registry: &Registry,
+    molecule: &Molecule,
+    options: &GradientOptions,
+) -> Result<Vec<[f64; 3]>, EngineError> {
+    if !(options.delta_bohr.is_finite() && options.delta_bohr > 0.0) {
+        return Err(EngineError::InvalidInput(format!(
+            "gradient delta must be positive and finite, got {}",
+            options.delta_bohr
+        )));
+    }
+    let mut gradient = vec![[0.0_f64; 3]; molecule.atoms.len()];
+    for (atom, row) in gradient.iter_mut().enumerate() {
+        for (axis, slot) in row.iter_mut().enumerate() {
+            let plus = displaced(molecule, atom, axis, options.delta_bohr);
+            let minus = displaced(molecule, atom, axis, -options.delta_bohr);
+            let e_plus = single_point_energy(registry, &plus, options)?;
+            let e_minus = single_point_energy(registry, &minus, options)?;
+            *slot = (e_plus - e_minus) / (2.0 * options.delta_bohr);
+        }
+    }
+    Ok(gradient)
+}
