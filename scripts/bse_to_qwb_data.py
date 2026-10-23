@@ -55,7 +55,7 @@ def fmt(value: float) -> str:
 
 def split_shells(entry: dict) -> list[dict]:
     """把一个 BSE electron_shell 拆成 K1 的 Shell 列表。"""
-    if entry.get("function_type") != "gto":
+    if entry.get("function_type") not in ("gto", "gto_spherical"):
         raise SystemExit(f"unsupported function_type: {entry.get('function_type')!r}")
     if entry.get("region"):
         raise SystemExit(f"unsupported region: {entry['region']!r} (only full-range shells)")
@@ -149,8 +149,12 @@ def main(argv: list[str]) -> int:
     with open(args.input, "r", encoding="utf-8") as handle:
         data = json.load(handle)
 
-    if data.get("function_types") and data["function_types"] != ["gto"]:
-        raise SystemExit(f"unsupported function_types: {data['function_types']}")
+        allowed = {"gto", "gto_spherical"}
+    seen = set(data.get("function_types") or [])
+    if not seen <= allowed:
+        raise SystemExit(f"unsupported function_types: {sorted(seen)}")
+    if "gto_spherical" in seen and args.angular != "spherical":
+        raise SystemExit("BSE export contains spherical shells; use --angular spherical")
 
     elements = data["elements"]
     per_element: "OrderedDict[str, list[dict]]" = OrderedDict()

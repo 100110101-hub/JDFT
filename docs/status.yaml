@@ -57,7 +57,12 @@ D-03:
   ts: "2026-10-22T23:18:58Z"
   artifact: "qwb-data/basis/sto-3g.yaml（H/C/N/O/F，13 shells）+ scripts/bse_to_qwb_data.py（BSE→K1 机器转录）+ fixtures/bse/sto-3g.json（ground truth）"
   verification: "cargo test -p qwb-registry --test d03_sto3g_bse（4 例）：逐元素逐系数 vs BSE diff < 1e-12；H=1、C/N/O/F=5 基函数；spherical；Registry 按生产名 sto-3g 可取"
-D-04: {state: pending, depends: [D-01]}
+D-04:
+  state: done
+  ts: "2026-10-23T00:15:38Z"
+  artifact: "qwb-data/basis/def2-svp.yaml（H/C/N/O，21 个收缩壳层）+ fixtures/bse/def2-svp.json（BSE ground truth）+ tests/d04_def2_svp.rs"
+  verification: "cargo test -p qwb-registry --test d04_def2_svp（4 例）：逐元素逐系数 vs BSE 导出 < 1e-12；每元素基函数数**从导出文件算出**（H=5，C/N/O=14）并断言；C/N/O 必有 d 壳层；Registry 按 def2-svp 可取；InternalBasis 可建（3 s / 2 p / 1 d）"
+  note: "两个真实发现：① BSE 的 def2-SVP 收缩**未重新归一化**（C 1s 的 <f|f>=0.978，Turbomole 惯例），因此数据声明 normalization: none 由加载器一次性归一（§8.1）——STO-3G 则是 l2（<f|f>=1±1e-10）；② InternalBasis 目前用**直角坐标**分量，d 壳层给 6 个而非球谐 5 个（C：15 vs 14），这是 R-06 的已知缺口，已在测试里 characterization 钉住，球谐转换必须在 SCF 之前补"
 D-05: {state: pending, depends: [D-01]}
 D-06: {state: pending, depends: [D-01]}
 D-07: {state: pending, depends: [D-01], note: "先确认 Stuttgart/BSE 的再分发条款（§14 #20）"}

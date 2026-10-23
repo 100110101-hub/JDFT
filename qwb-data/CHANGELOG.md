@@ -3,6 +3,17 @@
 数据仓独立 semver（§8.6）。**任何数据改动都必须 bump version 并在此登记**，
 否则 CI 拒绝（§8.6「变更必须 bump version」）。
 
+## 0.4.0 — 2026-10-23
+
+### 新增：`basis/def2-svp.yaml`（D-04，H/C/N/O）
+- 由 `scripts/bse_to_qwb_data.py` 从 BSE 导出机器转录（revision "Data from Turbomole 7.3"），
+  原始导出存为 `qwb-core/crates/qwb-registry/tests/fixtures/bse/def2-svp.json`。
+- **`normalization: none`**：def2 的收缩系数没有重新归一化（实测 C 1s 的 ⟨f|f⟩ = 0.978，
+  归一化原函数约定下），这是 Turbomole 的惯例；加载器按 §8.1 在加载时归一一次。
+  STO-3G 仍是 `l2`（⟨f|f⟩ = 1 ± 1e-10）——两者不同是数据事实，不是笔误。
+- 基函数数（球谐）：H = 5（2s1p），C/N/O = 14（3s2p1d）。
+- 引用：Weigend & Ahlrichs, *Phys. Chem. Chem. Phys.* **7**, 3297 (2005), doi:10.1039/b508541a。
+- `registry.yaml` 0.3.0 → 0.4.0。
 ## 0.3.0 — 2026-10-22
 
 ### 新增：生产数据 `functional/svwn5.yaml`（D-09）

@@ -17,6 +17,9 @@ hex.workspace = true
 thiserror.workspace = true
 qwb-engine-api.workspace = true
 
+[dev-dependencies]
+qwb-basis.workspace = true
+
 [lints]
 workspace = true
 
