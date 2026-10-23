@@ -41,7 +41,9 @@ fn pbe_runs_end_to_end_and_lda_is_unchanged() {
         lda.energy_hartree, lda.exchange_correlation_hartree, lda.iterations
     );
     assert!(
-        (lda.energy_hartree + 1.157_000_499_1).abs() < 1.0e-8,
+        // 2026-10-24 重钉：Boys 大 T 分支（choices 十三节）与 Becke 分区符号（十八节）
+        // 两处修复叠加后，SVWN5 在 grid-normal 上是 −1.1570005110。
+        (lda.energy_hartree + 1.157_000_511_0).abs() < 1.0e-8,
         "LDA 结果变了：{}",
         lda.energy_hartree
     );
