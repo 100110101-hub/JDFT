@@ -64,6 +64,7 @@ step "core: fmt" bash -c "cd qwb-core && \"\$0\" fmt --all --check" "$CARGO"
 step "core: clippy -D warnings" bash -c "cd qwb-core && \"\$0\" clippy --workspace --all-targets -- -D warnings" "$CARGO"
 step "core: test" bash -c "cd qwb-core && \"\$0\" test --workspace" "$CARGO"
 # I-00 验收：两个后端都必须编译，且给出同样的数（tests/backend_consistency.rs 的 golden 值）。
+step "core: I-06 integral cache" bash -c "cd qwb-core && \"\$0\" test -p qwb-integrals --features integral-cache --test i06_cache" "$CARGO"
 step "core: I-00 faer backend" bash -c "cd qwb-core && \"\$0\" test -p qwb-linalg --no-default-features --features faer" "$CARGO"
 step "core: cargo deny" bash -c "cd qwb-core && \"\$0\" deny check" "$CARGO"
 step "core: K1 schema freshness" bash -c "cd qwb-core && \"\$0\" run -q -p qwb-registry --bin qwb-gen-schemas -- ../qwb-contracts/schema --check" "$CARGO"

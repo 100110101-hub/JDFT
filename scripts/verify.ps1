@@ -97,6 +97,10 @@ Step -Name 'core: clippy -D warnings' -Dir 'qwb-core' -Body {
     cargo clippy --workspace --all-targets -- -D warnings
 }
 Step -Name 'core: test' -Dir 'qwb-core' -Body { cargo test --workspace }
+Step -Name 'core: I-06 integral cache (feature on)' -Dir 'qwb-core' -Body {
+    # I-06 acceptance: cache on/off must give identical results.
+    cargo test -p qwb-integrals --features integral-cache --test i06_cache
+}
 Step -Name 'core: I-00 faer backend' -Dir 'qwb-core' -Body {
     # I-00 acceptance: BOTH backends must compile and give the same numbers.
     cargo test -p qwb-linalg --no-default-features --features faer

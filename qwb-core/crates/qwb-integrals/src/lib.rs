@@ -27,9 +27,13 @@
 #![deny(missing_docs)]
 
 pub mod boys;
+#[cfg(feature = "integral-cache")]
+pub mod cache;
 pub mod one_electron;
 pub mod two_electron;
 
 pub use boys::boys_functions;
+#[cfg(feature = "integral-cache")]
+pub use cache::{IntegralCache, fingerprint};
 pub use one_electron::{OneElectronIntegrals, one_electron};
 pub use two_electron::{TwoElectronIntegrals, primitive_ssss, two_electron};

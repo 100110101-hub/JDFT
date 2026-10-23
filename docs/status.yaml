@@ -107,7 +107,11 @@ I-02:
   note: "v2 修订：先用数值 oracle 与宇称尺子证明旧的 R^n=(−2p)^n F_n 系数在 l>0 时是错的，再用生成函数**推导**出正确形式——把 6 维/3 维积分经 Laplace 变换与 y=t/(1+t) 换元后，所有 t 积分都化成广义 Boys 函数 I(m,N;u)=∫₀¹y^{m−1/2}(1−y)^N e^{−uy}dy=2Σ(−1)^k C(N,k)F_{m+k}(u)，于是 V=−Z E_AB(π/p)Σ W·x^{α−2a}…(4p)^{−N}·I(m,N)。方向依赖来自 x^{α−2a}，同中心奇次幂自动为 0。l>0 与 s 型共用同一条路径，水/含 p 基组已可完整计算。"
 I-04: {state: pending, depends: [I-03]}
 I-05: {state: pending, depends: [I-02]}
-I-06: {state: pending, depends: [I-03]}
+I-06:
+  state: done
+  ts: "2026-10-23T00:22:31Z"
+  artifact: "qwb-integrals::cache（可选 feature `integral-cache`）：按基组+分子的**内容指纹**缓存 2e 张量，命中返回同一个 Arc"
+  verification: "cargo test -p qwb-integrals --features integral-cache --test i06_cache（4 例）：缓存张量与直接计算逐位相同、第二次命中且 Arc::ptr_eq、几何不同不串味、内容相同的重建基组指纹一致；scripts/verify.ps1 已加该项（17 项全绿）"
 
 X-01:
   state: done
