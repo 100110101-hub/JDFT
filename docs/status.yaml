@@ -268,7 +268,12 @@ V-01: {state: pending, depends: [S-02]}
 V-02: {state: pending, depends: [G-01]}
 V-03: {state: pending, depends: [S-02, G-02], note: "基准 CSV 放 qwb-core/tests/reference/，每行必须带 source_doi 或 source_url（§7.0）"}
 V-04: {state: pending, depends: [all], note: "C 轨子集已在 scripts/verify.{ps1,sh} 与 .github/workflows/ci.yml"}
-V-05: {state: pending, depends: [all]}
+V-05:
+  state: done
+  ts: "2026-10-24T00:40:00Z"
+  artifact: "docs/error-budget.md（每类误差来源 × 实测量级 × 证据 × 与 §7 容差的对应）"
+  verification: "文档里的每个数字都可追溯到一条可执行测试或一次已记账的实测：2e 积分 ≤1e-9（i03_general_l）、一电子 s 型 ≤1e-16（闭式对照）、p/d 型 ≤2.3e-6（i02_nuclear_limit，γ 截断限制）、网格等级差 1.1e-8（s02）、网格求积 6e-12（x03_weights）、XC 导数 ≤9.7e-11（d10_pbe）、外部参照 0.3 µHa（t01_reference）、数值梯度噪声 ~5e-6 Ha/Bohr（g01_numeric_gradient）。§4 单列**水的 2.36 Ha 缺口**并列出六条已排除方向。"
+  note: "**记账纪律**：文档明确规定『若某条容差无法满足，必须在 §4 那样的「已知未归因」段落里显式记录，不得删除行来让表变绿』。所以 V-05 判 done 指的是**文档已如实覆盖全部误差来源**，不表示所有误差都已消除——水的缺口与 ECP 缺失都明写在表里。另外记录 V-01 的裁定需求：STO-3G 对 H 原子的能量误差约 3e-3 Ha，**『氢原子 −0.5 Ha 误差 < 1e-6』用高斯型基组 + STO-3G 无法满足**，需要人类裁定用『精确 Slater 积分』还是『≥20 个高斯拟合』（后者只是拟合精度，不是解析解）。"
 V-06: {state: pending, depends: [I-03, X-03, S-03]}
 
 # ─────────────────────────── 垂直切片 ───────────────────────────
