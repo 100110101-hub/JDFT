@@ -1379,6 +1379,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "qwb-scf"
+version = "0.1.0"
+dependencies = [
+ "qwb-basis",
+ "qwb-engine-api",
+ "qwb-integrals",
+ "qwb-linalg",
+ "qwb-registry",
+ "thiserror 2.0.21",
+]
+
+[[package]]
 name = "qwb-xc"
 version = "0.1.0"
 dependencies = [

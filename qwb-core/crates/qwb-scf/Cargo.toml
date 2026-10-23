@@ -1,0 +1,21 @@
+[package]
+name = "qwb-scf"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "QWB SCF：Fock 构建（S-01）与 RKS 迭代（S-02/S-03）"
+
+[dependencies]
+qwb-linalg.workspace = true
+qwb-integrals.workspace = true
+qwb-engine-api.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+qwb-registry.workspace = true
+qwb-basis.workspace = true
+
+[lints]
+workspace = true

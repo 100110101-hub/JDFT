@@ -128,7 +128,12 @@ X-03: {state: pending, depends: [X-01, D-13]}
 X-04: {state: pending, depends: [X-03]}
 X-05: {state: pending, depends: [X-02, X-04]}
 
-S-01: {state: pending, depends: [I-02, I-03]}
+S-01:
+  state: done
+  ts: "2026-10-23T00:23:40Z"
+  artifact: "qwb-core/crates/qwb-scf：build_fock（J/K/F，闭壳层自旋求和形式）+ two_electron_energy"
+  verification: "cargo test -p qwb-scf --test s01_fock（3 例）：J/K 与**张量展成矩阵后一次乘**的参照实现差 < 1e-12（这就是 S-01 要求的『与直接乘对照』）；F = H + 2J − K；J/K/F 对称；E_2e 与独立四重求和差 < 1e-12 且为正；形状不匹配被拒"
+  note: "S-01 本身不依赖 2e 积分支持到什么 l——它只做张量收缩，输入是任意合法 (ij|kl)。上游 two_electron 目前只支持 s 型（I-03 未完成），所以 H2/STO-3G 已可算，含 p 的体系等 I-03。"
 S-02: {state: pending, depends: [S-01, X-05]}
 S-03: {state: pending, depends: [S-02]}
 S-04: {state: pending, depends: [S-02]}
