@@ -225,8 +225,7 @@ def primitive_2e(pa, A, alpha, pb, B, beta, pc, C, gamma, pd, D, delta):
             for _ in range(powers[axis]):
                 derivs.append((label, axis))
     # 步长：最紧的高斯宽度的一个小分数
-    tightest = max(alpha, beta, gamma, delta)
-    step = 1.0e-3 / math.sqrt(tightest)
+    step = 0.01  # 固定步长：太小会被舍入放大（每层导数都除以 h）
 
     def ev(pending, centers):
         if not pending:
@@ -240,8 +239,9 @@ def primitive_2e(pa, A, alpha, pb, B, beta, pc, C, gamma, pd, D, delta):
             c2[label][axis] = t
             return ev(rest, c2)
 
-        d = lambda s: (moved(origin + s) - moved(origin - s)) / (2.0 * s)
-        raw = (4.0 * d(step * 0.5) - d(step)) / 3.0
+        # 5 点四阶中心差分
+        raw = (moved(origin - 2 * step) - 8.0 * moved(origin - step)
+               + 8.0 * moved(origin + step) - moved(origin + 2 * step)) / (12.0 * step)
         return raw
 
     scale = 1.0
@@ -251,6 +251,14 @@ def primitive_2e(pa, A, alpha, pb, B, beta, pc, C, gamma, pd, D, delta):
     return ev(derivs, centers0) * scale
 
 
+def v_ss(alpha, A, beta, B, C, Z):
+    """(ss|1/r_C) 闭式：−Z(2π/p)E_AB F₀(p|P−C|²)。"""
+    p = alpha + beta
+    P = [(alpha * A[i] + beta * B[i]) / p for i in range(3)]
+    ab2 = sum((A[i] - B[i]) ** 2 for i in range(3))
+    r2 = sum((P[i] - C[i]) ** 2 for i in range(3))
+    return -Z * 2.0 * PI / p * math.exp(-alpha * beta / p * ab2) * boys(0, p * r2)[0]
+
 def primitive_nuclear(pa, A, alpha, pb, B, beta, nuclei):
     """(ab|Σ_C −Z_C/r_C)：对 s-s 闭式做中心导数（递归复合）。"""
     derivs = []
@@ -258,7 +266,7 @@ def primitive_nuclear(pa, A, alpha, pb, B, beta, nuclei):
         for axis in range(3):
             for _ in range(powers[axis]):
                 derivs.append((label, axis))
-    step = 1.0e-3 / math.sqrt(max(alpha, beta))
+    step = 0.01
 
     def base(centers):
         return sum(v_ss(alpha, centers["a"], beta, centers["b"], C, Z) for C, Z in nuclei)
@@ -274,8 +282,8 @@ def primitive_nuclear(pa, A, alpha, pb, B, beta, nuclei):
             c2[label][axis] = t
             return ev(rest, c2)
 
-        d = lambda s: (moved(origin + s) - moved(origin - s)) / (2.0 * s)
-        return (4.0 * d(step * 0.5) - d(step)) / 3.0
+        return (moved(origin - 2 * step) - 8.0 * moved(origin - step)
+                + 8.0 * moved(origin + step) - moved(origin + 2 * step)) / (12.0 * step)
 
     centers0 = {"a": list(A), "b": list(B)}
     raw = ev(derivs, centers0)
