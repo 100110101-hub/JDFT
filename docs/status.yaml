@@ -129,7 +129,7 @@ X-03:
   ts: "2026-10-23T00:25:45Z"
   artifact: "qwb-core/crates/qwb-grid：angular_rule/radial_rule/atomic_grid/molecular_grid（Becke 分区）+ K1 v1.2 的 `angular_rule` 数据字段"
   verification: "cargo test -p qwb-grid --test x03_grid（6 例）：四个等级的角向权重 Σw=4π（1e-10）且方向是单位向量；径向 ∫4πr²e^{-r²}=π^{3/2}（相对 1e-6）；原子网格点数 = 径向×角向、Σw = Σ_radial·4π；单原子分区权重恒为 1；**均匀电子气极限**：ρ 恒定时网格加权平均 ε 与解析值一致（1e-10）；声明 lebedev 时显式报错而非替换"
-  note: "**未完成**：① Lebedev 点集表仍缺（数据现在声明 `angular_rule: gauss-product`，K1 v1.2 新增加可选字段；`lebedev` 分支显式报错，不会静默替换）；② 『单线程与并行 identical』需要 rayon 并行生成，属本 WP 的并行部分，未做——所以状态是 in_progress 而不是 done。"
+  verification: "cargo test -p qwb-grid --test x03_weights（2 例）：原子网格对解析高斯 e^{-αr²}（α=0.5/1/2）的积分相对误差 ≤ 6e-12；权重与坐标全部有限非负；最外节点半径 1248 bohr 已记录（cutoff 是尺度不是边界的证据，见 choices.md §十二）"\r\n  note: "**未完成**：① Lebedev 点集表仍缺（数据现在声明 `angular_rule: gauss-product`，K1 v1.2 新增加可选字段；`lebedev` 分支显式报错，不会静默替换）；② 『单线程与并行 identical』需要 rayon 并行生成，属本 WP 的并行部分，未做——所以状态是 in_progress 而不是 done。"
 X-04: {state: pending, depends: [X-03]}
 X-05: {state: pending, depends: [X-02, X-04]}
 
