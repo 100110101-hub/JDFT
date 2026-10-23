@@ -24,12 +24,14 @@ use std::collections::BTreeMap;
 
 use thiserror::Error;
 
+pub mod gga;
+
 /// `(3/π)^{1/3}` —— 用表达式算，不手抄字面量（上一版手抄错成 0.90036，
 /// 被 `slater_exchange_matches_the_analytic_formula` 立刻抓到）。
 /// 低密度截断阈值（e/Bohr³）：低于它 VWN5 的相关势按平坦处理。
 pub const LOW_DENSITY_FLOOR: f64 = 1.0e-12;
 
-fn three_over_pi_cbrt() -> f64 {
+pub(crate) fn three_over_pi_cbrt() -> f64 {
     (3.0 / std::f64::consts::PI).cbrt()
 }
 
@@ -148,7 +150,11 @@ pub trait FunctionalTerm: Send + Sync {
     );
 }
 
-fn check_shape(batch: &DensityBatch<'_>, out: &[f64], what: &str) -> Result<(), XcError> {
+pub(crate) fn check_shape(
+    batch: &DensityBatch<'_>,
+    out: &[f64],
+    what: &str,
+) -> Result<(), XcError> {
     if out.len() != batch.len() {
         return Err(XcError::Shape(format!(
             "{}: output {} vs input {}",
@@ -243,7 +249,7 @@ pub struct LdaSvwn5 {
 }
 
 /// VWN 的 `G(x)`（`ε_c = G(x)`，`x = √r_s`）。
-fn vwn_g(x: f64, a: f64, x0: f64, b: f64, c: f64) -> f64 {
+pub(crate) fn vwn_g(x: f64, a: f64, x0: f64, b: f64, c: f64) -> f64 {
     let big_x = |t: f64| t * t + b * t + c;
     let x0sq = x0 * x0 + b * x0 + c;
     let q = (4.0 * c - b * b).sqrt();
@@ -252,7 +258,7 @@ fn vwn_g(x: f64, a: f64, x0: f64, b: f64, c: f64) -> f64 {
 }
 
 /// `dG/dx`（解析式，X-02 会用有限差分校验它）。
-fn vwn_g_prime(x: f64, a: f64, x0: f64, b: f64, c: f64) -> f64 {
+pub(crate) fn vwn_g_prime(x: f64, a: f64, x0: f64, b: f64, c: f64) -> f64 {
     let big_x = |t: f64| t * t + b * t + c;
     let x0sq = x0 * x0 + b * x0 + c;
     // 三项分别求导后合并；最后一个 arctan 项的导数化简为 −Q/(2X)。
@@ -332,7 +338,11 @@ impl FunctionalTerm for LdaSvwn5 {
 
 // ───────────────────────── 工厂 ─────────────────────────
 
-fn parameter(id: &str, parameters: &BTreeMap<String, f64>, name: &str) -> Result<f64, XcError> {
+pub(crate) fn parameter(
+    id: &str,
+    parameters: &BTreeMap<String, f64>,
+    name: &str,
+) -> Result<f64, XcError> {
     parameters
         .get(name)
         .copied()
@@ -363,6 +373,6 @@ pub fn build_term(
             parameter(id, parameters, "vwn5_p_b")?,
             parameter(id, parameters, "vwn5_p_c")?,
         )))),
-        other => Err(XcError::UnknownTerm(other.to_string())),
+        others => crate::gga::build_pbe_term(others, parameters),
     }
 }

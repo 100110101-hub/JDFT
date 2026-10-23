@@ -25,6 +25,9 @@ bases:
     path: basis/def2-svp.yaml
     sha256: 177675559ef883e087c3ead49936369dfc74357d4795ed92b02aa49bbe310021
 functionals:
+  - name: pbe
+    path: functional/pbe.yaml
+    sha256: 6f9c7a390d0d813e8b2c5490918f2e851c23bda718c44d96b5286df0ce836b86
   - name: svwn5
     path: functional/svwn5.yaml
     sha256: e62bd0014d27c73d38e1475a261c47cb273eafa320f337217179b42910b4ebd8

@@ -1,0 +1,35 @@
+sha256: 6f9c7a390d0d813e8b2c5490918f2e851c23bda718c44d96b5286df0ce836b86
+requires:
+  rho: true
+  sigma: true
+  laplacian: false
+parameters:
+  pbe_kappa: 0.804
+  pbe_mu: 0.21951
+  pbe_beta: 0.06672455060314922
+  pbe_gamma: 0.0310906908696549
+  vwn5_p_A: 0.0310907
+  vwn5_p_x0: -0.409286
+  vwn5_p_b: 13.072
+  vwn5_p_c: 42.7198
+stability:
+  density_floor: 1e-12
+  sigma_ceiling: 100000000.0
+name: pbe
+version: 1.0.0
+notes: PBE = PBE 交换（GgaPbeX）+ PBE 相关（GgaPbeC）。κ=0.804、μ=0.21951 取原文； β=0.06672455060314922 与 γ=(1−ln2)/π² 为原文常数，这里显式存成参数以便复现 （γ 由 ln2 与 π 推出，避免手抄数值）。相关项用 VWN5 顺磁参数作为「均匀电子气」 的 ε_c，与 svwn5.yaml 同一套数字，保证 σ→0 时两者逐位一致。
+citation:
+- title: Generalized Gradient Approximation Made Simple (Perdew, Burke & Ernzerhof, Phys. Rev. Lett. 77, 3865)
+  doi: 10.1103/PhysRevLett.77.3865
+- title: 'Accurate spin-dependent electron liquid correlation energies for local spin density calculations: a critical analysis (Vosko, Wilk & Nusair, Can. J. Phys. 58, 1200) —— 供相关项里的 ε_c^LDA'
+  doi: 10.1139/p80-159
+license:
+  spdx: Apache-2.0
+  commercial_ok: true
+  redistribute_ok: true
+created: 2026-10-23T20:30:00Z
+components:
+- id: GgaPbeX
+  weight: 1.0
+- id: GgaPbeC
+  weight: 1.0

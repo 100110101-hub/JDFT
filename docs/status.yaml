@@ -73,7 +73,12 @@ D-09:
   artifact: "qwb-data/functional/svwn5.yaml（LdaSlaterX + LdaSvwn5，13 参数逐个带 parameter_sources）"
   verification: "cargo test -p qwb-registry --test d09_svwn5（4 例）：13 常数逐位相等、每参数有来源且无悬空、rs=1 复现 C-A 相关能（含 VWN3 负对照）、Q² 指纹、Registry 按 svwn5 可取"
   note: "D-09 原文的『X-02 有限差分导数 < 1e-9』依赖 X-01 的 FunctionalTerm，属 X 轨；数据侧可做项已全做，该门禁在 X-02 落地后回填"
-D-10: {state: pending, depends: [D-01], note: "**GGA 前置已就绪**（2026-10-23）：qwb-scf::rks::ao_value_and_gradient 给出 AO 值 + 解析梯度（l ≤ 1），并用有限差分验证——AO 梯度最大绝对误差 1.7e-10，密度梯度 ∇ρ 与差分差 ≤ 5.5e-11（qwb-scf/tests/gga_ao_gradient.rs）。下一步是 PBE 交换/相关的 ε(ρ,σ) 与 dε/dρ、dε/dσ，再按 D-09 的方式用 X-02 的有限差分校验器判 < 1e-9。"}
+D-10:
+  state: in_progress
+  ts: "2026-10-23T21:30:00Z"
+  artifact: "qwb-core/crates/qwb-xc/src/gga.rs（PbeExchange `GgaPbeX` + PbeCorrelation `GgaPbeC`，对偶数自动求导）+ tests/d10_pbe.rs + qwb-data/functional/pbe.yaml（κ=0.804、μ=0.21951、β、γ，逐参数带 citation）"
+  verification: "cargo test -p qwb-xc --test d10_pbe（3 例）：① **σ→0 时退化为 LDA**——4 个密度点上 PBE 交换/相关与 LdaSlaterX/LdaSvwn5 **逐位一致**（< 1e-12）；② 交换增强因子在 s=1 处 F_x = 1.1724321599，与解析式 1+κ−κ/(1+μ/κ) 差 < 1e-10；③ **导数**：dε/dρ 与 dε/dσ 对 ρ∈{0.02,0.15,0.8,3}、σ∈{1e-4,0.01,0.5,4} 与五点四阶有限差分相对差 ≤ 9.7e-11（验收要求 < 1e-9）。`qwb data verify` 9/9 通过（pbe.yaml 已入 manifest 并带 sha256）。"
+  note: "**已完成的半**：PBE 交换与相关的**数学实现 + 数据 + 导数正确性**（D-09 的验收口径）。导数不是手推的：用一个对偶数类型（value + ∂ρ + ∂σ）把能量表达式写一遍，一次求值同时得到值与两个偏导，数学上精确；VWN5 段复用已有的 `vwn_g_prime` 解析导数。**未完成的半**：SCF 里用不了 PBE——`rks_from_data` 仍显式拒绝 `requires().sigma` 的项。要把 GGA 接进 SCF，需要 ① 在网格上算 σ=|∇ρ|²（`ao_value_and_gradient` 已就绪）② XC 势里的散度项 −∇·(2·dε/dσ·∇ρ)（需要网格上的散度处理，属实质新工作）。这也解释了为什么 D-10 记 in_progress 而不是 done。**过程教训**：本轮两次用字符串替换改一个多行 `assert!(matches!(...))` 把宏括号弄坏，最后靠 `git checkout` 回退 + 只改 id 字符串才修好——对宏调用做替换要先看完整语句，或者干脆只改最内层的字面量。"
 D-11: {state: pending, depends: [D-01]}
 D-12: {state: pending, depends: [D-01]}
 D-13:

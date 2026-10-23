@@ -148,7 +148,7 @@ fn factory_builds_terms_from_data_parameters() {
 
     // 未知组件 → 明确错误（不猜）。
     assert!(matches!(
-        build_term("GgaPbeX", &parameters),
+        build_term("NoSuchFunctional", &parameters),
         Err(XcError::UnknownTerm(_))
     ));
     // 缺参数 → 明确错误。
