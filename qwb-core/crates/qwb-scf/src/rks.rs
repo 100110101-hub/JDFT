@@ -621,6 +621,18 @@ pub fn evaluate_xc(
         } else {
             0.0
         };
+        // 临时诊断：哪个系数先坏
+        if !(potential.is_finite()
+            && sigma_coefficient.is_finite()
+            && laplacian_coefficient.is_finite())
+        {
+            return Err(EngineError::Internal(format!(
+                "coefficient not finite at grid point {index}: potential {potential:.3e}, \
+                 sigma_coeff {sigma_coefficient:.3e}, laplacian_coeff {laplacian_coefficient:.3e}, \
+                 rho {rho:.3e}, d_eps {:.3e}, d_sigma {:.3e}, d_lap {:.3e}",
+                d_epsilon[index], d_sigma[index], d_laplacian[index]
+            )));
+        }
         let values = &ao_values[index];
         let gradients = &ao_gradients[index];
         let laplacians = &ao_laplacians[index];

@@ -94,6 +94,11 @@ impl D {
         }
     }
 
+    /// 幂函数。
+    ///
+    /// **注意**：底数为 0 且 `exponent < 1` 时，导数是无穷（`0^{e-1} = ∞`），
+    /// 对偶数会把它变成 NaN。热路径上不要用 `σ.powf(0.5)` 这种写法——改用
+    /// `t = σ/ρ^{8/3}` 这类对 `σ` 线性的中间量（见 [`B88Exchange::evaluate`]）。
     fn powf(self, exponent: f64) -> Self {
         let value = self.value.powf(exponent);
         let scale = exponent * self.value.powf(exponent - 1.0);
@@ -216,21 +221,39 @@ impl B88Exchange {
     }
 
     /// 在 `(ρ, σ)` 上求「值 + 两个偏导」。
+    ///
+    /// # 为什么用 `t = σ/ρ^{8/3}` 而不是 `x = sqrt(σ)/ρ^{4/3}`
+    ///
+    /// `x` 对 `σ` 的导数是 `1/(2·sqrt(σ))`，在 `σ = 0` 处发散。对偶数会把这个发散带下去：
+    /// `x·x` 的导数变成 `2·0·∞ = NaN`，尽管 `x²` 对 `σ` 是**线性**的、导数有界。
+    /// 真实 SCF 里远处网格点的 `σ` 会**精确**等于 0（AO 梯度下溢），于是 B88 的导数是 NaN，
+    /// 顺着 v_xc 污染整个 Fock —— 这正是 B3LYP 此前在 grid-coarse 上 NaN 的根因。
+    ///
+    /// 所以对偶数只承载 `t = x²`（对 `σ` 线性、无奇点），`A(x) = x·asinh(x)` 用解析导数喂进去：
+    /// `dA/dt = 1/(2√(1+x²)) + asinh(x)/(2x)`，`x → 0` 时极限为 1。
+    /// 单位检查：`t` 是 `σ/ρ^{8/3}`，`dA/dt` 无量纲 ✓。
     fn evaluate(&self, rho: f64, sigma: f64) -> D {
         let rho = rho.max(crate::LOW_DENSITY_FLOOR);
         let sigma = sigma.max(0.0);
         let rho_d = D::rho(rho);
         let sigma_d = D::sigma(sigma);
 
-        // x = |∇ρ| / ρ^{4/3}
-        let x = sigma_d.powf(0.5) / rho_d.powf(4.0 / 3.0);
-        // asinh(x) = ln(x + sqrt(x² + 1))
-        let asinh = (x + (x * x + D::constant(1.0)).powf(0.5)).ln();
+        // t = x² = σ/ρ^{8/3}
+        let t = sigma_d / rho_d.powf(8.0 / 3.0);
+        // A(x) = x·asinh(x)：值用 x = sqrt(t)，导数 dA/dt 解析给出
+        let x_value = t.value.max(0.0).sqrt();
+        let a_value = x_value * x_value.asinh();
+        let d_a_dt = if x_value > 1.0e-12 {
+            1.0 / (2.0 * (1.0 + x_value * x_value).sqrt()) + x_value.asinh() / (2.0 * x_value)
+        } else {
+            1.0
+        };
+        let a = D::with_partials(a_value, d_a_dt * t.d_rho, d_a_dt * t.d_sigma);
         let beta = D::constant(self.beta);
-        // 修正项：−β·ρ^{1/3}·x²/(1 + 6β·x·asinh x)（每电子）
-        let correction =
-            beta * rho_d.cbrt() * x * x / (D::constant(1.0) + D::constant(6.0) * beta * x * asinh);
-        exchange_lda(rho_d) - correction
+        let c_x = D::constant(0.75 * three_over_pi_cbrt());
+        // ε = −ρ^{1/3}[C_x + β·t/(1 + 6β·A)]
+        let correction = beta * t / (D::constant(1.0) + D::constant(6.0) * beta * a);
+        -rho_d.cbrt() * (c_x + correction)
     }
 }
 

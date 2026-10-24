@@ -140,19 +140,21 @@ D-12:
     已完成：
     * **hybrid 机制**（PBE0 三判据）：α=0 与 PBE 逐位相同；α=1 且 DFT 交换权重 0 与 HF 差 1.4e-14
       （两条不同代码路径）；PBE0 收敛且能量分解复算差 1.8e-9。
-    * **四个组件都可构造**：0.8 B88 + 0.2 HfExchange + 0.81 LYP + 0.19 VWN5 在 API 层可拼出。
+    * **四个组件都可构造且 SCF 稳定**：0.8 B88 + 0.2 HfExchange + 0.81 LYP + 0.19 VWN5 在 API 层可拼出；
+      H2O/STO-3G 21 步收敛，E = -75.2933510460 Ha，能量分解复算差 7e-11，权重同乘 0.5 时 E_xc 精确减半。
+    * **B88 的 σ=0 奇点已修**（`sqrt(σ)` 的导数 2·0·∞ = NaN，远处网格点 AO 梯度下溢成精确 0 时命中），
+      改成用 `t = σ/ρ^{8/3}` 承载对偶数；回归钉在 `qwb-xc/tests/d11_b88_sigma_zero.rs`。
+    * **外部核对（CCCBDB Release 22）**：H2/STO-3G 的 B3LYP 差 **0.30 mHa**（通过）；
+      H2O/STO-3G 差 **+19.0 mHa**（未通过，`t06_reference.rs`）。
     未完成：
-    * **B3LYP 的 SCF 不稳定**：grid-coarse 上 3 步内中止于 `density laplacian is not finite (NaN)`。
-      已排除 LYP 项本身（逐点扫过 29400 点无 NaN）与变分自洽（残差线性下降）。
-      剩两个嫌疑：① 网格太粗；② `evaluate_xc` 的 σ/laplacian 通道用未截断的 ρ 乘、
-      泛函内部用 `LOW_DENSITY_FLOOR` 截断过的 ρ，极小密度处不一致（LYP 的 ρ 依赖更陡）。
-      测试 `d12_b3lyp.rs` 已按 known-failure `#[ignore]`，排查记录写在函数文档里。
+    * **水/苯/CO 的外部判据**（project.md 的 D-12 行）未达到 2 mHa，所以本 WP 保持 in_progress。
     * **数据层不允许 B3LYP**：K1 的 phase-1 语义门禁拒绝 `requires.laplacian = true`
       （"no meta-GGA"，冻结范围 §2.2）。所以没有 b3lyp.yaml，`qwb data verify` 会对它报错。
       这不是缺陷，是**冻结契约**：放开要人类拍板，我不改动它。
   note: |
-    T6（B3LYP）的前置因此是：先解决 B3LYP SCF 的数值稳定性（上面两个嫌疑），
-    再等 phase-2 允许 laplacian 类泛函进数据层。D-11 已 done，机制、B88、LYP 三块都在。
+    组合权重的定案**不靠推理、靠判据**：用 CCCBDB 的 H2/STO-3G 一测就否掉了我上一轮"推导"出的
+    `0.08 Slater + 0.72 B88`（差 6.9 mHa），而原来的 `0.8 GgaB88X` 差 0.30 mHa。
+    水的 +19 mHa 与 PBE 的 -176 mHa 是同一条未解线索（GGA 曲线对不上外部基准，见 choices 三十节）。
 D-13:
   state: done
   ts: "2026-10-22T23:23:27Z"
@@ -504,7 +506,20 @@ P-10: {state: pending, depends: [P-09, G-02, F-02]}
 
 V-01: {state: pending, depends: [S-02]}
 V-02: {state: pending, depends: [G-01]}
-V-03: {state: pending, depends: [S-02, G-02], note: "基准 CSV 放 qwb-core/tests/reference/，每行必须带 source_doi 或 source_url（§7.0）"}
+V-03:
+  state: in_progress
+  ts: "2026-11-02T18:00:00Z"
+  artifact: "crates/qwb-scf/tests/reference/cccbdb_{energies,geometries}.csv + scripts/fetch_cccbdb_reference.py + scripts/gen_cccbdb_reference.py"
+  verification: |
+    已覆盖：H2 / H2O / CO / C6H6 × HF、LSDA(SVWN5)、PBEPBE、B3LYP（另抓 B1B95 只作对照）
+    × STO-3G / 6-31G* / 6-311G**，逐行带 `energy3x.asp` URL（CCCBDB Release 22, SRD 101）。
+    生成脚本自带自检：用解析出的坐标重算核排斥能，抓串行时会差 3 倍以上（真发生过：
+    距离矩阵的首列也是 `C1`/`O1`，混进来就把 E_nuc 算成 3 倍）。
+    CI 里只启用 STO-3G 的比对（HF/LSDA 判 1e-4 Ha，B3LYP 在 H2 上判 2 mHa）。
+  note: |
+    未完成：① 缺 CH4 / NH3 / N2（project.md 的清单里有）；② 6-31G*/6-311G** 的行先不进判据——
+    Gaussian 默认 6d、本项目数据层是 spherical(5d)，混进 1–3 mHa 的基组约定差，要先解决；
+    ③ `tolerance` 列暂时统一写 2 mHa，等 GGA 曲线对上外部基准后按 §7 收紧。
 V-04: {state: pending, depends: [all], note: "C 轨子集已在 scripts/verify.{ps1,sh} 与 .github/workflows/ci.yml"}
 V-05:
   state: done
@@ -542,6 +557,10 @@ T2:
     数字已实测并写在文档注释里）。
     **收口条件**：拿到一个可引用的 H2O/PBE/def2-SVP 总能量（含几何与软件出处）后，
     把 csv 的来源标注从 internal 改成 external 并把容差收到 1e-3，T2 即可判 done。
+    **2026-11-02 的进展**：外部基准这条路打通了（NIST CCCBDB Release 22，机器可抓、可引用），
+    但先用 STO-3G 避开 5d/6d 约定差：HF 差 1.9e-7、LSDA(SVWN5) 差 1.7e-6
+    ——流水线（基组/几何/积分/SCF/网格/Slater/VWN5）因此被锁死；
+    **PBE 差 -175.8 mHa**（H2O/STO-3G），说明"差 < 1 mHa"现在卡在 PBE 本身，不只是缺外部表值。
 T3:
   state: in_progress
   ts: "2026-11-01T00:00:00Z"
@@ -571,7 +590,25 @@ T3:
     测试 t3_water_geometry.rs 按本模型化学的收敛值断言 0.015，并 #[ignore]（一次 40 分钟）。
 T4: {state: pending}
 T5: {state: pending, note: "体系已冻结：CuH/LANL2DZ 与 ZnO/def2-SVP+def2-ECP"}
-T6: {state: pending}
+T6:
+  state: in_progress
+  ts: "2026-11-02T18:00:00Z"
+  artifact: "crates/qwb-scf/tests/t06_reference.rs + tests/reference/cccbdb_{energies,geometries}.csv + scripts/fetch_cccbdb_reference.py、scripts/gen_cccbdb_reference.py"
+  verification: |
+    **第一次有外部基准**：NIST CCCBDB Release 22 / SRD 101，每行 CSV 带原始 `energy3x.asp` URL。
+    判据 1（水/苯/CO 总能量与基准差 < 2 mHa）实测（STO-3G，用 CCCBDB 自己的优化几何）：
+    * H2：B3LYP -1.165238026 vs -1.165535，**+0.30 mHa 通过**（`cccbdb_sto3g_b3lyp_h2_agrees`）；
+    * H2O：B3LYP -75.303760113 vs -75.322775，**+19.0 mHa 未通过**；
+    * CO / C6H6：与 H2O 同类，钉在 `#[ignore]` 的 `cccbdb_sto3g_gga_curves_are_still_off`。
+    判据 2（HF 混合系数 0.20 与定义一致）：`RksOptions.hf_exchange = 0.20`，权重线性性在
+    d12_b3lyp.rs（四个权重同乘 0.5 → E_xc 精确减半）。
+    判据 3（B3LYP 梯度有限差分一致 < 1e-6）：**未做**——KS 解析梯度缺 v_xc 的基组移动项
+    （choices 二十四节），只能走数值梯度。
+  note: |
+    **不能判 done 的原因**：水上差 19 mHa。已排除网格（coarse → normal 只挪 5e-5 Ha）、
+    基组/几何/积分（HF 差 1.9e-7）、LDA 两项（LSDA 差 1.7e-6）。同一条线索上 PBE 差得更多
+    （H2 -29 mHa、H2O -176 mHa），PBE 与 B3LYP 的区别只在 GGA 交换/相关两块，
+    所以先把 GGA 对上外部基准，T6 才可能收口。记录见 docs/choices.md 三十节。
 T7: {state: pending}
 T8: {state: pending}
 I-03:

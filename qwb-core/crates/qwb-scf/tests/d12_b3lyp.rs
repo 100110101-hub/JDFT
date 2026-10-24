@@ -94,7 +94,7 @@ fn solve(scale: f64) -> (RksResult, qwb_basis::InternalBasis, qwb_grid::Grid) {
     (result, basis, grid)
 }
 
-/// **已知失败**（本轮实测）：B3LYP 的 SCF 在 grid-coarse 上 3 步内就以
+/// **曾经的失败（已修复）**：B3LYP 的 SCF 在 grid-coarse 上 3 步内就以
 /// `density laplacian is not finite (NaN)` 中止。已排除的：
 ///
 /// - LYP 项本身在三通道上都有限（用「类 SCF」的对角密度逐点扫过 29400 个点，非有限点 0 个，
@@ -106,9 +106,11 @@ fn solve(scale: f64) -> (RksResult, qwb_basis::InternalBasis, qwb_grid::Grid) {
 /// sigma/laplacian 通道用**未截断**的 ρ 去乘、而泛函内部用 `LOW_DENSITY_FLOOR` 截断过的 ρ，
 /// 极小密度处两者不一致（LYP 的 ρ 依赖比 PBE 陡，放大了这个不一致）。
 ///
-/// 下一步：先用 grid-normal 复现一次，再决定是加稠密网格还是修这个地板不一致。
+/// **真正的根因**（下一步排查发现的）：B88 用 sqrt(σ)，对偶数在 σ = 0 处导数发散，
+/// x·x 的导数变成 2·0·∞ = NaN；远处网格点的 AO 梯度下溢成精确 0 时就会命中。
+/// 改成用 t = σ/ρ^{8/3}（对 σ 线性）承载对偶数、A(x)=x·asinh x 用解析导数之后，
+/// B3LYP 收敛到 −75.2933510460 Ha（21 步）。回归钉在 qwb-xc/tests/d11_b88_sigma_zero.rs。
 #[test]
-#[ignore = "KNOWN FAILURE: B3LYP 的 SCF 在 grid-coarse 上 NaN（density laplacian is not finite），见函数文档里的排查记录"]
 fn b3lyp_energy_decomposes_and_weights_are_linear() {
     let registry = Registry::open(data_root()).expect("qwb-data");
     let molecule = water();
