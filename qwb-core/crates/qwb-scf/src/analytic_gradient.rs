@@ -337,13 +337,25 @@ fn quartet_derivative(
 }
 
 /// 2e 项：`½ Σ ρ̃ρ̃ [d(ab|cd) − ½ d(ac|bd)]`。
-fn two_electron_axis(cartesian: &[CartAo], density: &Matrix, atom: usize, axis: usize) -> f64 {
+fn two_electron_all(cartesian: &[CartAo], density: &Matrix) -> Vec<[f64; 3]> {
     let n = cartesian.len();
-    let mut total = 0.0;
-    // 中心归属预先算好，避免最内层反复比较
-    let owned: Vec<bool> = cartesian
+    let natoms = cartesian
         .iter()
-        .map(|orbital| orbital.center_index == atom)
+        .map(|orbital| orbital.center_index)
+        .max()
+        .map_or(0, |index| index + 1);
+    let mut out = vec![[0.0_f64; 3]; natoms];
+    // 原函数归一化只与（轨道、指数）有关：**预先算一次**，不要在 3N 遍里反复算。
+    let norms: Vec<Vec<f64>> = cartesian
+        .iter()
+        .map(|orbital| {
+            let powers = powers_tuple(orbital.powers);
+            orbital
+                .exponents
+                .iter()
+                .map(|alpha| primitive_norm(powers, *alpha))
+                .collect()
+        })
         .collect();
     for a in 0..n {
         for b in 0..n {
@@ -359,34 +371,29 @@ fn two_electron_axis(cartesian: &[CartAo], density: &Matrix, atom: usize, axis: 
                     }
                     let coulomb_owners = [a, b, c, d];
                     let exchange_owners = [a, c, b, d];
-                    if !coulomb_owners.iter().any(|owner| owned[*owner])
-                        && !exchange_owners.iter().any(|owner| owned[*owner])
-                    {
-                        continue;
-                    }
-                    let mut coulomb = 0.0;
-                    let mut exchange = 0.0;
+                    // 每个槽位、每个轴的导数先在本 quartet 内累起来，最后一次性加到
+                    // 该槽位所属的原子上（槽位 → 原子的映射每个 quartet 只查一次）。
+                    let mut coulomb = [[0.0_f64; 3]; 4];
+                    let mut exchange = [[0.0_f64; 3]; 4];
                     for (ia, &alpha) in cartesian[a].exponents.iter().enumerate() {
                         let ca = cartesian[a].coefficients[ia];
-                        let na = primitive_norm(powers_tuple(cartesian[a].powers), alpha);
+                        let na = norms[a][ia];
                         for (ib, &beta) in cartesian[b].exponents.iter().enumerate() {
                             let cb = cartesian[b].coefficients[ib];
-                            let nb = primitive_norm(powers_tuple(cartesian[b].powers), beta);
+                            let nb = norms[b][ib];
                             for (ic, &gamma) in cartesian[c].exponents.iter().enumerate() {
                                 let cc = cartesian[c].coefficients[ic];
-                                let nc = primitive_norm(powers_tuple(cartesian[c].powers), gamma);
+                                let nc = norms[c][ic];
                                 for (id, &delta) in cartesian[d].exponents.iter().enumerate() {
                                     let cd = cartesian[d].coefficients[id];
-                                    let nd =
-                                        primitive_norm(powers_tuple(cartesian[d].powers), delta);
+                                    let nd = norms[d][id];
                                     let weight = ca * cb * cc * cd * na * nb * nc * nd;
                                     let exponents = [alpha, beta, gamma, delta];
                                     // 交换积分的槽位顺序是 a,c,b,d，指数必须跟着换位
                                     let exchange_exponents = [alpha, gamma, beta, delta];
-                                    // 库仑 (ab|cd)：槽位 0..3 = a,b,c,d
                                     for slot in 0..4 {
-                                        if owned[coulomb_owners[slot]] {
-                                            coulomb += weight
+                                        for axis in 0..3 {
+                                            coulomb[slot][axis] += weight
                                                 * quartet_derivative(
                                                     coulomb_owners,
                                                     &exponents,
@@ -394,12 +401,7 @@ fn two_electron_axis(cartesian: &[CartAo], density: &Matrix, atom: usize, axis: 
                                                     slot,
                                                     axis,
                                                 );
-                                        }
-                                    }
-                                    // 交换 (ac|bd)：槽位 0..3 = a,c,b,d
-                                    for slot in 0..4 {
-                                        if owned[exchange_owners[slot]] {
-                                            exchange += weight
+                                            exchange[slot][axis] += weight
                                                 * quartet_derivative(
                                                     exchange_owners,
                                                     &exchange_exponents,
@@ -413,12 +415,22 @@ fn two_electron_axis(cartesian: &[CartAo], density: &Matrix, atom: usize, axis: 
                             }
                         }
                     }
-                    total += 0.5 * p_ab * p_cd * (coulomb - 0.5 * exchange);
+                    let factor = 0.5 * p_ab * p_cd;
+                    for slot in 0..4 {
+                        let atom = cartesian[coulomb_owners[slot]].center_index;
+                        for axis in 0..3 {
+                            out[atom][axis] += factor * coulomb[slot][axis];
+                        }
+                        let atom = cartesian[exchange_owners[slot]].center_index;
+                        for axis in 0..3 {
+                            out[atom][axis] -= factor * 0.5 * exchange[slot][axis];
+                        }
+                    }
                 }
             }
         }
     }
-    total
+    out
 }
 
 /// 核排斥导数：`−Σ_B Z_A Z_B (R_A − R_B)_axis / |R_A − R_B|³`。
@@ -526,6 +538,10 @@ pub fn gradient_components(
     let nuclei = nuclei_of(molecule)?;
     let natoms = molecule.atoms.len();
 
+    // 2e 导数是整条梯度里最贵的一段：一次遍历 quartet、把四个中心分别累加，
+    // 不要按 3N 个坐标各扫一遍 n^4（旧实现就是那样，实测 5–7 倍浪费）。
+    let two_electron_all = two_electron_all(&cartesian, &density_cart);
+
     let mut components = GradientComponents {
         kinetic: vec![[0.0; 3]; natoms],
         nuclear_ao: vec![[0.0; 3]; natoms],
@@ -534,6 +550,7 @@ pub fn gradient_components(
         pulay: vec![[0.0; 3]; natoms],
         nuclear_repulsion: vec![[0.0; 3]; natoms],
     };
+    #[allow(clippy::needless_range_loop)]
     for atom in 0..natoms {
         for axis in 0..3 {
             let mut kinetic = 0.0;
@@ -611,8 +628,7 @@ pub fn gradient_components(
             components.pulay[atom][axis] = pulay;
             components.nuclear_center[atom][axis] =
                 nuclear_center_axis(&cartesian, &density_cart, &nuclei, atom, axis);
-            components.two_electron[atom][axis] =
-                two_electron_axis(&cartesian, &density_cart, atom, axis);
+            components.two_electron[atom][axis] = two_electron_all[atom][axis];
             components.nuclear_repulsion[atom][axis] = nuclear_repulsion_axis(&nuclei, atom, axis);
         }
     }
