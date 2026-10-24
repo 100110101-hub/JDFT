@@ -292,12 +292,13 @@ fn compare(
 #[test]
 fn cccbdb_sto3g_hf_lsda_agree() {
     let registry = Registry::open(data_root()).expect("qwb-data");
-    // 苯（42 个基函数 × 5 个泛函）在 CI 里太慢，留在下面那个 #[ignore] 的慢测试里；
-    // 这里跑 H2 / H2O / CO 的五个模型化学。
+    // CI 分层（project.md V-04）：默认测试只跑 H2 / H2O 的五个模型化学（约 5 分钟）；
+    // CO（尤其 BLYP/B3LYP 的 SCF 要 100+ 步）与苯（42 个基函数）放在
+    // 下面那个 #[ignore] 的慢测试里，数值已实测并写在文档注释中。
     let (checked, worst) = compare(
         &registry,
         |m| matches!(m, "HF" | "LSDA" | "PBEPBE" | "BLYP" | "B3LYP"),
-        |sp| sp != "C6H6",
+        |sp| sp == "H2" || sp == "H2O",
         true,
     );
     println!("比对 {checked} 条；最差 {:.3e} Ha", worst);
