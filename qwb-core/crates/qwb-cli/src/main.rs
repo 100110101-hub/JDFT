@@ -77,6 +77,9 @@ struct BatchArgs {
     /// 并行度
     #[arg(long)]
     parallel: Option<u32>,
+    /// 结果根目录（队列写在 `<out>/queue.json`）
+    #[arg(long)]
+    out: Option<PathBuf>,
 }
 
 #[derive(Debug, Args)]
@@ -236,7 +239,21 @@ fn cmd_run(args: &RunArgs) -> CliResult<()> {
             "qwb: note: --threads {threads} is recorded but this build is single-threaded (I-04)"
         );
     }
+    let task_id = args
+        .input_yaml
+        .file_stem()
+        .and_then(|stem| stem.to_str())
+        .unwrap_or("task")
+        .to_string();
+    let out_root = args.out.clone().unwrap_or_else(|| PathBuf::from("results"));
+    let energy = execute_job(&input, &task_id, &out_root)?;
+    println!("energy  {energy:.10} Ha");
+    println!("task    {}", out_root.join(&task_id).display());
+    Ok(())
+}
 
+/// 跑一个 job 并写出 K3 结果目录；返回总能量。
+fn execute_job(input: &JobInput, task_id: &str, out_root: &Path) -> CliResult<f64> {
     let root = find_data_root()?;
     let registry = qwb_registry::Registry::open(&root).map_err(|e| CliError::from_engine(&e))?;
     let handle = registry.engine_handle();
@@ -246,19 +263,11 @@ fn cmd_run(args: &RunArgs) -> CliResult<()> {
 
     let reporter = CliReporter::new();
     let result = engine
-        .run(&input, &reporter)
+        .run(input, &reporter)
         .map_err(|e| CliError::from_engine(&e))?;
     let lines = reporter.into_lines();
 
-    // 结果目录（K3 布局）。任务 id：输入文件名（去扩展名）。
-    let task_id = args
-        .input_yaml
-        .file_stem()
-        .and_then(|stem| stem.to_str())
-        .unwrap_or("task")
-        .to_string();
-    let out_root = args.out.clone().unwrap_or_else(|| PathBuf::from("results"));
-    let task_dir = out_root.join(&task_id);
+    let task_dir = out_root.join(task_id);
     std::fs::create_dir_all(task_dir.join("artifacts"))
         .map_err(|e| CliError::internal(format!("cannot create {}: {e}", task_dir.display())))?;
 
@@ -266,7 +275,7 @@ fn cmd_run(args: &RunArgs) -> CliResult<()> {
         std::fs::write(task_dir.join(name), bytes)
             .map_err(|e| CliError::internal(format!("cannot write {name}: {e}")))
     };
-    let input_yaml = serde_yaml::to_string(&input)
+    let input_yaml = serde_yaml::to_string(input)
         .map_err(|e| CliError::internal(format!("cannot serialise input: {e}")))?;
     write("input.yaml", input_yaml.into_bytes())?;
     write(
@@ -289,12 +298,48 @@ fn cmd_run(args: &RunArgs) -> CliResult<()> {
     log.push_str(&result.log);
     log.push('\n');
     write("log.txt", log.into_bytes())?;
-
-    println!("energy  {:.10} Ha", result.energy_hartree);
     println!("scf     converged = {}", result.scf_converged);
-    println!("task    {}", task_dir.display());
+    Ok(result.energy_hartree)
+}
+
+/// 队列里的一条记录（K3 的状态名原样保存）。
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+struct QueueEntry {
+    input: String,
+    task_id: String,
+    state: String,
+}
+
+fn queue_path(out_root: &Path) -> PathBuf {
+    out_root.join("queue.json")
+}
+
+fn load_queue(path: &Path) -> CliResult<Vec<QueueEntry>> {
+    if !path.is_file() {
+        return Ok(Vec::new());
+    }
+    let bytes = std::fs::read(path)
+        .map_err(|e| CliError::internal(format!("cannot read {}: {e}", path.display())))?;
+    serde_json::from_slice(&bytes)
+        .map_err(|e| CliError::input(format!("{} is not a valid queue.json: {e}", path.display())))
+}
+
+/// 原子写：先写 `.tmp` 再 rename，`kill -9` 也不会留下半截文件。
+fn save_queue(path: &Path, entries: &[QueueEntry]) -> CliResult<()> {
+    let tmp = path.with_extension("json.tmp");
+    let bytes = serde_json::to_vec_pretty(entries)
+        .map_err(|e| CliError::internal(format!("cannot serialise queue: {e}")))?;
+    std::fs::write(&tmp, bytes)
+        .map_err(|e| CliError::internal(format!("cannot write queue: {e}")))?;
+    std::fs::rename(&tmp, path)
+        .map_err(|e| CliError::internal(format!("cannot rename queue: {e}")))?;
     Ok(())
 }
+
+/// `qwb batch`：把目录里每个 `*.yaml` 登记成一条队列记录并执行，队列写进
+/// `<out>/queue.json`（K3 状态名）。进程被杀掉之后再跑同一条命令会**接着做 queued 的**：
+/// 停在 `running` 的任务按冻结的 K3 表**不能**回到 `queued`，只能用新 task id 重提，
+/// 所以这里把它们报告出来并以非零退出码结束（不假装恢复成功）。
 fn cmd_batch(args: &BatchArgs) -> CliResult<()> {
     let files = expand_pattern(&args.pattern)?;
     if files.is_empty() {
@@ -303,18 +348,127 @@ fn cmd_batch(args: &BatchArgs) -> CliResult<()> {
             args.pattern
         )));
     }
-    let mut ok = 0usize;
-    for file in &files {
-        load_input(file)?;
-        ok += 1;
+    let out_root = args.out.clone().unwrap_or_else(|| PathBuf::from("results"));
+    std::fs::create_dir_all(&out_root)
+        .map_err(|e| CliError::internal(format!("cannot create {}: {e}", out_root.display())))?;
+    let path = queue_path(&out_root);
+    let mut entries = load_queue(&path)?;
+    if entries.is_empty() {
+        for file in &files {
+            load_input(file)?; // 先校验，坏输入不要进队列
+            let task_id = file
+                .file_stem()
+                .and_then(|stem| stem.to_str())
+                .unwrap_or("task")
+                .to_string();
+            entries.push(QueueEntry {
+                input: file.display().to_string(),
+                task_id,
+                state: "queued".to_string(),
+            });
+        }
+        save_queue(&path, &entries)?;
+        println!("queued {} task(s) in {}", entries.len(), path.display());
+    } else {
+        println!("resuming {} task(s) from {}", entries.len(), path.display());
     }
+
+    let interrupted: Vec<String> = entries
+        .iter()
+        .filter(|entry| entry.state == "running")
+        .map(|entry| entry.task_id.clone())
+        .collect();
+    for task_id in &interrupted {
+        eprintln!(
+            "qwb: task {task_id} 上次停在 running（进程被杀）；K3 表没有 running→queued 边，\
+             请用新 task id 重提"
+        );
+    }
+
+    let pending: Vec<usize> = entries
+        .iter()
+        .enumerate()
+        .filter(|(_, entry)| entry.state == "queued")
+        .map(|(index, _)| index)
+        .collect();
+    let parallel = args.parallel.unwrap_or(1).max(1) as usize;
+    let workers = parallel.min(pending.len().max(1));
     println!(
-        "{ok} input(s) parsed and validated, parallel = {}",
-        args.parallel.unwrap_or(0)
+        "{} task(s) queued, {} running, parallel = {workers}",
+        pending.len(),
+        interrupted.len()
     );
-    Err(CliError::internal(
-        "batch execution needs the engine backend (P-07); inputs were only validated",
-    ))
+
+    if !pending.is_empty() {
+        let queue = std::sync::Mutex::new(entries);
+        let failures: std::sync::Mutex<Vec<String>> = std::sync::Mutex::new(Vec::new());
+        let next = std::sync::atomic::AtomicUsize::new(0);
+        std::thread::scope(|scope| {
+            for _ in 0..workers {
+                scope.spawn(|| {
+                    loop {
+                        let slot = next.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                        if slot >= pending.len() {
+                            break;
+                        }
+                        let index = pending[slot];
+                        // queued → running（K3 的第 2 条边），先落盘再干活
+                        let (input_path, task_id) = {
+                            let mut guard = queue.lock().expect("queue");
+                            guard[index].state = "running".to_string();
+                            (guard[index].input.clone(), guard[index].task_id.clone())
+                        };
+                        {
+                            let guard = queue.lock().expect("queue");
+                            let _ = save_queue(&path, &guard);
+                        }
+                        let outcome = load_input(Path::new(&input_path))
+                            .and_then(|input| execute_job(&input, &task_id, &out_root));
+                        let snapshot = {
+                            let mut guard = queue.lock().expect("queue");
+                            match outcome {
+                                Ok(energy) => {
+                                    guard[index].state = "converged".to_string();
+                                    println!("ok      {task_id}  {energy:.10} Ha");
+                                }
+                                Err(err) => {
+                                    guard[index].state = "failed".to_string();
+                                    failures
+                                        .lock()
+                                        .expect("failures")
+                                        .push(format!("{task_id}: {err:?}"));
+                                }
+                            }
+                            guard.clone()
+                        };
+                        let _ = save_queue(&path, &snapshot);
+                    }
+                });
+            }
+        });
+        entries = queue.into_inner().expect("queue");
+    }
+
+    let converged = entries
+        .iter()
+        .filter(|entry| entry.state == "converged")
+        .count();
+    let failed = entries
+        .iter()
+        .filter(|entry| entry.state == "failed")
+        .count();
+    println!(
+        "batch summary: {converged} converged, {failed} failed, {} interrupted, {} total",
+        interrupted.len(),
+        entries.len()
+    );
+    if failed > 0 || !interrupted.is_empty() {
+        return Err(CliError::internal(format!(
+            "batch incomplete: {failed} failed, {} interrupted",
+            interrupted.len()
+        )));
+    }
+    Ok(())
 }
 
 fn load_input(path: &Path) -> CliResult<JobInput> {

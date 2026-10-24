@@ -658,25 +658,30 @@ T6:
     换成 PW_MOD（会把 PBE 再压低 0.56 Ha，方向相反）、网格等级、电子数/∫ρ、能量记账。
     剩下的唯一可疑环节是网格点上 (ρ,σ) 的配对（docs/unblock.md 八之补四）。
 T7:
-  state: in_progress
-  ts: "2026-11-03T03:00:00Z"
-  artifact: "qwb-core/crates/qwb-io/tests/k3_state_machine.rs + qwb-core/crates/qwb-cli/tests/{p08_replay,t07_inspect_env}.rs"
+  state: done
+  ts: "2026-11-03T04:30:00Z"
+  artifact: "qwb-core/crates/qwb-cli/src/main.rs（batch 执行 + 持久化队列）+ tests/{k3_state_machine,p08_replay,t07_inspect_env,t07_batch_recovery}.rs"
   verification: |
-    四条判据的当前状况：
-    * **K3 状态机 6 条转移由 proptest 覆盖 — 通过**：`k3_state_machine.rs` 用 36 个
-      (from,to) 组合与 `TaskState::LEGAL` 逐元素比对（含两条 `cancelled` 边），另有
-      "终态是汇""随机序列不离图""合法路径 ≤ 3 步""小写序列化"四条性质。
+    四条判据全部通过（2026-11-03）：
+    * **K3 状态机 6 条转移由 proptest 覆盖 — 通过**：`k3_state_machine.rs` 用 36 个 (from,to)
+      组合与 `TaskState::LEGAL` 逐元素比对（含两条 `cancelled` 边），另有"终态是汇""随机序列
+      不离图""合法路径 ≤ 3 步""小写序列化"四条性质。
+    * **`kill -9` 后重启恢复 `queued` 任务 — 通过**：`qwb batch` 现在把队列写进
+      `<out>/queue.json`（K3 状态名、原子写：先写 `.tmp` 再 rename），每次状态迁移**先落盘再干活**。
+      `t07_batch_recovery.rs` 直接构造"被杀的现场"（一条 running、一条 queued）后重跑同一命令，
+      断言：queued 的被接着做完、running 的**不**被静默重跑并按冻结的 K3 表报告出来
+      （K3 没有 running→queued 边，要用新 task id 重提）、有中断时命令以非零退出码结束；
+      重提之后全部成功。
+    * **缺 `env.json` 时 `qwb inspect` 退出码 3 — 通过**：`t07_inspect_env.rs` 跑一次 H2/STO-3G
+      任务、删掉 `env.json` 再 inspect，断言 `status.code() == Some(3)`。
     * **`replay` 后能量差 < 1e-10 — 通过**：`p08_replay.rs` 解析 `qwb replay` 输出的 delta 行
       并断言 < 1e-10（不是只看退出码），另有"篡改 result.json 必须被拒"的对照。
-    * **缺 `env.json` 时 `qwb inspect` 退出码 3 — 通过**（本轮新增 `t07_inspect_env.rs`）：
-      先跑一次 H2/STO-3G 任务，删掉 `env.json` 再 inspect，断言 `status.code() == Some(3)`。
-    * **`kill -9` 后重启恢复 `queued` 任务 — 未做**：依赖调度器/任务队列（P-03 那一层，
-      目前 `P-01..P-06` 全部 pending：`qwb-studio` 的 Python 侧尚未创建）。
-      `qwb batch --parallel` 已实现（C-04/C-05），但没有"进程被杀后从结果目录恢复队列"的
-      持久化语义，所以这条判据还不能执行。
+    验收命令 `qwb batch jobs/*.yaml --parallel 4 && qwb replay <task_id>` 现在可执行：
+    `--parallel N` 用 N 个线程从共享队列里取任务（互不依赖，各自写自己的结果目录）。
   note: |
-    这一轮把 T7 能做的三条判据都落成了可执行测试（状态机、replay、inspect 退出码），
-    第四条（kill -9 恢复）明确记在 P-03/调度器缺口上，不冒充通过。
+    语义边界写清楚：`running` 是**不可回退**的（K3 冻结表里没有 running→queued），
+    所以"恢复"只对 `queued` 生效；被杀的 `running` 任务用新 task id 重提——这是冻结契约，
+    不是实现偷懒。`--parallel` 的线程数与单次 SCF 的线程（I-04 单线程）是两件事。
 T8: {state: pending}
 I-03:
   state: done
