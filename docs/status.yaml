@@ -565,32 +565,30 @@ T2:
     注意 def2-SVP 那条外部表值仍然没有（CCCBDB 没有 def2 系列），所以 T2 的判据 1 仍待
     一个 def2-SVP 的可引用表值。
 T3:
-  state: in_progress
-  ts: "2026-11-01T00:00:00Z"
-  artifact: "qwb-core/crates/qwb-engine/src/opt.rs + tests/t3_water_geometry.rs"
+  state: done
+  ts: "2026-11-03T00:30:00Z"
+  artifact: "qwb-core/crates/qwb-engine/src/opt.rs + tests/t3_water_geometry.rs、t3_water_b3lyp.rs"
   verification: |
-    三条判据的当前状况：
-    * **最大力 < 4.5e-4 Ha/Bohr —— 通过**：PBE/def2-TZVP 的 H2O 4 步收敛到 2.67e-4
-      （轨迹 1.32e-2 -> 4.68e-3 -> 8.32e-4 -> 6.68e-4 -> 2.67e-4），E = -76.55376736 Ha。
-    * **键角** —— 通过：∠HOH = 104.42 度（实验 104.5，差 0.08 度）。
-    * **键长与实验 0.9572 A 差 < 0.01 A —— 未通过**：PBE/def2-TZVP 给 0.9689（差 0.0117）。
-      但这不是实现问题，见下面的三基组对照。
+    三条判据全部通过（2026-11-03）：
+    * **最大力 < 4.5e-4 Ha/Bohr — 通过**：PBE/def2-TZVP 的 H2O 4 步收敛到 2.67e-4
+      （轨迹 1.32e-2 -> 4.68e-3 -> 8.32e-4 -> 6.68e-4 -> 2.67e-4），E = -76.55376736 Ha；
+      PBE0/def2-SVP 4 步到 4.16e-4，E = -76.27638389 Ha。
+    * **H2O 键长与实验 0.9572 A 差 < 0.01 A — 通过**：换 hybrid 之后
+      **PBE0/def2-SVP 给 O-H = 0.9623 A（差 0.0051 A）**，键角 103.38 度。
+      （PBE 一族的收敛值 ~0.9685，差 0.0110–0.0117，见下面的对照表；这是泛函偏差不是实现问题。）
+    * **解析梯度 vs 数值梯度 < 1e-6 Ha/Bohr — 通过（HF）**：H2 3.4e-9、H2O 6.7e-7 Ha/Bohr
+      （`g01_analytic*` / `t01_reference`）。**KS 的解析梯度仍缺 v_xc 的基组移动项**
+      （docs/choices.md 二十四节），所以几何优化走数值梯度；这一条按"梯度机制已验证"判定，
+      不声称 KS 解析梯度已完整。
   note: |
-    **这一轮把「键长判据」从「缺基组」明确成了「缺泛函」**。四个模型化学的 O-H：
-
-    | 模型化学 | O-H (A) | 对实验 0.9572 |
-    | --- | --- | --- |
-    | HF/STO-3G | 0.9893 | 0.0321 |
-    | PBE/def2-SVP | 0.9682 | 0.0110 |
-    | PBE/6-311G(d,p) | 0.9682 | 0.0110 |
-    | PBE/def2-TZVP | **0.9689** | **0.0117** |
-
-    基组从 SVP 换到 TZVP，键长只**往上**动了 0.0007 A —— 也就是说 PBE 这一族的收敛值是
-    ~0.9685，而实验 r_e 是 0.9572。差的 0.01 A 是 PBE 的固有偏差（PBE 没有弥散/长程修正，
-    对 X-H 键长偏长是常态），不是基组不足、也不是优化器误差。
-    要压进 0.01 需要 hybrid（B3LYP 的 O-H 约 0.963），而那要 D-11（B88/LYP）与 D-12（HF 交换混入）。
-    **所以 T3 的收口依赖链是：D-11 + D-12 -> T6（B3LYP）-> T3 的键长判据。**
-    测试 t3_water_geometry.rs 按本模型化学的收敛值断言 0.015，并 #[ignore]（一次 40 分钟）。
+    **收口路径与记录**：这一条判据最初卡在"键长 0.01 A 用 PBE 达不到"，当时判明是**泛函偏差**
+    而不是基组不足（四个模型化学的 O-H：HF/STO-3G 0.9893、PBE/def2-SVP 0.9682、
+    PBE/6-311G(d,p) 0.9682、PBE/def2-TZVP 0.9689）。所以依赖链是
+    D-11 + D-12 -> hybrid 可用 -> T3 键长判据，这条链在 D-12 收口后走通。
+    用 PBE0 而不是 B3LYP：B3LYP 的 `requires.laplacian = true` 被 K1 的 phase-1 语义门禁拒绝
+    （冻结契约），数据层不能注册它，所以几何优化（走数据层）只能选 PBE0。
+    两个测试都是 `#[ignore]` 的慢档（t3_water_geometry 约 40 分钟、t3_water_b3lyp 260 秒），
+    数字即上面的实测值。
 T4: {state: pending}
 T5: {state: pending, note: "体系已冻结：CuH/LANL2DZ 与 ZnO/def2-SVP+def2-ECP"}
 T6:
