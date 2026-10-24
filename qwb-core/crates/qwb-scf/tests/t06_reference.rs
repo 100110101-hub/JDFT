@@ -120,7 +120,8 @@ fn molecule_of(atoms: &[(String, [f64; 3])]) -> Molecule {
 /// | `0.08·LdaSlaterX + 0.72·GgaB88X + …` | +6.9 mHa |
 ///
 /// 所以本项目的 `GgaB88X` 在 B3LYP 的语境里就该配 0.8，换成 0.08+0.72 反而更差。
-fn b3lyp_terms(scale: f64) -> Vec<Box<dyn FunctionalTerm>> {
+/// 程序化构造 B3LYP/BLYP 时需要的参数（数据层不允许这些泛函，见文件头）。
+fn xc_parameters() -> BTreeMap<String, f64> {
     let mut p = BTreeMap::new();
     p.insert("b88_beta".to_string(), 0.0042);
     p.insert("lyp_a".to_string(), 0.049_18);
@@ -132,6 +133,11 @@ fn b3lyp_terms(scale: f64) -> Vec<Box<dyn FunctionalTerm>> {
     p.insert("vwn5_p_b".to_string(), 13.072);
     p.insert("vwn5_p_c".to_string(), 42.7198);
     p.insert("slater_alpha".to_string(), 2.0 / 3.0);
+    p
+}
+
+fn b3lyp_terms(scale: f64) -> Vec<Box<dyn FunctionalTerm>> {
+    let p = xc_parameters();
     vec![
         qwb_xc::scale_term(qwb_xc::build_term("GgaB88X", &p).expect("b88"), 0.8 * scale),
         qwb_xc::scale_term(
@@ -166,6 +172,14 @@ fn solve(registry: &Registry, molecule: &Molecule, method: &str, grid_name: &str
         "B3LYP" => {
             options.hf_exchange = 0.20;
             b3lyp_terms(1.0)
+        }
+        // BLYP = B88 + LYP（两个都是"全"泛函，权重 1:1）
+        "BLYP" => {
+            let p = xc_parameters();
+            vec![
+                qwb_xc::build_term("GgaB88X", &p).expect("b88"),
+                qwb_xc::build_term("GgaLypC", &p).expect("lyp"),
+            ]
         }
         // CCCBDB 里的名字 -> 本项目的泛函数据文件
         name => {
@@ -209,6 +223,7 @@ fn compare(
     registry: &Registry,
     method_filter: impl Fn(&str) -> bool,
     species_filter: impl Fn(&str) -> bool,
+    assert_each: bool,
 ) -> (usize, f64) {
     let geometries = read_geometries();
     let references = read_energies();
@@ -250,7 +265,7 @@ fn compare(
         checked += 1;
         worst = worst.max(delta.abs());
         assert!(
-            delta.abs() < tolerance,
+            delta.abs() < tolerance || !assert_each,
             "{} / {} 与 CCCBDB 差 {:+.2e} Ha，超出 {:+.0e}（来源 {}）",
             reference.species,
             reference.method,
@@ -269,7 +284,7 @@ fn compare(
 #[test]
 fn cccbdb_sto3g_hf_lsda_agree() {
     let registry = Registry::open(data_root()).expect("qwb-data");
-    let (checked, worst) = compare(&registry, |m| matches!(m, "HF" | "LSDA"), |_| true);
+    let (checked, worst) = compare(&registry, |m| matches!(m, "HF" | "LSDA"), |_| true, true);
     println!("比对 {checked} 条；最差 {:.3e} Ha", worst);
     assert!(checked >= 6, "参考集太小：{checked}");
 }
@@ -280,7 +295,7 @@ fn cccbdb_sto3g_hf_lsda_agree() {
 #[test]
 fn cccbdb_sto3g_b3lyp_h2_agrees() {
     let registry = Registry::open(data_root()).expect("qwb-data");
-    let (checked, worst) = compare(&registry, |m| m == "B3LYP", |s| s == "H2");
+    let (checked, worst) = compare(&registry, |m| m == "B3LYP", |s| s == "H2", true);
     println!("B3LYP/H2: {checked} 条；最差 {:.3} mHa", worst * 1e3);
     assert_eq!(checked, 1);
     assert!(worst < 2.0e-3, "B3LYP/H2 偏差 {:.1} mHa", worst * 1e3);
@@ -310,7 +325,12 @@ fn cccbdb_sto3g_b3lyp_h2_agrees() {
 #[ignore = "已知失败：PBE -29(H2)/-176(H2O) mHa、B3LYP +19(H2O) mHa；根因定位中，见 docs/choices.md 三十节"]
 fn cccbdb_sto3g_gga_curves_are_still_off() {
     let registry = Registry::open(data_root()).expect("qwb-data");
-    let (checked, worst) = compare(&registry, |m| matches!(m, "PBEPBE" | "B3LYP"), |_| true);
+    let (checked, worst) = compare(
+        &registry,
+        |m| matches!(m, "PBEPBE" | "BLYP" | "B3LYP"),
+        |_| true,
+        false,
+    );
     println!("{checked} 条，最差 {:.1} mHa（判据 2 mHa）", worst * 1e3);
     assert!(checked >= 4);
     assert!(worst < 2.0e-3, "GGA 曲线仍然偏差 {:.1} mHa", worst * 1e3);

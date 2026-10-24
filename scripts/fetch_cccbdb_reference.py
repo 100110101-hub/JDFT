@@ -13,7 +13,7 @@ import time
 import urllib.request
 
 CAS = {"H2": "1333740", "H2O": "7732185", "CO": "630080", "C6H6": "71432"}
-METHODS = {"HF": 1, "LSDA": 51, "PBEPBE": 61, "B1B95": 55, "B3LYP": 8}
+METHODS = {"HF": 1, "LSDA": 51, "PBEPBE": 61, "BLYP": 13, "B1B95": 55, "B3LYP": 8}
 BASES = {"STO-3G": 20, "6-31G*": 1, "6-311G**": 21}
 
 NUMBER = re.compile(r"-?\d+\.\d+")

@@ -600,6 +600,9 @@ T6:
     * H2：B3LYP -1.165238026 vs -1.165535，**+0.30 mHa 通过**（`cccbdb_sto3g_b3lyp_h2_agrees`）；
     * H2O：B3LYP -75.303760113 vs -75.322775，**+19.0 mHa 未通过**；
     * CO / C6H6：与 H2O 同类，钉在 `#[ignore]` 的 `cccbdb_sto3g_gga_curves_are_still_off`。
+    另补一条关键对照（BLYP = 1.0 B88 + 1.0 LYP，两个组件都已逐点核对过）：
+    H2/STO-3G **+9.5 mHa**、H2O/STO-3G **+112.0 mHa**——误差不是权重的线性函数
+    （BLYP 权重 1.0/1.0 差 112 mHa，B3LYP 权重 0.8/0.81 只差 19 mHa）。
     判据 2（HF 混合系数 0.20 与定义一致）：`RksOptions.hf_exchange = 0.20`，权重线性性在
     d12_b3lyp.rs（四个权重同乘 0.5 → E_xc 精确减半）。
     判据 3（B3LYP 梯度有限差分一致 < 1e-6）：**未做**——KS 解析梯度缺 v_xc 的基组移动项

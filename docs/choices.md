@@ -712,3 +712,27 @@ B3LYP 在水上 +19 mHa、在 H2 上 +0.3 mHa；PBE 在水上 -176 mHa、在 H2 
 - https://raw.githubusercontent.com/psi4/libxc/v4.0.2/src/gga_x_pbe.c
 - https://raw.githubusercontent.com/psi4/libxc/v4.0.2/src/work_gga_x.c
 - https://raw.githubusercontent.com/psi4/libxc/v4.0.2/src/util.h
+
+### 又一条关键数据：BLYP 比 B3LYP 差得多
+
+补抓 CCCBDB 的 `BLYP`（method=13）之后，同一套流水线上的四个 GGA 相关数值（H2O/STO-3G）：
+
+| 模型化学 | 我们 | CCCBDB | 差 |
+| --- | --- | --- | --- |
+| BLYP（1.0 B88 + 1.0 LYP） | -75.180006 | -75.291954 | **+112.0 mHa** |
+| B3LYP（0.8 B88 + 0.81 LYP + 0.19 VWN5 + 0.2 HF） | -75.303760 | -75.322775 | +19.0 mHa |
+| PBE（PBE-X + PBE-C） | -75.414346 | -75.238534 | **-175.8 mHa** |
+| H2 上的同三条 | | | +9.5 / +0.3 / -29.1 mHa |
+
+这条数据很关键：**误差不是权重的线性函数**——BLYP 的 GGA 权重是 1.0/1.0 却差 112 mHa，
+B3LYP 的 GGA 权重只有 0.8/0.81（还混了 19% VWN5 与 20% 精确交换）却只差 19 mHa。
+所以"某个 GGA 项被整体放大/缩小一个因子"这类解释被排除；更像是**与具体密度/近核行为耦合**
+的误差（HF 与 LSDA 在同一条流水线上精确到 1e-6，说明积分与网格本身没问题）。
+
+同时，两个 GGA 项的"点值公式"都已独立核对：
+* LYP：把 libxc `gga_c_lyp.c` 的 t1..t6 写法（不含 ∇²ρ）接进同一网格、同一密度，
+  与我们的 `GgaLypC` 差 **1.1e-6 Ha**（水，LSDA 密度）；
+* PBE 相关项：`H(t)` 与 libxc `gga_c_pbe.c` 的写法在 s = 0.05…3 的七个点上**比值 1.000000**。
+
+这排除了"闭壳层转录写错"，把嫌疑进一步压到「把点值公式接到流水线上的方式」
+（下一步：导出 PBE 密度与 (ρ,σ,w) 逐点数据，用独立实现积分对照；以及换 PW_MOD 的 LDA 基）。
