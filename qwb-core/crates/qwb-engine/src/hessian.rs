@@ -275,6 +275,8 @@ pub struct ThermoResult {
 /// 物理常数（CODATA 2018）。
 pub const HARTREE_J_PER_MOL: f64 = 2_625_499.639;
 const KB: f64 = 1.380_649e-23;
+/// 1 Hartree 的焦耳数（单分子）。
+const HARTREE_J: f64 = 4.359_744_722_207_1e-18;
 const H_PLANCK: f64 = 6.626_070_15e-34;
 const SPEED_OF_LIGHT_CM: f64 = 2.997_924_58e10;
 const R_J_PER_MOL_K: f64 = 8.314_462_618;
@@ -363,18 +365,15 @@ pub fn thermochemistry(
     }
     let linear = moments.len() == 1 || is_linear(molecule);
 
-    // 振动：只取正频的振动模（虚频按 0 处理，热化学里已无意义）
+    // 振动：**不依赖 `modes` 的排序**——按波数降序自己挑前 `vibrational_modes` 个。
+    // （平移/转动模的波数接近 0，排在降序末尾，正好被这一步排除；虚频丢掉。）
     let vib_wavenumbers: Vec<f64> = {
-        let mut list: Vec<f64> = result
-            .modes
-            .iter()
-            .rev()
+        let mut list: Vec<f64> = result.modes.iter().map(|mode| mode.wavenumber).collect();
+        list.sort_by(|a, b| b.partial_cmp(a).unwrap_or(std::cmp::Ordering::Equal));
+        list.into_iter()
             .take(result.vibrational_modes)
-            .map(|mode| mode.wavenumber)
             .filter(|value| *value > 0.0)
-            .collect();
-        list.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
-        list
+            .collect()
     };
 
     let kt = KB * temperature_k; // J
@@ -384,10 +383,12 @@ pub fn thermochemistry(
     let s_trans = R_J_PER_MOL_K * ((q_trans_over_v * kt / pressure_pa).ln() + 2.5);
 
     // 转动熵
+    let symmetry = rotational_symmetry(molecule);
     let s_rot = if linear {
+        // 转动温度用 **kB**（不是 kT）：θ_rot = h²/(8π²Ik)。
         let theta = H_PLANCK * H_PLANCK
-            / (8.0 * std::f64::consts::PI * std::f64::consts::PI * moments[0] * kt);
-        R_J_PER_MOL_K * ((temperature_k / theta).ln() + 1.0)
+            / (8.0 * std::f64::consts::PI * std::f64::consts::PI * moments[0] * KB);
+        R_J_PER_MOL_K * ((temperature_k / (symmetry * theta)).ln() + 1.0)
     } else {
         let theta_product: f64 = moments[0] * moments[1] * moments[2];
         let theta = (theta_product / 8.0).sqrt() * H_PLANCK * H_PLANCK * H_PLANCK
@@ -398,7 +399,6 @@ pub fn thermochemistry(
             H_PLANCK * H_PLANCK / (8.0 * std::f64::consts::PI * std::f64::consts::PI * moment * KB)
         };
         let product = theta_i(moments[0]) * theta_i(moments[1]) * theta_i(moments[2]);
-        let symmetry = rotational_symmetry(molecule);
         R_J_PER_MOL_K
             * ((std::f64::consts::PI.sqrt() / symmetry) * (temperature_k.powi(3) / product).sqrt())
                 .ln()
@@ -416,13 +416,13 @@ pub fn thermochemistry(
         e_vib_j += quantum * (0.5 + 1.0 / (x.exp() - 1.0));
         s_vib += R_J_PER_MOL_K * (x / (x.exp() - 1.0) - (1.0 - (-x).exp()).ln());
     }
-    let zpe_hartree = zpe_j / HARTREE_J_PER_MOL;
+    let zpe_hartree = zpe_j / HARTREE_J;
     // U - E_elec = ZPE + (3/2)kT + (线性 ? 1 : 3/2)kT + 振动热 = ...
     let trans_u = 1.5 * kt;
     let rot_u = if linear { kt } else { 1.5 * kt };
     let delta_e = trans_u + rot_u + (e_vib_j - zpe_j);
-    let internal_energy_hartree = zpe_hartree + delta_e / HARTREE_J_PER_MOL;
-    let enthalpy_hartree = internal_energy_hartree + kt / HARTREE_J_PER_MOL;
+    let internal_energy_hartree = zpe_hartree + delta_e / HARTREE_J;
+    let enthalpy_hartree = internal_energy_hartree + kt / HARTREE_J;
     let entropy = s_trans + s_rot + s_vib;
     let gibbs_hartree =
         electronic_energy_hartree + enthalpy_hartree - temperature_k * entropy / HARTREE_J_PER_MOL;

@@ -32,7 +32,6 @@ fn h2() -> Molecule {
 }
 
 #[test]
-#[ignore = "WIP：振动模提取目前拿到 0（ZPE=0，S 因此偏大 40%）；转动常数单位已修（H2 应为 60.8 cm⁻¹）"]
 fn h2_thermochemistry_is_the_right_size() {
     let registry = Registry::open(data_root()).expect("qwb-data");
     let options = OptOptions::new("sto-3g", "", "grid-coarse");
@@ -59,6 +58,14 @@ fn h2_thermochemistry_is_the_right_size() {
         thermo.gibbs_hartree
     );
     println!("振动模：{:?}", hessian.zero_point_cm);
+    println!(
+        "全部 modes：{:?}",
+        hessian
+            .modes
+            .iter()
+            .map(|m| m.wavenumber)
+            .collect::<Vec<_>>()
+    );
     println!("转动常数（cm⁻¹）：{:?}", thermo.rotational_constants_cm);
 
     // ① ZPE > 0、S > 0
@@ -95,8 +102,12 @@ fn h2_thermochemistry_is_the_right_size() {
         (thermo.gibbs_hartree - expected_g).abs() < 1.0e-12,
         "G 与 E + H_corr − T·S 不一致"
     );
+    // **不能**断言 G < E_elec：H2 的 ZPE(0.0125 Ha) + 热修正(0.0033 Ha) 合计 0.0158 Ha，
+    // 大于 298 K 的 T·S(0.0147 Ha)，所以 G 略高于电子能量。只核对恒等式与量级。
+    assert!(thermo.gibbs_hartree > optimized.energy_hartree);
     assert!(
-        thermo.gibbs_hartree < optimized.energy_hartree,
-        "G 应低于电子能量（T·S 大于 H_corr）"
+        thermo.zero_point_hartree > 0.01 && thermo.zero_point_hartree < 0.02,
+        "ZPE 应在 0.01 Ha 量级（H2 的 5480 cm⁻¹ 给 0.0125 Ha），实得 {}",
+        thermo.zero_point_hartree
     );
 }
