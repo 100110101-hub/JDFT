@@ -458,6 +458,7 @@ pub fn evaluate_xc(
     let mut laplacian_values = Vec::with_capacity(grid.len());
     let mut ao_values: Vec<Vec<f64>> = Vec::with_capacity(grid.len());
     let mut ao_gradients: Vec<Vec<[f64; 3]>> = Vec::with_capacity(grid.len());
+    let mut ao_laplacians: Vec<Vec<f64>> = Vec::with_capacity(grid.len());
     let mut grad_rho: Vec<[f64; 3]> = Vec::with_capacity(grid.len());
 
     for GridPoint { position_bohr, .. } in &grid.points {
@@ -467,8 +468,9 @@ pub fn evaluate_xc(
             (ao_value(basis, *position_bohr)?, Vec::new())
         };
         // ∇²ρ = Σ_μν P_μν (∇²φ_μ φ_ν + 2 ∇φ_μ·∇φ_ν + φ_μ ∇²φ_ν)
+        let mut ao_laplacian_here = Vec::new();
         let laplacian_here = if needs_laplacian {
-            let ao_laplacian_here = ao_laplacian(basis, *position_bohr)?;
+            ao_laplacian_here = ao_laplacian(basis, *position_bohr)?;
             let mut total = 0.0;
             for i in 0..n {
                 for j in 0..n {
@@ -486,9 +488,26 @@ pub fn evaluate_xc(
                 }
             }
             if !total.is_finite() {
-                return Err(EngineError::Internal(
-                    "density laplacian is not finite at a grid point".to_string(),
-                ));
+                // 诊断：把参与求和的量抽样吐出来，定位是 P、φ、∇φ 还是 ∇²φ 出了问题
+                let mut max_p = 0.0_f64;
+                let mut max_value = 0.0_f64;
+                let mut max_gradient = 0.0_f64;
+                let mut max_laplacian = 0.0_f64;
+                for i in 0..n {
+                    max_value = max_value.max(values[i].abs());
+                    max_laplacian = max_laplacian.max(ao_laplacian_here[i].abs());
+                    for value in &gradients[i] {
+                        max_gradient = max_gradient.max(value.abs());
+                    }
+                    for j in 0..n {
+                        max_p = max_p.max(density[(i, j)].abs());
+                    }
+                }
+                return Err(EngineError::Internal(format!(
+                    "density laplacian is not finite ({total}) at a grid point: \
+                     max|P| {max_p:.3e}, max|φ| {max_value:.3e}, max|∇φ| {max_gradient:.3e}, \
+                     max|∇²φ| {max_laplacian:.3e}"
+                )));
             }
             total
         } else {
@@ -540,6 +559,7 @@ pub fn evaluate_xc(
         grad_rho.push(gradient_here);
         ao_values.push(values);
         ao_gradients.push(gradients);
+        ao_laplacians.push(ao_laplacian_here);
     }
 
     let batch = if needs_laplacian {
@@ -552,17 +572,25 @@ pub fn evaluate_xc(
     let mut epsilon = vec![0.0; grid.len()];
     let mut d_epsilon = vec![0.0; grid.len()];
     let mut d_sigma = vec![0.0; grid.len()];
+    let mut d_laplacian = vec![0.0; grid.len()];
 
     for term in terms {
         let mut local_epsilon = vec![0.0; grid.len()];
         let mut local_d_rho = vec![0.0; grid.len()];
         let mut local_d_sigma = vec![0.0; grid.len()];
+        let mut local_d_laplacian = vec![0.0; grid.len()];
         term.energy_density(&batch, &mut local_epsilon);
-        term.potential_derivatives(&batch, &mut local_d_rho, &mut local_d_sigma);
+        term.potential_derivatives_laplacian(
+            &batch,
+            &mut local_d_rho,
+            &mut local_d_sigma,
+            &mut local_d_laplacian,
+        );
         for index in 0..grid.len() {
             epsilon[index] += local_epsilon[index];
             d_epsilon[index] += local_d_rho[index];
             d_sigma[index] += local_d_sigma[index];
+            d_laplacian[index] += local_d_laplacian[index];
         }
     }
 
@@ -585,8 +613,17 @@ pub fn evaluate_xc(
         } else {
             0.0
         };
+        // ∇²ρ 通道：∫ φ_μ(∇²(ρ·∂ε/∂∇²ρ))φ_ν（一遍分部积分）
+        //   = ∫ (ρ·∂ε/∂∇²ρ)·∇²(φ_μ φ_ν)，而
+        //   ∇²(φ_μ φ_ν) = ∇²φ_μ φ_ν + 2 ∇φ_μ·∇φ_ν + φ_μ ∇²φ_ν ——三样都已经在手上。
+        let laplacian_coefficient = if needs_laplacian && rho > 0.0 {
+            rho * d_laplacian[index]
+        } else {
+            0.0
+        };
         let values = &ao_values[index];
         let gradients = &ao_gradients[index];
+        let laplacians = &ao_laplacians[index];
         let gradient_rho = grad_rho[index];
         for i in 0..n {
             if values[i] == 0.0 {
@@ -603,6 +640,15 @@ pub fn evaluate_xc(
                         })
                         .sum::<f64>();
                     element += sigma_coefficient * dot;
+                }
+                if laplacian_coefficient != 0.0 {
+                    let dot = gradients[i]
+                        .iter()
+                        .zip(gradients[j].iter())
+                        .map(|(left, right)| left * right)
+                        .sum::<f64>();
+                    element += laplacian_coefficient
+                        * (laplacians[i] * values[j] + 2.0 * dot + values[i] * laplacians[j]);
                 }
                 v_xc[(i, j)] += weight * element;
             }

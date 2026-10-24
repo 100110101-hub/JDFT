@@ -67,6 +67,16 @@ impl Requirements {
             laplacian: false,
         }
     }
+
+    /// 需要 `∇²ρ` 的项（LYP 一类）：ρ、σ、`∇²ρ` 全要。
+    #[must_use]
+    pub fn laplacian_gga() -> Self {
+        Self {
+            rho: true,
+            sigma: true,
+            laplacian: true,
+        }
+    }
 }
 
 /// 一批网格点的密度量（批量接口，避免逐点虚调用）。
@@ -168,6 +178,25 @@ pub trait FunctionalTerm: Send + Sync {
         d_rho: &mut [f64],
         d_sigma: &mut [f64],
     );
+
+    /// 三通道版本：额外给出 `dε/d∇²ρ`。
+    ///
+    /// 默认实现把 `d_laplacian` 全部置零并转发给 [`Self::potential_derivatives`]，
+    /// 所以只有真正依赖 `∇²ρ` 的项（LYP 一类）才需要覆盖它。
+    ///
+    /// **为什么必须有这个通道**：LYP 的 ε 依赖 `(ρ, σ, ∇²ρ)`，它的变分势里有一项
+    /// `∇²(ρ·dε/d∇²ρ)`。若只实现 ρ、σ 两个通道，**能量表达式看着对，但 v_xc 会缺一整项**，
+    /// SCF 会收敛到错的密度上——而且这种错误从能量数值上几乎看不出来。
+    fn potential_derivatives_laplacian(
+        &self,
+        batch: &DensityBatch<'_>,
+        d_rho: &mut [f64],
+        d_sigma: &mut [f64],
+        d_laplacian: &mut [f64],
+    ) {
+        self.potential_derivatives(batch, d_rho, d_sigma);
+        d_laplacian.fill(0.0);
+    }
 }
 
 pub(crate) fn check_shape(
@@ -396,6 +425,27 @@ impl ScaledTerm {
 }
 
 impl FunctionalTerm for ScaledTerm {
+    fn potential_derivatives_laplacian(
+        &self,
+        batch: &DensityBatch<'_>,
+        d_rho: &mut [f64],
+        d_sigma: &mut [f64],
+        d_laplacian: &mut [f64],
+    ) {
+        // 三个导数通道必须用**同一个权重**缩放（与能量一致），否则复合泛函的势会错。
+        self.inner
+            .potential_derivatives_laplacian(batch, d_rho, d_sigma, d_laplacian);
+        for slot in d_rho.iter_mut() {
+            *slot *= self.weight;
+        }
+        for slot in d_sigma.iter_mut() {
+            *slot *= self.weight;
+        }
+        for slot in d_laplacian.iter_mut() {
+            *slot *= self.weight;
+        }
+    }
+
     fn id(&self) -> &'static str {
         self.inner.id()
     }

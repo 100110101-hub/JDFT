@@ -111,71 +111,48 @@ D-10:
   verification: "① `cargo test -p qwb-xc --test d10_pbe`（3 例）：σ→0 时 PBE 交换/相关与 LdaSlaterX/LdaSvwn5 **逐位一致**（<1e-12）；s=1 处 F_x = 1.1724321599 与解析式差 <1e-10；**dε/dρ、dε/dσ 与五点四阶差分相对差 ≤ 9.7e-11**（验收 < 1e-9）。② `cargo test -p qwb-scf --test d10_pbe_scf`：**PBE 端到端跑通**——H2/STO-3G/PBE 收敛（iters=2），E = −1.1811827115、E_xc = −0.7391793342；同一轮 SVWN5 是 −1.1570005105（三者都在 Boys 与网格分区修复后重钉，见 §十三/§十八）（**GGA 的引入没有改变 LDA 结果**，回归钉住）。③ `qwb data verify` 9/9（pbe.yaml 带 sha256 与逐参数 citation：PBE 1996 DOI + VWN5 DOI）。"
   note: "**GGA 的关键实现选择**：不做网格上的数值散度。GGA 势里的 −∇·(2·∂f/∂σ·∇ρ) 用**分部积分**转成矩阵元 `+ 2·∂f/∂σ·∇ρ·∇(φ_μ φ_ν)`，只需要 AO 值与 AO 梯度（`ao_value_and_gradient`，上一轮已用有限差分验证过），避免了在离散网格上算二阶导。导数由对偶数一次求值得到（值 + ∂ρ + ∂σ），VWN5 段复用解析的 `vwn_g_prime`。物理合理性：PBE 的 E_xc 比 LDA 更负 0.024 Ha（梯度修正增强交换），总能量 −1.181 vs −1.157，方向正确。"
 D-11:
-  state: in_progress
-  ts: "2026-11-02T00:30:00Z"
-  artifact: "qwb-core/crates/qwb-xc/src/gga.rs::B88Exchange（GgaB88X）+ qwb-data/functional/b88.yaml + tests/d11_b88.rs"
+  state: done
+  ts: "2026-11-02T08:00:00Z"
+  artifact: "qwb-core/crates/qwb-xc/src/gga.rs（B88Exchange `GgaB88X` + LypCorrelation `GgaLypC`）+ qwb-data/functional/b88.yaml + tests/d11_b88.rs、d11_lyp.rs、qwb-scf/tests/lyp_variational.rs"
   verification: |
-    B88 部分已完成，三条不依赖外部参照的判据（`cargo test -p qwb-xc --test d11_b88`）：
-    * **σ→0 退化为 Slater**：与 `LdaSlaterX` 逐点相对差 < 1e-14（ρ = 1e-3…10）；
-    * **增强因子**：与闭式 `F = 1 + (β/C_x)x²/(1+6βx·asinh x)` 相对差 < 1e-12
-      （x = 1e-3…5；同时断言 F ≥ 1，把符号写反直接挡掉）；
-    * **导数**：`∂ε/∂ρ`、`∂ε/∂σ` 与五点四阶差分一致（相对 1.1e-12…8.8e-11），
-      判据带自校准的舍入地板 `8·eps·|ε|/h`——`∂ε/∂σ` 很小时差分的舍入才是瓶颈
-      （实测 ρ=2, σ=0.01 处「相对差」2.25e-8 正是地板本身，不是实现误差）。
-    数据：`b88.yaml`（β = 0.0042，citation = Becke PRA 38, 3098 + Slater LDA 交换），
-    已进 registry 与 DATA_LICENSES.md（12 个文件）。
+    两项都已实现并验证：
+    * **B88**（`GgaB88X`）：σ→0 退化为 Slater（< 1e-14 相对）、增强因子与闭式一致
+      （< 1e-12）、导数对五点差分一致（1.1e-12…8.8e-11）。
+    * **LYP**（`GgaLypC`）：三通道导数都对五点差分一致（d/dρ、d/dσ、d/dL）；
+      均匀电子气极限 `ε_c = −a[1 + b·C_F·e^{−cρ^{−1/3}}]/(1+dρ^{−1/3})` 逐点相对差 < 1e-13。
+    * **三通道的变分自洽**（`lyp_variational.rs`）：给密度矩阵加扰动 `ΔP = s·M`，
+      `ΔE` 与 `Tr(v·ΔP)` 的残差随 s **线性**下降（3.4e-9 → 3.4e-11 → 3.4e-13）。
+      这是整个三通道管线（含 `∇²(φ_μφ_ν)` 矩阵元）作为「真变分导数」的证明。
+    公式常数：`a=0.04918, b=0.132, c=0.2533, d=0.349`；`C_F=(3/10)(3π²)^{2/3}`。
+    等价的核对锚点：把 `Br = C_Fρ^{5/3} − 2t_W + (1/9)(t_W + ½∇²ρ)`（`t_W=(1/8)(σ/ρ−∇²ρ)`）
+    展开得 `C_Fρ^{5/3} + (7/24)∇²ρ − (17/72)(σ/ρ)`，这两个系数与三个独立来源一致。
   note: |
-    **未完成的是 LYP 相关项**：标准 LYP 需要 ρ 的拉普拉斯量 ∇²ρ，而网格侧现在只提供
-    ρ 与 σ = |∇ρ|²（`Requirements.laplacian` 字段存在但没人提供值）。所以 D-11 的
-    「B88 + LYP」只做完一半，状态保持 in_progress，不标 done。
-    下一步（属 D-11）：给 `ao_value_and_gradient` 加二阶导（每个直角分量沿三个轴的
-    ∂²φ 由同一套抬/降幂恒等式给出），再把它接进 `DensityBatch` 的 laplacian 字段；
-    然后按 LYP 原式实现相关项，判据仍用「σ→0 退化到 LDA 相关 + 导数对差分」。
-    这一条做完，D-12（加权组件 + hybrid）才有意义，进而 T6（B3LYP）。
-
-    **本轮（3）进展：∇²ρ 基础设施已落地**（LYP 的前置）。`ao_laplacian` 给出每个 AO 的
-    `∇²φ = Σ_axis[a(a−1)u^{a−2} − 2α(2a+1)u^a + 4α²u^{a+2}]`，`evaluate_xc` 在
-    `requirements.laplacian` 为真时供给 `∇²ρ = Σ P(∇²φ φ + 2∇φ·∇φ + φ ∇²φ)`，
-    `DensityBatch::with_laplacian` 把它带进泛函。验收（`tests/laplacian_density.rs`）：
-    * AO 级：与 `ao_value` 的二阶中心差分一致，STO-3G 1.3e-7、def2-SVP 8.6e-8（相对）；
-    * ρ 级：与「直接对 ρ 做二阶差分」一致，最大 2.8e-7（相对）。
-    **LYP 还差「第三个势通道」**：LYP 的 ε 依赖 `(ρ, σ, ∇²ρ)`，所以变分势是
-    `v = ε + ρ∂ε/∂ρ − ∇·(2ρ∂ε/∂σ ∇ρ) + ∇²(ρ∂ε/∂∇²ρ)`。前两项/三项现有接口能表达
-    （`potential_derivatives` 返回 d_rho、d_sigma，σ 通道用分部积分转成
-    `+2ρ∂ε/∂σ∇ρ·∇(φ_μφ_ν)`），但**第三项不行**：它需要
-    `∫w·(ρ∂ε/∂∇²ρ)·∇²(φ_μφ_ν)`，也就是要 `potential_derivatives` 再吐一个 d_laplacian，
-    并且 `evaluate_xc` 里加一条
-    `∇²(φ_μφ_ν) = ∇²φ_μφ_ν + 2∇φ_μ·∇φ_ν + φ_μ∇²φ_ν` 的矩阵元通道。
-    好消息是这三样东西现在**都有了**（ao_laplacian + ao 梯度 + DensityBatch.laplacian），
-    所以下一步是把接口扩成三通道、再按 LYP 闭壳层原式写 ε：
-    `ε_c = −a[1 + bρ^{−5/3}(C_Fρ^{5/3} − 2t_W + (1/9)(t_W + ½∇²ρ))e^{−cρ^{−1/3}}]/(1+dρ^{−1/3})`，
-    `t_W = (1/8)(σ/ρ − ∇²ρ)`，`a=0.04918, b=0.132, c=0.2533, d=0.349`。
+    实现路径：`D`（对偶数）从两通道扩到三通道（`d_laplacian`），`potential_derivatives_laplacian`
+    作为 trait 的**默认方法**（默认置零并转发两通道），所以只有 LYP 覆盖它；
+    `ScaledTerm` 三通道用同一权重缩放；`evaluate_xc` 在 `requirements.laplacian` 为真时
+    供给 `∇²ρ` 并加 `ρ∂ε/∂∇²ρ·∇²(φ_μφ_ν)` 的矩阵元。
+    **上一轮判断对了**：如果按两通道实现 LYP，变分残差会是 O(1) 而不是 O(s)——这条测试就是那个闸门。
 D-12:
   state: in_progress
-  ts: "2026-11-02T03:00:00Z"
-  artifact: "qwb-scf（RksOptions.hf_exchange + HfExchange 组件 + Fock/能量里的 α 项）+ qwb-data/functional/pbe0.yaml + tests/d12_hybrid.rs"
+  ts: "2026-11-02T08:00:00Z"
+  artifact: "hybrid 机制（HfExchange + RksOptions.hf_exchange）+ LYP（GgaLypC）+ tests/d12_hybrid.rs、d12_b3lyp.rs"
   verification: |
-    **前置机制（hybrid 的精确交换混入）已完成**，用 PBE0 验证，三条判据：
-    * **α = 0 逐位退化为 PBE**：数据路径与手搭路径的能量 `to_bits()` 相同
-      （-75.401985067298 Ha）；
-    * **α = 1 且 DFT 交换权重 = 0 逐位退化为 HF**：与 `terms` 为空的 HF 分支差 **1.4e-14 Ha**
-      （E = -74.962946680979）。这条同时钉住 Fock 里的 −½K 与能量里的 −¼Tr(PK) 两个系数，
-      以及 `P = 2Σccᵀ` 的自旋求和约定——两条完全不同的代码路径给出同一个数；
-    * **中间值**：PBE0/STO-3G 的 H2O 收敛（27 步，E = -75.4221478533 Ha），
-      且能量能被独立分解复算：
-      `Tr(PH) -122.39422378 + ½Tr(PJ) 47.34463614 + E_xc -7.28975559 + α(−¼Tr(PK)) -2.27671795
-       + E_nuc 9.19391333 = -75.4221478515`（与 SCF 报告差 1.8e-9）。
-    数据侧：`HfExchange` 作为一个**伪组件**写在 functional 的 components 里（权重即 α），
-    `rks_from_data` 把它读进 `RksOptions.hf_exchange` 而不是当成能量密度项——不需要改 K1 schema。
+    已完成：
+    * **hybrid 机制**（PBE0 三判据）：α=0 与 PBE 逐位相同；α=1 且 DFT 交换权重 0 与 HF 差 1.4e-14
+      （两条不同代码路径）；PBE0 收敛且能量分解复算差 1.8e-9。
+    * **四个组件都可构造**：0.8 B88 + 0.2 HfExchange + 0.81 LYP + 0.19 VWN5 在 API 层可拼出。
+    未完成：
+    * **B3LYP 的 SCF 不稳定**：grid-coarse 上 3 步内中止于 `density laplacian is not finite (NaN)`。
+      已排除 LYP 项本身（逐点扫过 29400 点无 NaN）与变分自洽（残差线性下降）。
+      剩两个嫌疑：① 网格太粗；② `evaluate_xc` 的 σ/laplacian 通道用未截断的 ρ 乘、
+      泛函内部用 `LOW_DENSITY_FLOOR` 截断过的 ρ，极小密度处不一致（LYP 的 ρ 依赖更陡）。
+      测试 `d12_b3lyp.rs` 已按 known-failure `#[ignore]`，排查记录写在函数文档里。
+    * **数据层不允许 B3LYP**：K1 的 phase-1 语义门禁拒绝 `requires.laplacian = true`
+      （"no meta-GGA"，冻结范围 §2.2）。所以没有 b3lyp.yaml，`qwb data verify` 会对它报错。
+      这不是缺陷，是**冻结契约**：放开要人类拍板，我不改动它。
   note: |
-    **还差 LYP**。D-12 的定义是 B3LYP = 0.8 B88 + 0.2 HF + 0.81 LYP + 0.19 VWN5，
-    而 LYP 需要网格上的 ∇²ρ（`Requirements.laplacian` 字段有、没人提供值）。
-    机制与 B88 都已就位（D-11 本轮补了 B88），所以 D-12 的剩余工作只有两件：
-    ① 给 `ao_value_and_gradient` 加二阶导并接进 `DensityBatch` 的 laplacian；
-    ② 按 LYP 原式实现相关项（判据：导数对五点差分 + 与 LYP 的已知极限行为对照）。
-    之后 B3LYP 的数据文件只是把四个组件按 0.8/0.2/0.81/0.19 写出来而已。
-    顺带一条负面结果：**STO-3G 上的 HOMO–LUMO 间隙不是可靠的定性判据**——实测 PBE 0.2279 Ha、
-    PBE0 0.2123 Ha，hybrid 反而略小。所以本测试没有拿「间隙打开」当断言，改用能量分解。
+    T6（B3LYP）的前置因此是：先解决 B3LYP SCF 的数值稳定性（上面两个嫌疑），
+    再等 phase-2 允许 laplacian 类泛函进数据层。D-11 已 done，机制、B88、LYP 三块都在。
 D-13:
   state: done
   ts: "2026-10-22T23:23:27Z"

@@ -35,12 +35,16 @@ use crate::{
     three_over_pi_cbrt, vwn_g, vwn_g_prime,
 };
 
-/// 对偶数：`value + ∂ρ·δρ + ∂σ·δσ`。
+/// 对偶数：`value + ∂ρ·δρ + ∂σ·δσ + ∂∇²ρ·δ∇²ρ`。
+///
+/// 第三个通道是 LYP 一类依赖 `∇²ρ` 的泛函要的。`evaluate_xc` 会把它转成
+/// `+ ρ∂ε/∂∇²ρ · ∇²(φ_μ φ_ν)` 的矩阵元。
 #[derive(Debug, Clone, Copy)]
 struct D {
     value: f64,
     d_rho: f64,
     d_sigma: f64,
+    d_laplacian: f64,
 }
 
 impl D {
@@ -49,6 +53,7 @@ impl D {
             value,
             d_rho: 0.0,
             d_sigma: 0.0,
+            d_laplacian: 0.0,
         }
     }
 
@@ -57,6 +62,7 @@ impl D {
             value,
             d_rho: 1.0,
             d_sigma: 0.0,
+            d_laplacian: 0.0,
         }
     }
 
@@ -65,6 +71,16 @@ impl D {
             value,
             d_rho: 0.0,
             d_sigma: 1.0,
+            d_laplacian: 0.0,
+        }
+    }
+
+    fn laplacian(value: f64) -> Self {
+        Self {
+            value,
+            d_rho: 0.0,
+            d_sigma: 0.0,
+            d_laplacian: 1.0,
         }
     }
 
@@ -74,6 +90,7 @@ impl D {
             value,
             d_rho,
             d_sigma,
+            d_laplacian: 0.0,
         }
     }
 
@@ -84,6 +101,7 @@ impl D {
             value,
             d_rho: scale * self.d_rho,
             d_sigma: scale * self.d_sigma,
+            d_laplacian: scale * self.d_laplacian,
         }
     }
 
@@ -96,6 +114,7 @@ impl D {
             value: self.value.ln(),
             d_rho: self.d_rho / self.value,
             d_sigma: self.d_sigma / self.value,
+            d_laplacian: self.d_laplacian / self.value,
         }
     }
 
@@ -105,6 +124,7 @@ impl D {
             value,
             d_rho: value * self.d_rho,
             d_sigma: value * self.d_sigma,
+            d_laplacian: value * self.d_laplacian,
         }
     }
 }
@@ -116,6 +136,7 @@ impl std::ops::Add for D {
             value: self.value + other.value,
             d_rho: self.d_rho + other.d_rho,
             d_sigma: self.d_sigma + other.d_sigma,
+            d_laplacian: self.d_laplacian + other.d_laplacian,
         }
     }
 }
@@ -127,6 +148,7 @@ impl std::ops::Neg for D {
             value: -self.value,
             d_rho: -self.d_rho,
             d_sigma: -self.d_sigma,
+            d_laplacian: -self.d_laplacian,
         }
     }
 }
@@ -138,6 +160,7 @@ impl std::ops::Sub for D {
             value: self.value - other.value,
             d_rho: self.d_rho - other.d_rho,
             d_sigma: self.d_sigma - other.d_sigma,
+            d_laplacian: self.d_laplacian - other.d_laplacian,
         }
     }
 }
@@ -149,6 +172,7 @@ impl std::ops::Mul for D {
             value: self.value * other.value,
             d_rho: self.d_rho * other.value + self.value * other.d_rho,
             d_sigma: self.d_sigma * other.value + self.value * other.d_sigma,
+            d_laplacian: self.d_laplacian * other.value + self.value * other.d_laplacian,
         }
     }
 }
@@ -162,6 +186,7 @@ impl std::ops::Div for D {
             value,
             d_rho: (self.d_rho - value * other.d_rho) * inv,
             d_sigma: (self.d_sigma - value * other.d_sigma) * inv,
+            d_laplacian: (self.d_laplacian - value * other.d_laplacian) * inv,
         }
     }
 }
@@ -289,6 +314,119 @@ impl PbeExchange {
         let mu = D::constant(self.mu);
         let fx = D::constant(1.0) + kappa - kappa / (D::constant(1.0) + mu * s2 / kappa);
         exchange_lda(rho_d) * fx
+    }
+}
+
+/// LYP 相关（`GgaLypC`）——Lee–Yang–Parr 1988。
+///
+/// 闭壳层形式（`ρ` 为总密度、`σ = |∇ρ|²`、`L = ∇²ρ`）：
+///
+/// ```text
+/// ε_c = −a·[1 + b·ρ^{−5/3}·Br·e^{−c·ρ^{−1/3}}] / (1 + d·ρ^{−1/3})
+/// Br  = C_F·ρ^{5/3} + (7/24)·L − (17/72)·σ/ρ,   C_F = (3/10)(3π²)^{2/3}
+/// a = 0.04918, b = 0.132, c = 0.2533, d = 0.349
+/// ```
+///
+/// 等价写法（更容易核对来源）：
+/// `Br = C_F ρ^{5/3} − 2t_W + (1/9)(t_W + ½L)`，`t_W = (1/8)(σ/ρ − L)`；
+/// 展开后 `L` 的系数是 `17/72 + 1/18 = 7/24`、`σ/ρ` 的系数是 `−17/72`。
+/// 这两个系数在多个独立来源里以 `+7/24` / `−17/72` 的形式出现，是核对公式的锚点。
+///
+/// **注意**：LYP 是唯一需要 `∇²ρ` 的项，所以它必须同时覆盖三通道导数
+/// （`potential_derivatives_laplacian`），否则 SCF 的 v_xc 会缺一整项。
+#[derive(Debug, Clone, Copy)]
+#[non_exhaustive]
+pub struct LypCorrelation {
+    /// `a = 0.04918`。
+    pub a: f64,
+    /// `b = 0.132`。
+    pub b: f64,
+    /// `c = 0.2533`。
+    pub c: f64,
+    /// `d = 0.349`。
+    pub d: f64,
+}
+
+impl LypCorrelation {
+    /// 由数据参数构造。
+    #[must_use]
+    pub fn new(a: f64, b: f64, c: f64, d: f64) -> Self {
+        Self { a, b, c, d }
+    }
+
+    /// 在 `(ρ, σ, ∇²ρ)` 上求「值 + 三个偏导」。
+    fn evaluate(&self, rho: f64, sigma: f64, laplacian: f64) -> D {
+        let rho = rho.max(crate::LOW_DENSITY_FLOOR);
+        let sigma = sigma.max(0.0);
+        let rho_d = D::rho(rho);
+        let sigma_d = D::sigma(sigma);
+        let laplacian_d = D::laplacian(laplacian);
+
+        // Br = C_F ρ^{5/3} + (7/24)L − (17/72)σ/ρ
+        let c_f =
+            D::constant(0.3 * (3.0 * std::f64::consts::PI * std::f64::consts::PI).powf(2.0 / 3.0));
+        let br = c_f * rho_d.powf(5.0 / 3.0) + D::constant(7.0 / 24.0) * laplacian_d
+            - D::constant(17.0 / 72.0) * sigma_d / rho_d;
+
+        let exponential = (D::constant(-self.c) * rho_d.powf(-1.0 / 3.0)).exp();
+        let numerator =
+            D::constant(1.0) + D::constant(self.b) * rho_d.powf(-5.0 / 3.0) * br * exponential;
+        let denominator = D::constant(1.0) + D::constant(self.d) * rho_d.powf(-1.0 / 3.0);
+        D::constant(-self.a) * numerator / denominator
+    }
+}
+
+impl FunctionalTerm for LypCorrelation {
+    fn id(&self) -> &'static str {
+        "GgaLypC"
+    }
+
+    fn requires(&self) -> Requirements {
+        Requirements::laplacian_gga()
+    }
+
+    fn spin_scaling(&self) -> f64 {
+        1.0
+    }
+
+    fn energy_density(&self, batch: &DensityBatch<'_>, out: &mut [f64]) {
+        check_shape(batch, out, "LypCorrelation::energy_density").expect("shape");
+        for (index, slot) in out.iter_mut().enumerate() {
+            let sigma = batch.sigma.get(index).copied().unwrap_or(0.0);
+            let laplacian = batch.laplacian.get(index).copied().unwrap_or(0.0);
+            *slot = self.evaluate(batch.rho[index], sigma, laplacian).value;
+        }
+    }
+
+    fn potential_derivatives(
+        &self,
+        batch: &DensityBatch<'_>,
+        d_rho: &mut [f64],
+        d_sigma: &mut [f64],
+    ) {
+        // 只填前两通道；第三通道由 potential_derivatives_laplacian 覆盖
+        let mut d_laplacian = vec![0.0; batch.len()];
+        self.potential_derivatives_laplacian(batch, d_rho, d_sigma, &mut d_laplacian);
+    }
+
+    fn potential_derivatives_laplacian(
+        &self,
+        batch: &DensityBatch<'_>,
+        d_rho: &mut [f64],
+        d_sigma: &mut [f64],
+        d_laplacian: &mut [f64],
+    ) {
+        check_shape(batch, d_rho, "LypCorrelation::d_rho").expect("shape");
+        check_shape(batch, d_sigma, "LypCorrelation::d_sigma").expect("shape");
+        check_shape(batch, d_laplacian, "LypCorrelation::d_laplacian").expect("shape");
+        for index in 0..batch.len() {
+            let sigma = batch.sigma.get(index).copied().unwrap_or(0.0);
+            let laplacian = batch.laplacian.get(index).copied().unwrap_or(0.0);
+            let value = self.evaluate(batch.rho[index], sigma, laplacian);
+            d_rho[index] = value.d_rho;
+            d_sigma[index] = value.d_sigma;
+            d_laplacian[index] = value.d_laplacian;
+        }
     }
 }
 
@@ -438,6 +576,12 @@ pub fn build_pbe_term(
         "GgaPbeX" => Ok(Box::new(PbeExchange::new(
             parameter(id, parameters, "pbe_kappa")?,
             parameter(id, parameters, "pbe_mu")?,
+        ))),
+        "GgaLypC" => Ok(Box::new(LypCorrelation::new(
+            parameter(id, parameters, "lyp_a")?,
+            parameter(id, parameters, "lyp_b")?,
+            parameter(id, parameters, "lyp_c")?,
+            parameter(id, parameters, "lyp_d")?,
         ))),
         "GgaB88X" => Ok(Box::new(B88Exchange::new(parameter(
             id, parameters, "b88_beta",
