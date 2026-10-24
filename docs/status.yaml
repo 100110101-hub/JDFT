@@ -75,23 +75,27 @@ D-05:
     随时可以生成；本轮优先用 6-311G(d,p) 判 T3（同为三 zeta、无 f），cc-pVDZ 留给 V-03 的
     参考表一起做。
 D-06:
-  state: in_progress
-  ts: "2026-10-25T06:00:00Z"
-  artifact: "qwb-data/basis/def2-tzvp.yaml（H/C/N/O/F，由 scripts/gen_basis_from_bse.py 从 BSE 生成）+ scripts/gen_basis_from_bse.py"
+  state: done
+  ts: "2026-10-25T14:00:00Z"
+  artifact: "qwb-data/basis/def2-tzvp.yaml（H/C/N/O/F，BSE 生成）+ scripts/gen_basis_from_bse.py + qwb-basis/src/spherical.rs 的 f 变换 + tests/f01_f_transform.rs"
   verification: |
-    数据侧已完成并可校验：`qwb data verify` 11/11 通过；文件带 sha256（263b684f…）、
-    citation（Weigend & Ahlrichs, PCCP 7, 3297, 2005, doi 10.1039/b508541a）与 license，
-    DATA_LICENSES.md 已同步。生成器的正确性**用已有数据自证**：用同一个脚本重新生成
-    def2-SVP，与仓库里手抄的 def2-svp.yaml 逐数对比，41 个指数的最大差 **0.00e+00**
-    （指数与收缩系数都是逐位相同）。
-    **但还不能用来算**：def2-TZVP 的 O/C/N 带 f 函数（l=3），而 `qwb_basis::spherical`
-    的球谐变换目前只到 d（R-06 第一阶段的范围），实际跑 H2O/def2-TZVP 会报
-    Unsupported("spherical transformation for l=3 is not implemented")。
+    ① 数据：`qwb data verify` 11/11 通过；def2-tzvp.yaml 带 sha256（263b684f…）、citation
+    （Weigend & Ahlrichs, PCCP 7, 3297, 2005, doi 10.1039/b508541a）与 license；
+    生成器的正确性用已有数据自证（重新生成 def2-SVP 与仓库文件逐数对比，41 个指数最大差 0.00e+00）。
+    ② f 函数（l=3）变换：`cargo test -p qwb-basis --test f01_f_transform`（3 例）——
+    TᵀST 与单位阵偏差 2.2e-16、七个 f 与 r²·p 的正交性 1.1e-15、10 个三次分量完整。
+    ③ 端到端：`cargo test --release -p qwb-scf --test i01_basis_ladder` —— H2O 的 HF 总能量
+    def2-SVP −75.96100896（24 个基函数）、6-311G(d,p) −76.04644115（30）、
+    def2-TZVP −76.05903300（43）：单调收敛且量级正确（此前 def2-TZVP 直接报
+    `spherical transformation for l=3 is not implemented`）。
   note: |
-    所以 D-06 记 in_progress 而不是 done：数据到位了，但**要用它必须先做 f 的球谐变换**
-    （10 个直角分量 → 7 个球谐，且要在重叠度量下正交归一，参照 qwb-basis 里 d 的那条测试）。
-    这也顺带说明 T3/G-02 的几何判据暂时不能用 def2-TZVP 判——本轮改用同为三 zeta 质量、
-    无 f 的 6-311G(d,p) 去判（见 T3）。
+    本轮把「缺数据」变成了「缺 f 变换」，然后把 f 变换实现掉。做法是构造式而不是抄系数：
+    三次单项式空间分解为 f(7) ⊕ r²·p(3)，所以先取七个实立方谐波的多项式形式，
+    在**重叠度规**下投影掉 r²·p，再正交归一 —— TᵀST = I 与「与 r²·p 正交」都由构造保证，
+    而张成的子空间正是真实 f 子空间（闭壳层 SCF 对同一壳层内的正交归一基不敏感）。
+    **R-06 的第一阶段范围由 s/p/d 扩到 s/p/d/f**；l ≥ 4 仍然显式返回 None（系数不猜）。
+    下一步（属于 T3）：用 PBE/def2-TZVP 重跑水分子几何优化，看键长能否压到实验 0.9572 Å
+    的 0.01 以内（6-311G(d,p) 实测 0.9682，差 0.0110）。
 D-07: {state: pending, depends: [D-01], note: "先确认 Stuttgart/BSE 的再分发条款（§14 #20）"}
 D-08: {state: pending, depends: [D-01]}
 D-09:

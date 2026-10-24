@@ -93,7 +93,8 @@ pub fn spherical_transform(l: u32, angular: Angular) -> Option<Transform> {
         // l <= 1：球谐与直角坐标一一对应（1 个 s；p 就是 x/y/z）。
         Angular::Spherical if l <= 1 => Some(Transform::identity(n_cart)),
         Angular::Spherical if l == 2 => Some(d_transform()),
-        // f 及更高阶：系数不猜，显式不支持。
+        Angular::Spherical if l == 3 => Some(f_transform()),
+        // l >= 4：系数不猜，显式不支持。
         _ => None,
     }
 }
@@ -142,6 +143,197 @@ pub fn d_overlap_metric() -> Transform {
         data,
     }
 }
+/// `l = 3` 的 10 个直角分量在**重叠度规**下的自重叠比 `Π_axis (a+a'-1)!!/sqrt((2a-1)!!(2a'-1)!!)`。
+///
+/// 只有同一轴上两个幂次的奇偶性一致时才非零；否则该轴积分为 0。
+fn f_overlap_metric_value(left: (u32, u32, u32), right: (u32, u32, u32)) -> f64 {
+    let left = [left.0, left.1, left.2];
+    let right = [right.0, right.1, right.2];
+    fn double_factorial(n: i64) -> f64 {
+        if n <= 0 {
+            return 1.0;
+        }
+        let mut product = 1.0;
+        let mut current = n;
+        while current > 1 {
+            product *= current as f64;
+            current -= 2;
+        }
+        product
+    }
+    let mut product = 1.0;
+    for axis in 0..3 {
+        let a = i64::from(left[axis]);
+        let b = i64::from(right[axis]);
+        if (a + b) % 2 == 1 {
+            return 0.0;
+        }
+        let numerator = double_factorial(a + b - 1);
+        let denominator = (double_factorial(2 * a - 1) * double_factorial(2 * b - 1)).sqrt();
+        product *= numerator / denominator;
+    }
+    product
+}
+
+/// `l = 3` 的 10×7 变换（列主序，行序见 [`crate::cartesian_components`]）。
+///
+/// # 怎么构造的（不用手推归一化常数）
+///
+/// 三次单项式空间（10 维）分解为 `f(7) ⊕ r²·p(3)`。所以：
+///
+/// 1. 取七个实立方谐波的**多项式**形式（`z(5z²−3r²)`、`x(5z²−r²)`、`z(x²−y²)`、`xyz`、
+///    `x(x²−3y²)` 及其 ±y 对应）；
+/// 2. 在**重叠度规** `S` 下把它们对 `r²·x, r²·y, r²·z` 做 Gram–Schmidt 投影（把 p 成分打掉）；
+/// 3. 再在 `S` 下正交归一化。
+///
+/// 于是 `Tᵀ S T = I₇` 与「与 `r²·p` 正交」都是构造保证的，而**张成的子空间**正是
+/// 真实的 f 子空间——闭壳层 SCF 用同一壳层内的任意正交归一基给出的能量与密度完全相同，
+/// 所以这一步不需要（也不应该）去猜每一列的解析归一化常数。
+fn f_transform() -> Transform {
+    use crate::cartesian_components;
+    let components = cartesian_components(3);
+    debug_assert_eq!(components.len(), 10);
+
+    // 立方谐波（未归一化，允许任意整体缩放）
+    let candidates: [[f64; 10]; 7] = [
+        // z(5z² − r²) = 2z³ − 3x²z − 3y²z
+        [0.0, 0.0, -3.0, 0.0, 0.0, 0.0, 0.0, -3.0, 0.0, 2.0],
+        // x(5z² − r²) = 4xz² − x³ − xy²
+        [-1.0, 0.0, 0.0, -1.0, 0.0, 4.0, 0.0, 0.0, 0.0, 0.0],
+        // y(5z² − r²) = 4yz² − y³ − x²y
+        [0.0, -1.0, 0.0, 0.0, 0.0, 0.0, -1.0, 0.0, 4.0, 0.0],
+        // z(x² − y²) = x²z − y²z
+        [0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, -1.0, 0.0, 0.0],
+        // xyz
+        [0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+        // x(x² − 3y²) = x³ − 3xy²
+        [1.0, 0.0, 0.0, -3.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+        // y(3x² − y²) = 3x²y − y³
+        [0.0, 3.0, 0.0, 0.0, 0.0, 0.0, -1.0, 0.0, 0.0, 0.0],
+    ];
+
+    // 重叠度规
+    let mut metric = [[0.0_f64; 10]; 10];
+    for i in 0..10 {
+        for j in 0..10 {
+            metric[i][j] = f_overlap_metric_value(components[i], components[j]);
+        }
+    }
+    // r²·x、r²·y、r²·z 在三项式基下的系数
+    let radial: [[f64; 10]; 3] = [
+        // x(x²+y²+z²) = x³ + xy² + xz²
+        {
+            let mut v = [0.0; 10];
+            v[0] = 1.0;
+            v[3] = 1.0;
+            v[5] = 1.0;
+            v
+        },
+        // y(x²+y²+z²)
+        {
+            let mut v = [0.0; 10];
+            v[1] = 1.0;
+            v[6] = 1.0;
+            v[8] = 1.0;
+            v
+        },
+        // z(x²+y²+z²)
+        {
+            let mut v = [0.0; 10];
+            v[2] = 1.0;
+            v[7] = 1.0;
+            v[9] = 1.0;
+            v
+        },
+    ];
+    // 在 S 下的内积
+    let inner = |a: &[f64; 10], b: &[f64; 10]| -> f64 {
+        let mut total = 0.0;
+        for i in 0..10 {
+            for j in 0..10 {
+                total += a[i] * metric[i][j] * b[j];
+            }
+        }
+        total
+    };
+    // 先把径向向量在 S 下正交归一（作为投影的基底）
+    let mut radial_basis: Vec<[f64; 10]> = Vec::new();
+    for vector in &radial {
+        let mut current = *vector;
+        for basis in &radial_basis {
+            let projection = inner(&current, basis);
+            for k in 0..10 {
+                current[k] -= projection * basis[k];
+            }
+        }
+        let norm = inner(&current, &current).sqrt();
+        if norm > 1.0e-12 {
+            for value in current.iter_mut() {
+                *value /= norm;
+            }
+            radial_basis.push(current);
+        }
+    }
+
+    // 候选列：去掉径向成分，再逐列正交归一
+    let mut columns: Vec<[f64; 10]> = Vec::new();
+    for candidate in &candidates {
+        let mut current = *candidate;
+        for basis in &radial_basis {
+            let projection = inner(&current, basis);
+            for k in 0..10 {
+                current[k] -= projection * basis[k];
+            }
+        }
+        for basis in &columns {
+            let projection = inner(&current, basis);
+            for k in 0..10 {
+                current[k] -= projection * basis[k];
+            }
+        }
+        let norm = inner(&current, &current).sqrt();
+        assert!(
+            norm > 1.0e-8,
+            "f 变换构造失败：某一列在去掉径向与已选成分后范数过小"
+        );
+        for value in current.iter_mut() {
+            *value /= norm;
+        }
+        columns.push(current);
+    }
+    assert_eq!(columns.len(), 7, "f 必须构造出 7 列");
+
+    let mut data = vec![0.0; 10 * 7];
+    for (column, values) in columns.iter().enumerate() {
+        for row in 0..10 {
+            data[column * 10 + row] = values[row];
+        }
+    }
+    Transform {
+        n_cartesian: 10,
+        n_spherical: 7,
+        data,
+    }
+}
+
+/// `l = 3` 的重叠度规（同一中心、归一化原函数，10×10）。
+#[must_use]
+pub fn f_overlap_metric() -> Transform {
+    use crate::cartesian_components;
+    let components = cartesian_components(3);
+    let mut data = vec![0.0; 100];
+    for i in 0..10 {
+        for j in 0..10 {
+            data[j * 10 + i] = f_overlap_metric_value(components[i], components[j]);
+        }
+    }
+    Transform {
+        n_cartesian: 10,
+        n_spherical: 10,
+        data,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{Transform, d_overlap_metric, spherical_transform};
