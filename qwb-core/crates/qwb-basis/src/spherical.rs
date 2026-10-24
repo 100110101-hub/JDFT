@@ -413,10 +413,15 @@ mod tests {
         }
     }
 
+    /// `l = 3`（f）现在**是**支持的（见 `f_transform`），`l >= 4` 仍拒绝猜系数。
+    /// 这条测试以前断言 `l = 3` 返回 None——那是 def2-TZVP 之前的限制，已解除。
     #[test]
     fn unknown_higher_angular_momentum_is_rejected_not_guessed() {
-        assert!(spherical_transform(3, Angular::Spherical).is_none());
+        assert!(spherical_transform(3, Angular::Spherical).is_some());
         assert!(spherical_transform(4, Angular::Spherical).is_none());
+        assert!(spherical_transform(5, Angular::Spherical).is_none());
         assert!(spherical_transform(3, Angular::Cartesian).is_some());
+        assert_eq!(crate::cartesian_components(3).len(), 10);
+        assert_eq!(spherical_transform(3, Angular::Spherical).unwrap().n_spherical, 7);
     }
 }
