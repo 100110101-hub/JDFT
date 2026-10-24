@@ -344,10 +344,18 @@ pub fn thermochemistry(
         .map_err(|err| EngineError::Internal(format!("inertia tensor: {err}")))?;
     let (moments, _) = qwb_linalg::symmetric_eigen(&moment_matrix)
         .map_err(|err| EngineError::Internal(format!("inertia eigen: {err}")))?;
-    let moments: Vec<f64> = (0..3)
-        .map(|i| moments.get(i))
-        .filter(|v| *v > 1.0e-46)
-        .collect();
+    // 相对阈值：线性分子的两个主轴矩是数值零（H2 的 I ≈ 4e-48 kg·m²），
+    // 用绝对阈值会把三个都滤掉，于是误报"退化"。
+    let all: Vec<f64> = (0..3).map(|i| moments.get(i)).collect();
+    let largest = all.iter().cloned().fold(0.0_f64, f64::max);
+    let moments: Vec<f64> = if is_linear(molecule) {
+        vec![largest]
+    } else {
+        all.iter()
+            .cloned()
+            .filter(|v| *v > largest * 1.0e-6)
+            .collect()
+    };
     if moments.is_empty() {
         return Err(EngineError::Internal(
             "degenerate inertia tensor".to_string(),
@@ -431,12 +439,7 @@ pub fn thermochemistry(
             .iter()
             .map(|m| {
                 H_PLANCK
-                    / (8.0
-                        * std::f64::consts::PI
-                        * std::f64::consts::PI
-                        * m
-                        * SPEED_OF_LIGHT_CM
-                        * 1.0e-2)
+                    / (8.0 * std::f64::consts::PI * std::f64::consts::PI * m * SPEED_OF_LIGHT_CM)
             })
             .collect(),
     })
