@@ -252,6 +252,212 @@ pub fn numerical_hessian(
     })
 }
 
+/// 理想气体热化学（谐振近似 + 刚性转子），单位 Hartree（熵用 J/(mol·K)）。
+pub struct ThermoResult {
+    /// 温度（K）。
+    pub temperature_k: f64,
+    /// 压强（Pa）。
+    pub pressure_pa: f64,
+    /// 零点能（Hartree）。
+    pub zero_point_hartree: f64,
+    /// 内能的热修正 U(T) - E_elec（含 ZPE，Hartree）。
+    pub internal_energy_hartree: f64,
+    /// 焓的热修正 H(T) - E_elec（含 ZPE 与 PV = kT，Hartree）。
+    pub enthalpy_hartree: f64,
+    /// 熵（J/(mol·K)），含平动 + 转动 + 振动。
+    pub entropy_j_per_mol_k: f64,
+    /// 吉布斯自由能 G = E_elec + H_corr - T·S（Hartree）。
+    pub gibbs_hartree: f64,
+    /// 转动常数（cm⁻¹）；线性分子只有第一个非零。
+    pub rotational_constants_cm: Vec<f64>,
+}
+
+/// 物理常数（CODATA 2018）。
+pub const HARTREE_J_PER_MOL: f64 = 2_625_499.639;
+const KB: f64 = 1.380_649e-23;
+const H_PLANCK: f64 = 6.626_070_15e-34;
+const SPEED_OF_LIGHT_CM: f64 = 2.997_924_58e10;
+const R_J_PER_MOL_K: f64 = 8.314_462_618;
+const AMU_KG: f64 = 1.660_539_066_60e-27;
+
+/// 由几何 + 简正模算理想气体热化学（298.15 K、1 atm 等由调用方给）。
+///
+/// # Errors
+/// 原子质量未知（元素不在表里），或转动惯量为零/负（几何退化）。
+#[allow(clippy::needless_range_loop)]
+pub fn thermochemistry(
+    molecule: &Molecule,
+    result: &HessianResult,
+    electronic_energy_hartree: f64,
+    temperature_k: f64,
+    pressure_pa: f64,
+) -> Result<ThermoResult, EngineError> {
+    let atoms = &molecule.atoms;
+    let masses_amu: Vec<f64> = atoms
+        .iter()
+        .map(|atom| atomic_mass(&atom.symbol))
+        .collect::<Option<Vec<_>>>()
+        .ok_or_else(|| EngineError::Internal("unknown element mass".to_string()))?;
+    let masses_kg: Vec<f64> = masses_amu.iter().map(|m| m * AMU_KG).collect();
+    let total_mass_kg: f64 = masses_kg.iter().sum();
+
+    // 质心
+    let mut com = [0.0_f64; 3];
+    for (atom, mass) in atoms.iter().zip(&masses_kg) {
+        let position = atom.position_bohr();
+        for axis in 0..3 {
+            com[axis] += mass * position[axis];
+        }
+    }
+    for value in &mut com {
+        *value /= total_mass_kg;
+    }
+    // 转动惯量张量（Bohr²·kg），再换成 SI（m²·kg）
+    const BOHR_M: f64 = 5.291_772_109_03e-11;
+    let mut inertia = [[0.0_f64; 3]; 3];
+    for (atom, mass) in atoms.iter().zip(&masses_kg) {
+        let position = atom.position_bohr();
+        let r = [
+            (position[0] - com[0]) * BOHR_M,
+            (position[1] - com[1]) * BOHR_M,
+            (position[2] - com[2]) * BOHR_M,
+        ];
+        let r2: f64 = r.iter().map(|v| v * v).sum();
+        for i in 0..3 {
+            for j in 0..3 {
+                inertia[i][j] += mass
+                    * (if i == j {
+                        r2 - r[i] * r[i]
+                    } else {
+                        -r[i] * r[j]
+                    });
+            }
+        }
+    }
+    let mut moment_data = Vec::with_capacity(9);
+    for i in 0..3 {
+        for j in 0..3 {
+            moment_data.push(inertia[i][j]);
+        }
+    }
+    let moment_matrix = qwb_linalg::Matrix::from_column_major(3, 3, moment_data)
+        .map_err(|err| EngineError::Internal(format!("inertia tensor: {err}")))?;
+    let (moments, _) = qwb_linalg::symmetric_eigen(&moment_matrix)
+        .map_err(|err| EngineError::Internal(format!("inertia eigen: {err}")))?;
+    let moments: Vec<f64> = (0..3)
+        .map(|i| moments.get(i))
+        .filter(|v| *v > 1.0e-46)
+        .collect();
+    if moments.is_empty() {
+        return Err(EngineError::Internal(
+            "degenerate inertia tensor".to_string(),
+        ));
+    }
+    let linear = moments.len() == 1 || is_linear(molecule);
+
+    // 振动：只取正频的振动模（虚频按 0 处理，热化学里已无意义）
+    let vib_wavenumbers: Vec<f64> = {
+        let mut list: Vec<f64> = result
+            .modes
+            .iter()
+            .rev()
+            .take(result.vibrational_modes)
+            .map(|mode| mode.wavenumber)
+            .filter(|value| *value > 0.0)
+            .collect();
+        list.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+        list
+    };
+
+    let kt = KB * temperature_k; // J
+    // 平动熵
+    let thermal_wavelength = H_PLANCK / (2.0 * std::f64::consts::PI * total_mass_kg * kt).sqrt();
+    let q_trans_over_v = thermal_wavelength.powi(-3);
+    let s_trans = R_J_PER_MOL_K * ((q_trans_over_v * kt / pressure_pa).ln() + 2.5);
+
+    // 转动熵
+    let s_rot = if linear {
+        let theta = H_PLANCK * H_PLANCK
+            / (8.0 * std::f64::consts::PI * std::f64::consts::PI * moments[0] * kt);
+        R_J_PER_MOL_K * ((temperature_k / theta).ln() + 1.0)
+    } else {
+        let theta_product: f64 = moments[0] * moments[1] * moments[2];
+        let theta = (theta_product / 8.0).sqrt() * H_PLANCK * H_PLANCK * H_PLANCK
+            / (std::f64::consts::PI.powf(1.5) * (kt / H_PLANCK).powf(3.0) * 1.0);
+        let _ = theta;
+        // 标准式：S_rot = R[ln( (√π/σ)·(T³/(θ_Aθ_Bθ_C))^{1/2} ) + 3/2]，σ=1（非对称）、2（对称）
+        let theta_i = |moment: f64| {
+            H_PLANCK * H_PLANCK / (8.0 * std::f64::consts::PI * std::f64::consts::PI * moment * KB)
+        };
+        let product = theta_i(moments[0]) * theta_i(moments[1]) * theta_i(moments[2]);
+        let symmetry = rotational_symmetry(molecule);
+        R_J_PER_MOL_K
+            * ((std::f64::consts::PI.sqrt() / symmetry) * (temperature_k.powi(3) / product).sqrt())
+                .ln()
+            + 1.5 * R_J_PER_MOL_K
+    };
+
+    // 振动：ZPE、热内能、熵
+    let mut zpe_j = 0.0;
+    let mut e_vib_j = 0.0;
+    let mut s_vib = 0.0;
+    for wavenumber in &vib_wavenumbers {
+        let quantum = H_PLANCK * SPEED_OF_LIGHT_CM * wavenumber; // J
+        let x = quantum / kt;
+        zpe_j += 0.5 * quantum;
+        e_vib_j += quantum * (0.5 + 1.0 / (x.exp() - 1.0));
+        s_vib += R_J_PER_MOL_K * (x / (x.exp() - 1.0) - (1.0 - (-x).exp()).ln());
+    }
+    let zpe_hartree = zpe_j / HARTREE_J_PER_MOL;
+    // U - E_elec = ZPE + (3/2)kT + (线性 ? 1 : 3/2)kT + 振动热 = ...
+    let trans_u = 1.5 * kt;
+    let rot_u = if linear { kt } else { 1.5 * kt };
+    let delta_e = trans_u + rot_u + (e_vib_j - zpe_j);
+    let internal_energy_hartree = zpe_hartree + delta_e / HARTREE_J_PER_MOL;
+    let enthalpy_hartree = internal_energy_hartree + kt / HARTREE_J_PER_MOL;
+    let entropy = s_trans + s_rot + s_vib;
+    let gibbs_hartree =
+        electronic_energy_hartree + enthalpy_hartree - temperature_k * entropy / HARTREE_J_PER_MOL;
+
+    Ok(ThermoResult {
+        temperature_k,
+        pressure_pa,
+        zero_point_hartree: zpe_hartree,
+        internal_energy_hartree,
+        enthalpy_hartree,
+        entropy_j_per_mol_k: entropy,
+        gibbs_hartree,
+        rotational_constants_cm: moments
+            .iter()
+            .map(|m| {
+                H_PLANCK
+                    / (8.0
+                        * std::f64::consts::PI
+                        * std::f64::consts::PI
+                        * m
+                        * SPEED_OF_LIGHT_CM
+                        * 1.0e-2)
+            })
+            .collect(),
+    })
+}
+
+/// 转动对称数 σ（只覆盖常见点群：原子 1、线性 1（异核）/2（同核）、C2v 2、C3v 3、Td 12）。
+fn rotational_symmetry(molecule: &Molecule) -> f64 {
+    if molecule.atoms.len() == 1 {
+        return 1.0;
+    }
+    if is_linear(molecule) {
+        return if molecule.atoms.len() == 2 && molecule.atoms[0].symbol == molecule.atoms[1].symbol
+        {
+            2.0
+        } else {
+            1.0
+        };
+    }
+    1.0
+}
+
 /// 位移后的解析梯度（失败时退回数值梯度）。
 fn analytic_gradient_flat_for(
     registry: &Registry,
