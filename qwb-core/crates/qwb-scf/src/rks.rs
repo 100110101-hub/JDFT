@@ -632,9 +632,7 @@ pub fn rks_scf(
                     fock_data.fock[(i, j)]
                 } else {
                     // KS：F = h + J + v_xc（+ hybrid 的 α·(−½K)）
-                    hcore[(i, j)]
-                        + fock_data.coulomb[(i, j)]
-                        + v_xc[(i, j)]
+                    hcore[(i, j)] + fock_data.coulomb[(i, j)] + v_xc[(i, j)]
                         - 0.5 * options.hf_exchange * fock_data.exchange[(i, j)]
                 };
             }

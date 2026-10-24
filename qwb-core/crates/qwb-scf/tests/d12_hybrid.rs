@@ -36,7 +36,10 @@ fn water() -> Molecule {
     )
 }
 
-fn terms_from(components: &[(&str, f64)], parameters: &BTreeMap<String, f64>) -> Vec<Box<dyn qwb_xc::FunctionalTerm>> {
+fn terms_from(
+    components: &[(&str, f64)],
+    parameters: &BTreeMap<String, f64>,
+) -> Vec<Box<dyn qwb_xc::FunctionalTerm>> {
     let mut terms: Vec<Box<dyn qwb_xc::FunctionalTerm>> = Vec::new();
     for (id, weight) in components {
         if *id == "HfExchange" {
@@ -54,17 +57,12 @@ fn solve(
     hf_exchange: f64,
 ) -> qwb_scf::rks::RksResult {
     let molecule = water();
-    let basis = qwb_basis::InternalBasis::build(
-        registry.get_basis("sto-3g").expect("sto-3g"),
-        &molecule,
-    )
-    .expect("build");
+    let basis =
+        qwb_basis::InternalBasis::build(registry.get_basis("sto-3g").expect("sto-3g"), &molecule)
+            .expect("build");
     let tensor = qwb_integrals::two_electron::two_electron(&basis, &molecule).expect("2e");
-    let grid = qwb_grid::molecular_grid(
-        registry.get_grid("grid-coarse").expect("grid"),
-        &molecule,
-    )
-    .expect("grid");
+    let grid = qwb_grid::molecular_grid(registry.get_grid("grid-coarse").expect("grid"), &molecule)
+        .expect("grid");
     let parameters = registry
         .get_functional("pbe")
         .expect("pbe")
@@ -86,14 +84,17 @@ fn zero_mixing_reproduces_pbe() {
         let mut options = RksOptions::default();
         options.max_iter = 400;
         options.energy_threshold = 1.0e-10;
-        qwb_scf::rks::rks_from_data(&registry, &molecule, "sto-3g", "pbe", "grid-coarse", options)
-            .expect("pbe")
+        qwb_scf::rks::rks_from_data(
+            &registry,
+            &molecule,
+            "sto-3g",
+            "pbe",
+            "grid-coarse",
+            options,
+        )
+        .expect("pbe")
     };
-    let manual = solve(
-        &registry,
-        &[("GgaPbeX", 1.0), ("GgaPbeC", 1.0)],
-        0.0,
-    );
+    let manual = solve(&registry, &[("GgaPbeX", 1.0), ("GgaPbeC", 1.0)], 0.0);
     println!(
         "PBE（数据路径）E = {:.12}，PBE（α=0 手搭）E = {:.12}",
         from_data.energy_hartree, manual.energy_hartree
@@ -111,11 +112,7 @@ fn full_mixing_with_zero_dft_exchange_reproduces_hf() {
     // 纯 HF：terms 为空（走 build_fock 的 H + J − ½K 分支）
     let hf = solve(&registry, &[], 0.0);
     // hybrid 路径：DFT 交换权重 0、α = 1（走 H + J + v_xc + α(−½K) 分支）
-    let mixed = solve(
-        &registry,
-        &[("GgaPbeX", 0.0), ("GgaPbeC", 0.0)],
-        1.0,
-    );
+    let mixed = solve(&registry, &[("GgaPbeX", 0.0), ("GgaPbeC", 0.0)], 1.0);
     println!(
         "HF（terms 为空）E = {:.12}，α=1 + 零 DFT 交换 E = {:.12}，差 {:.2e}",
         hf.energy_hartree,
@@ -138,8 +135,15 @@ fn pbe0_converges_and_the_energy_decomposes() {
     let mut options = RksOptions::default();
     options.max_iter = 400;
     options.energy_threshold = 1.0e-10;
-    let pbe = qwb_scf::rks::rks_from_data(&registry, &molecule, "sto-3g", "pbe", "grid-coarse", options.clone())
-        .expect("pbe");
+    let pbe = qwb_scf::rks::rks_from_data(
+        &registry,
+        &molecule,
+        "sto-3g",
+        "pbe",
+        "grid-coarse",
+        options.clone(),
+    )
+    .expect("pbe");
     let pbe0 = qwb_scf::rks::rks_from_data(
         &registry,
         &molecule,
@@ -178,20 +182,19 @@ fn pbe0_converges_and_the_energy_decomposes() {
     //   E = Tr(PH) + ½Tr(PJ) + E_xc + α·(−¼Tr(PK)) + E_nuc
     // 用返回的密度重算右边每一项，与报告的 E 比。
     let molecule = water();
-    let basis = qwb_basis::InternalBasis::build(
-        registry.get_basis("sto-3g").expect("sto-3g"),
-        &molecule,
-    )
-    .expect("build");
+    let basis =
+        qwb_basis::InternalBasis::build(registry.get_basis("sto-3g").expect("sto-3g"), &molecule)
+            .expect("build");
     let one = qwb_integrals::one_electron::one_electron(&basis, &molecule).expect("1e");
     let tensor = qwb_integrals::two_electron::two_electron(&basis, &molecule).expect("2e");
     let fock = qwb_scf::build_fock(&one.core_hamiltonian, &tensor, &pbe0.density).expect("fock");
-    let grid = qwb_grid::molecular_grid(
-        registry.get_grid("grid-coarse").expect("grid"),
-        &molecule,
-    )
-    .expect("grid");
-    let parameters = registry.get_functional("pbe").expect("pbe").parameters.clone();
+    let grid = qwb_grid::molecular_grid(registry.get_grid("grid-coarse").expect("grid"), &molecule)
+        .expect("grid");
+    let parameters = registry
+        .get_functional("pbe")
+        .expect("pbe")
+        .parameters
+        .clone();
     let terms = terms_from(&[("GgaPbeX", 0.75), ("GgaPbeC", 1.0)], &parameters);
     let (e_xc, _) = qwb_scf::rks::evaluate_xc(&basis, &grid, &pbe0.density, &terms).expect("xc");
     let n = pbe0.density.nrows();
@@ -205,7 +208,8 @@ fn pbe0_converges_and_the_energy_decomposes() {
             tr_pk += pbe0.density[(i, j)] * fock.exchange[(i, j)];
         }
     }
-    let reassembled = tr_ph + 0.5 * tr_pj + e_xc + 0.25 * (-0.25 * tr_pk) + pbe0.nuclear_repulsion_hartree;
+    let reassembled =
+        tr_ph + 0.5 * tr_pj + e_xc + 0.25 * (-0.25 * tr_pk) + pbe0.nuclear_repulsion_hartree;
     println!(
         "能量分解：Tr(PH) {tr_ph:.8} + ½Tr(PJ) {:.8} + E_xc {e_xc:.8} + α(−¼Tr(PK)) {:.8} + E_nuc {:.8} = {reassembled:.10}",
         0.5 * tr_pj,
