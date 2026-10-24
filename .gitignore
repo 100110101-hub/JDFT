@@ -21,3 +21,5 @@ __pycache__/
 *副本*
 *- 副本*
 
+# CCCBDB 抓取的中间快照（用 scripts/fetch_cccbdb_reference.py 可重建；进仓库的是 CSV）
+cccbdb-raw.json
