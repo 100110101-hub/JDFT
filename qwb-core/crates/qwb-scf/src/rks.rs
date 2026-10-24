@@ -441,10 +441,74 @@ pub fn ao_laplacian(basis: &InternalBasis, point: [f64; 3]) -> Result<Vec<f64>, 
 ///
 /// # Errors
 ///
+/// 网格上的 AO 数据（`φ`、`∇φ`、`∇²φ`），与密度无关，**可以在 SCF 迭代之间复用**。
+///
+/// SCF 每步都要在整张网格上重算 AO 三元组，这是 XC 求值的主要开销（苯/STO-3G 实测约 5 s/步，
+/// 400 步就是半小时）。网格与基组在 SCF 期间不变，所以这里把它算一次、后面只做密度缩并。
+pub struct GridAoCached {
+    values: Vec<Vec<f64>>,
+    gradients: Vec<Vec<[f64; 3]>>,
+    laplacians: Vec<Vec<f64>>,
+}
+
+impl GridAoCached {
+    /// 按需求（是否需要 σ / ∇²ρ）预取网格上的 AO 数据。
+    ///
+    /// # Errors
+    /// AO 求值失败（例如基函数角动量超出现有实现）。
+    pub fn build(
+        basis: &InternalBasis,
+        grid: &Grid,
+        needs_sigma: bool,
+        needs_laplacian: bool,
+    ) -> Result<Self, EngineError> {
+        let mut values = Vec::with_capacity(grid.len());
+        let mut gradients = Vec::with_capacity(grid.len());
+        let mut laplacians = Vec::with_capacity(grid.len());
+        for GridPoint { position_bohr, .. } in &grid.points {
+            let (value, gradient) = if needs_sigma || needs_laplacian {
+                ao_value_and_gradient(basis, *position_bohr)?
+            } else {
+                (ao_value(basis, *position_bohr)?, Vec::new())
+            };
+            let laplacian = if needs_laplacian {
+                ao_laplacian(basis, *position_bohr)?
+            } else {
+                Vec::new()
+            };
+            values.push(value);
+            gradients.push(gradient);
+            laplacians.push(laplacian);
+        }
+        Ok(Self {
+            values,
+            gradients,
+            laplacians,
+        })
+    }
+}
+
 /// AO 求值遇到 l>=2，或密度出现非有限值。
 pub fn evaluate_xc(
     basis: &InternalBasis,
     grid: &Grid,
+    density: &Matrix,
+    terms: &[Box<dyn FunctionalTerm>],
+) -> Result<(f64, Matrix), EngineError> {
+    let needs_sigma = terms.iter().any(|term| term.requires().sigma);
+    let needs_laplacian = terms.iter().any(|term| term.requires().laplacian);
+    let cache = GridAoCached::build(basis, grid, needs_sigma, needs_laplacian)?;
+    evaluate_xc_cached(basis, grid, &cache, density, terms)
+}
+
+/// 与 [`evaluate_xc`] 相同，但 AO 数据由调用方预先算好（SCF 里每个迭代步复用）。
+///
+/// # Errors
+/// 密度或密度梯度出现非有限值。
+pub fn evaluate_xc_cached(
+    basis: &InternalBasis,
+    grid: &Grid,
+    cache: &GridAoCached,
     density: &Matrix,
     terms: &[Box<dyn FunctionalTerm>],
 ) -> Result<(f64, Matrix), EngineError> {
@@ -461,16 +525,13 @@ pub fn evaluate_xc(
     let mut ao_laplacians: Vec<Vec<f64>> = Vec::with_capacity(grid.len());
     let mut grad_rho: Vec<[f64; 3]> = Vec::with_capacity(grid.len());
 
-    for GridPoint { position_bohr, .. } in &grid.points {
-        let (values, gradients) = if needs_sigma || needs_laplacian {
-            ao_value_and_gradient(basis, *position_bohr)?
-        } else {
-            (ao_value(basis, *position_bohr)?, Vec::new())
-        };
+    for (index, GridPoint { .. }) in grid.points.iter().enumerate() {
+        // AO 三元组来自预取缓存（见 GridAoCached）：与密度无关，SCF 各步复用。
+        let values = cache.values[index].clone();
+        let gradients = cache.gradients[index].clone();
+        let ao_laplacian_here = cache.laplacians[index].clone();
         // ∇²ρ = Σ_μν P_μν (∇²φ_μ φ_ν + 2 ∇φ_μ·∇φ_ν + φ_μ ∇²φ_ν)
-        let mut ao_laplacian_here = Vec::new();
         let laplacian_here = if needs_laplacian {
-            ao_laplacian_here = ao_laplacian(basis, *position_bohr)?;
             let mut total = 0.0;
             for i in 0..n {
                 for j in 0..n {
@@ -770,6 +831,20 @@ pub fn rks_scf(
     let mut e_xc = 0.0;
     let mut electronic = 0.0;
 
+    // AO 三元组与密度无关，整次 SCF 只算一次（苯/STO-3G 的网格求值实测占每步开销的大头）。
+    let xc_cache = if terms.is_empty() {
+        None
+    } else {
+        let needs_sigma = terms.iter().any(|term| term.requires().sigma);
+        let needs_laplacian = terms.iter().any(|term| term.requires().laplacian);
+        Some(GridAoCached::build(
+            basis,
+            grid,
+            needs_sigma,
+            needs_laplacian,
+        )?)
+    };
+
     for step in 0..options.max_iter {
         iterations = step + 1;
         let fock_data: FockMatrices = build_fock(hcore, tensor, &density).map_err(linalg)?;
@@ -779,7 +854,10 @@ pub fn rks_scf(
         let (xc_energy, v_xc) = if terms.is_empty() {
             (0.0, Matrix::zeros(basis.n_functions(), basis.n_functions()))
         } else {
-            evaluate_xc(basis, grid, &density, terms)?
+            match &xc_cache {
+                Some(cache) => evaluate_xc_cached(basis, grid, cache, &density, terms)?,
+                None => evaluate_xc(basis, grid, &density, terms)?,
+            }
         };
         e_xc = xc_energy;
 
