@@ -201,6 +201,10 @@ fn functional_terms(
     }
     let functional = registry.get_functional(&options.functional)?;
     for component in &functional.components {
+        // hybrid 的 HF 交换比例由调用方处理（本函数只建网格上的能量密度项）
+        if component.id == "HfExchange" {
+            continue;
+        }
         let term = qwb_xc::build_term(&component.id, &functional.parameters)
             .map_err(|err| EngineError::Data(format!("functional `{}`: {err}", functional.name)))?;
         terms.push(qwb_xc::scale_term(term, component.weight));

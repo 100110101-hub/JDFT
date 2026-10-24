@@ -3,7 +3,7 @@
 本文件由 `scripts/gen_data_licenses.py` 生成。重跑必须得到**逐字节相同**的结果
 （排序固定 + 不含时间戳），所以它可以直接进 CI 比对。
 
-共 12 个生产数据文件。`qwb-data/examples/` 下的 SPECIMEN 不计入
+共 13 个生产数据文件。`qwb-data/examples/` 下的 SPECIMEN 不计入
 （它们是形状示例，不在 manifest 里）。
 
 | 数据 | 版本 | 许可 | 商用 | 可再分发 | sha256（前 16 位） |
@@ -14,6 +14,7 @@
 | `qwb-data/basis/sto-3g.yaml` | 1.0.0 | Apache-2.0 | true | true | `fce3af14b8b3ea12` |
 | `qwb-data/functional/b88.yaml` | 1.0.0 | Apache-2.0 | true | true | `efa0fa7b9f8aa98d` |
 | `qwb-data/functional/pbe.yaml` | 1.0.0 | Apache-2.0 | true | true | `6f9c7a390d0d813e` |
+| `qwb-data/functional/pbe0.yaml` | 1.0.0 | Apache-2.0 | true | true | `0af62e0946c2f563` |
 | `qwb-data/functional/svwn5.yaml` | 1.0.0 | Apache-2.0 | true | true | `e62bd0014d27c73d` |
 | `qwb-data/grid/grid-coarse.yaml` | 1.0.0 | Apache-2.0 | true | true | `48eaeaa2d73acd45` |
 | `qwb-data/grid/grid-fine.yaml` | 1.0.0 | Apache-2.0 | true | true | `25080b62b80416b1` |
@@ -48,6 +49,12 @@
 
 - Generalized Gradient Approximation Made Simple (Perdew, Burke & Ernzerhof, Phys. Rev. Lett. 77, 3865)
 - Accurate spin-dependent electron liquid correlation energies for local spin density calculations: a critical analysis (Vosko, Wilk & Nusair, Can. J. Phys. 58, 1200) —— 供相关项里的 ε_c^LDA
+
+### `qwb-data/functional/pbe0.yaml`（pbe0 1.0.0）
+
+- Toward reliable density functional methods without adjustable parameters: The PBE0 model (Adamo & Barone, J. Chem. Phys. 110, 6158)
+- Generalized Gradient Approximation Made Simple (Perdew, Burke & Ernzerhof, Phys. Rev. Lett. 77, 3865)
+- Accurate spin-dependent electron liquid correlation energies for local spin density calculations: a critical analysis (Vosko, Wilk & Nusair, Can. J. Phys. 58, 1200)
 
 ### `qwb-data/functional/svwn5.yaml`（svwn5 1.0.0）
 

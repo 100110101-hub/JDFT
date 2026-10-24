@@ -37,6 +37,9 @@ functionals:
   - name: svwn5
     path: functional/svwn5.yaml
     sha256: e62bd0014d27c73d38e1475a261c47cb273eafa320f337217179b42910b4ebd8
+  - name: pbe0
+    path: functional/pbe0.yaml
+    sha256: 0af62e0946c2f563df1eac01ee475902e81d53d2176a1a76f3334c28a570559b
   - name: b88
     path: functional/b88.yaml
     sha256: efa0fa7b9f8aa98d5b4ca8fb0573a7d8d1384f6efc0a7c96b90ec7c3aa47ae76

@@ -1,0 +1,48 @@
+sha256: 0af62e0946c2f563df1eac01ee475902e81d53d2176a1a76f3334c28a570559b
+name: pbe0
+version: 1.0.0
+notes: 'PBE0（Adamo & Barone 1999）：75% PBE 交换 + 25% 精确（HF）交换 + 100% PBE 相关。它在 hybrid 机制上等价于 B3LYP 的骨架（同样的 0.25 HF 混入），但不需要 LYP（LYP 要 ∇²ρ，网格侧还没有），所以拿它当 hybrid 机制的第一个验证体系：α=0 时必须逐位退化为 PBE，α=1 且 DFT 交换权重为 0 时必须逐位退化为 HF。HfExchange 不是一个能量密度项，而是一个混入比例，由 rks_from_data 读进 RksOptions.hf_exchange。'
+citation:
+- title: 'Toward reliable density functional methods without adjustable parameters: The PBE0 model (Adamo & Barone, J. Chem. Phys. 110, 6158)'
+  doi: 10.1063/1.478522
+- title: Generalized Gradient Approximation Made Simple (Perdew, Burke & Ernzerhof, Phys. Rev. Lett. 77, 3865)
+  doi: 10.1103/PhysRevLett.77.3865
+- title: 'Accurate spin-dependent electron liquid correlation energies for local spin density calculations: a critical analysis (Vosko, Wilk & Nusair, Can. J. Phys. 58, 1200)'
+  doi: 10.1139/p80-159
+license:
+  spdx: Apache-2.0
+  commercial_ok: true
+  redistribute_ok: true
+created: 2026-11-02T02:00:00Z
+components:
+- id: GgaPbeX
+  weight: 0.75
+- id: GgaPbeC
+  weight: 1.0
+- id: HfExchange
+  weight: 0.25
+requires:
+  rho: true
+  sigma: true
+  laplacian: false
+parameters:
+  pbe_kappa: 0.804
+  pbe_mu: 0.21951
+  pbe_beta: 0.06672455060314922
+  pbe_gamma: 0.0310906908696549
+  vwn5_p_A: 0.0310907
+  vwn5_p_x0: -0.409286
+  vwn5_p_b: 13.072
+  vwn5_p_c: 42.7198
+parameter_sources:
+  pbe_kappa: 'PBE 1996 (PRL 77, 3865): kappa = 0.804'
+  pbe_mu: 'PBE 1996: mu = 0.21951 (= beta*pi^2/3)'
+  pbe_beta: 'PBE 1996: beta = 0.06672455060314922'
+  pbe_gamma: 'PBE 1996: gamma = (1-ln2)/pi^2'
+  vwn5_p_A: 'VWN 1980 parameterization V, paramagnetic set (Table 5) —— PBE 相关的 LDA 极限'
+  vwn5_p_x0: 'VWN 1980 parameterization V, paramagnetic set (Table 5)'
+  vwn5_p_b: 'VWN 1980 parameterization V, paramagnetic set (Table 5)'
+  vwn5_p_c: 'VWN 1980 parameterization V, paramagnetic set (Table 5)'
+stability:
+  density_floor: 1e-12
+  sigma_ceiling: 100000000.0

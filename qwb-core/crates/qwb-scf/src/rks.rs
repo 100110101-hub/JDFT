@@ -50,6 +50,12 @@ pub struct RksOptions {
     pub energy_threshold: f64,
     /// 密度矩阵收敛阈值。
     pub density_threshold: f64,
+    /// HF 交换的混入比例 `α`（hybrid 泛函；纯泛函为 0）。
+    ///
+    /// 数据侧写在 functional 的 `components` 里：`- id: HfExchange, weight: 0.25`
+    /// （`rks_from_data` 会把它读进这个字段，而不是当成能量密度项）。
+    /// 进入 Fock 的是 `α·(−½K)`，进入能量的是 `α·(−¼Tr(PK))`。
+    pub hf_exchange: f64,
     /// 是否用 Pulay DIIS 加速（默认开）。
     pub use_diis: bool,
     /// DIIS 子空间最多保留多少组向量。
@@ -68,6 +74,7 @@ impl Default for RksOptions {
             max_iter: 128,
             energy_threshold: 1.0e-8,
             density_threshold: 1.0e-6,
+            hf_exchange: 0.0,
             use_diis: true,
             diis_max_vectors: 8,
             resume_from: None,
@@ -624,7 +631,11 @@ pub fn rks_scf(
                 fock[(i, j)] = if hf_mode {
                     fock_data.fock[(i, j)]
                 } else {
-                    hcore[(i, j)] + fock_data.coulomb[(i, j)] + v_xc[(i, j)]
+                    // KS：F = h + J + v_xc（+ hybrid 的 α·(−½K)）
+                    hcore[(i, j)]
+                        + fock_data.coulomb[(i, j)]
+                        + v_xc[(i, j)]
+                        - 0.5 * options.hf_exchange * fock_data.exchange[(i, j)]
                 };
             }
         }
@@ -661,10 +672,12 @@ pub fn rks_scf(
         // E = Tr(P H) + ½ Tr(P G) + E_xc + E_nuc
         let mut tr_ph = 0.0;
         let mut tr_pg = 0.0;
+        let mut tr_pk = 0.0;
         for i in 0..n {
             for j in 0..n {
                 tr_ph += new_density[(i, j)] * hcore[(i, j)];
                 // KS 的 2e 项是纯库仑 J；HF 的 2e 项才是 J − ½K。
+                tr_pk += new_density[(i, j)] * fock_data.exchange[(i, j)];
                 tr_pg += new_density[(i, j)]
                     * if hf_mode {
                         fock_data.fock[(i, j)] - hcore[(i, j)]
@@ -673,7 +686,13 @@ pub fn rks_scf(
                     };
             }
         }
-        electronic = tr_ph + 0.5 * tr_pg + xc_energy;
+        // hybrid：E += α·(−¼Tr(PK))；纯 HF 走的是 hf_mode（build_fock 已经含 −½K），不重复计
+        let hybrid = if hf_mode {
+            0.0
+        } else {
+            options.hf_exchange * (-0.25 * tr_pk)
+        };
+        electronic = tr_ph + 0.5 * tr_pg + xc_energy + hybrid;
         let energy = electronic + e_nuc;
 
         let mut max_dp = 0.0_f64;
@@ -796,8 +815,14 @@ pub fn rks_from_data(
         .map_err(|err| EngineError::Data(format!("grid: {err}")))?;
 
     let parameters: BTreeMap<String, f64> = functional.parameters.clone();
+    let mut options = options;
     let mut terms: Vec<Box<dyn FunctionalTerm>> = Vec::new();
     for component in &functional.components {
+        // `HfExchange` 不是一个能量密度项，而是 hybrid 的混入比例：读进 options，不建 term。
+        if component.id == "HfExchange" {
+            options.hf_exchange += component.weight;
+            continue;
+        }
         let term = qwb_xc::build_term(&component.id, &parameters)
             .map_err(|err| EngineError::Data(format!("functional `{functional_name}`: {err}")))?;
         // 权重 ≠ 1（复合泛函）由 qwb-xc 的 ScaledTerm 处理：能量与两个导数用同一权重。

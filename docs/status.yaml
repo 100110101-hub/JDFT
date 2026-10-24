@@ -132,8 +132,32 @@ D-11:
     ∂²φ 由同一套抬/降幂恒等式给出），再把它接进 `DensityBatch` 的 laplacian 字段；
     然后按 LYP 原式实现相关项，判据仍用「σ→0 退化到 LDA 相关 + 导数对差分」。
     这一条做完，D-12（加权组件 + hybrid）才有意义，进而 T6（B3LYP）。
-D-12: {state: pending, depends: [D-01], note: "**前置已完成**（2026-10-23）：加权组件。此前引擎对 weight≠1 的组件直接报 Unsupported；现在 qwb-xc::ScaledTerm/scale_term 对**能量与两个导数**施加同一权重，
-ks_from_data 已改为包装而不是拒绝，测试 d12_weights.rs 验证 0.5/0.8 权重下三者按同一比例缩放、权重为 1 时逐位不变。仍缺：B88、LYP、以及 20% 的 HF 交换混入（hybrid，属新机制）。"}
+D-12:
+  state: in_progress
+  ts: "2026-11-02T03:00:00Z"
+  artifact: "qwb-scf（RksOptions.hf_exchange + HfExchange 组件 + Fock/能量里的 α 项）+ qwb-data/functional/pbe0.yaml + tests/d12_hybrid.rs"
+  verification: |
+    **前置机制（hybrid 的精确交换混入）已完成**，用 PBE0 验证，三条判据：
+    * **α = 0 逐位退化为 PBE**：数据路径与手搭路径的能量 `to_bits()` 相同
+      （-75.401985067298 Ha）；
+    * **α = 1 且 DFT 交换权重 = 0 逐位退化为 HF**：与 `terms` 为空的 HF 分支差 **1.4e-14 Ha**
+      （E = -74.962946680979）。这条同时钉住 Fock 里的 −½K 与能量里的 −¼Tr(PK) 两个系数，
+      以及 `P = 2Σccᵀ` 的自旋求和约定——两条完全不同的代码路径给出同一个数；
+    * **中间值**：PBE0/STO-3G 的 H2O 收敛（27 步，E = -75.4221478533 Ha），
+      且能量能被独立分解复算：
+      `Tr(PH) -122.39422378 + ½Tr(PJ) 47.34463614 + E_xc -7.28975559 + α(−¼Tr(PK)) -2.27671795
+       + E_nuc 9.19391333 = -75.4221478515`（与 SCF 报告差 1.8e-9）。
+    数据侧：`HfExchange` 作为一个**伪组件**写在 functional 的 components 里（权重即 α），
+    `rks_from_data` 把它读进 `RksOptions.hf_exchange` 而不是当成能量密度项——不需要改 K1 schema。
+  note: |
+    **还差 LYP**。D-12 的定义是 B3LYP = 0.8 B88 + 0.2 HF + 0.81 LYP + 0.19 VWN5，
+    而 LYP 需要网格上的 ∇²ρ（`Requirements.laplacian` 字段有、没人提供值）。
+    机制与 B88 都已就位（D-11 本轮补了 B88），所以 D-12 的剩余工作只有两件：
+    ① 给 `ao_value_and_gradient` 加二阶导并接进 `DensityBatch` 的 laplacian；
+    ② 按 LYP 原式实现相关项（判据：导数对五点差分 + 与 LYP 的已知极限行为对照）。
+    之后 B3LYP 的数据文件只是把四个组件按 0.8/0.2/0.81/0.19 写出来而已。
+    顺带一条负面结果：**STO-3G 上的 HOMO–LUMO 间隙不是可靠的定性判据**——实测 PBE 0.2279 Ha、
+    PBE0 0.2123 Ha，hybrid 反而略小。所以本测试没有拿「间隙打开」当断言，改用能量分解。
 D-13:
   state: done
   ts: "2026-10-22T23:23:27Z"
