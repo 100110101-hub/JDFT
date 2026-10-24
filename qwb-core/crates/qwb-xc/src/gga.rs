@@ -171,6 +171,81 @@ fn exchange_lda(rho: D) -> D {
     D::constant(-0.75 * three_over_pi_cbrt()) * rho.cbrt()
 }
 
+/// B88 交换（`GgaB88X`）：`ε_x = ε_x^LDA·[1 + (β/C_x)·x²/(1 + 6β·x·asinh x)]`，
+/// `x = sqrt(σ)/ρ^{4/3}`，`C_x = (3/4)(3/π)^{1/3}`。
+///
+/// 等价写法（更透明）：`E_x = E_x^LDA − β∫ρ^{4/3}x²/(1+6βx·asinh x)`。
+/// `β = 0.0042` 是 Becke 1988 对氢原子交换能的拟合值。
+#[derive(Debug, Clone, Copy)]
+#[non_exhaustive]
+pub struct B88Exchange {
+    /// `β = 0.0042`。
+    pub beta: f64,
+}
+
+impl B88Exchange {
+    /// 由数据参数构造。
+    #[must_use]
+    pub fn new(beta: f64) -> Self {
+        Self { beta }
+    }
+
+    /// 在 `(ρ, σ)` 上求「值 + 两个偏导」。
+    fn evaluate(&self, rho: f64, sigma: f64) -> D {
+        let rho = rho.max(crate::LOW_DENSITY_FLOOR);
+        let sigma = sigma.max(0.0);
+        let rho_d = D::rho(rho);
+        let sigma_d = D::sigma(sigma);
+
+        // x = |∇ρ| / ρ^{4/3}
+        let x = sigma_d.powf(0.5) / rho_d.powf(4.0 / 3.0);
+        // asinh(x) = ln(x + sqrt(x² + 1))
+        let asinh = (x + (x * x + D::constant(1.0)).powf(0.5)).ln();
+        let beta = D::constant(self.beta);
+        // 修正项：−β·ρ^{1/3}·x²/(1 + 6β·x·asinh x)（每电子）
+        let correction =
+            beta * rho_d.cbrt() * x * x / (D::constant(1.0) + D::constant(6.0) * beta * x * asinh);
+        exchange_lda(rho_d) - correction
+    }
+}
+
+impl FunctionalTerm for B88Exchange {
+    fn id(&self) -> &'static str {
+        "GgaB88X"
+    }
+
+    fn requires(&self) -> Requirements {
+        Requirements::gga()
+    }
+
+    fn spin_scaling(&self) -> f64 {
+        1.0
+    }
+
+    fn energy_density(&self, batch: &DensityBatch<'_>, out: &mut [f64]) {
+        check_shape(batch, out, "B88Exchange::energy_density").expect("shape");
+        for (index, slot) in out.iter_mut().enumerate() {
+            let sigma = batch.sigma.get(index).copied().unwrap_or(0.0);
+            *slot = self.evaluate(batch.rho[index], sigma).value;
+        }
+    }
+
+    fn potential_derivatives(
+        &self,
+        batch: &DensityBatch<'_>,
+        d_rho: &mut [f64],
+        d_sigma: &mut [f64],
+    ) {
+        check_shape(batch, d_rho, "B88Exchange::d_rho").expect("shape");
+        check_shape(batch, d_sigma, "B88Exchange::d_sigma").expect("shape");
+        for index in 0..batch.len() {
+            let sigma = batch.sigma.get(index).copied().unwrap_or(0.0);
+            let value = self.evaluate(batch.rho[index], sigma);
+            d_rho[index] = value.d_rho;
+            d_sigma[index] = value.d_sigma;
+        }
+    }
+}
 /// PBE 交换（`GgaPbeX`）。
 #[derive(Debug, Clone, Copy)]
 #[non_exhaustive]
@@ -364,6 +439,9 @@ pub fn build_pbe_term(
             parameter(id, parameters, "pbe_kappa")?,
             parameter(id, parameters, "pbe_mu")?,
         ))),
+        "GgaB88X" => Ok(Box::new(B88Exchange::new(parameter(
+            id, parameters, "b88_beta",
+        )?))),
         "GgaPbeC" => Ok(Box::new(PbeCorrelation::new(
             (
                 parameter(id, parameters, "vwn5_p_A")?,

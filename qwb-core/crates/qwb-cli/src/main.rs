@@ -114,6 +114,17 @@ enum DataCommand {
         /// 要校验的文件；省略则校验 `registry.yaml` 及其全部条目
         paths: Vec<PathBuf>,
     },
+    /// 按规范化摘要给数据文件重新签名
+    ///
+    /// 规范化摘要 = sha256(serde_json(YAML 去掉 `sha256` 键))，所以**签名可重复执行**：
+    /// 写回 sha256 字段不会改变摘要。之前这个值一直是手抄的，几份文件因此过期而没人发现。
+    Sign {
+        /// 要签名的数据文件
+        paths: Vec<PathBuf>,
+        /// 只打印摘要，不改文件
+        #[arg(long)]
+        check: bool,
+    },
 }
 
 /// CLI 层错误：带 K5 退出码。
@@ -173,6 +184,7 @@ fn dispatch(cli: &Cli) -> CliResult<()> {
             DataCommand::List => cmd_data_list(),
             DataCommand::Show { name } => cmd_data_show(name),
             DataCommand::Verify { paths } => cmd_data_verify(paths),
+            DataCommand::Sign { paths, check } => cmd_data_sign(paths, *check),
         },
     }
 }
@@ -559,6 +571,55 @@ fn cmd_data_show(name: &str) -> CliResult<()> {
     if !report.is_ok() {
         print_report(&report);
         return Err(CliError::data(format!("{name} failed verification")));
+    }
+    Ok(())
+}
+
+/// `qwb data sign`：把规范化摘要写回文件的 `sha256` 字段。
+///
+/// 规范化摘要见 `qwb_registry::sha256::content_sha256`：YAML → 去掉 `sha256` 键 → JSON → sha256。
+/// **不改变任何其它字节**（只替换或插入 `sha256:` 那一行），而且因为 sha256 键被排除在摘要之外，
+/// 重复执行是幂等的。
+fn cmd_data_sign(paths: &[PathBuf], check: bool) -> CliResult<()> {
+    if paths.is_empty() {
+        return Err(CliError::input(
+            "data sign 需要至少一个文件路径（可先 `qwb data list` 看条目）".to_string(),
+        ));
+    }
+    let mut signed = 0usize;
+    for path in paths {
+        let text = std::fs::read_to_string(path)
+            .map_err(|e| CliError::data(format!("{}: {e}", path.display())))?;
+        let value: serde_yaml::Value = serde_yaml::from_str(&text)
+            .map_err(|e| CliError::data(format!("{}: yaml {e}", path.display())))?;
+        let digest = qwb_registry::sha256::content_sha256(&value)
+            .map_err(|e| CliError::data(format!("{}: {e}", path.display())))?;
+        if check {
+            println!("{}  {}", digest, path.display());
+            continue;
+        }
+        let mut replaced = false;
+        let mut lines: Vec<String> = Vec::new();
+        for line in text.lines() {
+            if line.starts_with("sha256:") && !replaced {
+                lines.push(format!("sha256: {digest}"));
+                replaced = true;
+            } else {
+                lines.push(line.to_string());
+            }
+        }
+        if !replaced {
+            lines.insert(0, format!("sha256: {digest}"));
+        }
+        let mut output = lines.join("\n");
+        output.push('\n');
+        std::fs::write(path, output)
+            .map_err(|e| CliError::data(format!("{}: {e}", path.display())))?;
+        println!("signed {}  {}", digest, path.display());
+        signed += 1;
+    }
+    if !check {
+        println!("{signed} file(s) signed");
     }
     Ok(())
 }

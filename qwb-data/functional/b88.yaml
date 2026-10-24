@@ -1,0 +1,30 @@
+sha256: efa0fa7b9f8aa98d5b4ca8fb0573a7d8d1384f6efc0a7c96b90ec7c3aa47ae76
+name: b88
+version: 1.0.0
+notes: 'B88 交换（Becke 1988）。只含交换，不含相关；LYP 相关项需要 ∇²ρ（网格上还没有），所以 B88/LYP 的完整 D-11 要等 laplacian 支持。闭壳层自旋求和约定：ρ 为总密度、σ = |∇ρ|²，x = sqrt(σ)/ρ^{4/3}，ε_x = ε_x^LDA·[1 + (β/C_x)x²/(1+6βx·asinh x)]。'
+citation:
+- title: Density-functional exchange-energy approximation with correct asymptotic behavior (Becke, Phys. Rev. A 38, 3098)
+  doi: 10.1103/PhysRevA.38.3098
+- title: Electron correlations by the Slater X-alpha method (Dirac-Slater LDA exchange, alpha = 2/3) —— 供 ε_x^LDA
+  doi: 10.1103/PhysRev.140.A1133
+license:
+  spdx: Apache-2.0
+  commercial_ok: true
+  redistribute_ok: true
+created: 2026-11-02T00:00:00Z
+components:
+- id: GgaB88X
+  weight: 1.0
+requires:
+  rho: true
+  sigma: true
+  laplacian: false
+parameters:
+  b88_beta: 0.0042
+  slater_alpha: 0.6666666666666666
+parameter_sources:
+  b88_beta: 'Becke 1988 (Phys. Rev. A 38, 3098): beta = 0.0042，由氢原子交换能拟合'
+  slater_alpha: 'Dirac-Slater LDA exchange: alpha = 2/3 exactly（与 svwn5.yaml 同一来源）'
+stability:
+  density_floor: 1e-12
+  sigma_ceiling: 100000000.0
