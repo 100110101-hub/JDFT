@@ -589,7 +589,29 @@ T3:
     （冻结契约），数据层不能注册它，所以几何优化（走数据层）只能选 PBE0。
     两个测试都是 `#[ignore]` 的慢档（t3_water_geometry 约 40 分钟、t3_water_b3lyp 260 秒），
     数字即上面的实测值。
-T4: {state: pending}
+T4:
+  state: in_progress
+  ts: "2026-11-03T01:30:00Z"
+  artifact: "qwb-core/crates/qwb-engine/src/hessian.rs（numerical_hessian + thermochemistry）+ tests/f01_hessian_h2.rs、f02_thermochemistry.rs"
+  verification: |
+    三条判据的当前状况：
+    * **3N−6 全实（线性 3N−5）— 通过**：H2/STO-3G 的 6 个模为
+      [-6e-4, -7e-5, -3e-5, 54.29, 54.29, **5480.41**] cm⁻¹（前三个是平移/转动，约 0），
+      振动模 1 个且为正；`numerical_hessian` 的 ZPE = 2740.2 cm⁻¹。
+    * **ZPE > 0、S > 0、G 量级正确 — 通过**：`thermochemistry`（平动 Sackur–Tetrode +
+      转动刚性转子 + 振动谐振）在 H2/STO-3G 上给 ZPE = 0.012485 Ha、
+      U−E_elec = 0.014846 Ha、H−E_elec = 0.015790 Ha、**S = 129.56 J/(mol·K)**
+      （实验 130.68，差 **0.85%**）、G = −1.116429 Ha（`f02_thermochemistry`，已转正进 CI）。
+    * **H2O 的 IR 峰位与实验差 < 30 cm⁻¹ — 未做**：IR 强度（偶极对简正坐标的导数）尚未实现，
+      且这条判据需要先澄清"未标度谐振频率 vs 实验基频"的口径（水通常高 3–6%，
+      即 100–150 cm⁻¹，按字面无法满足 30 cm⁻¹）。
+  note: |
+    这一轮把热化学落地时修掉四个真实错误（都在换算/单位上，不涉及物理模型）：
+    ① 转动温度用了 kT 而不是 kB；② 线型分子漏了对称数 σ（H2 的 σ=2）；
+    ③ 振动模选取依赖 `modes` 的排序（按降序自取前 n_vib 个才稳）；
+    ④ 单分子与摩尔 Hartree 换算混用（ZPE 曾被除成 0）。
+    修好后 S 立刻落到 0.85% 以内 —— 这类"量级对、常数错"的问题正是外部参考值能抓到的。
+    下一步：偶极导数 → IR 强度；以及请人类裁定上面那条口径问题。
 T5: {state: pending, note: "体系已冻结：CuH/LANL2DZ 与 ZnO/def2-SVP+def2-ECP"}
 T6:
   state: in_progress
