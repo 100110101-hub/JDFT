@@ -110,7 +110,28 @@ D-10:
   artifact: "qwb-core/crates/qwb-xc/src/gga.rs（PbeExchange `GgaPbeX` + PbeCorrelation `GgaPbeC`，对偶数自动求导）+ qwb-scf 的 evaluate_xc GGA 支持（σ 与散度项）+ qwb-data/functional/pbe.yaml + tests/d10_pbe.rs、tests/d10_pbe_scf.rs"
   verification: "① `cargo test -p qwb-xc --test d10_pbe`（3 例）：σ→0 时 PBE 交换/相关与 LdaSlaterX/LdaSvwn5 **逐位一致**（<1e-12）；s=1 处 F_x = 1.1724321599 与解析式差 <1e-10；**dε/dρ、dε/dσ 与五点四阶差分相对差 ≤ 9.7e-11**（验收 < 1e-9）。② `cargo test -p qwb-scf --test d10_pbe_scf`：**PBE 端到端跑通**——H2/STO-3G/PBE 收敛（iters=2），E = −1.1811827115、E_xc = −0.7391793342；同一轮 SVWN5 是 −1.1570005105（三者都在 Boys 与网格分区修复后重钉，见 §十三/§十八）（**GGA 的引入没有改变 LDA 结果**，回归钉住）。③ `qwb data verify` 9/9（pbe.yaml 带 sha256 与逐参数 citation：PBE 1996 DOI + VWN5 DOI）。"
   note: "**GGA 的关键实现选择**：不做网格上的数值散度。GGA 势里的 −∇·(2·∂f/∂σ·∇ρ) 用**分部积分**转成矩阵元 `+ 2·∂f/∂σ·∇ρ·∇(φ_μ φ_ν)`，只需要 AO 值与 AO 梯度（`ao_value_and_gradient`，上一轮已用有限差分验证过），避免了在离散网格上算二阶导。导数由对偶数一次求值得到（值 + ∂ρ + ∂σ），VWN5 段复用解析的 `vwn_g_prime`。物理合理性：PBE 的 E_xc 比 LDA 更负 0.024 Ha（梯度修正增强交换），总能量 −1.181 vs −1.157，方向正确。"
-D-11: {state: pending, depends: [D-01], note: "B88 是纯 GGA 闭式、现有对偶数机制可直接套用；LYP 的标准实现需要 ∇²ρ（本构建的 Requirements 有 laplacian 位但没有网格上的 ∇²ρ 计算），所以 D-11 需要先补 laplacian 或改用分部积分形式。"}
+D-11:
+  state: in_progress
+  ts: "2026-11-02T00:30:00Z"
+  artifact: "qwb-core/crates/qwb-xc/src/gga.rs::B88Exchange（GgaB88X）+ qwb-data/functional/b88.yaml + tests/d11_b88.rs"
+  verification: |
+    B88 部分已完成，三条不依赖外部参照的判据（`cargo test -p qwb-xc --test d11_b88`）：
+    * **σ→0 退化为 Slater**：与 `LdaSlaterX` 逐点相对差 < 1e-14（ρ = 1e-3…10）；
+    * **增强因子**：与闭式 `F = 1 + (β/C_x)x²/(1+6βx·asinh x)` 相对差 < 1e-12
+      （x = 1e-3…5；同时断言 F ≥ 1，把符号写反直接挡掉）；
+    * **导数**：`∂ε/∂ρ`、`∂ε/∂σ` 与五点四阶差分一致（相对 1.1e-12…8.8e-11），
+      判据带自校准的舍入地板 `8·eps·|ε|/h`——`∂ε/∂σ` 很小时差分的舍入才是瓶颈
+      （实测 ρ=2, σ=0.01 处「相对差」2.25e-8 正是地板本身，不是实现误差）。
+    数据：`b88.yaml`（β = 0.0042，citation = Becke PRA 38, 3098 + Slater LDA 交换），
+    已进 registry 与 DATA_LICENSES.md（12 个文件）。
+  note: |
+    **未完成的是 LYP 相关项**：标准 LYP 需要 ρ 的拉普拉斯量 ∇²ρ，而网格侧现在只提供
+    ρ 与 σ = |∇ρ|²（`Requirements.laplacian` 字段存在但没人提供值）。所以 D-11 的
+    「B88 + LYP」只做完一半，状态保持 in_progress，不标 done。
+    下一步（属 D-11）：给 `ao_value_and_gradient` 加二阶导（每个直角分量沿三个轴的
+    ∂²φ 由同一套抬/降幂恒等式给出），再把它接进 `DensityBatch` 的 laplacian 字段；
+    然后按 LYP 原式实现相关项，判据仍用「σ→0 退化到 LDA 相关 + 导数对差分」。
+    这一条做完，D-12（加权组件 + hybrid）才有意义，进而 T6（B3LYP）。
 D-12: {state: pending, depends: [D-01], note: "**前置已完成**（2026-10-23）：加权组件。此前引擎对 weight≠1 的组件直接报 Unsupported；现在 qwb-xc::ScaledTerm/scale_term 对**能量与两个导数**施加同一权重，
 ks_from_data 已改为包装而不是拒绝，测试 d12_weights.rs 验证 0.5/0.8 权重下三者按同一比例缩放、权重为 1 时逐位不变。仍缺：B88、LYP、以及 20% 的 HF 交换混入（hybrid，属新机制）。"}
 D-13:
