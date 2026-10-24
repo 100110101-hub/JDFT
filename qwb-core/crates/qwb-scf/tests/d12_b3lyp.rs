@@ -10,7 +10,7 @@
 //!   `requires.laplacian = true is out of first-phase scope`）。
 //!
 //! 这不是缺陷、也不是绕过：`data verify` 的拒绝是**冻结语义**的一部分，改动它要人类拍板。
-//! 等 phase-2 放开 meta-GGA 后，只需把这里的四个组件按 0.8/0.2/0.81/0.19 写进 YAML。
+//! 等 phase-2 放开 meta-GGA 后，只需把这里的组件按 0.08/0.72/0.2/0.81/0.19 写进 YAML。
 //!
 //! # 判据
 //!
@@ -44,6 +44,7 @@ fn water() -> Molecule {
 
 fn parameters() -> BTreeMap<String, f64> {
     let mut p = BTreeMap::new();
+    p.insert("slater_alpha".to_string(), 2.0 / 3.0);
     p.insert("b88_beta".to_string(), 0.0042);
     p.insert("lyp_a".to_string(), 0.049_18);
     p.insert("lyp_b".to_string(), 0.132);
@@ -60,7 +61,14 @@ fn parameters() -> BTreeMap<String, f64> {
 fn b3lyp_terms(scale: f64) -> Vec<Box<dyn FunctionalTerm>> {
     let p = parameters();
     vec![
-        qwb_xc::scale_term(qwb_xc::build_term("GgaB88X", &p).expect("b88"), 0.8 * scale),
+        qwb_xc::scale_term(
+            qwb_xc::build_term("LdaSlaterX", &p).expect("slater"),
+            0.08 * scale,
+        ),
+        qwb_xc::scale_term(
+            qwb_xc::build_term("GgaB88X", &p).expect("b88"),
+            0.72 * scale,
+        ),
         qwb_xc::scale_term(
             qwb_xc::build_term("GgaLypC", &p).expect("lyp"),
             0.81 * scale,

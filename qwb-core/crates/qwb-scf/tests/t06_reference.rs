@@ -139,7 +139,14 @@ fn xc_parameters() -> BTreeMap<String, f64> {
 fn b3lyp_terms(scale: f64) -> Vec<Box<dyn FunctionalTerm>> {
     let p = xc_parameters();
     vec![
-        qwb_xc::scale_term(qwb_xc::build_term("GgaB88X", &p).expect("b88"), 0.8 * scale),
+        qwb_xc::scale_term(
+            qwb_xc::build_term("LdaSlaterX", &p).expect("slater"),
+            0.08 * scale,
+        ),
+        qwb_xc::scale_term(
+            qwb_xc::build_term("GgaB88X", &p).expect("b88"),
+            0.72 * scale,
+        ),
         qwb_xc::scale_term(
             qwb_xc::build_term("GgaLypC", &p).expect("lyp"),
             0.81 * scale,
@@ -277,7 +284,7 @@ fn compare(
     (checked, worst)
 }
 
-/// **已经与外部基准对齐的部分**：HF、LSDA（SVWN5）、PBE。
+/// **已经与外部基准对齐的部分**：HF、LSDA（SVWN5）、PBE、BLYP、B3LYP。
 ///
 /// 实测（STO-3G、CCCBDB 自己的优化几何）：HF 最差 4e-6 Ha、LSDA 最差 3e-6 Ha、
 /// PBE 最差 4e-6 Ha（H2 +2.5e-8、H2O -4.0e-6）。PBE 这一条是 2026-11-02 修好
@@ -285,10 +292,12 @@ fn compare(
 #[test]
 fn cccbdb_sto3g_hf_lsda_agree() {
     let registry = Registry::open(data_root()).expect("qwb-data");
+    // 苯（42 个基函数 × 5 个泛函）在 CI 里太慢，留在下面那个 #[ignore] 的慢测试里；
+    // 这里跑 H2 / H2O / CO 的五个模型化学。
     let (checked, worst) = compare(
         &registry,
-        |m| matches!(m, "HF" | "LSDA" | "PBEPBE"),
-        |_| true,
+        |m| matches!(m, "HF" | "LSDA" | "PBEPBE" | "BLYP" | "B3LYP"),
+        |sp| sp != "C6H6",
         true,
     );
     println!("比对 {checked} 条；最差 {:.3e} Ha", worst);

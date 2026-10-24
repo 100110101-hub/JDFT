@@ -237,21 +237,32 @@ impl B88Exchange {
         let rho_d = D::rho(rho);
         let sigma_d = D::sigma(sigma);
 
-        // t = x² = σ/ρ^{8/3}
+        // t = x² = σ/ρ^{8/3}（**总密度**的约化梯度平方）
         let t = sigma_d / rho_d.powf(8.0 / 3.0);
-        // A(x) = x·asinh(x)：值用 x = sqrt(t)，导数 dA/dt 解析给出
-        let x_value = t.value.max(0.0).sqrt();
-        let a_value = x_value * x_value.asinh();
-        let d_a_dt = if x_value > 1.0e-12 {
-            1.0 / (2.0 * (1.0 + x_value * x_value).sqrt()) + x_value.asinh() / (2.0 * x_value)
+        // B88 的原始形式用的是**每个自旋**的约化梯度 x_σ = |∇ρ_σ|/ρ_σ^{4/3}。
+        // 闭壳层 ρ_σ = ρ/2 ⇒ x_σ = 2^{1/3}·x_total，即 x_σ² = 2^{2/3}·t。
+        // 系数里的 X_FACTOR_C = (3/4)(6/π)^{1/3} = 0.9305257 也是按每自旋定义的；
+        // 漏掉这两个 2 的幂会让 B88 的梯度修正弱 1.7 倍（BLYP 在水上偏高 112 mHa 的原因）。
+        let c2 = 2.0_f64.cbrt();
+        let sqrt_t = t.value.max(0.0).sqrt();
+        let x_spin_value = c2 * sqrt_t;
+        let asinh_x = x_spin_value.asinh();
+        let a_value = x_spin_value * asinh_x;
+        let d_a_dt = if x_spin_value > 1.0e-12 {
+            (asinh_x + x_spin_value / (1.0 + x_spin_value * x_spin_value).sqrt()) * c2
+                / (2.0 * sqrt_t)
         } else {
-            1.0
+            c2 * c2
         };
         let a = D::with_partials(a_value, d_a_dt * t.d_rho, d_a_dt * t.d_sigma);
         let beta = D::constant(self.beta);
         let c_x = D::constant(0.75 * three_over_pi_cbrt());
-        // ε = −ρ^{1/3}[C_x + β·t/(1 + 6β·A)]
-        let correction = beta * t / (D::constant(1.0) + D::constant(6.0) * beta * a);
+        let x_factor_c = D::constant(0.930_525_736_349_1);
+        // ε = −ρ^{1/3}[C_x + (β/X_FACTOR_C)·t_σ/(1 + 6β·A)]，t_σ = 2^{2/3}t
+        // 注意 c_x 这一因子：B88 的写法是 ε = −C_xρ^{1/3}[1 + (β/X_FACTOR_C)x_σ²/(…)]，
+        // 展开后修正项还要乘 C_x，漏掉它会强 1/0.7386 倍。
+        let correction = beta * c_x * D::constant(c2 * c2) / x_factor_c * t
+            / (D::constant(1.0) + D::constant(6.0) * beta * a);
         -rho_d.cbrt() * (c_x + correction)
     }
 }
