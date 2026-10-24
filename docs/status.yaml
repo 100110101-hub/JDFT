@@ -612,6 +612,9 @@ T6:
     基组/几何/积分（HF 差 1.9e-7）、LDA 两项（LSDA 差 1.7e-6）。同一条线索上 PBE 差得更多
     （H2 -29 mHa、H2O -176 mHa），PBE 与 B3LYP 的区别只在 GGA 交换/相关两块，
     所以先把 GGA 对上外部基准，T6 才可能收口。记录见 docs/choices.md 三十节。
+    已排除的假设（都留了实测）：点值公式（与 libxc 逐点相符）、PBE 相关的 LDA 基从 VWN5
+    换成 PW_MOD（会把 PBE 再压低 0.56 Ha，方向相反）、网格等级、电子数/∫ρ、能量记账。
+    剩下的唯一可疑环节是网格点上 (ρ,σ) 的配对（docs/unblock.md 八之补四）。
 T7: {state: pending}
 T8: {state: pending}
 I-03:
