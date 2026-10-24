@@ -277,14 +277,20 @@ fn compare(
     (checked, worst)
 }
 
-/// **已经与外部基准对齐的部分**：HF 与 LSDA（SVWN5）在 H2 / H2O / CO / C6H6 上。
+/// **已经与外部基准对齐的部分**：HF、LSDA（SVWN5）、PBE。
 ///
-/// 实测（STO-3G、CCCBDB 自己的优化几何）：HF 最差 2e-7 Ha、LSDA 最差 3e-6 Ha。
-/// 这几条一次性锁死了基组、几何、核排斥、积分、SCF、网格求积和两个 LDA 项。
+/// 实测（STO-3G、CCCBDB 自己的优化几何）：HF 最差 4e-6 Ha、LSDA 最差 3e-6 Ha、
+/// PBE 最差 4e-6 Ha（H2 +2.5e-8、H2O -4.0e-6）。PBE 这一条是 2026-11-02 修好
+/// "相关的 LDA 基"（VWN5 → PW92 modified）之后才成立的，见 docs/choices.md 三十一节。
 #[test]
 fn cccbdb_sto3g_hf_lsda_agree() {
     let registry = Registry::open(data_root()).expect("qwb-data");
-    let (checked, worst) = compare(&registry, |m| matches!(m, "HF" | "LSDA"), |_| true, true);
+    let (checked, worst) = compare(
+        &registry,
+        |m| matches!(m, "HF" | "LSDA" | "PBEPBE"),
+        |_| true,
+        true,
+    );
     println!("比对 {checked} 条；最差 {:.3e} Ha", worst);
     assert!(checked >= 6, "参考集太小：{checked}");
 }
@@ -305,10 +311,13 @@ fn cccbdb_sto3g_b3lyp_h2_agrees() {
 ///
 /// | 体系 | 模型化学 | 我们 | CCCBDB | 差 |
 /// | --- | --- | --- | --- | --- |
-/// | H2 | PBE/STO-3G | -1.181216207 | -1.152097 | **-29.1 mHa** |
-/// | H2O | PBE/STO-3G | -75.414233041 | -75.238534 | **-175.8 mHa** |
-/// | H2 | B3LYP/STO-3G | -1.165238026 | -1.165535 | +0.3 mHa（见上一个测试） |
+/// | H2 | BLYP/STO-3G | -1.145414115 | -1.154948 | **+9.5 mHa** |
+/// | H2O | BLYP/STO-3G | -75.180006476 | -75.291954 | **+112.0 mHa** |
+/// | H2 | B3LYP/STO-3G | -1.165238026 | -1.165535 | +0.3 mHa |
 /// | H2O | B3LYP/STO-3G | -75.303760113 | -75.322775 | **+19.0 mHa** |
+///
+/// （PBE 原来也在这张表里：-29.1 / -175.8 mHa；2026-11-02 把 `GgaPbeC` 的 LDA 基
+/// 从 VWN5 换成 PW92 modified 之后，两条都收到 1e-6 Ha 量级，已移进上面的 active 测试。）
 ///
 /// 已排除的（都有独立证据，见 `docs/choices.md` 三十节）：
 /// * 基组、几何、核排斥、积分：HF 与 CCCBDB 差 2e-7；
@@ -322,12 +331,12 @@ fn cccbdb_sto3g_b3lyp_h2_agrees() {
 /// H2O 是 0.352 vs 0.52 —— 都偏小约 1.5 倍。下一步按 PBE 原文（PRL 77, 3865）核对
 /// `t² = σ/(4k_s²ρ²)`、`A = (β/γ)/(e^{−ε_c/γ}−1)` 与 `H` 的定义。
 #[test]
-#[ignore = "已知失败：PBE -29(H2)/-176(H2O) mHa、B3LYP +19(H2O) mHa；根因定位中，见 docs/choices.md 三十节"]
+#[ignore = "已知失败：BLYP +112(H2O) mHa、B3LYP +19(H2O) mHa；都在含 LYP 的泛函上，见 docs/choices.md 三十一节"]
 fn cccbdb_sto3g_gga_curves_are_still_off() {
     let registry = Registry::open(data_root()).expect("qwb-data");
     let (checked, worst) = compare(
         &registry,
-        |m| matches!(m, "PBEPBE" | "BLYP" | "B3LYP"),
+        |m| matches!(m, "BLYP" | "B3LYP"),
         |_| true,
         false,
     );

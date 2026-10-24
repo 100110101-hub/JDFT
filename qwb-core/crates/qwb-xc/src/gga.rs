@@ -31,8 +31,7 @@
 use std::collections::BTreeMap;
 
 use crate::{
-    DensityBatch, FunctionalTerm, Requirements, XcError, check_shape, parameter,
-    three_over_pi_cbrt, vwn_g, vwn_g_prime,
+    DensityBatch, FunctionalTerm, Requirements, XcError, check_shape, parameter, three_over_pi_cbrt,
 };
 
 /// 对偶数：`value + ∂ρ·δρ + ∂σ·δσ + ∂∇²ρ·δ∇²ρ`。
@@ -473,14 +472,28 @@ impl PbeCorrelation {
     }
 
     /// LDA 相关能（值 + 对 ρ 的解析导数）；`σ` 方向为 0。
+    ///
+    /// **PBE 的 LDA 基是 PW92 的 modified 版本**（Perdew & Wang, PRB 45, 13244），
+    /// 不是 SVWN5 用的 VWN5：libxc 的 `gga_c_pbe.c` 明确用 `XC_LDA_C_PW_MOD`。
+    /// 两者在 r_s ≈ 1 处差约 0.02 Ha/e，水（10 电子）上就是约 0.18 Ha 的总能量差 ——
+    /// 这正是 PBE 一开始比 CCCBDB 低 176 mHa 的原因（LSDA 仍用 VWN5，所以 LSDA 一直是对的）。
     fn lda_correlation(&self, rho: f64) -> D {
-        let (a, x0, b, c) = self.para;
+        const A: f64 = 0.031_090_7;
+        const ALPHA: f64 = 0.213_70;
+        const BETA: [f64; 4] = [7.5957, 3.5876, 1.638_2, 0.492_94];
         let rs = (3.0 / (4.0 * std::f64::consts::PI * rho)).cbrt();
-        let x = rs.sqrt();
-        let value = vwn_g(x, a, x0, b, c);
-        // x = (3/(4πρ))^{1/6} ⇒ dx/dρ = −x/(6ρ)
-        let d_x = -x / (6.0 * rho);
-        let d_rho = vwn_g_prime(x, a, x0, b, c) * d_x;
+        let root = rs.sqrt();
+        let b = BETA[0] * root + BETA[1] * rs + BETA[2] * rs * root + BETA[3] * rs * rs;
+        let q1 = 2.0 * A * b;
+        let log = (1.0 + 1.0 / q1).ln();
+        let value = -2.0 * A * (1.0 + ALPHA * rs) * log;
+        // dε/dr_s = −2Aα·ln(1+1/q1) + (2A(1+α r_s))·q1′/(q1²+q1)
+        let db = BETA[0] / (2.0 * root) + BETA[1] + 1.5 * BETA[2] * root + 2.0 * BETA[3] * rs;
+        let q1_prime = 2.0 * A * db;
+        let d_rs =
+            -2.0 * A * ALPHA * log + 2.0 * A * (1.0 + ALPHA * rs) * q1_prime / (q1 * q1 + q1);
+        // r_s = (3/(4πρ))^{1/3} ⇒ dr_s/dρ = −r_s/(3ρ)
+        let d_rho = d_rs * (-rs / (3.0 * rho));
         D::with_partials(value, d_rho, 0.0)
     }
 

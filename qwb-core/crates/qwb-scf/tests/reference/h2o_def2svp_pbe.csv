@@ -10,7 +10,11 @@
 #   （无 wheel、源码构建失败），所以「与外部参考差 < 1 mHa」这一条 T2 判据**尚未满足**。
 #   详见 docs/status.yaml 的 T2 与 docs/error-budget.md 第 0 节。
 #
-# 附带实测（同一几何）：coarse 与 normal 差 9.4e-5 Ha；1 线程与 4 线程逐位相同；
+# 附带实测（同一几何）：coarse 与 normal 差 9.41e-5 Ha；1 线程与 4 线程逐位相同；
 # |μ| = 1.9544 D（实验 1.85 D）；Tr(P·S) = 10.000000。
-pbe_total_energy_coarse,-76.4496675241,0.001,internal-independent-path
-pbe_total_energy,-76.4495733131,0.001,internal-independent-path
+#
+# 2026-11-02 修正：PBE 相关项的 LDA 基从 VWN5 换成 PW92 modified（见 docs/choices.md 三十一节）。
+# 旧钉是 -76.4496675241 / -76.4495733131（VWN5 基，低约 0.178 Ha），已作废；
+# 新钉在同一几何/网格上重测。STO-3G 上换基后与 CCCBDB 差 4e-6 Ha，是这次改动的外部依据。
+pbe_total_energy_coarse,-76.2720362190,0.001,internal-independent-path
+pbe_total_energy,-76.2719421662,0.001,internal-independent-path

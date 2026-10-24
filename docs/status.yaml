@@ -154,7 +154,9 @@ D-12:
   note: |
     组合权重的定案**不靠推理、靠判据**：用 CCCBDB 的 H2/STO-3G 一测就否掉了我上一轮"推导"出的
     `0.08 Slater + 0.72 B88`（差 6.9 mHa），而原来的 `0.8 GgaB88X` 差 0.30 mHa。
-    水的 +19 mHa 与 PBE 的 -176 mHa 是同一条未解线索（GGA 曲线对不上外部基准，见 choices 三十节）。
+    PBE 的 -176 mHa 已修好（LDA 基 VWN5 → PW92 modified，见 T2 与 choices 三十一节），
+    所以水的 +19 mHa **不是**"GGA 项通病"：剩下的偏差只在含 LYP 的几个泛函上，
+    而 LYP 是唯一走 ∇²ρ 通道的项——其势的装配还未被导数测试覆盖（下一步）。
 D-13:
   state: done
   ts: "2026-10-22T23:23:27Z"
@@ -543,8 +545,8 @@ T2:
   artifact: "qwb-core/crates/qwb-scf/tests/t02_h2o_def2svp.rs + tests/reference/h2o_def2svp_pbe.csv"
   verification: |
     已通过（四条真判据）：
-    * 相邻网格等级：coarse -76.4496675241 / normal -76.4495733131，差 9.42e-5 Ha（< 0.1 mHa）；
-    * 1 线程 vs 4 线程：能量与密度指纹**逐位相同**（129364e77400c84f）；
+    * 相邻网格等级：coarse -76.2720362190 / normal -76.2719421662，差 9.41e-5 Ha（< 0.1 mHa）；
+    * 1 线程 vs 4 线程：能量与密度指纹**逐位相同**；
     * 偶极 1.9544 D vs 实验 1.85 D（差 0.104 D，要求 < 0.15）；
     * Tr(P*S) = 10.00000000（电荷守恒）。
     未通过（一条外部参考）：T2 规定「能量与参考 csv 差 < 1 mHa」，但参考文件
@@ -558,9 +560,13 @@ T2:
     **收口条件**：拿到一个可引用的 H2O/PBE/def2-SVP 总能量（含几何与软件出处）后，
     把 csv 的来源标注从 internal 改成 external 并把容差收到 1e-3，T2 即可判 done。
     **2026-11-02 的进展**：外部基准这条路打通了（NIST CCCBDB Release 22，机器可抓、可引用），
-    但先用 STO-3G 避开 5d/6d 约定差：HF 差 1.9e-7、LSDA(SVWN5) 差 1.7e-6
-    ——流水线（基组/几何/积分/SCF/网格/Slater/VWN5）因此被锁死；
-    **PBE 差 -175.8 mHa**（H2O/STO-3G），说明"差 < 1 mHa"现在卡在 PBE 本身，不只是缺外部表值。
+    先用 STO-3G 避开 5d/6d 约定差：HF 差 1.9e-7、LSDA(SVWN5) 差 1.7e-6
+    ——流水线（基组/几何/积分/SCF/网格/Slater/VWN5）因此被锁死。
+    **PBE 的 176 mHa 缺口已定位并修复**：`GgaPbeC` 的 LDA 相关基原本用 VWN5，
+    而 PBE 原文/libxc 用的是 **PW92 modified**（`XC_LDA_C_PW_MOD`）；两者在 r_s≈1 差约 0.02 Ha/e。
+    换基后 `t06_reference` 实测：H2 **+2.5e-8 Ha**、H2O **-4.0e-6 Ha**（原来 -29 / -176 mHa）。
+    注意 def2-SVP 那条外部表值仍然没有（CCCBDB 没有 def2 系列），所以 T2 的判据 1 仍待
+    一个 def2-SVP 的可引用表值。
 T3:
   state: in_progress
   ts: "2026-11-01T00:00:00Z"
@@ -603,6 +609,9 @@ T6:
     另补一条关键对照（BLYP = 1.0 B88 + 1.0 LYP，两个组件都已逐点核对过）：
     H2/STO-3G **+9.5 mHa**、H2O/STO-3G **+112.0 mHa**——误差不是权重的线性函数
     （BLYP 权重 1.0/1.0 差 112 mHa，B3LYP 权重 0.8/0.81 只差 19 mHa）。
+    **2026-11-02 修复 PBE 后**：PBE 已精确对上（H2 +2.5e-8、H2O -4.0e-6 Ha）。
+    剩下的偏差只在含 LYP 的 BLYP/B3LYP 上——LYP 是唯一走 ∇²ρ 通道的项，其**势**的装配
+    还没被"v_xc 对能量求导"的测试覆盖过，列为下一步。
     判据 2（HF 混合系数 0.20 与定义一致）：`RksOptions.hf_exchange = 0.20`，权重线性性在
     d12_b3lyp.rs（四个权重同乘 0.5 → E_xc 精确减半）。
     判据 3（B3LYP 梯度有限差分一致 < 1e-6）：**未做**——KS 解析梯度缺 v_xc 的基组移动项

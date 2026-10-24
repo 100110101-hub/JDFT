@@ -1,6 +1,6 @@
 //! D-10 验收：PBE 交换/相关的解析导数与有限差分差 < 1e-9，且 σ→0 时退化为 LDA。
 use qwb_xc::gga::{PbeCorrelation, PbeExchange};
-use qwb_xc::{DensityBatch, FunctionalTerm, LdaSlaterX, LdaSvwn5};
+use qwb_xc::{DensityBatch, FunctionalTerm, LdaSlaterX};
 
 const VWN5: (f64, f64, f64, f64) = (0.0310907, -0.409286, 13.0720, 42.7198);
 
@@ -24,12 +24,17 @@ fn pbe_reduces_to_lda_when_sigma_vanishes() {
 
     let mut pbe_c = vec![0.0; rho.len()];
     correlation().energy_density(&DensityBatch::new(&rho, &sigma), &mut pbe_c);
+    // σ→0 时 PBE 相关退化为 **PW92(modified)**，不是 SVWN5 用的 VWN5：
+    // PBE 原文与 libxc 的 gga_c_pbe.c 都以 XC_LDA_C_PW_MOD 为基。两者在 r_s≈1 处差约
+    // 0.02 Ha/e（水上是 ~0.18 Ha 的总能量差），所以这条必须按 PW92 公式独立重算来对照。
     let mut lda_c = vec![0.0; rho.len()];
-    LdaSvwn5::new(VWN5).energy_density(&DensityBatch::from_rho(&rho), &mut lda_c);
+    for (slot, value) in lda_c.iter_mut().zip(&rho) {
+        *slot = pw92_modified(*value);
+    }
 
     for i in 0..rho.len() {
         println!(
-            "rho = {:>5}: ε_x PBE {:.12} vs LDA {:.12}; ε_c PBE {:.12} vs LDA {:.12}",
+            "rho = {:>5}: ε_x PBE {:.12} vs LDA {:.12}; ε_c PBE {:.12} vs PW92 {:.12}",
             rho[i], pbe_x[i], lda_x[i], pbe_c[i], lda_c[i]
         );
         assert!(
@@ -39,7 +44,7 @@ fn pbe_reduces_to_lda_when_sigma_vanishes() {
         );
         assert!(
             (pbe_c[i] - lda_c[i]).abs() < 1.0e-12,
-            "σ=0 时 PBE 相关必须等于 LDA（rho = {}）",
+            "σ=0 时 PBE 相关必须退化为 PW92(modified)（rho = {}）",
             rho[i]
         );
     }
@@ -131,4 +136,16 @@ fn pbe_derivatives_match_finite_differences() {
             );
         }
     }
+}
+
+/// PW92（modified）ζ=0 的每粒子相关能 —— PBE 相关的 LDA 基
+/// （libxc 里叫 XC_LDA_C_PW_MOD；常数是 PW92 原文加了更多有效数字）。
+fn pw92_modified(rho: f64) -> f64 {
+    const A: f64 = 0.031_090_7;
+    const ALPHA: f64 = 0.213_70;
+    const BETA: [f64; 4] = [7.5957, 3.5876, 1.638_2, 0.492_94];
+    let rs = (3.0 / (4.0 * std::f64::consts::PI * rho)).cbrt();
+    let root = rs.sqrt();
+    let b = BETA[0] * root + BETA[1] * rs + BETA[2] * rs * root + BETA[3] * rs * rs;
+    -2.0 * A * (1.0 + ALPHA * rs) * (1.0 + 1.0 / (2.0 * A * b)).ln()
 }
