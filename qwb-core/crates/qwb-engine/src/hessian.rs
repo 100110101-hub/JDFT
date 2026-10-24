@@ -23,6 +23,7 @@
 
 use qwb_engine_api::{EngineError, Molecule};
 use qwb_registry::Registry;
+use qwb_scf::rks::RksOptions;
 
 use crate::gradient::{GradientOptions, numerical_gradient};
 use crate::opt::OptOptions;
@@ -459,6 +460,107 @@ fn rotational_symmetry(molecule: &Molecule) -> f64 {
         };
     }
     1.0
+}
+
+/// IR 强度的换算因子：`A(km/mol) = 42.2561 * |dμ/dQ|²`，
+/// 其中 `dμ/dQ` 的单位是 `D/(Å·√amu)`（这组单位下因子就是文献里常见的 42.2561）。
+pub const IR_INTENSITY_FACTOR: f64 = 42.2561;
+
+/// 某个几何下的偶极矩（Debye）。
+fn dipole_at(
+    registry: &Registry,
+    molecule: &Molecule,
+    basis_name: &str,
+    functional: &str,
+    grid_name: &str,
+) -> Result<[f64; 3], EngineError> {
+    let mut scf_options = RksOptions::default();
+    scf_options.max_iter = 400;
+    let basis = qwb_basis::InternalBasis::build(registry.get_basis(basis_name)?, molecule)?;
+    let density = if functional.is_empty() {
+        let tensor = qwb_integrals::two_electron::two_electron(&basis, molecule)?;
+        let level = registry.get_grid(grid_name)?;
+        let grid = qwb_grid::molecular_grid(level, molecule)
+            .map_err(|err| EngineError::Data(format!("grid: {err}")))?;
+        qwb_scf::rks::rks_scf(&basis, molecule, &tensor, &grid, &[], scf_options)?.density
+    } else {
+        qwb_scf::rks::rks_from_data(
+            registry,
+            molecule,
+            basis_name,
+            functional,
+            grid_name,
+            scf_options,
+        )?
+        .density
+    };
+    qwb_props::dipole_debye(&basis, molecule, &density)
+}
+
+/// 偶极矩对笛卡尔坐标的导数，单位 `D/Bohr`，形状 `[3*atom + axis] -> [dμx, dμy, dμz]`。
+///
+/// 中心差分；步长与 Hessian 一致（[`HESSIAN_DELTA_BOHR`]）。每次位移都要重跑一次 SCF
+/// （几何变了、基组与网格都要重建），所以这个函数的代价是 `6N` 次 SCF。
+///
+/// # Errors
+/// 任何一次位移的单点计算失败。
+pub fn dipole_derivatives(
+    registry: &Registry,
+    molecule: &Molecule,
+    basis_name: &str,
+    functional: &str,
+    grid_name: &str,
+) -> Result<Vec<[f64; 3]>, EngineError> {
+    const ANGSTROM_PER_BOHR: f64 = 0.529_177_210_903;
+    let dof = 3 * molecule.atoms.len();
+    let mut out = vec![[0.0_f64; 3]; dof];
+    for atom in 0..molecule.atoms.len() {
+        for axis in 0..3 {
+            let mut plus = molecule.clone();
+            let mut minus = molecule.clone();
+            plus.atoms[atom].position_angstrom[axis] += HESSIAN_DELTA_BOHR * ANGSTROM_PER_BOHR;
+            minus.atoms[atom].position_angstrom[axis] -= HESSIAN_DELTA_BOHR * ANGSTROM_PER_BOHR;
+            let mu_plus = dipole_at(registry, &plus, basis_name, functional, grid_name)?;
+            let mu_minus = dipole_at(registry, &minus, basis_name, functional, grid_name)?;
+            for component in 0..3 {
+                out[3 * atom + axis][component] =
+                    (mu_plus[component] - mu_minus[component]) / (2.0 * HESSIAN_DELTA_BOHR);
+            }
+        }
+    }
+    Ok(out)
+}
+
+/// 每个简正模的 IR 强度（km/mol），顺序与 `result.modes` 一致；平移/转动模给 0。
+///
+/// `dμ/dQ_k = Σ_j (∂μ/∂x_j)·(L_kj/√m_j)`；`NormalMode::displacement` 存的正是 `L_kj/√m_j`
+/// （质量加权坐标下的单位向量摊回笛卡尔），所以这里只做点积。
+#[must_use]
+#[allow(clippy::needless_range_loop)]
+pub fn ir_intensities(result: &HessianResult, dipole_derivatives: &[[f64; 3]]) -> Vec<f64> {
+    const ANGSTROM_PER_BOHR: f64 = 0.529_177_210_903;
+    let dof = result.degrees_of_freedom;
+    let mut intensities = vec![0.0_f64; result.modes.len()];
+    // 只有最大的 n_vib 个模是振动模（平移/转动模的位移几乎全在质心/转动方向，强度自然接近 0，
+    // 但为了明确，这里仍然只取前 n_vib 个）。
+    let start = result.modes.len().saturating_sub(result.vibrational_modes);
+    for (index, mode) in result.modes.iter().enumerate().skip(start) {
+        let mut derivative = [0.0_f64; 3];
+        for coordinate in 0..dof {
+            let atom = coordinate / 3;
+            let axis = coordinate % 3;
+            let weight = mode.displacement[atom][axis];
+            for component in 0..3 {
+                derivative[component] += dipole_derivatives[coordinate][component] * weight;
+            }
+        }
+        // ∂μ/∂x 是 D/Bohr，位移是 Bohr·amu^{-1/2}；换到 D/(Å·√amu) 需要除以 Å-per-Bohr
+        // （分子里 Å 与 Bohr 的因子正好抵消一半，见函数文档）。
+        let scale = 1.0 / ANGSTROM_PER_BOHR;
+        let magnitude: f64 = derivative.iter().map(|v| (v * scale) * (v * scale)).sum();
+        intensities[index] = IR_INTENSITY_FACTOR * magnitude;
+    }
+    intensities
 }
 
 /// 位移后的解析梯度（失败时退回数值梯度）。
