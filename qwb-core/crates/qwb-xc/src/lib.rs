@@ -77,19 +77,39 @@ pub struct DensityBatch<'a> {
     pub rho: &'a [f64],
     /// `σ = |∇ρ|²`；LDA 项可以给空切片。
     pub sigma: &'a [f64],
+    /// `∇²ρ`；只有声明 `requires.laplacian` 的项需要（LYP 一类）。
+    pub laplacian: &'a [f64],
 }
 
 impl<'a> DensityBatch<'a> {
-    /// 用 ρ 构造（LDA 用；`sigma` 为空）。
+    /// 用 ρ 构造（LDA 用；`sigma` 与 `laplacian` 为空）。
     #[must_use]
     pub fn from_rho(rho: &'a [f64]) -> Self {
-        Self { rho, sigma: &[] }
+        Self {
+            rho,
+            sigma: &[],
+            laplacian: &[],
+        }
     }
 
-    /// 用 ρ 与 σ 构造（GGA 用）。
+    /// 用 ρ 与 σ 构造（GGA 用；不看 `laplacian`）。
     #[must_use]
     pub fn new(rho: &'a [f64], sigma: &'a [f64]) -> Self {
-        Self { rho, sigma }
+        Self {
+            rho,
+            sigma,
+            laplacian: &[],
+        }
+    }
+
+    /// 用 ρ、σ、∇²ρ 构造（meta-GGA / LYP 用）。
+    #[must_use]
+    pub fn with_laplacian(rho: &'a [f64], sigma: &'a [f64], laplacian: &'a [f64]) -> Self {
+        Self {
+            rho,
+            sigma,
+            laplacian,
+        }
     }
 
     /// 点数。

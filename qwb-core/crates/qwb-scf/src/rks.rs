@@ -367,6 +367,76 @@ fn spherical_count(l: u32) -> usize {
     (2 * l as usize + 1).min(6)
 }
 
+/// 每个 AO 在 `point` 处的**拉普拉斯量** `∇²φ`。
+///
+/// 对笛卡尔分量 `φ = N·u_x^a u_y^b u_z^c e^{−αu²}`（`u = r − A`）：
+///
+/// ```text
+/// ∂²/∂u_x² [u_x^a e^{−αu²}] = a(a−1)u_x^{a−2} − 2α(2a+1)u_x^a + 4α²u_x^{a+2}
+/// ```
+///
+/// 三个轴各按这个式子取一项（只改本轴的幂次），求和即 `∇²φ`。球谐壳层同样按
+/// `spherical_transform` 的列做线性组合——与 `ao_value_and_gradient` 一致。
+///
+/// # Errors
+///
+/// 形状或球谐变换维度不一致。
+#[allow(clippy::needless_range_loop)]
+pub fn ao_laplacian(basis: &InternalBasis, point: [f64; 3]) -> Result<Vec<f64>, EngineError> {
+    let mut values = vec![0.0_f64; basis.n_functions()];
+    for shell in basis.shells() {
+        let components = cartesian_components(shell.l);
+        let mut cartesian = [0.0_f64; MAX_CARTESIAN];
+        let d = [
+            point[0] - shell.center_bohr[0],
+            point[1] - shell.center_bohr[1],
+            point[2] - shell.center_bohr[2],
+        ];
+        let r2 = d[0] * d[0] + d[1] * d[1] + d[2] * d[2];
+        for (component, powers) in components.iter().enumerate() {
+            let powers = [powers.0, powers.1, powers.2];
+            let monomial = |exponents: [u32; 3]| {
+                d[0].powi(i32::try_from(exponents[0]).expect("small"))
+                    * d[1].powi(i32::try_from(exponents[1]).expect("small"))
+                    * d[2].powi(i32::try_from(exponents[2]).expect("small"))
+            };
+            let mut value = 0.0;
+            for (alpha, coefficient) in shell.exponents.iter().zip(&shell.coefficients) {
+                let norm = primitive_norm((powers[0], powers[1], powers[2]), *alpha);
+                let weight = coefficient * norm * (-alpha * r2).exp();
+                let mut laplacian = 0.0;
+                for axis in 0..3 {
+                    // a(a−1)u^{a−2}
+                    if powers[axis] >= 2 {
+                        let mut lowered = powers;
+                        lowered[axis] -= 2;
+                        laplacian += f64::from(powers[axis])
+                            * f64::from(powers[axis] - 1)
+                            * monomial(lowered);
+                    }
+                    // −2α(2a+1)u^a
+                    laplacian -=
+                        2.0 * alpha * (2.0 * f64::from(powers[axis]) + 1.0) * monomial(powers);
+                    // +4α²u^{a+2}
+                    let mut raised = powers;
+                    raised[axis] += 2;
+                    laplacian += 4.0 * alpha * alpha * monomial(raised);
+                }
+                value += weight * laplacian;
+            }
+            cartesian[component] = value;
+        }
+        write_transformed(
+            &mut values,
+            shell.first_function,
+            &cartesian[..components.len()],
+            shell.l,
+            shell.angular,
+        )?;
+    }
+    Ok(values)
+}
+
 /// 在网格上求密度与 XC 能量/v_xc。
 ///
 /// # Errors
@@ -379,20 +449,52 @@ pub fn evaluate_xc(
     terms: &[Box<dyn FunctionalTerm>],
 ) -> Result<(f64, Matrix), EngineError> {
     let n = basis.n_functions();
+    // Requirements 是 non_exhaustive，只能逐字段问，不能构造字面量
     let needs_sigma = terms.iter().any(|term| term.requires().sigma);
+    let needs_laplacian = terms.iter().any(|term| term.requires().laplacian);
 
     let mut rho_values = Vec::with_capacity(grid.len());
     let mut sigma_values = Vec::with_capacity(grid.len());
+    let mut laplacian_values = Vec::with_capacity(grid.len());
     let mut ao_values: Vec<Vec<f64>> = Vec::with_capacity(grid.len());
     let mut ao_gradients: Vec<Vec<[f64; 3]>> = Vec::with_capacity(grid.len());
     let mut grad_rho: Vec<[f64; 3]> = Vec::with_capacity(grid.len());
 
     for GridPoint { position_bohr, .. } in &grid.points {
-        let (values, gradients) = if needs_sigma {
+        let (values, gradients) = if needs_sigma || needs_laplacian {
             ao_value_and_gradient(basis, *position_bohr)?
         } else {
             (ao_value(basis, *position_bohr)?, Vec::new())
         };
+        // ∇²ρ = Σ_μν P_μν (∇²φ_μ φ_ν + 2 ∇φ_μ·∇φ_ν + φ_μ ∇²φ_ν)
+        let laplacian_here = if needs_laplacian {
+            let ao_laplacian_here = ao_laplacian(basis, *position_bohr)?;
+            let mut total = 0.0;
+            for i in 0..n {
+                for j in 0..n {
+                    let p = density[(i, j)];
+                    if p == 0.0 {
+                        continue;
+                    }
+                    let dot = gradients[i][0] * gradients[j][0]
+                        + gradients[i][1] * gradients[j][1]
+                        + gradients[i][2] * gradients[j][2];
+                    total += p
+                        * (ao_laplacian_here[i] * values[j]
+                            + 2.0 * dot
+                            + values[i] * ao_laplacian_here[j]);
+                }
+            }
+            if !total.is_finite() {
+                return Err(EngineError::Internal(
+                    "density laplacian is not finite at a grid point".to_string(),
+                ));
+            }
+            total
+        } else {
+            0.0
+        };
+        laplacian_values.push(laplacian_here);
         let mut rho = 0.0;
         for i in 0..n {
             for j in 0..n {
@@ -440,7 +542,9 @@ pub fn evaluate_xc(
         ao_gradients.push(gradients);
     }
 
-    let batch = if needs_sigma {
+    let batch = if needs_laplacian {
+        DensityBatch::with_laplacian(&rho_values, &sigma_values, &laplacian_values)
+    } else if needs_sigma {
         DensityBatch::new(&rho_values, &sigma_values)
     } else {
         DensityBatch::from_rho(&rho_values)
