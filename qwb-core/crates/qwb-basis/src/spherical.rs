@@ -422,6 +422,11 @@ mod tests {
         assert!(spherical_transform(5, Angular::Spherical).is_none());
         assert!(spherical_transform(3, Angular::Cartesian).is_some());
         assert_eq!(crate::cartesian_components(3).len(), 10);
-        assert_eq!(spherical_transform(3, Angular::Spherical).unwrap().n_spherical, 7);
+        assert_eq!(
+            spherical_transform(3, Angular::Spherical)
+                .unwrap()
+                .n_spherical,
+            7
+        );
     }
 }
