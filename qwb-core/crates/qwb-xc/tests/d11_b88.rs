@@ -25,11 +25,6 @@ fn term() -> Box<dyn FunctionalTerm> {
     qwb_xc::build_term("GgaB88X", &parameters).expect("GgaB88X")
 }
 
-/// `C_x = (3/4)(3/π)^{1/3}`。
-fn c_x() -> f64 {
-    0.75 * (3.0 / std::f64::consts::PI).cbrt()
-}
-
 /// 实现给出的 `ε`（单点）。
 fn energy(term: &dyn FunctionalTerm, rho: f64, sigma: f64) -> f64 {
     let rho_values = [rho];
@@ -85,9 +80,17 @@ fn enhancement_factor_matches_the_closed_form() {
             rho,
             sigma,
         );
-        // ε_b88 = ε_lda − corr，所以增强因子是 computed/from_slater（不是反过来）
+        // ε_b88 = ε_lda − corr，所以增强因子是 computed/from_slater（不是反过来）。
+        // B88 的原始形式用**每自旋**的约化梯度 x_σ = 2^{1/3}x（闭壳层），系数是
+        // β/X_FACTOR_C（X_FACTOR_C = (3/4)(6/π)^{1/3}）——libxc 的 gga_x_b88.c 就是这么写的。
+        // 漏掉这两个约定会让梯度修正弱 1.26 倍以上（BLYP 在水上偏高 112 mHa 的根因）。
         let ratio = computed / from_slater;
-        let expected = 1.0 + (beta() / c_x()) * x * x / (1.0 + 6.0 * beta() * x * x.asinh());
+        let c2 = 2.0_f64.cbrt();
+        let x_spin = c2 * x;
+        let x_factor_c = 0.930_525_736_349_1_f64;
+        let expected = 1.0
+            + (beta() / x_factor_c) * x_spin * x_spin
+                / (1.0 + 6.0 * beta() * x_spin * x_spin.asinh());
         assert!(
             ((ratio - expected) / expected).abs() < 1.0e-12,
             "x = {x}：实现的增强因子 {ratio} 与闭式 {expected} 不符"
