@@ -657,7 +657,26 @@ T6:
     已排除的假设（都留了实测）：点值公式（与 libxc 逐点相符）、PBE 相关的 LDA 基从 VWN5
     换成 PW_MOD（会把 PBE 再压低 0.56 Ha，方向相反）、网格等级、电子数/∫ρ、能量记账。
     剩下的唯一可疑环节是网格点上 (ρ,σ) 的配对（docs/unblock.md 八之补四）。
-T7: {state: pending}
+T7:
+  state: in_progress
+  ts: "2026-11-03T03:00:00Z"
+  artifact: "qwb-core/crates/qwb-io/tests/k3_state_machine.rs + qwb-core/crates/qwb-cli/tests/{p08_replay,t07_inspect_env}.rs"
+  verification: |
+    四条判据的当前状况：
+    * **K3 状态机 6 条转移由 proptest 覆盖 — 通过**：`k3_state_machine.rs` 用 36 个
+      (from,to) 组合与 `TaskState::LEGAL` 逐元素比对（含两条 `cancelled` 边），另有
+      "终态是汇""随机序列不离图""合法路径 ≤ 3 步""小写序列化"四条性质。
+    * **`replay` 后能量差 < 1e-10 — 通过**：`p08_replay.rs` 解析 `qwb replay` 输出的 delta 行
+      并断言 < 1e-10（不是只看退出码），另有"篡改 result.json 必须被拒"的对照。
+    * **缺 `env.json` 时 `qwb inspect` 退出码 3 — 通过**（本轮新增 `t07_inspect_env.rs`）：
+      先跑一次 H2/STO-3G 任务，删掉 `env.json` 再 inspect，断言 `status.code() == Some(3)`。
+    * **`kill -9` 后重启恢复 `queued` 任务 — 未做**：依赖调度器/任务队列（P-03 那一层，
+      目前 `P-01..P-06` 全部 pending：`qwb-studio` 的 Python 侧尚未创建）。
+      `qwb batch --parallel` 已实现（C-04/C-05），但没有"进程被杀后从结果目录恢复队列"的
+      持久化语义，所以这条判据还不能执行。
+  note: |
+    这一轮把 T7 能做的三条判据都落成了可执行测试（状态机、replay、inspect 退出码），
+    第四条（kill -9 恢复）明确记在 P-03/调度器缺口上，不冒充通过。
 T8: {state: pending}
 I-03:
   state: done

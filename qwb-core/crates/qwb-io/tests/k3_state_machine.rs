@@ -17,7 +17,7 @@ fn any_state() -> impl Strategy<Value = TaskState> {
 }
 
 proptest! {
-    /// 6×6 = 36 个 (from, to) 组合，与 K3 的 5 条合法转移精确对应。
+    /// 6×6 = 36 个 (from, to) 组合，与 K3 的 **6 条**合法转移精确对应（v2.1 起含两条 cancelled 边）。
     #[test]
     fn transition_relation_equals_the_k3_graph(from in any_state(), to in any_state()) {
         let expected = TaskState::LEGAL.contains(&(from, to));
