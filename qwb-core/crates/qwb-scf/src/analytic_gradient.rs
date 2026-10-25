@@ -344,7 +344,20 @@ fn quartet_derivative(
     })
 }
 
-/// 2e 项：`½ Σ ρ̃ρ̃ [d(ab|cd) − ½ d(ac|bd)]`。
+/// 2e 项：`½ Σ P P d(ab|cd) − ¼ Σ P P d(ac|bd)`。
+///
+/// # 两个乘数级的加速（2026-10-25，T4 的前置）
+///
+/// 1. **把交换项搬到同一张积分上**：令 `b↔c` 换标号，
+///    `Σ P_ab P_cd (ac|bd) = Σ P_ac P_bd (ab|cd)`，
+///    于是库仑与交换共用同一组 `(ab|cd)` 的槽位导数（原来要算两遍积分）。
+/// 2. **8 重置换对称**：`(ab|cd)` 在「对内互换」与「换对」下不变。于是只遍历**规范** quartet
+///    （`a≤b`、`c≤d`、`(a,b)≤(c,d)`），每个 quartet 只算 12 个槽位导数（4 槽 × 3 轴），
+///    再把权重按轨道对称性乘回去。原来每个 quartet 算 24 个导数、且全量 `n⁴` 遍历。
+///
+/// 两条合起来把导数积分次数降到原来的 ≈1/16。判据不变：`g01_analytic`（H2 3.4e-9）、
+/// `g01_analytic_water`（6.7e-7）、`g01_components`（逐项）、`g01_analytic_pbe`（8.4e-7）、
+/// `t6_b3lyp_gradient`（7.3e-8）全部继续成立 —— 加速不能改变数字。
 fn two_electron_all(cartesian: &[CartAo], density: &Matrix) -> (Vec<[f64; 3]>, Vec<[f64; 3]>) {
     let n = cartesian.len();
     let natoms = cartesian
@@ -354,69 +367,81 @@ fn two_electron_all(cartesian: &[CartAo], density: &Matrix) -> (Vec<[f64; 3]>, V
         .map_or(0, |index| index + 1);
     let mut coulomb_out = vec![[0.0_f64; 3]; natoms];
     let mut exchange_out = vec![[0.0_f64; 3]; natoms];
-    // 原函数归一化只与（轨道、指数）有关：**预先算一次**，不要在 3N 遍里反复算。
-    let norms: Vec<Vec<f64>> = cartesian
+
+    // 每个 AO 的「收缩系数 × 原函数归一化」预先算一次（原来在 quartet 内层重复乘）。
+    let weighted: Vec<Vec<f64>> = cartesian
         .iter()
         .map(|orbital| {
             let powers = powers_tuple(orbital.powers);
             orbital
                 .exponents
                 .iter()
-                .map(|alpha| primitive_norm(powers, *alpha))
+                .zip(orbital.coefficients.iter())
+                .map(|(alpha, coefficient)| coefficient * primitive_norm(powers, *alpha))
                 .collect()
         })
         .collect();
+
+    // 8 重对称的置换：对内互换（a,b）/（c,d）与换对（ab）↔（cd）。
+    // 用轨道下标的元组去重：索引重合时多个置换会给出同一个 quartet，不能重复累加。
+    const PERMS: [[usize; 4]; 8] = [
+        [0, 1, 2, 3],
+        [1, 0, 2, 3],
+        [0, 1, 3, 2],
+        [1, 0, 3, 2],
+        [2, 3, 0, 1],
+        [3, 2, 0, 1],
+        [2, 3, 1, 0],
+        [3, 2, 1, 0],
+    ];
+
     for a in 0..n {
-        for b in 0..n {
-            let p_ab = density[(a, b)];
-            if p_ab == 0.0 {
-                continue;
-            }
+        for b in a..n {
             for c in 0..n {
-                for d in 0..n {
-                    let p_cd = density[(c, d)];
-                    if p_cd == 0.0 {
+                for d in c..n {
+                    // 换对对称：只保留 (a,b) ≤ (c,d)
+                    if (a, b) > (c, d) {
                         continue;
                     }
-                    let coulomb_owners = [a, b, c, d];
-                    let exchange_owners = [a, c, b, d];
-                    // 每个槽位、每个轴的导数先在本 quartet 内累起来，最后一次性加到
-                    // 该槽位所属的原子上（槽位 → 原子的映射每个 quartet 只查一次）。
-                    let mut coulomb = [[0.0_f64; 3]; 4];
-                    let mut exchange = [[0.0_f64; 3]; 4];
+                    // 该 quartet 的权重（库仑 + 交换）是否全零：先看 8 个成员
+                    let mut any = false;
+                    for perm in PERMS.iter() {
+                        let i = [a, b, c, d];
+                        let (i0, i1, i2, i3) = (i[perm[0]], i[perm[1]], i[perm[2]], i[perm[3]]);
+                        if density[(i0, i1)] != 0.0 && density[(i2, i3)] != 0.0 {
+                            any = true;
+                            break;
+                        }
+                        if density[(i0, i2)] != 0.0 && density[(i1, i3)] != 0.0 {
+                            any = true;
+                            break;
+                        }
+                    }
+                    if !any {
+                        continue;
+                    }
+
+                    // 规范 quartet 的 12 个槽位导数（每个原函数组合）
+                    let mut slot_derivatives = [[[0.0_f64; 3]; 4]; 4]; // [prim][slot][axis]
                     for (ia, &alpha) in cartesian[a].exponents.iter().enumerate() {
-                        let ca = cartesian[a].coefficients[ia];
-                        let na = norms[a][ia];
                         for (ib, &beta) in cartesian[b].exponents.iter().enumerate() {
-                            let cb = cartesian[b].coefficients[ib];
-                            let nb = norms[b][ib];
                             for (ic, &gamma) in cartesian[c].exponents.iter().enumerate() {
-                                let cc = cartesian[c].coefficients[ic];
-                                let nc = norms[c][ic];
                                 for (id, &delta) in cartesian[d].exponents.iter().enumerate() {
-                                    let cd = cartesian[d].coefficients[id];
-                                    let nd = norms[d][id];
-                                    let weight = ca * cb * cc * cd * na * nb * nc * nd;
                                     let exponents = [alpha, beta, gamma, delta];
-                                    // 交换积分的槽位顺序是 a,c,b,d，指数必须跟着换位
-                                    let exchange_exponents = [alpha, gamma, beta, delta];
+                                    let weight = weighted[a][ia]
+                                        * weighted[b][ib]
+                                        * weighted[c][ic]
+                                        * weighted[d][id];
+                                    if weight == 0.0 {
+                                        continue;
+                                    }
+                                    let owners = [a, b, c, d];
+                                    #[allow(clippy::needless_range_loop)] // slot/axis 同时用作下标
                                     for slot in 0..4 {
                                         for axis in 0..3 {
-                                            coulomb[slot][axis] += weight
+                                            slot_derivatives[0][slot][axis] += weight
                                                 * quartet_derivative(
-                                                    coulomb_owners,
-                                                    &exponents,
-                                                    cartesian,
-                                                    slot,
-                                                    axis,
-                                                );
-                                            exchange[slot][axis] += weight
-                                                * quartet_derivative(
-                                                    exchange_owners,
-                                                    &exchange_exponents,
-                                                    cartesian,
-                                                    slot,
-                                                    axis,
+                                                    owners, &exponents, cartesian, slot, axis,
                                                 );
                                         }
                                     }
@@ -424,15 +449,39 @@ fn two_electron_all(cartesian: &[CartAo], density: &Matrix) -> (Vec<[f64; 3]>, V
                             }
                         }
                     }
-                    let factor = 0.5 * p_ab * p_cd;
-                    for slot in 0..4 {
-                        let atom = cartesian[coulomb_owners[slot]].center_index;
-                        for axis in 0..3 {
-                            coulomb_out[atom][axis] += factor * coulomb[slot][axis];
+                    #[allow(clippy::needless_range_loop)] // slot/axis 同时用作下标
+                    let derivatives = &slot_derivatives[0];
+
+                    // 把权重按 8 个置换乘回去（去重）
+                    let mut seen: [[usize; 4]; 8] = [[usize::MAX; 4]; 8];
+                    let mut count = 0;
+                    for perm in PERMS.iter() {
+                        let base = [a, b, c, d];
+                        let member = [base[perm[0]], base[perm[1]], base[perm[2]], base[perm[3]]];
+                        if seen[..count].contains(&member) {
+                            continue;
                         }
-                        let atom = cartesian[exchange_owners[slot]].center_index;
-                        for axis in 0..3 {
-                            exchange_out[atom][axis] -= factor * 0.5 * exchange[slot][axis];
+                        seen[count] = member;
+                        count += 1;
+                        let coulomb_weight =
+                            0.5 * density[(member[0], member[1])] * density[(member[2], member[3])];
+                        let exchange_weight = -0.25
+                            * density[(member[0], member[2])]
+                            * density[(member[1], member[3])];
+                        if coulomb_weight == 0.0 && exchange_weight == 0.0 {
+                            continue;
+                        }
+                        for slot in 0..4 {
+                            let atom = cartesian[member[slot]].center_index;
+                            // 成员的第 `slot` 个轨道来自规范 quartet 的第 `perm[slot]` 槽位。
+                            // 必须用置换映射，**不能**按"下标相等"去找规范槽位：索引重复时
+                            // （例如 a==b）不同槽位的导数是不同的量。
+                            let canonical = perm[slot];
+                            for axis in 0..3 {
+                                let value = derivatives[canonical][axis];
+                                coulomb_out[atom][axis] += coulomb_weight * value;
+                                exchange_out[atom][axis] += exchange_weight * value;
+                            }
                         }
                     }
                 }
