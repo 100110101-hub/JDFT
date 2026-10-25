@@ -59,11 +59,12 @@ STATE_COLORS = {
 class MainWindow(QMainWindow):
     """一个工程窗口。"""
 
-    def __init__(self, out_root: str | Path, *, workers: int = 2) -> None:
+    def __init__(self, out_root: str | Path, *, workers: int = 2, runner: str = "mock") -> None:
         super().__init__()
         self.setWindowTitle("QuantumWorkbench Studio")
         self.resize(1100, 700)
-        self.project = GuiProject(out_root, workers=workers, runner="mock")
+        self.runner = runner
+        self.project = GuiProject(out_root, workers=workers, runner=runner)
         self.bridge = SchedulerBridge(self.project, self)
         self._rows: dict[str, int] = {}
 
@@ -115,17 +116,23 @@ class MainWindow(QMainWindow):
         self.seconds_spin.setRange(0.01, 60.0)
         self.seconds_spin.setValue(0.2)
         self.seconds_spin.setSuffix(" s")
+        self.input_edit = QLineEdit("")
+        self.input_edit.setPlaceholderText("input.yaml（engine runner 用）")
         form.addRow("任务 id", self.id_edit)
         form.addRow("mock 时长", self.seconds_spin)
+        form.addRow("作业输入", self.input_edit)
 
         buttons = QHBoxLayout()
         self.submit_button = QPushButton("提交")
         self.submit_button.clicked.connect(self.submit_task)
+        self.submit_engine_button = QPushButton("提交真作业")
+        self.submit_engine_button.clicked.connect(self.submit_engine_task)
         self.run_button = QPushButton("运行队列")
         self.run_button.clicked.connect(self.run_queue)
         self.cancel_button = QPushButton("取消选中")
         self.cancel_button.clicked.connect(self.cancel_selected)
         buttons.addWidget(self.submit_button)
+        buttons.addWidget(self.submit_engine_button)
         buttons.addWidget(self.run_button)
         buttons.addWidget(self.cancel_button)
         holder = QWidget()
@@ -173,6 +180,19 @@ class MainWindow(QMainWindow):
         self._status.setText(f"已登记 {view.task_id}（{view.state}）")
         return task_id
 
+    def submit_engine_task(self) -> str | None:
+        """登记一个真作业（`engine` runner）：input.yaml → 队列 → `qwb run`。"""
+        source = self.input_edit.text().strip()
+        if not source:
+            self._status.setText("先填 input.yaml 路径")
+            return None
+        task_id = self.id_edit.text().strip() or "task"
+        view = self.project.submit_engine(task_id, source)
+        self._sync_tree()
+        self._refresh_monitor()
+        self._status.setText(f"已登记真作业 {view.task_id}")
+        return view.task_id
+
     def run_queue(self) -> None:
         if self.bridge.is_running():
             self._status.setText("已经在跑")
@@ -210,7 +230,12 @@ class MainWindow(QMainWindow):
         self._status.setText(f"{task_id} → {state}")
         if state == "converged":
             self.select_task(task_id)
-            self.reload_result_dir()
+            # 真作业的结果目录是 `<out>/<task_id>/`，直接打开给用户看
+            candidate = self.project.out_root / task_id
+            if (candidate / "result.json").is_file():
+                self.set_result_root(candidate)
+            else:
+                self.reload_result_dir()
 
     def _on_run_finished(self, outcome: dict) -> None:
         self._refresh_monitor()

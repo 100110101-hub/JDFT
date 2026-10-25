@@ -45,6 +45,7 @@ class GuiProject(QObject):
         self.out_root = Path(out_root)
         self.workers = workers
         self.runner = runner
+        self.runner = runner
         self.scheduler = Scheduler(
             queue_path=self.out_root / "queue.json",
             out_root=self.out_root,
@@ -74,11 +75,33 @@ class GuiProject(QObject):
     # -- 变更 ---------------------------------------------------------------
 
     def submit(self, task_id: str, seconds: float = 0.2, label: str | None = None) -> TaskView:
+        if self.runner == "engine":
+            raise ValueError("engine runner：请用 submit_engine(task_id, input_yaml)")
         self.scheduler.submit(task_id, f"{task_id}.mock", {"seconds": seconds, "label": label})
         self._payloads[task_id] = seconds
         self.taskAdded.emit(task_id)
         self.projectChanged.emit()
         return TaskView(task_id, "queued", None, seconds)
+
+    def submit_engine(self, task_id: str, input_yaml: str | Path) -> TaskView:
+        """登记一个**真作业**：把 input.yaml 暂存成 `<staging>/<task_id>.yaml`。
+
+        文件名必须等于 `task_id` —— `qwb run` 用输入文件的 stem 命名结果目录，
+        只有这样才能落在 `<out>/<task_id>/`，与队列里的 task 对上。
+        """
+        source = Path(input_yaml)
+        if not source.is_file():
+            raise FileNotFoundError(f"input.yaml 不存在：{source}")
+        staging = self.out_root / ".staging"
+        staging.mkdir(parents=True, exist_ok=True)
+        staged = staging / f"{task_id}.yaml"
+        staged.write_text(source.read_text(encoding="utf-8"), encoding="utf-8")
+        self.scheduler.runner_name = "engine"
+        self.scheduler.submit(task_id, str(staged))
+        self._payloads[task_id] = 0.0
+        self.taskAdded.emit(task_id)
+        self.projectChanged.emit()
+        return TaskView(task_id, "queued", None, 0.0)
 
     def cancel(self, task_id: str) -> None:
         try:

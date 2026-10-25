@@ -53,6 +53,8 @@ __all__ = [
 ]
 
 QUEUE_FILE = "queue.json"
+#: 真引擎 runner：worker 就是 `qwb run <input.yaml> --out <out_root>`（Rust CLI）。
+ENGINE_RUNNER = "engine"
 MOCK_RESULT_FILE = "mock_result.json"
 SPEC_FILE = "job_spec.json"
 WORKER_LOG = "worker.log"
@@ -294,8 +296,10 @@ class Scheduler:
         self.queue_path = Path(self.queue_path)
         self.out_root = Path(self.out_root)
         self._queue = TaskQueue(self.queue_path)
-        if self.runner_name not in MOCK_RUNNERS:
-            raise SchedulerError(f"unknown runner {self.runner_name!r}; have {sorted(MOCK_RUNNERS)}")
+        if self.runner_name not in MOCK_RUNNERS and self.runner_name != ENGINE_RUNNER:
+            raise SchedulerError(
+                f"unknown runner {self.runner_name!r}; have {sorted(MOCK_RUNNERS) + [ENGINE_RUNNER]}"
+            )
 
     # -- 队列 ---------------------------------------------------------------
 
@@ -406,22 +410,36 @@ class Scheduler:
     def _task_dir(self, task_id: str) -> Path:
         return self.out_root / task_id
 
+    def _work_dir(self, task_id: str) -> Path:
+        """临时文件（spec / worker.log / 取消标志 / mock 结果）放哪。
+
+        `mock` 直接放在结果目录里（测试要看 `mock_result.json`）；
+        `engine` 放 `.staging/`，因为 `<out>/<task_id>/` 是 **K3 结果目录**，
+        不能塞 `job_spec.json` 之类的东西进去。
+        """
+        if self.runner_name == ENGINE_RUNNER:
+            return self.out_root / ".staging" / task_id
+        return self._task_dir(task_id)
+
     def _write_cancel_flag(self, task_id: str) -> None:
-        target = self._task_dir(task_id)
+        target = self._work_dir(task_id)
         target.mkdir(parents=True, exist_ok=True)
         (target / CANCEL_FLAG).write_text("cancel\n", encoding="utf-8")
 
     def _start(self, task_id: str) -> None:
         if self._queue.get(task_id).state is not TaskState.QUEUED:
             return  # 在 pending 里被别处取消掉了
-        task_dir = self._task_dir(task_id)
+        task_dir = self._work_dir(task_id)
         task_dir.mkdir(parents=True, exist_ok=True)
-        spec = {
-            "task_id": task_id,
-            "input": self._queue.get(task_id).input,
-            "payload": dict(self.payloads.get(task_id, {})),
-        }
-        (task_dir / SPEC_FILE).write_text(json.dumps(spec, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+        if self.runner_name != ENGINE_RUNNER:
+            spec = {
+                "task_id": task_id,
+                "input": self._queue.get(task_id).input,
+                "payload": dict(self.payloads.get(task_id, {})),
+            }
+            (task_dir / SPEC_FILE).write_text(
+                json.dumps(spec, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
+            )
 
         self._queue.set_state(task_id, TaskState.RUNNING)
         self._queue.save()  # 先落盘：被 kill -9 时下一轮才能看出它停在 running
@@ -430,30 +448,52 @@ class Scheduler:
         env["PYTHONPATH"] = os.pathsep.join(
             [str(PACKAGE_ROOT), env.get("PYTHONPATH", "")] if env.get("PYTHONPATH") else [str(PACKAGE_ROOT)]
         )
-        command = [
-            sys.executable,
-            "-m",
-            "qwb_studio.scheduler",
-            "--worker",
-            str(task_dir / SPEC_FILE),
-            "--cancel",
-            str(task_dir / CANCEL_FLAG),
-            "--result",
-            str(task_dir / MOCK_RESULT_FILE),
-            "--cancel-ack",
-            str(task_dir / CANCEL_ACK_FILE),
-            "--runner",
-            self.runner_name,
-            "--poll",
-            str(self.poll_interval),
-        ]
+        if self.runner_name == ENGINE_RUNNER:
+            # 真引擎：worker 就是 Rust CLI，结果目录由它按 K3 写出（含真实 env.json）。
+            # 取消走"父进程 kill"那条路（CLI 没有协作取消点），与 stubborn worker 同一路径。
+            from .cli import EngineNotFound, engine_command
+
+            try:
+                command, cargo_cwd = engine_command()
+            except EngineNotFound as exc:
+                # 引擎不可用要落到 failed（带原因），不能在 run() 里抛出去把整个调度器炸掉
+                self._queue.set_state(task_id, TaskState.FAILED, f"engine unavailable: {exc}")
+                self._queue.save()
+                return
+            command = [
+                *command,
+                "run",
+                str(Path(self._queue.get(task_id).input).resolve()),
+                "--out",
+                str(self.out_root),
+            ]
+            child_cwd = str(cargo_cwd) if cargo_cwd is not None else str(PACKAGE_ROOT)
+        else:
+            command = [
+                sys.executable,
+                "-m",
+                "qwb_studio.scheduler",
+                "--worker",
+                str(task_dir / SPEC_FILE),
+                "--cancel",
+                str(task_dir / CANCEL_FLAG),
+                "--result",
+                str(task_dir / MOCK_RESULT_FILE),
+                "--cancel-ack",
+                str(task_dir / CANCEL_ACK_FILE),
+                "--runner",
+                self.runner_name,
+                "--poll",
+                str(self.poll_interval),
+            ]
+            child_cwd = str(PACKAGE_ROOT)
         with open(task_dir / WORKER_LOG, "wb") as log:
             self._children[task_id] = subprocess.Popen(  # noqa: S603 - 参数全由本模块构造
                 command,
                 stdout=log,
                 stderr=subprocess.STDOUT,
                 env=env,
-                cwd=str(PACKAGE_ROOT),
+                cwd=child_cwd,
             )
 
     def _reap(self) -> None:
@@ -476,8 +516,21 @@ class Scheduler:
             if code != 0:
                 self._finish(task_id, TaskState.FAILED, f"worker exited with code {code}")
                 continue
+            if self.runner_name == ENGINE_RUNNER:
+                # CLI 退出码就是判据（K5）：0 = 成功，result.json 必须存在。
+                result_json = self._task_dir(task_id) / "result.json"
+                if result_json.is_file():
+                    self._finish(task_id, TaskState.CONVERGED, None)
+                else:
+                    tail = self._log_tail(task_id)
+                    self._finish(
+                        task_id,
+                        TaskState.FAILED,
+                        f"engine exited without result.json: {tail}"[:400],
+                    )
+                continue
             result = self._read_result(task_id)
-            acked = (self._task_dir(task_id) / CANCEL_ACK_FILE).exists()
+            acked = (self._work_dir(task_id) / CANCEL_ACK_FILE).exists()
             if result is not None:
                 self._finish(task_id, TaskState.CONVERGED, None)
             elif acked:
@@ -485,8 +538,16 @@ class Scheduler:
             else:
                 self._finish(task_id, TaskState.FAILED, "worker exited without writing a result file")
 
+    def _log_tail(self, task_id: str, limit: int = 400) -> str:
+        path = self._work_dir(task_id) / WORKER_LOG
+        try:
+            text = path.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            return "(no worker log)"
+        return text.strip()[-limit:]
+
     def _read_result(self, task_id: str) -> dict[str, Any] | None:
-        path = self._task_dir(task_id) / MOCK_RESULT_FILE
+        path = self._work_dir(task_id) / MOCK_RESULT_FILE
         for _ in range(200):  # 子进程刚退出时文件系统可能还没对父进程可见
             if path.is_file():
                 try:
@@ -504,7 +565,7 @@ class Scheduler:
             except subprocess.TimeoutExpired:  # pragma: no cover - 不该发生
                 process.kill()
                 process.wait(timeout=10)
-        flag = self._task_dir(task_id) / CANCEL_FLAG
+        flag = self._work_dir(task_id) / CANCEL_FLAG
         if flag.exists():
             flag.unlink()
         self._queue.set_state(task_id, state, reason)

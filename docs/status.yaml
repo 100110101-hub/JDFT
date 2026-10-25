@@ -867,13 +867,16 @@ T4:
            —— 理论上 `3N` 倍；`f01_hessian_water` 复测（HF/STO-3G，优化 + Hessian）
            568 s，频率数值与旧实现逐位相同（2169.4 / 4140.8 / 4392.0，ZPE 5351.1），
            说明换路径没有改变物理结果。
-         * **HF/6-311G(d,p)（新路径上的实测，进行中）**：`qwb-engine/tests/t4_frequencies_6311gdp.rs`
+         * **HF/6-311G(d,p)（新路径上的实测：跑不完）**：`qwb-engine/tests/t4_frequencies_6311gdp.rs`
            （`#[ignore]`，`cargo test --release ... -- --ignored`）先优化再算 Hessian。
-           优化已收敛：**E = −76.0470115830 Ha**（HF/6-311G(d,p) 的水，文献约 −76.0471，对得上）；
-           Hessian 段（18 位移 × 2 = 36 次 SCF + 解析梯度、31 个笛卡尔基函数）在 release 下
-           已跑约 50 分钟仍在进行 —— **本节下一次更新会写实测频率**。
-           这条测试是**测量**而非判据（只断言"3 个振动模"），因为模型化学够不够要用数字说话。
-         ⇒ 若 6-311G(d,p) 上 30 cm⁻¹ 仍不过，再考虑 **2e 导数的 Schwarz 预筛/收缩层优化**
+           **优化收敛**：E = −76.0470115830 Ha（HF/6-311G(d,p) 的水，文献约 −76.0471 ✓）。
+           **Hessian 段 3 小时未跑完**（`target/release`、rayon 多线程、CPU 时间实测 **16903 s**，
+           31 个笛卡尔基函数 × 18 位移 × 2），被手动终止 —— 这不是数值问题，是**性能**问题：
+           `two_electron_all` 现在按 n⁴ 全量 quartet、每个原函数组合算 24 次 Hermite 导数
+           （4 槽 × 3 轴 × 库仑/交换），既没用 8 重置换对称，也没有 Schwarz 预筛。
+           ⇒ T4 的下一个动作是**性能 WP**：2e 导数的 8 重对称 + Schwarz 预筛（预计 5–20 倍），
+           之后重测这一档。STO-3G 的数字（+377/+107/+236 cm⁻¹）继续作为"模型化学不够"的证据。
+         ⇒ 若性能修好、6-311G(d,p) 上 30 cm⁻¹ 仍不过，再考虑收缩层/预筛的进一步优化
            （choices 三十五之补）。
       `scripts/verify.ps1` 在本轮改动之后实测 **19/19 全绿**。
   note: |
@@ -958,7 +961,33 @@ T7:
     语义边界写清楚：`running` 是**不可回退**的（K3 冻结表里没有 running→queued），
     所以"恢复"只对 `queued` 生效；被杀的 `running` 任务用新 task id 重提——这是冻结契约，
     不是实现偷懒。`--parallel` 的线程数与单次 SCF 的线程（I-04 单线程）是两件事。
-T8: {state: pending}
+T8:
+  state: in_progress
+  ts: "2026-10-25T21:10:00Z"
+  artifact: |
+    P-09（qwb-studio/qwb_studio/gui/：MainWindow 五区域 + GuiProject + SchedulerBridge + LogView）
+    + 调度器的 `engine` runner（worker 就是 `qwb run`，结果目录是真 K3 目录）
+    + tests/{test_gui,test_scheduler_engine}.py
+  verification: |
+    三条判据的当前状况：
+    * **打开项目 → 建分子 → 提交 → Job Monitor → 结果，不崩溃不阻塞 — 一半已过**：
+      GUI 的提交流 / 监控流 / 结果面板都有测试（`test_gui.py` 6 例）：
+      ① mock 任务 3 个并发跑完，运行期间事件循环转了 > 50 圈（不阻塞）；
+      ② 取消生效；(3) 102.8 MB / 154 万行日志流式追加 66.7 s、期间事件循环 3081 圈；
+      ④ **真作业**（`qwb run` H2/STO-3G/SVWN5）从 GUI 提交 → 监控 → 结果面板显示 −1.157 Ha，
+      结果目录是真 K3 目录（`result.json`/`env.json` 由引擎写）。
+      **没做**：分子编辑器（"建分子"目前靠 input.yaml）与 P-10 的 VTK 3D
+      （分子/轨道/ESP/振动）—— T8 判据里的"3D 结果"这一环还缺。
+    * **大日志（> 100 MB）UI 不卡 — 通过**：见上（LogView 块数上限 5000，事件循环持续推进）。
+    * **崩溃后重启恢复未完成视图 — 未做**：调度器的 `kill -9` 恢复（P-03）已有，
+      但 GUI 侧还没有"重启后重建 Task Panel 视图"的用例。
+    * T8 判据点名的 **PBE/def2-SVP/opt** 全流程要十几分钟（def2-SVP 的 SCF ≈ 2–4 min/次 × 优化步数），
+      属于慢档；先用 H2/STO-3G 的真作业证明链路，慢档等 2e 性能 WP 之后补。
+  note: |
+    `engine` runner 让 GUI 跑真作业：`qwb run <input.yaml> --out <out>`，临时文件
+    （worker.log / 取消标志）放 `<out>/.staging/`，**不污染 K3 结果目录**；引擎不可用
+    （`QWB_ENGINE_BIN` 指错）会让任务落 `failed` 并带原因，不会把调度器炸掉。
+    P-10（VTK 3D）是 T8 的下一半，尚未开始。
 I-03:
   state: done
   ts: "2026-10-24T18:00:00Z"

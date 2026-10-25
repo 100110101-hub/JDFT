@@ -185,3 +185,28 @@ def test_gui_reports_a_broken_result_directory(app, tmp_path: Path) -> None:
         assert "env.json" in window.env_label.text()
     finally:
         window.close()
+
+def test_gui_runs_a_real_engine_job(app, tmp_path: Path) -> None:
+    """T8 的主链路（用真作业，但选最便宜的模型化学）：提交 → 监控 → 结果面板。
+
+    qwb run 的 H2/STO-3G/SVWN5 约 1 s，所以这条能在 gate 里跑；
+    T8 判据里点名的 PBE/def2-SVP/opt 要十几分钟，属于慢档，见 docs/status.yaml 的 T8 条目。
+    """
+    example = REPO_ROOT / "qwb-core" / "examples" / "h2_sto3g_svwn5.yaml"
+    assert example.is_file(), example
+
+    window = MainWindow(tmp_path / "project", workers=1, runner="engine")
+    try:
+        window.id_edit.setText("h2")
+        window.input_edit.setText(str(example))
+        assert window.submit_engine_task() == "h2"
+        window.run_queue()
+        finished = spin_until(app, lambda: not window.bridge.is_running(), timeout=300)
+        assert finished, "真作业没在 300 s 内结束"
+        states = [view.state for view in window.project.tasks()]
+        assert states == ["converged"], states
+        assert "-1.157" in window.energy_label.text(), window.energy_label.text()
+        assert "收敛" in window.converged_label.text()
+        assert (tmp_path / "project" / "h2" / "result.json").is_file()
+    finally:
+        window.close()
