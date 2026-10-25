@@ -292,13 +292,18 @@ fn compare(
 #[test]
 fn cccbdb_sto3g_hf_lsda_agree() {
     let registry = Registry::open(data_root()).expect("qwb-data");
-    // CI 分层（project.md V-04）：默认测试只跑 H2 / H2O 的五个模型化学（约 5 分钟）；
-    // CO（尤其 BLYP/B3LYP 的 SCF 要 100+ 步）与苯（42 个基函数）放在
-    // 下面那个 #[ignore] 的慢测试里，数值已实测并写在文档注释中。
+    // CI 分层（project.md V-04）：默认测试跑 H2/H2O/CO/CH4/NH3 的五个模型化学；
+    // 苯（42 个基函数）留在下面那个 #[ignore] 的慢测试里。
+    //
+    // **N2 目前不在这条断言里**：实测 HF/STO-3G 比 CCCBDB 高 **0.684 Ha**（其余五个体系都在
+    // 1e-6~1e-4 内，NH3 最差 0.10 mHa）。0.68 Ha 不是数值噪声，也不是"NH3 里 N 的基组错"
+    // （NH3 对得上），所以要么我们的 N2 SCF 落到另一个解，要么 CCCBDB 那条记录的几何与能量
+    // 不自洽。待查，见 docs/choices.md 三十六节；查清之前不把它写成通过。
     let (checked, worst) = compare(
         &registry,
         |m| matches!(m, "HF" | "LSDA" | "PBEPBE" | "BLYP" | "B3LYP"),
-        |sp| sp == "H2" || sp == "H2O",
+        // 苯太慢（42 个基函数）留在慢档；N2 见下面的 note——它目前**不符**，先不冒充通过。
+        |sp| sp != "C6H6" && sp != "N2",
         true,
     );
     println!("比对 {checked} 条；最差 {:.3e} Ha", worst);
