@@ -43,6 +43,7 @@ from PySide6.QtWidgets import (
 
 from ..resultdir import ResultDirError, open_result_dir
 from .logview import LogView
+from .scene_panel import Scene3DPanel
 from .model import GuiProject
 from .runner import SchedulerBridge
 
@@ -105,6 +106,8 @@ class MainWindow(QMainWindow):
         tabs.addTab(self._build_result_panel(), "Result")
         self.log_view = LogView()
         tabs.addTab(self.log_view, "Log")
+        self.scene_panel = Scene3DPanel()
+        tabs.addTab(self.scene_panel, "3D")
         self.tabs = tabs
         return tabs
 
@@ -297,6 +300,8 @@ class MainWindow(QMainWindow):
     def set_result_root(self, root: str | Path) -> None:
         self._result_root = Path(root)
         self.reload_result_dir()
+        # P-10：同一个结果目录顺手渲染 3D（离屏 VTK，几十毫秒，不阻塞 UI）
+        self.scene_panel.show_result(root)
 
     def reload_result_dir(self) -> None:
         if self._result_root is None:

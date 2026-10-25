@@ -296,6 +296,19 @@ def _parse_mapping(entries: list[tuple[int, str, int]], index: int, indent: int)
             continue
         if index + 1 < len(entries) and entries[index + 1][0] > indent:
             out[key], index = _parse_block(entries, index + 1, entries[index + 1][0])
+        elif (
+            index + 1 < len(entries)
+            and entries[index + 1][0] == indent
+            and _is_item(entries[index + 1][1])
+        ):
+            # **缩进式之外的写法**：`serde_yaml` 把序列写在键的同一缩进上
+            # ```yaml
+            # atoms:
+            # - symbol: O
+            # ```
+            # 这种"indentless sequence"在 Rust 侧写出的 input.yaml 里到处都是，
+            # 不认它就没法读引擎自己的输入文件。
+            out[key], index = _parse_sequence(entries, index + 1, indent)
         else:
             out[key] = None
             index += 1

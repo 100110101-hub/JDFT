@@ -110,6 +110,11 @@ pub struct RksResult {
     pub density: Matrix,
     /// 轨道能（升序）。
     pub mo_energies_hartree: Vector,
+    /// **MO 系数矩阵**（列 = MO，AO 为基；`C` 满足 `Cᵀ S C = 1`）。
+    ///
+    /// 之前 `RksResult` 只带密度矩阵，于是 `qwb-engine` 拿密度去填 K2 的
+    /// `JobResult.mo_coeffs` —— 字段名与内容不符（P-10 的轨道等值面也因此做不了）。
+    pub coefficients: Matrix,
     /// 最后一次能量变化。
     pub last_energy_change: f64,
     /// 网格点数（诊断用）。
@@ -848,6 +853,8 @@ pub fn rks_scf(
     let mut converged = false;
     let mut last_change = f64::INFINITY;
     let mut mo_energies = Vector::zeros(n);
+    // 最后一次对角化的 MO 系数（列 = MO）；收敛后即 K2 mo_coeffs 的真实内容。
+    let mut final_coefficients = Matrix::zeros(n, n);
     let mut e_xc = 0.0;
     let mut electronic = 0.0;
 
@@ -914,6 +921,7 @@ pub fn rks_scf(
         let (values, vectors) = symmetric_eigen(&f_prime).map_err(linalg)?;
         mo_energies = values;
         let coefficients = matmul(&x, &vectors).map_err(linalg)?;
+        final_coefficients = coefficients.clone();
 
         // 新密度：P = 2 Σ_{i<n_occ} c_i c_iᵀ
         let mut new_density = Matrix::zeros(n, n);
@@ -1021,6 +1029,7 @@ pub fn rks_scf(
         nuclear_repulsion_hartree: e_nuc,
         density,
         mo_energies_hartree: mo_energies,
+        coefficients: final_coefficients,
         last_energy_change: last_change,
         grid_points: grid.len(),
         checkpoint,

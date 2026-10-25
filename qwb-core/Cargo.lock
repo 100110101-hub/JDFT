@@ -1310,10 +1310,15 @@ name = "qwb-cli"
 version = "0.1.0"
 dependencies = [
  "clap",
+ "qwb-basis",
  "qwb-engine",
  "qwb-engine-api",
+ "qwb-integrals",
  "qwb-io",
+ "qwb-linalg",
+ "qwb-props",
  "qwb-registry",
+ "qwb-scf",
  "serde",
  "serde_json",
  "serde_yaml",

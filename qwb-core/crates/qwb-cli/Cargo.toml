@@ -20,6 +20,12 @@ qwb-registry.workspace = true
 qwb-io.workspace = true
 qwb-engine-api.workspace = true
 qwb-engine.workspace = true
+# P-10 的可视化产物：需要直接拿基组/积分/布居（populations + 轨道 cube）
+qwb-basis.workspace = true
+qwb-linalg.workspace = true
+qwb-integrals.workspace = true
+qwb-scf.workspace = true
+qwb-props.workspace = true
 
 [lints]
 workspace = true

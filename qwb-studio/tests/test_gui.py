@@ -210,3 +210,34 @@ def test_gui_runs_a_real_engine_job(app, tmp_path: Path) -> None:
         assert (tmp_path / "project" / "h2" / "result.json").is_file()
     finally:
         window.close()
+
+def test_3d_panel_shows_molecule_esp_orbital_and_vibration(app, tmp_path: Path) -> None:
+    """P-10 接到 GUI 上：真作业 → 3D 面板 → ESP / 轨道 / 振动帧都能切换。"""
+    example = REPO_ROOT / "qwb-core" / "examples" / "h2o_sto3g_svwn5.yaml"
+    assert example.is_file(), example
+
+    window = MainWindow(tmp_path / "project", workers=1, runner="engine")
+    rendered: list[int] = []
+    window.scene_panel.rendered.connect(lambda _path, painted: rendered.append(painted))
+    try:
+        window.id_edit.setText("water")
+        window.input_edit.setText(str(example))
+        assert window.submit_engine_task() == "water"
+        window.run_queue()
+        assert spin_until(app, lambda: not window.bridge.is_running(), timeout=300)
+        assert window.scene_panel.pixmap() is not None, "3D 面板没有出图"
+        assert rendered and rendered[-1] > 2000, rendered
+        assert window.scene_panel.orbital_button.isEnabled(), "有 homo.cube 时轨道按钮应当可用"
+
+        rest = rendered[-1]
+        window.scene_panel.toggle_esp()
+        esp = rendered[-1]
+        window.scene_panel.toggle_orbital()
+        orbital = rendered[-1]
+        window.scene_panel.step_vibration()
+        vibration = rendered[-1]
+        assert esp != rest, (rest, esp)
+        assert orbital > esp, (esp, orbital)
+        assert vibration != orbital, (orbital, vibration)
+    finally:
+        window.close()

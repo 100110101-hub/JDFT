@@ -160,7 +160,10 @@ impl EngineBackend for RksBackend {
         .with_dipole(nalgebra::DVector::from_column_slice(&dipole))
         .with_orbitals(
             nalgebra::DVector::from_column_slice(result.mo_energies_hartree.as_slice()),
-            density_to_api(&result.density),
+            // K2 的 `mo_coeffs` 是**系数矩阵**（列 = MO）。之前这里塞的是密度矩阵，
+            // 字段名与内容不符；`RksResult.coefficients` 落定后改回正确的东西（P-10 的
+            // 轨道等值面也依赖它）。
+            density_to_api(&result.coefficients),
         )
         .with_log(format!(
             "method = {}, basis = {}, grid = {}, iterations = {}, E_elec = {:.10}, E_xc = {:.10}, dipole = [{:.4}, {:.4}, {:.4}] D",

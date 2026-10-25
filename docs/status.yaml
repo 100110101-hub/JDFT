@@ -741,7 +741,44 @@ P-09:
     已写进 README 的 `.venv` 安装行；测试用**硬导入**（缺它就让测试失败，不是 skip），
     免得 GUI 验收在缺依赖的机器上"静悄悄通过"。
     P-10（VTK 3D：分子/轨道/ESP/振动）还没做，T8 仍不算完成。
-P-10: {state: pending, depends: [P-09, G-02, F-02]}
+P-10:
+  state: done
+  ts: "2026-10-26T01:20:00Z"
+  artifact: |
+    qwb-studio/qwb_studio/gui/{scene3d.py（VTK 离屏场景：球棍分子、±isovalue 轨道等值面、
+    ESP 电荷着色、振动帧；`read_cube` 读 Gaussian cube）、scene_panel.py（Qt 面板，
+    "VTK 离屏渲染 → PNG → QLabel"，避开 PySide6/VTK 的 Qt 绑定版本坑）}
+    + **引擎侧的可视化产物**：`qwb run` 现在写 `artifacts/populations.json`（S-06 的
+    Mulliken/Löwdin 布居）与 `artifacts/{homo,lumo}.cube`（Gaussian cube，x 变化最快）
+    + qwb-scf 的 `RksResult.coefficients`（真 MO 系数矩阵）+ qwb-cli 的 `write_visual_artifacts`
+    + tests/test_scene3d.py（7 例）+ test_gui 里的 3D 集成用例
+  verification: |
+    判据（§7 P-10：打开 H2O 结果可视化正确；ESP 用 S-06 的电荷着色）逐条实测：
+    * **分子**：从真结果目录的 `input.yaml` 读 3 个原子（serde_yaml 的
+      "indentless sequence" 写法 —— 为此给 `yaml_min` 补了这条语法并有专门测试），
+      按共价半径猜出 2 条键；离屏渲染 480×360 得到 **> 2000 个非背景像素**，PNG > 5 KB。
+    * **ESP（S-06 着色）**：`artifacts/populations.json` 的 Löwdin 电荷
+      O −0.269 / H +0.134 各一；开 ESP 后画面像素差 > 1e4（确实换了颜色），
+      色标单调性另有单测（负→红、正→蓝、零→白）。
+    * **轨道**：`artifacts/homo.cube`（H2O/STO-3G，249 KB）→ marching cubes 在
+      ±0.02 上各出一张等值面（点数 > 500），开轨道后非背景像素从 32041 增到 78736。
+    * **振动帧**：给出位移向量后重建场景，画面与平衡帧差 > 1e4；
+      GUI 里"振动帧 ±"按钮切换后非背景像素从 78736 变到 60498。
+    * **GUI 集成**：真作业（`qwb run` H2O/STO-3G/SVWN5）从界面提交 → 结果面板 +
+      新 "3D" 页自动出图；ESP / 轨道 / 振动三个按钮逐一切换都有像素级断言；
+      结果目录缺 `env.json` 时 3D 面板显示"无法渲染"而不是崩溃。
+  note: |
+    三个工程决定写在代码里：
+    ① 引擎的 `JobResult.mo_coeffs` 之前塞的是**密度矩阵**（字段名与内容不符）——
+       补了 `RksResult.coefficients`（真 MO 系数）之后改回正确语义；轨道 cube 也因此可写。
+    ② VTK 用"离屏渲染 + PNG + QLabel"，不用 `QVTKRenderWindowInteractor`：后者要求
+       PySide6 与 VTK 的 Qt 绑定完全对齐，版本一错就 import 失败；而判据是"可视化正确"，
+       像素断言足够。
+    ③ cube 网格上限 2e6 点（0.35 Bohr 间距、4 Bohr 外扩），免得大分子写出几 GB；
+       超限直接报错，不静默截断。
+    仍未做：**振动帧接真实 Hessian 模式**（现在面板用一条演示位移；freq 作业还没把
+    Hessian/模式写进结果目录），以及 T8 判据点名的 "PBE/def2-SVP/opt" 全流程
+    （`opt` 作业类型还没接到 EngineBackend，见 T8）。
 
 # ─────────────────────────── V 轨（验证）───────────────────────────
 

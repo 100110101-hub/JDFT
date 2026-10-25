@@ -210,3 +210,43 @@ def test_molecule_yaml_roundtrip() -> None:
     again = Molecule.model_validate(yaml_loads(yaml_dumps(molecule.model_dump(mode="json"))))
     assert again == molecule
     assert again.atoms[1].position_angstrom == (0.0, 0.0, 0.7414)
+
+
+SERDE_STYLE_DOCUMENT = """\
+molecule:
+  atoms:
+  - symbol: O
+    position_angstrom:
+    - 0.0
+    - 0.0
+    - 0.0
+  - symbol: H
+    position_angstrom:
+    - 0.0
+    - 0.757
+    - 0.586
+  charge: 0
+  multiplicity: 1
+basis_name: sto-3g
+method_name: svwn5
+grid_level: normal
+options:
+  scf_max_iter: 128
+  ecp_name: null
+"""
+
+
+def test_parses_serde_yaml_style_documents() -> None:
+    """Rust 侧 `serde_yaml` 写出的写法：紧凑序列项 + **indentless sequence**。
+
+    引擎写进结果目录的 `input.yaml` 就是这种形态（`atoms:` 下面直接顶格写 `- symbol: O`），
+    解析器不认它就读不了自己的产物 —— P-10 的 3D 视图正是踩在这里之后补上的。
+    """
+    document = yaml_loads(SERDE_STYLE_DOCUMENT)
+    molecule = document["molecule"]
+    assert molecule["charge"] == 0
+    assert molecule["multiplicity"] == 1
+    assert [atom["symbol"] for atom in molecule["atoms"]] == ["O", "H"]
+    assert molecule["atoms"][1]["position_angstrom"] == [0.0, 0.757, 0.586]
+    assert document["options"]["scf_max_iter"] == 128
+    assert document["options"]["ecp_name"] is None

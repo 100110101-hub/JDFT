@@ -298,8 +298,179 @@ fn execute_job(input: &JobInput, task_id: &str, out_root: &Path) -> CliResult<f6
     log.push_str(&result.log);
     log.push('\n');
     write("log.txt", log.into_bytes())?;
+    write_visual_artifacts(&root, input, &result, &task_dir)?;
     println!("scf     converged = {}", result.scf_converged);
     Ok(result.energy_hartree)
+}
+
+/// 写可视化的附带产物到 `artifacts/`（K3 允许，`artifacts/**` 是自由形态）。
+///
+/// * `populations.json`：S-06 的 Mulliken / Löwdin 布居（P-10 的 ESP 着色用它）；
+/// * `homo.cube` / `lumo.cube`：Gaussian cube 格式的轨道等值面输入（P-10 的 3D 轨道）。
+///
+/// 失败不致命（例如基组里出现还没实现的角动量）—— 但**不静默**：返回 `CliError::internal`，
+/// 因为"结果目录缺可视化产物"应该是看得见的。
+fn write_visual_artifacts(
+    root: &std::path::Path,
+    input: &JobInput,
+    result: &qwb_engine_api::JobResult,
+    task_dir: &std::path::Path,
+) -> CliResult<()> {
+    use qwb_registry::elements::atomic_number;
+
+    let registry = qwb_registry::Registry::open(root).map_err(|e| CliError::from_engine(&e))?;
+    let basis = qwb_basis::InternalBasis::build(
+        registry
+            .get_basis(&input.basis_name)
+            .map_err(|e| CliError::from_engine(&e))?,
+        &input.molecule,
+    )
+    .map_err(|e| CliError::from_engine(&e))?;
+    let one = qwb_integrals::one_electron::one_electron(&basis, &input.molecule)
+        .map_err(|e| CliError::from_engine(&e))?;
+
+    let electrons: i32 = input
+        .molecule
+        .atoms
+        .iter()
+        .map(|atom| atomic_number(&atom.symbol).map_or(0, |z| z as i32))
+        .sum::<i32>()
+        - input.molecule.charge;
+    if electrons <= 0 || electrons % 2 != 0 {
+        return Err(CliError::input(format!(
+            "cannot write orbitals for {electrons} electrons (closed-shell only)"
+        )));
+    }
+    let n_occ = (electrons / 2) as usize;
+    let n = basis.n_functions();
+    let coefficients = result
+        .mo_coeffs
+        .as_ref()
+        .ok_or_else(|| CliError::internal("result has no MO coefficients".to_string()))?;
+    if coefficients.nrows() != n {
+        return Err(CliError::internal(format!(
+            "MO coefficient rows {} != basis size {n}",
+            coefficients.nrows()
+        )));
+    }
+
+    // 密度 P = 2 Σ_{i<n_occ} c_i c_iᵀ（K3 的 mo_coeffs 现在是真的系数矩阵）
+    let mut density = qwb_linalg::Matrix::zeros(n, n);
+    for i in 0..n {
+        for j in 0..n {
+            let mut sum = 0.0;
+            for orbital in 0..n_occ.min(coefficients.ncols()) {
+                sum += coefficients[(i, orbital)] * coefficients[(j, orbital)];
+            }
+            density[(i, j)] = 2.0 * sum;
+        }
+    }
+
+    let populations = qwb_props::populations(&basis, &input.molecule, &one.overlap, &density)
+        .map_err(|e| CliError::internal(format!("populations: {e}")))?;
+    let payload = serde_json::json!({
+        "mulliken_ao": populations.mulliken_ao,
+        "mulliken_atoms": populations.mulliken_atoms,
+        "lowdin_ao": populations.lowdin_ao,
+        "lowdin_atoms": populations.lowdin_atoms,
+        "mulliken_charges": populations.mulliken_charges,
+        "lowdin_charges": populations.lowdin_charges,
+        "n_electrons": electrons,
+    });
+    std::fs::write(
+        task_dir.join("artifacts").join("populations.json"),
+        serde_json::to_vec_pretty(&payload)
+            .map_err(|e| CliError::internal(format!("populations json: {e}")))?,
+    )
+    .map_err(|e| CliError::internal(format!("cannot write populations.json: {e}")))?;
+
+    // 轨道 cube：HOMO = n_occ-1，LUMO = n_occ（若存在）
+    for (label, orbital) in [("homo", n_occ.saturating_sub(1)), ("lumo", n_occ)] {
+        if orbital >= coefficients.ncols() {
+            continue;
+        }
+        let column: Vec<f64> = (0..n).map(|mu| coefficients[(mu, orbital)]).collect();
+        let text = orbital_cube(&basis, &input.molecule, &column)?;
+        std::fs::write(
+            task_dir.join("artifacts").join(format!("{label}.cube")),
+            text,
+        )
+        .map_err(|e| CliError::internal(format!("cannot write {label}.cube: {e}")))?;
+    }
+    Ok(())
+}
+
+/// 把一条 MO 写成 Gaussian cube（x 变化最快），给 P-10 的 marching cubes 用。
+fn orbital_cube(
+    basis: &qwb_basis::InternalBasis,
+    molecule: &qwb_engine_api::Molecule,
+    column: &[f64],
+) -> CliResult<Vec<u8>> {
+    const SPACING_BOHR: f64 = 0.35;
+    const PADDING_BOHR: f64 = 4.0;
+    let positions: Vec<[f64; 3]> = molecule
+        .atoms
+        .iter()
+        .map(|atom| atom.position_bohr())
+        .collect();
+    let mut lower = [f64::INFINITY; 3];
+    let mut upper = [f64::NEG_INFINITY; 3];
+    for position in &positions {
+        for axis in 0..3 {
+            lower[axis] = lower[axis].min(position[axis] - PADDING_BOHR);
+            upper[axis] = upper[axis].max(position[axis] + PADDING_BOHR);
+        }
+    }
+    let mut counts = [0usize; 3];
+    for axis in 0..3 {
+        counts[axis] = (((upper[axis] - lower[axis]) / SPACING_BOHR).ceil() as usize).max(2);
+    }
+    // 上限保护：免得一个 100 原子的分子写出几 GB 的 cube
+    if counts.iter().product::<usize>() > 2_000_000 {
+        return Err(CliError::internal(
+            "orbital cube grid too large (> 2e6 points)".to_string(),
+        ));
+    }
+
+    let mut out = String::new();
+    out.push_str("qwb orbital cube (x varies fastest)\n");
+    out.push_str("values = sum_mu c_mu phi_mu, Bohr\n");
+    out.push_str(&format!(
+        "{} {:.6} {:.6} {:.6}\n",
+        positions.len(),
+        lower[0],
+        lower[1],
+        lower[2]
+    ));
+    out.push_str(&format!("{} {SPACING_BOHR:.6} 0.0 0.0\n", counts[0]));
+    out.push_str(&format!("{} 0.0 {SPACING_BOHR:.6} 0.0\n", counts[1]));
+    out.push_str(&format!("{} 0.0 0.0 {SPACING_BOHR:.6}\n", counts[2]));
+    for (atom, position) in molecule.atoms.iter().zip(positions.iter()) {
+        let z = qwb_registry::elements::atomic_number(&atom.symbol).unwrap_or(0);
+        out.push_str(&format!(
+            "{} {} {:.6} {:.6} {:.6}\n",
+            z, z, position[0], position[1], position[2]
+        ));
+    }
+    for ix in 0..counts[0] {
+        for iy in 0..counts[1] {
+            for iz in 0..counts[2] {
+                let point = [
+                    lower[0] + SPACING_BOHR * ix as f64,
+                    lower[1] + SPACING_BOHR * iy as f64,
+                    lower[2] + SPACING_BOHR * iz as f64,
+                ];
+                let values =
+                    qwb_scf::rks::ao_value(basis, point).map_err(|e| CliError::from_engine(&e))?;
+                let mut total = 0.0;
+                for (mu, value) in values.iter().enumerate() {
+                    total += column[mu] * value;
+                }
+                out.push_str(&format!("{total:.6e}\n"));
+            }
+        }
+    }
+    Ok(out.into_bytes())
 }
 
 /// 队列里的一条记录（K3 的状态名原样保存）。
