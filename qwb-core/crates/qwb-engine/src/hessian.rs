@@ -204,6 +204,24 @@ pub fn numerical_hessian(
     molecule: &Molecule,
     options: &OptOptions,
 ) -> Result<HessianResult, EngineError> {
+    numerical_hessian_with_delta(registry, molecule, options, HESSIAN_DELTA_BOHR)
+}
+
+/// 与 [`numerical_hessian`] 相同，但显式给差分步长（单位 **Bohr**）。
+///
+/// 存在的理由：中心差分 Hessian 有 `O(δ²)` 的**非谐**误差，步长选多大要用实测说话
+/// （T4 的频率判据就吃过这个亏 —— `HESSIAN_DELTA_BOHR = 1e-2` 与 `5e-3` 的伸缩模
+/// 能差几十 cm⁻¹）。生产路径固定用 [`HESSIAN_DELTA_BOHR`]，这个入口留给收敛性研究。
+///
+/// # Errors
+///
+/// 同 [`numerical_hessian`]。
+pub fn numerical_hessian_with_delta(
+    registry: &Registry,
+    molecule: &Molecule,
+    options: &OptOptions,
+    delta_bohr: f64,
+) -> Result<HessianResult, EngineError> {
     let natoms = molecule.atoms.len();
     let dof = 3 * natoms;
     // 每个位移需要 ±δ 两个几何的梯度
@@ -216,12 +234,7 @@ pub fn numerical_hessian(
             &displacements,
             |(atom, axis)| {
                 let plus = analytic_gradient_flat_for(
-                    registry,
-                    molecule,
-                    options,
-                    *atom,
-                    *axis,
-                    HESSIAN_DELTA_BOHR,
+                    registry, molecule, options, *atom, *axis, delta_bohr,
                 )?;
                 let minus = analytic_gradient_flat_for(
                     registry,
@@ -229,11 +242,11 @@ pub fn numerical_hessian(
                     options,
                     *atom,
                     *axis,
-                    -HESSIAN_DELTA_BOHR,
+                    -delta_bohr,
                 )?;
                 let mut row = Vec::with_capacity(dof);
                 for k in 0..dof {
-                    row.push((plus[k] - minus[k]) / (2.0 * HESSIAN_DELTA_BOHR));
+                    row.push((plus[k] - minus[k]) / (2.0 * delta_bohr));
                 }
                 Ok(row)
             },
