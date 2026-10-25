@@ -359,37 +359,37 @@ G-01:
   state: done
   depends: [S-03]
   verification: |
-    cargo test -p qwb-scf --test g01_analytic（已去掉 #[ignore]，H2/STO-3G，R = 0.74 与 1.10 Å）：
+    cargo test -p qwb-scf --test g01_analytic（H2/STO-3G，R = 0.74 与 1.10 Å）：
     解析梯度 vs 全弛豫中心差分，最大分量差 3.4e-9 Ha/Bohr（验收 < 1e-6）。
-    g01_components：把梯度拆成 动能 / 核吸引(AO 移动) / 核吸引(核移动) / 2e / Pulay / 核排斥 六项，
+    g01_components：把梯度拆成 动能 / 核吸引(AO 移动) / 核吸引(核移动) / 2e(库仑) / 2e(交换) / Pulay / 核排斥，
     逐项对固定密度差分断言 < 1e-6 —— 这是修 bug 时唯一可靠的定位手段。
     g01_nuclear_derivative（核移动闭式 vs primitive_nuclear 中心差分，含宇称零点）与 g01_2e_primitive
-    （d_ssss 四槽位置换 vs primitive_ssss 差分）各 1e-11 通过。
-    boys::tests 7 例：两支在 x = 30 附近相对差 < 1e-14，F0(60) 贴合渐近值（旧实现错 4 倍）。
+    （d_ssss 四槽位置换 vs primitive_ssss 差分）各 1e-11 通过。boys::tests 7 例两支在 x = 30 附近
+    相对差 < 1e-14、F0(60) 贴合渐近值。
+    **KS（LDA/GGA/杂化）分支（2026-10-25 补齐）**：
+    * `qwb-engine/tests/g01_analytic_pbe.rs`（3 例，active）：H2/STO-3G，解析 vs 数值
+      —— LSDA **1.24e-6**、PBE **8.40e-7**（判据 < 5e-6）；另有"解析–数值差必须小于数值参照
+      自身散布的 10 倍"的对照（散布 5.13e-7），把"碰巧对上"排除。
+    * `qwb-scf/tests/gga_xc_gradient.rs`（4 例）：`ao_hessian` 对 AO 梯度差分 2.4e-10、
+      `ao_laplacian_derivative` 对 `ao_laplacian` 差分 7.1e-10、`xc_gradient_terms` 对
+      "位移几何重算网格、密度固定"的能量差分 —— PBE 8.1e-7、B3LYP 组合 2.5e-7。
   note: |
-    **已完成。** 三处真错：(a) 抬阶恒等式符号写反（应为 +2*alpha*抬阶项，我写成 -2*alpha）；
-    (b) 核排斥导数漏负号（E_nuc = Z_AZ_B/r  =>  dE/dR_A = -Z_AZ_B*(R_A - R_B)/r^3）；
-    (c) Boys 函数在大 T 下整体失效（同一处修复也解决了 I-02 的 2.09 Ha 水缺口）。
-    两条符号错互相抵消了一部分，使总误差看起来只有 0.0111 而不是 1.02，白费了一轮排查；
-    结构上的对策是 gradient_components 六项逐项断言，任一项写反立刻单点报错。
-    **范围限制（未变）**：只支持 s 型基组，l > 0 显式返回 Unsupported，所以 H2O 的解析梯度尚不可用
-    （O 有 2p）。**已知缺口**：qwb-engine/tests/g01_numeric_gradient.rs 的 CH2 平移不变性残差 1.0e-4
-    （z 分量），换细网格不变小（coarse -1.007e-4 / normal -2.121e-4），Boys 修复后数字完全没变
-    => 与积分精度无关，疑为 FD 两侧落不同 SCF 解（未验证），该测试已 #[ignore] 并写明数字。
-    下一步（G-02/T3）：把 l > 0 的 +-1 幂次组合补进积分导数，再用 H2O 接几何优化。
-
-    **本轮（55）把范围限制解除**：解析梯度现在支持**任意角动量**（含球谐 d）。两条推广都不需要新积分：
-    ① 抬/降幂恒等式 `d = 2α·抬阶 − a_x·降阶`，1e/Pulay/2e 全是这一个套路，而
-    `hermite2e::primitive_component` 本来就吃任意幂次；② 球谐壳层先用 `T` 把密度展开到直角分量
-    （`ρ̃ = Tᵀ P T`），在直角基上求导，再直接求和（梯度是标量）。
-    核吸引里「核本身在动」那一项也不再需要显式闭式：`⟨a_A|−Z/r_C|b_B⟩` 只依赖 `A−C`、`B−C`，
-    所以 `∂/∂C = −(∂/∂A + ∂/∂B)`（C 固定），右边正是已有能力。s 型的闭式仍保留，只给
-    `g01_nuclear_derivative` 独立钉住它（它当初写错过）。
-    新验收：`qwb-engine/tests/g01_analytic_water.rs`——H2O/STO-3G（**含 p**）的解析梯度 vs 数值梯度，
-    最大分量差 6.7e-7 Ha/Bohr（数值参照自己在 δ=1e-3 与 4e-3 之间的散布是 9.3e-6，所以解析值
-    落在参照的噪声里），平移不变性 1e-15。
-    **过程中抓到的一个真 bug**：2e 的交换项槽位顺序是 `(ac|bd)`，我把索引换了位却忘了把**指数**
-    一起换位，结果把 A 的指数配到 C 的中心上——误差 1.3e-1。修好后 6.7e-7。
+    **已完成。** 早期三处真错：(a) 抬阶恒等式符号写反；(b) 核排斥导数漏负号；
+    (c) Boys 函数在大 T 下整体失效（也修掉 I-02 的 2.09 Ha 水缺口）。对策是
+    `gradient_components` 逐项断言，任一项写反立刻单点报错。
+    **2026-10-25：KS 解析梯度收口。** 原来记的"缺 ⋿v_xc ∂ρ/∂R|_P"只是**一半**，真凶有两条：
+    ① 确实缺 XC 能量的显式基组运动项 —— ρ 通道用一阶 AO 导数、σ 通道用 `ao_hessian`、
+       LYP 的 `∇²ρ` 通道用 `ao_laplacian_derivative`；
+    ② **`gradient_components` 的 2e 骨架项与 Pulay 的 F 都按 HF 写死**（库仑+交换，`F = H+J−½K`）。
+       纯泛函没有 HF 交换，这条凭空多出的 `−½K` 造成 8.8e-2 Ha/Bohr 的偏差。
+    修法：2e 拆成 `two_electron_coulomb` / `two_electron_exchange`，`F_KS = H + J − ½α_hf K + v_xc`，
+    交换项乘 `α_hf`；并由 `rks_analytic_gradient` **自己搭 Fock**，不给调用方漏项的机会。
+    **没算的项（如实记）**：网格权重/网格点随原子移动的导数没有算。残留量按网格等级实测
+    （H2/STO-3G/B3LYP，δ=1e-3 Bohr）：coarse 2.26e-6 / normal 7.29e-8 / fine 2.64e-8 /
+    veryfine 2.25e-8 —— 随网格收敛，正是"权重导数项"的特征，不是公式漏项。
+    详细复盘见 docs/choices.md §三十八。
+    仍然挂着的旧缺口：`g01_numeric_gradient.rs` 的 CH2 平移不变性残差 1.0e-4（z），
+    换细网格不变小，疑为 FD 两侧落不同 SCF 解；该测试仍 `#[ignore]` 并写明数字。
 G-02:
   state: in_progress
   ts: "2026-10-24T22:00:00Z"
@@ -833,11 +833,15 @@ T4:
          （1595 / 3657 / 3756 cm⁻¹）比。实测两档：
          * **STO-3G**（158 秒跑完，`f02_frequencies`）：标度后 1972 / 3764 / 3992 cm⁻¹，
            与实验差 **+377 / +107 / +236 cm⁻¹** —— 达不到 30 cm⁻¹，是模型化学的问题；
-         * **6-311G(d,p)**：**6003 秒仍未跑完**（Hessian 要 18 次解析梯度，单次在 31 个
-           笛卡尔基函数上是 O(n⁴·prim⁴) ≈ 1e9 次原函数求值）。
-         已先把 2e 导数从"每个原子-轴各扫一遍"改成"一次遍历 quartet、四中心累加"
-         （约 5–7 倍的理论冗余去掉了），但绝对量级仍然太大。
-         ⇒ 要过这条判据必须先做**2e 导数的 Schwarz 预筛/收缩层优化**（choices 三十五之补）。
+         * **6-311G(d,p)**：**6003 秒仍未跑完**（当时 Hessian 每个位移都要先跑一次
+           **数值**梯度，等于 `6N × 3N × 2` 次 SCF）。2026-10-25 已把 Hessian 接到
+           `rks_analytic_gradient`（HF 与 KS 都走解析梯度），每个位移只要 1 次 SCF
+           —— 理论上 `3N` 倍；`f01_hessian_water` 复测（HF/STO-3G，优化 + Hessian）
+           568 s，频率数值与旧实现逐位相同（2169.4 / 4140.8 / 4392.0，ZPE 5351.1），
+           说明换路径没有改变物理结果。**6-311G(d,p) 的 Hessian 需要在新路径上重测**，
+           这是下一步。
+         ⇒ 若新路径下 30 cm⁻¹ 仍不过，再考虑 **2e 导数的 Schwarz 预筛/收缩层优化**
+           （choices 三十五之补）。
       `scripts/verify.ps1` 在本轮改动之后实测 **19/19 全绿**。
   note: |
     这一轮把热化学落地时修掉四个真实错误（都在换算/单位上，不涉及物理模型）：
@@ -876,8 +880,14 @@ T6:
     CO 与苯在 #[ignore] 的慢测试里。scripts/verify.ps1 于本轮实测 **19/19 全绿**。
     判据 2（HF 混合系数 0.20 与定义一致）：`RksOptions.hf_exchange = 0.20`，权重线性性在
     d12_b3lyp.rs（四个权重同乘 0.5 → E_xc 精确减半）。
-    判据 3（B3LYP 梯度有限差分一致 < 1e-6）：**未做**——KS 解析梯度缺 v_xc 的基组移动项
-    （choices 二十四节），只能走数值梯度。
+    判据 3（B3LYP 梯度有限差分一致 < 1e-6）：**通过（2026-10-25）**。
+      `qwb-engine/tests/t6_b3lyp_gradient.rs`：H2/STO-3G/B3LYP（程序化构造的四个组件 +
+      α_hf=0.20），`grid-normal` 上解析梯度 vs 手工中心差分（δ=1e-3 与 8e-4 两个步长）
+      最大差 **7.29e-8 Ha/Bohr**（判据 < 1e-6），数值参照自身散布 7.2e-9。
+      同一测试的 `#[ignore]` 慢档把"没算网格权重导数"的残留量按网格等级记下来了：
+      coarse 2.26e-6 / normal 7.29e-8 / fine 2.64e-8 / veryfine 2.25e-8（随网格收敛）。
+      背景：这条判据原来卡在"KS 解析梯度缺 ⋿v_xc ∂ρ/∂R|_P"，本轮补齐时发现还有第二处
+      ——2e 骨架项与 Pulay 的 F 按 HF 写死（纯泛函不该有 `−½K`），详见 G-01 与 choices 三十八。
   note: |
     **不能判 done 的原因**：水上差 19 mHa。已排除网格（coarse → normal 只挪 5e-5 Ha）、
     基组/几何/积分（HF 差 1.9e-7）、LDA 两项（LSDA 差 1.7e-6）。同一条线索上 PBE 差得更多
@@ -886,6 +896,10 @@ T6:
     已排除的假设（都留了实测）：点值公式（与 libxc 逐点相符）、PBE 相关的 LDA 基从 VWN5
     换成 PW_MOD（会把 PBE 再压低 0.56 Ha，方向相反）、网格等级、电子数/∫ρ、能量记账。
     剩下的唯一可疑环节是网格点上 (ρ,σ) 的配对（docs/unblock.md 八之补四）。
+    **当前只剩一件事没实测**：苯（42 基函数 × 五泛函）的 CCCBDB 数值 —— PBE 在苯上 400 步
+    不收敛（`t06_benzene` 的 known-failure），B3LYP 收敛且实测 −1.16 mHa（D-12，grid-normal）。
+    四个"判据 3"之外的三条判据（总能量 < 2 mHa、α_hf=0.20 与定义一致、B3LYP 梯度 < 1e-6）
+    现在全部有可执行证据。
 T7:
   state: done
   ts: "2026-11-03T04:30:00Z"

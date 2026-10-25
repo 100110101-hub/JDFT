@@ -205,8 +205,16 @@ pub struct GradientComponents {
     pub nuclear_ao: Vec<[f64; 3]>,
     /// `Tr(P dV/dR)` 里「核本身在动」的那一半。
     pub nuclear_center: Vec<[f64; 3]>,
-    /// 2e 项。
+    /// 2e 项（`库仑 + α_hf·交换`，`α_hf = 1` 即 HF；保留给"全 HF"的调用方）。
     pub two_electron: Vec<[f64; 3]>,
+    /// 2e 项里的**库仑**部分（`½ Σ P P (μν|λσ)^R`）。
+    pub two_electron_coulomb: Vec<[f64; 3]>,
+    /// 2e 项里的**交换**部分（`−¼ Σ P P (μλ|νσ)^R`，即 `α_hf = 1` 时的值）。
+    ///
+    /// 纯泛函（LDA/GGA）没有这一项，杂化泛函要乘 `α_hf`；把它单独拆出来，
+    /// 才不会把 HF 交换当成 KS 能量的一部分（这是 `g01_analytic_pbe` 一开始
+    /// 差 8.8e-2 的根因）。
+    pub two_electron_exchange: Vec<[f64; 3]>,
     /// `−Tr(W dS)`。
     pub pulay: Vec<[f64; 3]>,
     /// 核排斥导数。
@@ -337,14 +345,15 @@ fn quartet_derivative(
 }
 
 /// 2e 项：`½ Σ ρ̃ρ̃ [d(ab|cd) − ½ d(ac|bd)]`。
-fn two_electron_all(cartesian: &[CartAo], density: &Matrix) -> Vec<[f64; 3]> {
+fn two_electron_all(cartesian: &[CartAo], density: &Matrix) -> (Vec<[f64; 3]>, Vec<[f64; 3]>) {
     let n = cartesian.len();
     let natoms = cartesian
         .iter()
         .map(|orbital| orbital.center_index)
         .max()
         .map_or(0, |index| index + 1);
-    let mut out = vec![[0.0_f64; 3]; natoms];
+    let mut coulomb_out = vec![[0.0_f64; 3]; natoms];
+    let mut exchange_out = vec![[0.0_f64; 3]; natoms];
     // 原函数归一化只与（轨道、指数）有关：**预先算一次**，不要在 3N 遍里反复算。
     let norms: Vec<Vec<f64>> = cartesian
         .iter()
@@ -419,18 +428,18 @@ fn two_electron_all(cartesian: &[CartAo], density: &Matrix) -> Vec<[f64; 3]> {
                     for slot in 0..4 {
                         let atom = cartesian[coulomb_owners[slot]].center_index;
                         for axis in 0..3 {
-                            out[atom][axis] += factor * coulomb[slot][axis];
+                            coulomb_out[atom][axis] += factor * coulomb[slot][axis];
                         }
                         let atom = cartesian[exchange_owners[slot]].center_index;
                         for axis in 0..3 {
-                            out[atom][axis] -= factor * 0.5 * exchange[slot][axis];
+                            exchange_out[atom][axis] -= factor * 0.5 * exchange[slot][axis];
                         }
                     }
                 }
             }
         }
     }
-    out
+    (coulomb_out, exchange_out)
 }
 
 /// 核排斥导数：`−Σ_B Z_A Z_B (R_A − R_B)_axis / |R_A − R_B|³`。
@@ -540,13 +549,16 @@ pub fn gradient_components(
 
     // 2e 导数是整条梯度里最贵的一段：一次遍历 quartet、把四个中心分别累加，
     // 不要按 3N 个坐标各扫一遍 n^4（旧实现就是那样，实测 5–7 倍浪费）。
-    let two_electron_all = two_electron_all(&cartesian, &density_cart);
+    // 库仑与交换分开返回：纯泛函没有交换项，杂化泛函要按 α_hf 缩放。
+    let (two_electron_coulomb, two_electron_exchange) = two_electron_all(&cartesian, &density_cart);
 
     let mut components = GradientComponents {
         kinetic: vec![[0.0; 3]; natoms],
         nuclear_ao: vec![[0.0; 3]; natoms],
         nuclear_center: vec![[0.0; 3]; natoms],
         two_electron: vec![[0.0; 3]; natoms],
+        two_electron_coulomb: vec![[0.0; 3]; natoms],
+        two_electron_exchange: vec![[0.0; 3]; natoms],
         pulay: vec![[0.0; 3]; natoms],
         nuclear_repulsion: vec![[0.0; 3]; natoms],
     };
@@ -628,7 +640,10 @@ pub fn gradient_components(
             components.pulay[atom][axis] = pulay;
             components.nuclear_center[atom][axis] =
                 nuclear_center_axis(&cartesian, &density_cart, &nuclei, atom, axis);
-            components.two_electron[atom][axis] = two_electron_all[atom][axis];
+            components.two_electron_coulomb[atom][axis] = two_electron_coulomb[atom][axis];
+            components.two_electron_exchange[atom][axis] = two_electron_exchange[atom][axis];
+            components.two_electron[atom][axis] =
+                two_electron_coulomb[atom][axis] + two_electron_exchange[atom][axis];
             components.nuclear_repulsion[atom][axis] = nuclear_repulsion_axis(&nuclei, atom, axis);
         }
     }

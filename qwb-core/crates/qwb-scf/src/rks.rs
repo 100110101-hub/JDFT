@@ -1135,3 +1135,555 @@ pub fn rks_from_data(
 
     rks_scf(&basis, molecule, &tensor, &grid, &terms, options)
 }
+
+// ---------------------------------------------------------------------------
+// Kohn–Sham 解析梯度的 XC 显式项（G-01 / T6）
+// ---------------------------------------------------------------------------
+
+/// 每个 AO 在 `point` 处的**二阶导数张量** `∂²φ_μ/∂r_i∂r_j`（对称 3×3）。
+///
+/// 为什么需要它：GGA 的 XC 梯度里有 σ 通道，`σ = |∇ρ|²`，于是
+/// `∂σ/∂R_A = 2∇ρ·∂(∇ρ)/∂R_A`，而 `∂(∇φ_μ)/∂R_A = −∂²φ_μ/∂r_i∂r_j`
+/// —— 就是这里的量。只靠一阶 AO 导数写不出这一项（HF 没有它，所以这个缺口
+/// 直到把 Fock 换成 KS 才暴露）。
+///
+/// 对笛卡尔分量 `φ = N·u_x^a u_y^b u_z^c e^{−αu²}`（`u = r − A`）：
+///
+/// ```text
+/// ∂²/∂u_i∂u_j (g·e^{−αu²}) = e^{−αu²}[ ∂_i∂_j g − 2α(u_j ∂_i g + u_i ∂_j g) − 2α δ_ij g + 4α² u_i u_j g ]
+/// ```
+///
+/// 令 `j = i` 就退回 `ao_laplacian` 里那条闭式（`a(a−1)u^{a−2} − 2α(2a+1)u^a + 4α²u^{a+2}`），
+/// 两条公式的一致性由 `gga_ao_gradient` 的有限差分测试覆盖。
+///
+/// # Errors
+///
+/// 球谐变换维度不一致（`l >= 2` 的球谐壳层）。
+pub fn ao_hessian(
+    basis: &InternalBasis,
+    point: [f64; 3],
+) -> Result<Vec<[[f64; 3]; 3]>, EngineError> {
+    let mut hessian = vec![[[0.0_f64; 3]; 3]; basis.n_functions()];
+    for shell in basis.shells() {
+        let components = cartesian_components(shell.l);
+        let d = [
+            point[0] - shell.center_bohr[0],
+            point[1] - shell.center_bohr[1],
+            point[2] - shell.center_bohr[2],
+        ];
+        let r2 = d[0] * d[0] + d[1] * d[1] + d[2] * d[2];
+        let mut cartesian = [[[0.0_f64; 3]; 3]; MAX_CARTESIAN];
+        for (component, powers) in components.iter().enumerate() {
+            let p = [powers.0, powers.1, powers.2];
+            for (alpha, coefficient) in shell.exponents.iter().zip(&shell.coefficients) {
+                let norm = primitive_norm((p[0], p[1], p[2]), *alpha);
+                let weight = coefficient * norm * (-alpha * r2).exp();
+                let monomial = |exponents: [u32; 3]| {
+                    d[0].powi(i32::try_from(exponents[0]).expect("small"))
+                        * d[1].powi(i32::try_from(exponents[1]).expect("small"))
+                        * d[2].powi(i32::try_from(exponents[2]).expect("small"))
+                };
+                for i in 0..3 {
+                    for j in 0..3 {
+                        let mut term = 0.0;
+                        // ∂_i∂_j g（单变量二阶 / 混合二阶）
+                        if i == j {
+                            if p[i] >= 2 {
+                                let mut lowered = p;
+                                lowered[i] -= 2;
+                                term += f64::from(p[i] * (p[i] - 1)) * monomial(lowered);
+                            }
+                        } else if p[i] >= 1 && p[j] >= 1 {
+                            let mut lowered = p;
+                            lowered[i] -= 1;
+                            lowered[j] -= 1;
+                            term += f64::from(p[i] * p[j]) * monomial(lowered);
+                        }
+                        // −2α(u_j ∂_i g + u_i ∂_j g)
+                        if p[i] >= 1 {
+                            let mut shifted = p;
+                            shifted[i] -= 1;
+                            shifted[j] += 1;
+                            term -= 2.0 * alpha * f64::from(p[i]) * monomial(shifted);
+                        }
+                        if p[j] >= 1 {
+                            let mut shifted = p;
+                            shifted[j] -= 1;
+                            shifted[i] += 1;
+                            term -= 2.0 * alpha * f64::from(p[j]) * monomial(shifted);
+                        }
+                        // −2α δ_ij g
+                        if i == j {
+                            term -= 2.0 * alpha * monomial(p);
+                        }
+                        // +4α² u_i u_j g
+                        let mut raised = p;
+                        raised[i] += 1;
+                        raised[j] += 1;
+                        term += 4.0 * alpha * alpha * monomial(raised);
+                        cartesian[component][i][j] += weight * term;
+                    }
+                }
+            }
+        }
+        // 球谐变换作用在每个 (i,j) 分量上（与 `ao_value_and_gradient` 同一套写法）。
+        let range = if shell.angular == qwb_registry::Angular::Spherical {
+            spherical_count(shell.l)
+        } else {
+            components.len()
+        };
+        for i in 0..3 {
+            for j in 0..3 {
+                let mut slice = [0.0_f64; MAX_CARTESIAN];
+                for component in 0..components.len() {
+                    slice[component] = cartesian[component][i][j];
+                }
+                let mut flat = [0.0_f64; MAX_CARTESIAN];
+                write_transformed(
+                    &mut flat,
+                    0,
+                    &slice[..components.len()],
+                    shell.l,
+                    shell.angular,
+                )?;
+                for slot in 0..range {
+                    hessian[shell.first_function + slot][i][j] = flat[slot];
+                }
+            }
+        }
+    }
+    Ok(hessian)
+}
+
+/// 每个 AO 的**拉普拉斯量的中心导数** `∂(∇²φ_μ)/∂r_a`（`a = 0,1,2`）。
+///
+/// 为什么需要它：LYP（B3LYP 的组件之一）的能量密度依赖 `∇²ρ`，于是 XC 梯度里有
+/// `(ρ·∂ε/∂∇²ρ)·∂(∇²ρ)/∂R` 一项，而 `∂(∇²ρ)` 里含 `∂(∇²φ_μ)/∂R = −∂_a(∇²φ_μ)`。
+///
+/// 对笛卡尔分量 `∇²φ = Σ_prims w·L(u)`（`L` 是 `ao_laplacian` 里那串多项式），
+/// 把 `∂_a` 作用上去：`∂_a(w·L) = w·(∂_a L − 2α u_a L)`。
+///
+/// # Errors
+///
+/// 球谐变换维度不一致。
+pub fn ao_laplacian_derivative(
+    basis: &InternalBasis,
+    point: [f64; 3],
+) -> Result<Vec<[f64; 3]>, EngineError> {
+    let mut derivatives = vec![[0.0_f64; 3]; basis.n_functions()];
+    for shell in basis.shells() {
+        let components = cartesian_components(shell.l);
+        let d = [
+            point[0] - shell.center_bohr[0],
+            point[1] - shell.center_bohr[1],
+            point[2] - shell.center_bohr[2],
+        ];
+        let r2 = d[0] * d[0] + d[1] * d[1] + d[2] * d[2];
+        let mut cartesian = [[0.0_f64; 3]; MAX_CARTESIAN];
+        for (component, powers) in components.iter().enumerate() {
+            let p = [powers.0, powers.1, powers.2];
+            for (alpha, coefficient) in shell.exponents.iter().zip(&shell.coefficients) {
+                let norm = primitive_norm((p[0], p[1], p[2]), *alpha);
+                let weight = coefficient * norm * (-alpha * r2).exp();
+                let monomial = |exponents: [u32; 3]| {
+                    d[0].powi(i32::try_from(exponents[0]).expect("small"))
+                        * d[1].powi(i32::try_from(exponents[1]).expect("small"))
+                        * d[2].powi(i32::try_from(exponents[2]).expect("small"))
+                };
+                // L(u) 本身（与 ao_laplacian 同式）
+                let mut lap_polynomial = 0.0;
+                for k in 0..3 {
+                    if p[k] >= 2 {
+                        let mut lowered = p;
+                        lowered[k] -= 2;
+                        lap_polynomial += f64::from(p[k] * (p[k] - 1)) * monomial(lowered);
+                    }
+                    lap_polynomial -= 2.0 * alpha * (2.0 * f64::from(p[k]) + 1.0) * monomial(p);
+                    let mut raised = p;
+                    raised[k] += 2;
+                    lap_polynomial += 4.0 * alpha * alpha * monomial(raised);
+                }
+                for a in 0..3 {
+                    // ∂_a L(u)
+                    let mut derivative = 0.0;
+                    for k in 0..3 {
+                        if p[k] >= 2 {
+                            let mut lowered = p;
+                            lowered[k] -= 2;
+                            let mut target = lowered;
+                            if target[a] >= 1 {
+                                target[a] -= 1;
+                                derivative += f64::from(p[k] * (p[k] - 1))
+                                    * f64::from(lowered[a])
+                                    * monomial(target);
+                            }
+                        }
+                        if p[a] >= 1 {
+                            let mut target = p;
+                            target[a] -= 1;
+                            derivative -= 2.0
+                                * alpha
+                                * (2.0 * f64::from(p[k]) + 1.0)
+                                * f64::from(p[a])
+                                * monomial(target);
+                        }
+                        let mut raised = p;
+                        raised[k] += 2;
+                        if raised[a] >= 1 {
+                            let mut target = raised;
+                            target[a] -= 1;
+                            derivative +=
+                                4.0 * alpha * alpha * f64::from(raised[a]) * monomial(target);
+                        }
+                    }
+                    cartesian[component][a] +=
+                        weight * (derivative - 2.0 * alpha * d[a] * lap_polynomial);
+                }
+            }
+        }
+        let range = if shell.angular == qwb_registry::Angular::Spherical {
+            spherical_count(shell.l)
+        } else {
+            components.len()
+        };
+        for a in 0..3 {
+            let mut slice = [0.0_f64; MAX_CARTESIAN];
+            for component in 0..components.len() {
+                slice[component] = cartesian[component][a];
+            }
+            let mut flat = [0.0_f64; MAX_CARTESIAN];
+            write_transformed(
+                &mut flat,
+                0,
+                &slice[..components.len()],
+                shell.l,
+                shell.angular,
+            )?;
+            for slot in 0..range {
+                derivatives[shell.first_function + slot][a] = flat[slot];
+            }
+        }
+    }
+    Ok(derivatives)
+}
+
+/// XC 能量的**显式基组运动项** `∂E_xc/∂R_A`（Kohn–Sham 解析梯度缺的那一块）。
+///
+/// Kohn–Sham 的能量是 `E = Tr(PH) + E_2e + E_xc(P) + E_nuc`，对核坐标求导时
+/// `Tr(dP·F_KS) = −Tr(W dS)` 那一项由 `W = ½P F_KS P` 的 Pulay 项负责（`F_KS` 里
+/// 已经含 `v_xc`），但 `E_xc` 对**基函数位置**的显式依赖必须单独加：
+///
+/// ```text
+/// ∂E_xc/∂R_A,x = Σ_g w_g [ (ε + ρ ε_ρ)·∂ρ/∂R_A,x + (ρ ε_σ)·∂σ/∂R_A,x ]
+/// ∂ρ/∂R_A,x    = Σ_{μ∈A} (∂φ_μ/∂R_A,x)·Ỹ_μ
+/// ∂∇ρ/∂R_A,x   = Σ_{μ∈A} [ (∂∇φ_μ/∂R_A,x)·Ỹ_μ + (∂φ_μ/∂R_A,x)·Z̃_μ ]
+/// ∂σ/∂R_A,x    = 2 ∇ρ·∂∇ρ/∂R_A,x
+/// ```
+///
+/// 其中 `Ỹ_μ = Σ_ν (P_μν + P_νμ) φ_ν`、`Z̃_μ = Σ_ν (P_μν + P_νμ) ∇φ_ν`
+/// （用 `P + Pᵀ` 是为了不假设 P 严格对称），`∂φ_μ/∂R_A,x = −∂φ_μ/∂r_x`（平移不变）。
+///
+/// **网格权重导数没有算**：这是主流代码的通行做法（网格随原子移动的那一项通常是
+/// 1e-6 量级或更小）。这里不靠"通常"说服人 —— `g01_analytic_pbe` / `t6_b3lyp_gradient`
+/// 直接拿它与**数值梯度**比，差多少就写多少。
+///
+/// # Errors
+///
+/// 需要 `∇²ρ` 的 meta-GGA 不在解析梯度的支持范围内（显式拒绝，不静默忽略）；
+/// 密度或 AO 数据出现非有限值。
+pub fn xc_gradient_terms(
+    basis: &InternalBasis,
+    molecule: &Molecule,
+    grid: &Grid,
+    density: &Matrix,
+    terms: &[Box<dyn FunctionalTerm>],
+) -> Result<Vec<[f64; 3]>, EngineError> {
+    let n = basis.n_functions();
+    let natoms = molecule.atoms.len();
+    let mut gradient = vec![[0.0_f64; 3]; natoms];
+    if density.nrows() != n || density.ncols() != n {
+        return Err(EngineError::Internal(
+            "xc_gradient_terms: density size mismatch".to_string(),
+        ));
+    }
+    let needs_sigma = terms.iter().any(|term| term.requires().sigma);
+    // LYP（B3LYP 的组件之一）需要 ∇²ρ，所以这一路也要算：`∂(∇²ρ)/∂R` 用
+    // `ao_laplacian_derivative`（AO 拉普拉斯量再对中心求一次导）。
+    let needs_laplacian = terms.iter().any(|term| term.requires().laplacian);
+    if terms.is_empty() {
+        return Ok(gradient);
+    }
+
+    // AO → 原子（球谐/直角都按壳层的 function 区间取）
+    let mut owner = vec![usize::MAX; n];
+    for shell in basis.shells() {
+        for slot in 0..shell.n_functions() {
+            owner[shell.first_function + slot] = shell.atom_index;
+        }
+    }
+
+    for GridPoint {
+        position_bohr,
+        weight,
+        ..
+    } in &grid.points
+    {
+        let point = *position_bohr;
+        // ∇φ 一直要：LDA 的显式项也靠它（∂φ/∂R = −∂φ/∂r），只有 Hessian 能省。
+        let (values, gradients) = ao_value_and_gradient(basis, point)?;
+        let hessian = if needs_sigma {
+            ao_hessian(basis, point)?
+        } else {
+            Vec::new()
+        };
+        let ao_laplacians = if needs_laplacian {
+            ao_laplacian(basis, point)?
+        } else {
+            Vec::new()
+        };
+        let ao_laplacian_derivatives = if needs_laplacian {
+            ao_laplacian_derivative(basis, point)?
+        } else {
+            Vec::new()
+        };
+        // ∇²ρ = Σ P (∇²φ_μ φ_ν + 2 ∇φ_μ·∇φ_ν + φ_μ ∇²φ_ν)
+        let mut density_laplacian = 0.0;
+        if needs_laplacian {
+            for mu in 0..n {
+                for nu in 0..n {
+                    let p = density[(mu, nu)];
+                    if p == 0.0 {
+                        continue;
+                    }
+                    let dot = gradients[mu][0] * gradients[nu][0]
+                        + gradients[mu][1] * gradients[nu][1]
+                        + gradients[mu][2] * gradients[nu][2];
+                    density_laplacian += p
+                        * (ao_laplacians[mu] * values[nu]
+                            + 2.0 * dot
+                            + values[mu] * ao_laplacians[nu]);
+                }
+            }
+        }
+
+        // ρ 与 ∇ρ（与 SCF 的 evaluate_xc 同一条缩并）
+        let mut rho = 0.0;
+        for mu in 0..n {
+            for nu in 0..n {
+                rho += values[mu] * density[(mu, nu)] * values[nu];
+            }
+        }
+        if !rho.is_finite() {
+            return Err(EngineError::Internal(
+                "xc_gradient_terms: density is not finite at a grid point".to_string(),
+            ));
+        }
+        let mut grad_rho = [0.0_f64; 3];
+        if needs_sigma {
+            for mu in 0..n {
+                for nu in 0..n {
+                    let p = density[(mu, nu)];
+                    if p == 0.0 {
+                        continue;
+                    }
+                    for axis in 0..3 {
+                        grad_rho[axis] += p
+                            * (gradients[mu][axis] * values[nu] + values[mu] * gradients[nu][axis]);
+                    }
+                }
+            }
+        }
+        let sigma =
+            grad_rho[0] * grad_rho[0] + grad_rho[1] * grad_rho[1] + grad_rho[2] * grad_rho[2];
+        let rho = rho.max(0.0);
+
+        // 泛函在这一点的一阶导数
+        let rho_slice = [rho];
+        let sigma_slice = [sigma];
+        let laplacian_slice = [density_laplacian];
+        let batch = if needs_laplacian {
+            DensityBatch::with_laplacian(&rho_slice, &sigma_slice, &laplacian_slice)
+        } else if needs_sigma {
+            DensityBatch::new(&rho_slice, &sigma_slice)
+        } else {
+            DensityBatch::from_rho(&rho_slice)
+        };
+        let mut epsilon = [0.0_f64];
+        let mut d_rho = [0.0_f64];
+        let mut d_sigma = [0.0_f64];
+        let mut d_laplacian = [0.0_f64];
+        for term in terms {
+            let mut local_epsilon = [0.0_f64];
+            let mut local_rho = [0.0_f64];
+            let mut local_sigma = [0.0_f64];
+            let mut local_laplacian = [0.0_f64];
+            term.energy_density(&batch, &mut local_epsilon);
+            term.potential_derivatives_laplacian(
+                &batch,
+                &mut local_rho,
+                &mut local_sigma,
+                &mut local_laplacian,
+            );
+            epsilon[0] += local_epsilon[0];
+            d_rho[0] += local_rho[0];
+            d_sigma[0] += local_sigma[0];
+            d_laplacian[0] += local_laplacian[0];
+        }
+        let v_laplacian = if needs_laplacian && rho > 0.0 {
+            rho * d_laplacian[0]
+        } else {
+            0.0
+        };
+        let v_rho = if rho > 0.0 {
+            epsilon[0] + rho * d_rho[0]
+        } else {
+            epsilon[0]
+        };
+        let v_sigma = if needs_sigma && rho > 0.0 {
+            rho * d_sigma[0]
+        } else {
+            0.0
+        };
+
+        // Ỹ_μ = Σ_ν (P_μν + P_νμ) φ_ν 、 Z̃_μ = Σ_ν (P_μν + P_νμ) ∇φ_ν
+        let mut y_tilde = vec![0.0_f64; n];
+        let mut z_tilde = vec![[0.0_f64; 3]; n];
+        for mu in 0..n {
+            let mut y = 0.0;
+            let mut z = [0.0_f64; 3];
+            for nu in 0..n {
+                let p = density[(mu, nu)] + density[(nu, mu)];
+                if p == 0.0 {
+                    continue;
+                }
+                y += p * values[nu];
+                if needs_sigma {
+                    for axis in 0..3 {
+                        z[axis] += p * gradients[nu][axis];
+                    }
+                }
+            }
+            y_tilde[mu] = y;
+            z_tilde[mu] = z;
+        }
+        // L̃_μ = Σ_ν (P_μν + P_νμ) ∇²φ_ν（只在需要 ∇²ρ 通道时用）
+        let mut lap_tilde = vec![0.0_f64; n];
+        if needs_laplacian {
+            for mu in 0..n {
+                let mut total = 0.0;
+                for nu in 0..n {
+                    let p = density[(mu, nu)] + density[(nu, mu)];
+                    if p != 0.0 {
+                        total += p * ao_laplacians[nu];
+                    }
+                }
+                lap_tilde[mu] = total;
+            }
+        }
+
+        for mu in 0..n {
+            let atom = owner[mu];
+            if atom == usize::MAX || y_tilde[mu] == 0.0 {
+                continue;
+            }
+            for axis in 0..3 {
+                let d_phi = -gradients[mu][axis];
+                let mut sigma_axis = 0.0;
+                if needs_sigma {
+                    let mut grad_rho_axis = [0.0_f64; 3];
+                    for j in 0..3 {
+                        grad_rho_axis[j] =
+                            -hessian[mu][axis][j] * y_tilde[mu] + d_phi * z_tilde[mu][j];
+                    }
+                    sigma_axis = 2.0
+                        * (grad_rho[0] * grad_rho_axis[0]
+                            + grad_rho[1] * grad_rho_axis[1]
+                            + grad_rho[2] * grad_rho_axis[2]);
+                }
+                let mut laplacian_axis = 0.0;
+                if needs_laplacian {
+                    // ∂_A,a(∇²ρ) = Σ_{μ∈A} [ (∂_a∇²φ_μ)·Ỹ_μ + 2(∂_a∇φ_μ)·Z̃_μ + (∂_aφ_μ)·L̃_μ ]
+                    laplacian_axis =
+                        -ao_laplacian_derivatives[mu][axis] * y_tilde[mu] + d_phi * lap_tilde[mu];
+                    for j in 0..3 {
+                        laplacian_axis += 2.0 * (-hessian[mu][axis][j]) * z_tilde[mu][j];
+                    }
+                }
+                gradient[atom][axis] += weight
+                    * (v_rho * d_phi * y_tilde[mu]
+                        + v_sigma * sigma_axis
+                        + v_laplacian * laplacian_axis);
+            }
+        }
+    }
+
+    for slot in &gradient {
+        if !slot.iter().all(|value| value.is_finite()) {
+            return Err(EngineError::Internal(
+                "xc_gradient_terms: gradient is not finite".to_string(),
+            ));
+        }
+    }
+    Ok(gradient)
+}
+
+/// Kohn–Sham 解析梯度：`骨架项 + ½α_hf 交换 + Pulay(W = ½P F_KS P) + XC 显式项`。
+///
+/// # 为什么必须由这里自己搭 Fock
+///
+/// Pulay 项用 `W = ½ P F_KS P`，而 `F_KS = H + J − ½α_hf·K + v_xc`：
+///
+/// * 纯泛函（LDA/GGA）**没有** HF 交换（`α_hf = 0`），`F` 里不能出现 `−½K`；
+/// * 杂化泛函（B3LYP 0.20 / PBE0 0.25）要按 `α_hf` 缩放；
+/// * 2e 骨架项同理：库仑恒有，交换乘 `α_hf`。
+///
+/// 把 `fock` 交给调用方去拼，就等于把"别把 HF 交换算进 KS 能量"这件事交给运气
+/// —— 实测差 8.8e-2 Ha/Bohr，正是 `g01_analytic_pbe` 一开始失败的原因。
+///
+/// # Errors
+///
+/// 形状不匹配、AO 角动量超出实现、或 XC 是 meta-GGA（需要 `∇²ρ`，未支持）。
+#[allow(clippy::too_many_arguments)]
+pub fn rks_analytic_gradient(
+    basis: &InternalBasis,
+    molecule: &Molecule,
+    grid: &Grid,
+    hcore: &Matrix,
+    tensor: &TwoElectronIntegrals,
+    density: &Matrix,
+    terms: &[Box<dyn FunctionalTerm>],
+    hf_exchange: f64,
+) -> Result<Vec<[f64; 3]>, EngineError> {
+    let fock_hf = build_fock(hcore, tensor, density).map_err(|err| {
+        EngineError::Internal(format!("rks_analytic_gradient: build_fock: {err}"))
+    })?;
+    let (_, v_xc) = evaluate_xc(basis, grid, density, terms)?;
+    // F_KS = H + J − ½α_hf K + v_xc
+    let n = basis.n_functions();
+    let mut fock = Matrix::zeros(n, n);
+    for mu in 0..n {
+        for nu in 0..n {
+            fock[(mu, nu)] = hcore[(mu, nu)] + fock_hf.coulomb[(mu, nu)]
+                - 0.5 * hf_exchange * fock_hf.exchange[(mu, nu)]
+                + v_xc[(mu, nu)];
+        }
+    }
+    let components =
+        crate::analytic_gradient::gradient_components(basis, molecule, density, &fock)?;
+    let xc = xc_gradient_terms(basis, molecule, grid, density, terms)?;
+
+    let mut gradient = vec![[0.0_f64; 3]; molecule.atoms.len()];
+    for (atom, slot) in gradient.iter_mut().enumerate() {
+        for (axis, value) in slot.iter_mut().enumerate() {
+            *value = components.kinetic[atom][axis]
+                + components.nuclear_ao[atom][axis]
+                + components.nuclear_center[atom][axis]
+                + components.nuclear_repulsion[atom][axis]
+                + components.two_electron_coulomb[atom][axis]
+                + hf_exchange * components.two_electron_exchange[atom][axis]
+                + components.pulay[atom][axis]
+                + xc[atom][axis];
+        }
+    }
+    Ok(gradient)
+}
