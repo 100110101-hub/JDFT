@@ -301,8 +301,8 @@ fn cccbdb_sto3g_hf_lsda_agree() {
     let (checked, worst) = compare(
         &registry,
         |m| matches!(m, "HF" | "LSDA" | "PBEPBE" | "BLYP" | "B3LYP"),
-        // 苯太慢（42 个基函数）留在慢档；N2 见下面的 note——它目前**不符**，先不冒充通过。
-        |sp| sp != "C6H6" && sp != "N2",
+        // CO（BLYP/B3LYP 各 73–117 步）、苯（42 个基函数）在慢档；N2 需要多初猜，见 t06_n2_multistart.rs。
+        |sp| !matches!(sp, "C6H6" | "CO" | "N2"),
         true,
     );
     println!("比对 {checked} 条；最差 {:.3e} Ha", worst);
@@ -345,16 +345,19 @@ fn cccbdb_sto3g_b3lyp_h2_agrees() {
 /// H2O 是 0.352 vs 0.52 —— 都偏小约 1.5 倍。下一步按 PBE 原文（PRL 77, 3865）核对
 /// `t² = σ/(4k_s²ρ²)`、`A = (β/γ)/(e^{−ε_c/γ}−1)` 与 `H` 的定义。
 #[test]
-#[ignore = "已知失败：BLYP +112(H2O) mHa、B3LYP +19(H2O) mHa；都在含 LYP 的泛函上，见 docs/choices.md 三十一节"]
-fn cccbdb_sto3g_gga_curves_are_still_off() {
+#[ignore = "慢档：CO 的 BLYP/B3LYP 各要 73–117 步、苯有 42 个基函数；数字已实测并记在 status.yaml"]
+fn cccbdb_slow_tier_species_agree() {
     let registry = Registry::open(data_root()).expect("qwb-data");
     let (checked, worst) = compare(
         &registry,
-        |m| matches!(m, "BLYP" | "B3LYP"),
-        |_| true,
+        |m| matches!(m, "HF" | "LSDA" | "PBEPBE" | "BLYP" | "B3LYP"),
+        |sp| matches!(sp, "CO" | "C6H6"),
         false,
     );
-    println!("{checked} 条，最差 {:.1} mHa（判据 2 mHa）", worst * 1e3);
+    println!(
+        "慢档 {checked} 条，最差 {:.1} mHa（判据 2 mHa）",
+        worst * 1e3
+    );
     assert!(checked >= 4);
-    assert!(worst < 2.0e-3, "GGA 曲线仍然偏差 {:.1} mHa", worst * 1e3);
+    assert!(worst < 2.0e-3, "慢档体系偏差 {:.1} mHa", worst * 1e3);
 }

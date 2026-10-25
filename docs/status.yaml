@@ -513,11 +513,14 @@ V-03:
     已覆盖 **7 个体系**：H2 / H2O / CO / CH4 / NH3 / N2 / C6H6 × HF、LSDA(SVWN5)、PBEPBE、
     BLYP、B3LYP（另抓 B1B95 作对照）× STO-3G / 6-31G* / 6-311G**，逐行带
     `energy3x.asp` URL（CCCBDB Release 22, SRD 101）。
-    CI 实测（STO-3G，CCCBDB 自己的几何，STO-3G 避开 5d/6d 约定差）：
-    H2/H2O/CO/CH4 五个模型化学全部 ≤ 4e-6 Ha；NH3 ≤ 1.1e-4 Ha；苯的 B3LYP 在慢档实测
-    -1.16 mHa（grid-normal）。**N2 已修好**：原来 HF 就差 +0.684 Ha，根因是纯 core guess
-    收敛到激发态；加 `RksOptions.initial_guess_scale` + `rks_scf_multistart` 之后五个模型化学
-    都到了 ≤ 3.8e-6 Ha（回归钉在 `t06_n2_multistart.rs`，见 choices 三十六之补）。
+    CI 实测（STO-3G，CCCBDB 自己的几何，STO-3G 避开 5d/6d 约定差）—— **七个体系全部对上**：
+    * active 档（`t06_reference`，H2/H2O/CH4/NH3 × HF/LSDA/PBE/BLYP/B3LYP）：
+      H2/H2O/CH4 ≤ 4e-6 Ha、NH3 ≤ 1.1e-4 Ha；
+    * 慢档（`t06_reference` 的 `#[ignore]` 测试，CO + 苯 × 五个模型化学）：CO 全部 ≤ 3.7e-6 Ha、
+      苯的 B3LYP −1.16 mHa（grid-normal；grid-coarse −9.3e-6 Ha，见 `t06_benzene.rs`）；
+    * N2（`t06_n2_multistart.rs`）：原来 HF 就差 +0.684 Ha，根因是纯 core guess 收敛到激发态；
+      加 `RksOptions.initial_guess_scale` + `rks_scf_multistart` 之后五个模型化学都 ≤ 3.8e-6 Ha
+      （见 choices 三十六之补）。
   note: |
     未完成：① N2 的 0.684 Ha 不符要定位；② 6-31G*/6-311G** 的行仍不进判据（Gaussian 默认 6d、
     本项目数据层是 spherical(5d)，混进 1–3 mHa 的约定差）；③ `tolerance` 列统一写 2 mHa，
