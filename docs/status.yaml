@@ -515,8 +515,9 @@ V-03:
     `energy3x.asp` URL（CCCBDB Release 22, SRD 101）。
     CI 实测（STO-3G，CCCBDB 自己的几何，STO-3G 避开 5d/6d 约定差）：
     H2/H2O/CO/CH4 五个模型化学全部 ≤ 4e-6 Ha；NH3 ≤ 1.1e-4 Ha；苯的 B3LYP 在慢档实测
-    -1.16 mHa（grid-normal）。**N2 不符**（HF 就差 +0.684 Ha），已排除在判据外并立项待查
-    （docs/choices.md 三十六节）。
+    -1.16 mHa（grid-normal）。**N2 已修好**：原来 HF 就差 +0.684 Ha，根因是纯 core guess
+    收敛到激发态；加 `RksOptions.initial_guess_scale` + `rks_scf_multistart` 之后五个模型化学
+    都到了 ≤ 3.8e-6 Ha（回归钉在 `t06_n2_multistart.rs`，见 choices 三十六之补）。
   note: |
     未完成：① N2 的 0.684 Ha 不符要定位；② 6-31G*/6-311G** 的行仍不进判据（Gaussian 默认 6d、
     本项目数据层是 spherical(5d)，混进 1–3 mHa 的约定差）；③ `tolerance` 列统一写 2 mHa，

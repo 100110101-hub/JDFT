@@ -60,6 +60,11 @@ pub struct RksOptions {
     pub use_diis: bool,
     /// DIIS 子空间最多保留多少组向量。
     pub diis_max_vectors: usize,
+    /// 初猜里 `H_core` 非对角块的缩放系数（默认 1.0 = 纯 core guess）。
+    ///
+    /// N2/STO-3G 这类近简并体系上，纯 core guess 会稳定收敛到**激发态**（N2 实测高
+    /// 0.684 Ha）。配合 [`rks_scf_multistart`] 用几个不同的缩放因子各跑一次、取最低解。
+    pub initial_guess_scale: f64,
     /// 从检查点续算（S-05）。
     pub resume_from: Option<crate::checkpoint::ScfCheckpoint>,
     /// 检查点文件路径（`None` = 不写检查点）。
@@ -77,6 +82,7 @@ impl Default for RksOptions {
             hf_exchange: 0.0,
             use_diis: true,
             diis_max_vectors: 8,
+            initial_guess_scale: 1.0,
             resume_from: None,
             checkpoint_path: None,
             checkpoint_every: 0,
@@ -775,8 +781,22 @@ pub fn rks_scf(
         None
     };
 
-    // 用 Xᵀ H X 对角化得到初猜。
-    let mut density = core_guess(hcore, &x, n_occ)?;
+    // 用 Xᵀ H X 对角化得到初猜（`initial_guess_scale` 缩放非对角块，多初猜时用）。
+    let guess_hcore = if (options.initial_guess_scale - 1.0).abs() < f64::EPSILON {
+        hcore.clone()
+    } else {
+        let scale = options.initial_guess_scale;
+        let mut scaled = hcore.clone();
+        for i in 0..n {
+            for j in 0..n {
+                if i != j {
+                    scaled[(i, j)] = hcore[(i, j)] * scale;
+                }
+            }
+        }
+        scaled
+    };
+    let mut density = core_guess(&guess_hcore, &x, n_occ)?;
     let mut previous_energy = f64::NAN;
     let mut completed_steps = 0u32;
     if let Some(checkpoint) = &options.resume_from {
@@ -1029,6 +1049,50 @@ pub fn core_guess(hcore: &Matrix, x: &Matrix, n_occ: usize) -> Result<Matrix, En
         }
     }
     Ok(density)
+}
+
+/// 多初猜 SCF：用若干个 `initial_guess_scale` 各跑一次，返回**能量最低**的收敛解。
+///
+/// 动机（实测）：N2/STO-3G 的纯 core guess 会收敛到激发态——总能量比 CCCBDB 的
+/// HF 值高 **0.684 Ha**，占据轨道能级也明显不对（1π_u 不成对简并、HOMO 被抬到 -0.18 Ha）。
+/// 近简并体系（三键、同核双原子）上这是 SCF 初猜的经典问题，多初猜是标准对策。
+///
+/// # Errors
+///
+/// 所有初猜都不收敛，或线性代数失败。
+pub fn rks_scf_multistart(
+    basis: &InternalBasis,
+    molecule: &Molecule,
+    tensor: &qwb_integrals::two_electron::TwoElectronIntegrals,
+    grid: &qwb_grid::Grid,
+    terms: &[Box<dyn FunctionalTerm>],
+    options: RksOptions,
+) -> Result<RksResult, EngineError> {
+    let mut best: Option<RksResult> = None;
+    let mut last_error: Option<EngineError> = None;
+    for scale in [1.0, 0.5, 1.5, 0.25, 2.0] {
+        let mut attempt = options.clone();
+        attempt.initial_guess_scale = scale;
+        match rks_scf(basis, molecule, tensor, grid, terms, attempt) {
+            Ok(result) => {
+                let better = match &best {
+                    None => true,
+                    Some(current) => result.energy_hartree < current.energy_hartree - 1.0e-12,
+                };
+                if better {
+                    best = Some(result);
+                }
+            }
+            Err(err) => last_error = Some(err),
+        }
+    }
+    match (best, last_error) {
+        (Some(result), _) => Ok(result),
+        (None, Some(err)) => Err(err),
+        (None, None) => Err(EngineError::Internal(
+            "multistart SCF: no attempt produced a result".to_string(),
+        )),
+    }
 }
 
 /// 便捷入口：从注册表里的基组/泛函/网格名做一次 RKS（T1 路径用）。
