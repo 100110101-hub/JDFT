@@ -243,6 +243,37 @@ impl Registry {
         }
     }
 
+    /// 按等级取网格的**注册名**（`grid-normal` 这类）。
+    ///
+    /// 引擎要把冻结的 `JobInput.grid_level` 翻译成 `OptOptions.grid`（它按名字取网格），
+    /// 而"等级 → 名字"的映射只存在于注册表里；在引擎里硬编码 `"grid-normal"` 就等于
+    /// 把数据层的命名搬进代码，改数据就静默错位。
+    ///
+    /// # Errors
+    ///
+    /// 同 [`Registry::get_grid_by_level`]。
+    pub fn grid_name_by_level(&self, level: GridLevelName) -> Result<&str, EngineError> {
+        let matches: Vec<&str> = self
+            .grids
+            .iter()
+            .filter(|(_, grid)| grid.level == level)
+            .map(|(name, _)| name.as_str())
+            .collect();
+        match matches.as_slice() {
+            [only] => Ok(only),
+            [] => Err(EngineError::Data(format!(
+                "no grid definition for level `{}`",
+                level_dir_name(level)
+            ))),
+            many => Err(EngineError::Data(format!(
+                "ambiguous grid level `{}`: {} definitions declared ({})",
+                level_dir_name(level),
+                many.len(),
+                many.join(", ")
+            ))),
+        }
+    }
+
     /// **唯一**的基组/ECP 配对入口（§8.2）。
     ///
     /// 校验两件事：① ECP 的元素在基组里有对应的壳层块；② `z_eff == Z - n_core` 自洽。

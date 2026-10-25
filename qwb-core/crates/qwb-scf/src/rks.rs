@@ -1392,9 +1392,13 @@ pub fn ao_laplacian_derivative(
 /// 其中 `Ỹ_μ = Σ_ν (P_μν + P_νμ) φ_ν`、`Z̃_μ = Σ_ν (P_μν + P_νμ) ∇φ_ν`
 /// （用 `P + Pᵀ` 是为了不假设 P 严格对称），`∂φ_μ/∂R_A,x = −∂φ_μ/∂r_x`（平移不变）。
 ///
-/// **网格权重导数没有算**：这是主流代码的通行做法（网格随原子移动的那一项通常是
-/// 1e-6 量级或更小）。这里不靠"通常"说服人 —— `g01_analytic_pbe` / `t6_b3lyp_gradient`
-/// 直接拿它与**数值梯度**比，差多少就写多少。
+/// **网格本身随原子移动那一半没算**（Becke 权重的导数 + 网格点位置的导数）。
+/// 早先这里写的是"通行做法，通常是 1e-6 量级"—— **实测不是**：
+/// H2O/STO-3G/PBE 上解析（只有这一半）与数值梯度的最大分量差是 **3.30e-4 Ha/Bohr**，
+/// 而 H2/STO-3G/PBE 只有 8.4e-7（被对称性抹掉了，所以早期测试看不出问题）。
+/// 生产路径（`qwb_engine` 的 `opt`/Hessian）因此改用
+/// [`rks_analytic_gradient_with_xc`]，把这一半交给
+/// `qwb_engine::gradient::xc_geometric_derivative`（固定密度下对 `E_xc(R)` 做中心差分）。
 ///
 /// # Errors
 ///
@@ -1663,6 +1667,56 @@ pub fn rks_analytic_gradient(
     terms: &[Box<dyn FunctionalTerm>],
     hf_exchange: f64,
 ) -> Result<Vec<[f64; 3]>, EngineError> {
+    let xc = xc_gradient_terms(basis, molecule, grid, density, terms)?;
+    rks_analytic_gradient_with_xc(
+        basis,
+        molecule,
+        grid,
+        hcore,
+        tensor,
+        density,
+        terms,
+        hf_exchange,
+        &xc,
+    )
+}
+
+/// 与 [`rks_analytic_gradient`] 相同，但 **XC 的几何导数由调用方给**。
+///
+/// # 为什么需要这个入口
+///
+/// [`xc_gradient_terms`] 只算了"密度随原子移动"那一半（ρ 通道 + σ 通道 + `∇²ρ` 通道），
+/// **没有**算"网格本身随原子移动"那一半（Becke 权重的导数、网格点位置的导数）。
+/// 这一项在 H2 上被对称性抹掉（所以早期测试都是 1e-7），但在 H2O/STO-3G/PBE 上实测
+/// **3.30e-4 Ha/Bohr**，直接把 def2-SVP 的优化几何带偏（O–H 0.9745 vs 0.9682 Å）。
+///
+/// 补它的两条路：① 解析地算 Becke 权重导数（还没做）；② 在**固定密度**下对
+/// `E_xc(R)` 做中心差分（`qwb_engine::gradient::xc_geometric_derivative` 做的就是这个，
+/// 每次梯度多 `6N` 次 XC 求值，比一次 SCF 还便宜）。两条路给的是同一个量，
+/// 这个入口就是让 ② 的结果能和 ① 一样接进总梯度。
+///
+/// # Errors
+///
+/// 形状不匹配、AO 角动量实现缺失、XC 需要 `∇²ρ` 而基组不支持。
+#[allow(clippy::too_many_arguments)]
+pub fn rks_analytic_gradient_with_xc(
+    basis: &InternalBasis,
+    molecule: &Molecule,
+    grid: &Grid,
+    hcore: &Matrix,
+    tensor: &TwoElectronIntegrals,
+    density: &Matrix,
+    terms: &[Box<dyn FunctionalTerm>],
+    hf_exchange: f64,
+    xc_gradient: &[[f64; 3]],
+) -> Result<Vec<[f64; 3]>, EngineError> {
+    if xc_gradient.len() != molecule.atoms.len() {
+        return Err(EngineError::Internal(format!(
+            "rks_analytic_gradient_with_xc: xc gradient has {} entries, molecule has {} atoms",
+            xc_gradient.len(),
+            molecule.atoms.len()
+        )));
+    }
     let fock_hf = build_fock(hcore, tensor, density).map_err(|err| {
         EngineError::Internal(format!("rks_analytic_gradient: build_fock: {err}"))
     })?;
@@ -1679,7 +1733,6 @@ pub fn rks_analytic_gradient(
     }
     let components =
         crate::analytic_gradient::gradient_components(basis, molecule, density, &fock)?;
-    let xc = xc_gradient_terms(basis, molecule, grid, density, terms)?;
 
     let mut gradient = vec![[0.0_f64; 3]; molecule.atoms.len()];
     for (atom, slot) in gradient.iter_mut().enumerate() {
@@ -1691,7 +1744,7 @@ pub fn rks_analytic_gradient(
                 + components.two_electron_coulomb[atom][axis]
                 + hf_exchange * components.two_electron_exchange[atom][axis]
                 + components.pulay[atom][axis]
-                + xc[atom][axis];
+                + xc_gradient[atom][axis];
         }
     }
     Ok(gradient)

@@ -37,20 +37,38 @@ C-05:
 C-06:
   state: done
   ts: "2026-10-22T22:53:00Z"
-  artifact: "qwb-core workspace + 根 rust-toolchain.toml（1.97.1）+ qwb-core/deny.toml + .github/workflows/ci.yml + 三个门禁脚本 + scripts/{verify.sh,verify.ps1}"
-  verification: "scripts/verify.ps1 与 scripts/verify.sh 覆盖**同一清单**（3 个 bash 门禁 / K2 fmt-clippy-doc-test / core fmt-clippy-test + I-06 + I-00 + deny + K1 schema + G2 data / D-15 / 10.6 账本 / K6 mypy ×2 / P-06 pyo3 fmt-clippy-构建安装 / Python 侧 pytest / P-02 夹具新鲜度）；2026-10-25 第 48 轮实测 **24/24 全绿**（含 T4 的频率判据测试与 hessian 的新入口；Python 侧 139 例）（见 note）"
+  artifact: qwb-core workspace + 根 rust-toolchain.toml（1.97.1）+ qwb-core/deny.toml
+    + .github/workflows/ci.yml + 三个门禁脚本 + scripts/{verify.sh,verify.ps1}
+  verification: |
+    scripts/verify.ps1 与 scripts/verify.sh 覆盖**同一清单**（3 个 bash 门禁 / K2
+    fmt-clippy-doc-test / core fmt-clippy-test + I-06 + I-00 + deny + K1 schema +
+    G2 data / D-15 / 10.6 账本 / K6 mypy ×2 / P-06 pyo3 fmt-clippy-构建安装 / Python 侧 pytest
+    / P-02 夹具新鲜度）；2026-10-26 第 51 轮实测 **24/24 全绿**（含 T8 的 opt 作业类型、
+    GUI 建分子页/启动恢复、以及 XC 几何导数的修复；Python 侧 154 例）。
   note: |
-    本轮修掉一个**门禁自身的漏洞**：`scripts/check_unsafe.sh` 的 step 2（扫描 unsafe 用法）
-    在"没有命中"时直接 `exit 0`，把 step 1（每个 crate 必须声明 `#![deny(unsafe_code)]`）的
-    失败吞掉了。后果不是假想：`qwb-props` 从创建起就**没有**这条 deny，而这个脚本一直退出 0，
-    于是之前几轮的"ALL GATES GREEN"在这一项上是空的。修法：两个 step 计入同一个 `$fail`，
-    末尾统一 exit，并补上 `ok: unsafe policy satisfied` 的正向输出。
-    验证修法真的有效（不是换个写法继续假绿）：临时把 `qwb-props/src/lib.rs` 的 deny 行去掉 →
-    `bash scripts/check_unsafe.sh` 打印 `FAIL qwb-core/crates/qwb-props: missing #![deny(unsafe_code)]`
-    并 exit 1；恢复后 exit 0。同时给 `qwb-props` 补上 `#![deny(unsafe_code)]` 与
-    `#![deny(missing_docs)]`（clippy 全绿说明它的公开项文档齐全）。
+    **两处门禁自身漏洞（都修在这里，免得"全绿"被误读）**：
 
-# ─────────────────────────── D 轨（数据）───────────────────────────
+    ① `scripts/check_unsafe.sh` 的 step 2（扫描 unsafe 用法）在"没有命中"时直接 `exit 0`，
+    把 step 1（每个 crate 必须声明 `#![deny(unsafe_code)]`）的失败吞掉了。后果不是假想：
+    `qwb-props` 从创建起就**没有**这条 deny，而这个脚本一直退出 0，于是之前几轮的
+    "ALL GATES GREEN"在这一项上是空的。修法：两个 step 计入同一个 `$fail`，末尾统一 exit，
+    并补上 `ok: unsafe policy satisfied` 的正向输出。验证：临时去掉 `qwb-props/src/lib.rs`
+    的 deny 行 → 脚本打印 `FAIL ...: missing deny(unsafe_code)` 并 exit 1；恢复后 exit 0。
+
+    **第 50 轮先红了一次**（如实记）：`test_engine_binding.py::test_two_concurrent_jobs_overlap`
+    报 "two concurrent runs took 1.30s vs 0.84s single"—— 判据是 `wall < single*2*0.75`，
+    实测 1.297 s 对阈值 1.266 s，差 2.5%。这是**判据太贴噪声**（单个作业只有 0.8 s，
+    调度抖动轻松吃掉 5%），不是 GIL 没释放；改成"三个并发、阈值 0.8×串行和"
+    （持锁时 ≈ 3×单个、释放后 ≈ 1.5×单个），同一台机器上稳定通过。
+
+    ② `scripts/check_deps_centralized.sh` 在 Windows 上把 `[dependencies]` 段内的空行判成
+    "没写 `workspace = true` 的依赖"——原因是本仓库开了 `core.autocrlf=true`，磁盘上的文件是
+    CRLF，而 bash 的 `read` 只按 LF 切行，空行读出来是 `"\r"`（非空）。这不是规则被绕过，
+    是**报错报错了行**：修法是在 `read` 之后剥掉行尾的 `\r`（`line="${rawline%$'\r'}"`），
+    规则本身一个字没改；同时把 `qwb-cli/Cargo.toml`（P-10 加了 5 个依赖）重新写成 LF，
+    与其它 crate 保持一致。验证：临时造一个 `qwb-core/crates/zz-tmp/Cargo.toml`
+    （`serde = "1.0"`，不带 `workspace = true`）→ 脚本打印
+    `FAIL ...:5: dependency must inherit ...` 并 exit 1；删掉之后 exit 0。
 
 D-01:
   state: done
@@ -390,6 +408,18 @@ G-01:
     详细复盘见 docs/choices.md §三十八。
     仍然挂着的旧缺口：`g01_numeric_gradient.rs` 的 CH2 平移不变性残差 1.0e-4（z），
     换细网格不变小，疑为 FD 两侧落不同 SCF 解；该测试仍 `#[ignore]` 并写明数字。
+    **2026-10-26 第三个缺口（网格自己也在动）。** 上面的 KS 解析梯度只补了"密度随核移动"，
+    **没补**"网格随核移动"（Becke 权重导数 + 网格点位置导数）。它在 H2 上被对称性抹掉
+    （所以 `g01_analytic_pbe` 一直是 8.4e-7），在 H2O/STO-3G/PBE 上是 **3.304e-4 Ha/Bohr**、
+    H2O/def2-SVP/PBE 上 **2.282e-4**。四象限定位（HF vs PBE × STO-3G vs def2-SVP）证明
+    **与 d 壳层无关**（def2-SVP 的 HF 是 1.138e-7）。修法：`rks_analytic_gradient_with_xc`
+    接 `qwb_engine::gradient::xc_geometric_derivative`（固定密度下对 `E_xc(R)` 中心差分）。
+    修后实测：H2O/STO-3G/PBE **1.480e-7**、H2O/def2-SVP/PBE **1.589e-7**、HF 不变（1.138e-7）。
+    判据 < 5e-6 由两条 `#[ignore]` 慢档测试守着（`g01_gradient_localize.rs`、
+    `g01_analytic_def2svp.rs`，release 下 1–3 分钟）。详录 docs/choices.md 四十节。
+    **仍未做**：Becke 权重导数的解析版本（现在是 O(δ²) 差分，δ = 1e-3 Bohr）。
+    **新暴露的已知失败**：H2O/def2-SVP/PBE 在 grid-fine 上 SCF 不收敛（128 步与 400 步都不收敛，
+    grid-normal/coarse 正常），未定位，不在本轮修。
 G-02:
   state: in_progress
   ts: "2026-10-24T22:00:00Z"
@@ -428,6 +458,12 @@ G-02:
     ② 优化器能在 **KS 分支**（PBE + 网格）上工作——此时走的是数值梯度，因为解析梯度对 KS
     还缺显式 XC 项（见 G-01 的 known-gap）；③ 能量沿轨迹单调下降。
     「冗余内坐标」仍然未实现（现在是笛卡尔 BFGS）；键长判据与 T3 同因（PBE 的固有偏差）未达 0.01 Å。
+    **2026-10-26 梯度口径变化**：`opt` 的 KS 分支现在走
+    `analytic_energy_and_gradient`（解析 1e/2e/Pulay + XC 几何项的固定密度差分），
+    不再退到数值梯度。代价：每算一次梯度多 `6N` 次 XC 求值（H2O/def2-SVP/grid-normal 上一次
+    梯度 ≈ 20 s，整个 5 步优化 352 s）；收益：梯度与中心差分一致到 1.6e-7 Ha/Bohr，
+    且 Hessian 的每个位移也走同一条路（`analytic_gradient_flat` 复用它，不再各写一套）。
+    "冗余内坐标"仍未实现（笛卡尔 BFGS）。
 G-03:
   state: done
   ts: "2026-10-25T01:00:00Z"
@@ -779,6 +815,9 @@ P-10:
     仍未做：**振动帧接真实 Hessian 模式**（现在面板用一条演示位移；freq 作业还没把
     Hessian/模式写进结果目录），以及 T8 判据点名的 "PBE/def2-SVP/opt" 全流程
     （`opt` 作业类型还没接到 EngineBackend，见 T8）。
+    **2026-10-26 收口**：`opt` 作业类型已接到 `EngineBackend`（见 T8），引擎写
+    `artifacts/optimized.xyz` + `artifacts/optimization.json`；3D 面板优先读 `optimized.xyz`
+    （画优化后的几何，而不是 `input.yaml` 的初值）。"振动帧接真实 Hessian 模式"仍未做。
 
 # ─────────────────────────── V 轨（验证）───────────────────────────
 
@@ -875,6 +914,13 @@ T3:
     （冻结契约），数据层不能注册它，所以几何优化（走数据层）只能选 PBE0。
     两个测试都是 `#[ignore]` 的慢档（t3_water_geometry 约 40 分钟、t3_water_b3lyp 260 秒），
     数字即上面的实测值。
+    **2026-10-26 交叉验证（KS 梯度修好之后）**：`t3_water_b3lyp`（PBE0/def2-SVP、
+    grid-coarse）用**新的解析梯度**（+ XC 几何项的固定密度差分）重跑，数字与原证据**逐位相同**：
+    E = −76.27638389 Ha、O–H 0.9623 / 0.9623 Å、∠HOH 103.38°、最大力 4.15e-4、4 步（249 s）。
+    原来那份证据走的是**数值梯度**，两条独立路径给同一个驻点 —— 这一条判据没有因为梯度改动而失效。
+    另外记一句口径：T3 的数字是 **grid-coarse**、T8 的 def2-SVP 慢档是 **grid-normal**，
+    两个网格等级的 PBE/def2-SVP 能量差 9.4e-5 Ha 足以让平衡键长动 0.006 Å，
+    所以"T3 0.9682（PBE，coarse）vs T8 0.9745（PBE，normal）"是网格敏感度，不是矛盾（见 choices 四十节）。
 T4:
   state: done
   ts: "2026-10-25T23:55:00Z"
@@ -954,6 +1000,18 @@ T4:
                走不了"数据层 → optimize/numerical_hessian"这条路。
            两条都需要人类决定，所以 T4 保持 in_progress，并把这个岔路口写在这里。
       `scripts/verify.ps1` 在本轮改动之后实测 **19/19 全绿**。
+    **2026-10-26 KS 梯度修好之后重测**（H2O/6-311G(d,p)，grid-normal，解析梯度 + 数值 Hessian，
+    release，整条测试 **1601.6 s**）：
+
+    * **PBE × 0.991**：3777.54 / 3678.17 / 1591.81 cm⁻¹ → 对实验 3756 / 3657 / 1595 的最差偏差
+      **21.5 cm⁻¹**（判据 < 30，仍通过；修梯度前是 21.1 —— 这一档的网格几何项很小，
+      与 def2-SVP/H2O 上 3.3e-4 的情形不同）。E = −76.3603739718 Ha。
+    * **PBE0 × 0.959**：3813.76 / 3717.53 / 1575.05 → 最差 **60.5 cm⁻¹**（仍不通过，如实留作对照组；
+      修梯度前 58.8）。E = −76.3624420774 Ha。
+    * 平移/转动模残差的最大 |ν|：PBE 120.2、PBE0 114.5 cm⁻¹。
+    * **代价变了**：XC 的几何导数改成"固定密度中心差分"之后，每个位移的梯度多 `6N` 次 XC 求值，
+      Hessian 从 155.6 s 涨到这条测试一共 1601.6 s（两个方法 × 优化 + Hessian + 偶极导数）。
+      要把它压回去，得把 Becke 权重导数写成解析的（现在没做，记在这里）。
   note: |
     这一轮把热化学落地时修掉四个真实错误（都在换算/单位上，不涉及物理模型）：
     ① 转动温度用了 kT 而不是 kB；② 线型分子漏了对称数 σ（H2 的 σ=2）；
@@ -1037,32 +1095,65 @@ T7:
     所以"恢复"只对 `queued` 生效；被杀的 `running` 任务用新 task id 重提——这是冻结契约，
     不是实现偷懒。`--parallel` 的线程数与单次 SCF 的线程（I-04 单线程）是两件事。
 T8:
-  state: in_progress
-  ts: "2026-10-25T21:10:00Z"
+  state: done
+  ts: "2026-10-26T13:10:00Z"
   artifact: |
-    P-09（qwb-studio/qwb_studio/gui/：MainWindow 五区域 + GuiProject + SchedulerBridge + LogView）
-    + 调度器的 `engine` runner（worker 就是 `qwb run`，结果目录是真 K3 目录）
-    + tests/{test_gui,test_scheduler_engine}.py
+    GUI（P-09/P-10）+ 这次补齐的三块：
+    * **`JobType::Opt` 真的接到 `EngineBackend` 上**（`qwb-engine/src/lib.rs`）：
+      `OptReport`/`OptSink` 旁路交接（K2 的 `JobResult` 没有几何字段，K2 冻结）、
+      逐步回调打进度、取消在步与步之间生效；`opt` 的每一步 SCF 也遵守 K2 的
+      `scf_max_iter`/阈值，梯度用解析路径（XC 几何项见下方 note 与 choices 四十节）。
+    * **`qwb-cli` 为 `opt` 写产物**：`artifacts/optimized.xyz`（Å，标准 XYZ）与
+      `artifacts/optimization.json`（轨迹 `[step, E, max|grad|]`、步数、是否解析梯度、
+      退化原因）——K3 明确 `artifacts/**` 是自由形态，所以不动 `result.json` 的契约。
+    * **GUI 的 Build 页**（`qwb_studio/gui/builder.py`）+ `qwb_studio/data_catalog.py`
+      （下拉框只给 `qwb-data/registry.yaml` 里真有的基组/泛函/元素，不写死数据名）+
+      启动恢复（`GuiProject.restore`）+ 3D 面板优先读 `optimized.xyz`
+      （否则画的是 `input.yaml` 里的**初值**几何）。
+    * 测试：`t8_opt_jobtype.rs`(4 例)、`t8_opt_cli.rs`(1 例)、`test_engine_opt.py`(2 例)、
+      `test_gui_build.py`(4 例，含恢复与 Build→opt→3D 全流程)。
   verification: |
-    三条判据的当前状况：
-    * **打开项目 → 建分子 → 提交 → Job Monitor → 结果，不崩溃不阻塞 — 一半已过**：
-      GUI 的提交流 / 监控流 / 结果面板都有测试（`test_gui.py` 6 例）：
-      ① mock 任务 3 个并发跑完，运行期间事件循环转了 > 50 圈（不阻塞）；
-      ② 取消生效；(3) 102.8 MB / 154 万行日志流式追加 66.7 s、期间事件循环 3081 圈；
-      ④ **真作业**（`qwb run` H2/STO-3G/SVWN5）从 GUI 提交 → 监控 → 结果面板显示 −1.157 Ha，
-      结果目录是真 K3 目录（`result.json`/`env.json` 由引擎写）。
-      **没做**：分子编辑器（"建分子"目前靠 input.yaml）与 P-10 的 VTK 3D
-      （分子/轨道/ESP/振动）—— T8 判据里的"3D 结果"这一环还缺。
-    * **大日志（> 100 MB）UI 不卡 — 通过**：见上（LogView 块数上限 5000，事件循环持续推进）。
-    * **崩溃后重启恢复未完成视图 — 未做**：调度器的 `kill -9` 恢复（P-03）已有，
-      但 GUI 侧还没有"重启后重建 Task Panel 视图"的用例。
-    * T8 判据点名的 **PBE/def2-SVP/opt** 全流程要十几分钟（def2-SVP 的 SCF ≈ 2–4 min/次 × 优化步数），
-      属于慢档；先用 H2/STO-3G 的真作业证明链路，慢档等 2e 性能 WP 之后补。
+    三条判据逐条实测（2026-10-26）：
+
+    * **打开项目 → 建分子 → 选 PBE/def2-SVP/opt → 提交 → Job Monitor → 3D 结果，不崩溃不阻塞 — 通过**：
+      ① gate 里跑同一条链路（STO-3G，秒级）：Build 页加 2 个 H → 生成 input.yaml →
+      `submit()` → `run_queue()` → `converged` → 结果面板出能量、3D 面板出图（> 1000 非背景
+      像素，2 个原子，几何取自 `artifacts/optimized.xyz`）——
+      `test_gui_build.py::test_build_then_submit_opt_job_then_3d`；
+      ② **判据点名的 PBE/def2-SVP/opt 逐字跑了一遍**（离屏 Qt 窗口 + release 引擎，
+      `QWB_ENGINE_BIN` 指到 `target/release/qwb.exe`）：H2O 5 步收敛，
+      E = −76.2725559156 Ha，最大力 1.84e-4 Ha/Bohr，O–H 0.9745 Å、∠HOH 102.04°，
+      提交→结束 **530.7 s**（与另一条 release 测试并发，独占时 CLI 实测 352.1 s），
+      期间界面线程转事件循环 **96,760 圈**（"不阻塞"的硬证据），3D 面板 **32,350** 非背景像素；
+      ③ Python 绑定侧同一判据：`test_engine_opt.py` 断言 `jobtype="opt"` 的终点梯度
+      < 4.5e-4、带轨道/偶极，且能量低于同几何单点。
+    * **大日志（> 100 MB）UI 不卡 — 通过**：`test_gui.py` 的 102.8 MB / 1,540,096 行流式追加
+      66.7 s、事件循环 3081 圈、文档块数被 5000 截住。
+    * **崩溃后重启恢复未完成视图 — 通过**：`test_gui_build.py` 的
+      `test_restores_unfinished_view_after_a_crash`（构造"被杀现场"：队列里一条 `running`、
+      一条 `queued`）→ 新窗口重建 Task Panel/项目树：`running` 落 `failed` 且 reason 带
+      `interrupted`（K3 没有 `running→queued` 边），`queued` 仍 `queued` 并能接着跑完；
+      `test_restore_keeps_a_finished_task_finished` 保证终态不被重启改写。
+
+    慢档实测（H2O/PBE/def2-SVP/opt，grid-normal，release，初值 O–H 0.96 Å / ∠104.5°）：
+    轨迹 −76.27194217 → −76.27248302 → −76.27253933 → −76.27254717 → −76.27255517 →
+    −76.27255592 Ha（最大力 2.36e-2 → 1.84e-4），**5 步**收敛，
+    `used_analytic_gradient = true`、`analytic_fallback = null`。
   note: |
-    `engine` runner 让 GUI 跑真作业：`qwb run <input.yaml> --out <out>`，临时文件
-    （worker.log / 取消标志）放 `<out>/.staging/`，**不污染 K3 结果目录**；引擎不可用
-    （`QWB_ENGINE_BIN` 指错）会让任务落 `failed` 并带原因，不会把调度器炸掉。
-    P-10（VTK 3D）是 T8 的下一半，尚未开始。
+    **这次顺手抓到一个真 bug（T8 的最大收获，不是 T8 本身）**：KS 的解析梯度少了
+    "网格随原子移动"那一项（Becke 权重导数），H2 上被对称性抹掉（所以历来的梯度验收
+    都是 1e-7），H2O/STO-3G/PBE 上是 **3.30e-4 Ha/Bohr**。修法与四象限定位写在
+    docs/choices.md 四十节；修好后 H2O/def2-SVP/PBE 是 1.589e-7、HF 1.138e-7。
+
+    **两处仍不做（如实记）**：
+    ① `JobType::Freq` 没接到 `EngineBackend`（`hessian::numerical_hessian` 是有的，
+       F-01/F-02 的测试直接调它），所以 GUI 的作业类型只给 `sp`/`opt`，不给必然失败的选项；
+       3D 面板的"振动帧"仍是演示位移，不是真 Hessian 模式。
+    ② 建分子只有笛卡尔坐标（没有 Z-matrix/对称约束），也没有坐标粘贴解析。
+
+    **顺带记录的环境事实**：`qwb_studio/cli.py` 优先用 `qwb-core/target/debug/qwb.exe`，
+    所以 GUI 跑慢档作业要用 `QWB_ENGINE_BIN` 指到 release 二进制，否则 def2-SVP 会慢十倍。
+
 I-03:
   state: done
   ts: "2026-10-24T18:00:00Z"

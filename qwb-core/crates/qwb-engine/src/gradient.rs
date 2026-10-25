@@ -48,13 +48,102 @@ impl GradientOptions {
 }
 
 /// 把分子的第 `atom` 个原子沿 `axis` 移动 `shift_bohr`。
-fn displaced(molecule: &Molecule, atom: usize, axis: usize, shift_bohr: f64) -> Molecule {
+pub(crate) fn displaced(
+    molecule: &Molecule,
+    atom: usize,
+    axis: usize,
+    shift_bohr: f64,
+) -> Molecule {
     const ANGSTROM_PER_BOHR: f64 = 0.529_177_210_903;
     let mut moved = molecule.clone();
     let mut position = moved.atoms[atom].position_angstrom;
     position[axis] += shift_bohr * ANGSTROM_PER_BOHR;
     moved.atoms[atom].position_angstrom = position;
     moved
+}
+
+/// 在**固定密度矩阵**下，XC 能量对核坐标的导数（中心差分）。
+///
+/// # 为什么需要它（一个真 bug 的收尾）
+///
+/// `qwb_scf::rks::xc_gradient_terms` 只算了"密度随原子移动"那一半：ρ 通道、σ 通道、
+/// LYP 的 `∇²ρ` 通道。**没算**网格自己随原子移动那一半（Becke 权重的导数 + 网格点
+/// 位置的导数）。H2 上被对称性抹掉（8.4e-7），H2O 上是 **3.30e-4 Ha/Bohr**
+/// —— 足以把 def2-SVP 的优化几何带偏（O–H 0.9745 vs 0.9682 Å、∠HOH 102.08° vs ~104.5°）。
+///
+/// 这里用"固定 P、移动几何、重算网格与 `E_xc`、中心差分"求这一整块：
+///
+/// ```text
+/// ∂E_xc[P]/∂R_A,x = ( E_xc[P](R + δ e) − E_xc[P](R − δ e) ) / (2δ)
+/// ```
+///
+/// 它精确包含 AO 随核移动**和**网格随核移动两部分（所以生产路径用它**替代**
+/// `xc_gradient_terms`，不是叠加）。代价是每算一次梯度多 `6N` 次 XC 求值
+/// （不用重跑 SCF）—— 对水分子约等于一次 SCF 的量级。
+///
+/// 剩下的缺口记在 `docs/status.yaml` 的 G-01：Becke 权重导数的**解析**版本还没写，
+/// 现在是 `O(δ²)` 的有限差分。
+///
+/// # Errors
+///
+/// 任一几何的 XC 求值失败（基组/网格/泛函数据问题）。
+pub fn xc_geometric_derivative(
+    registry: &Registry,
+    molecule: &Molecule,
+    basis_name: &str,
+    grid_name: &str,
+    density: &qwb_linalg::Matrix,
+    terms: &[Box<dyn qwb_xc::FunctionalTerm>],
+    delta_bohr: f64,
+) -> Result<Vec<[f64; 3]>, EngineError> {
+    if terms.is_empty() {
+        // HF：没有 XC，这一项恒为 0（省掉 6N 次求值）
+        return Ok(vec![[0.0_f64; 3]; molecule.atoms.len()]);
+    }
+    if !(delta_bohr.is_finite() && delta_bohr > 0.0) {
+        return Err(EngineError::InvalidInput(format!(
+            "xc geometric derivative delta must be positive and finite, got {delta_bohr}"
+        )));
+    }
+    let mut gradient = vec![[0.0_f64; 3]; molecule.atoms.len()];
+    for (atom, row) in gradient.iter_mut().enumerate() {
+        for (axis, slot) in row.iter_mut().enumerate() {
+            let plus = xc_energy_at(
+                registry,
+                &displaced(molecule, atom, axis, delta_bohr),
+                basis_name,
+                grid_name,
+                density,
+                terms,
+            )?;
+            let minus = xc_energy_at(
+                registry,
+                &displaced(molecule, atom, axis, -delta_bohr),
+                basis_name,
+                grid_name,
+                density,
+                terms,
+            )?;
+            *slot = (plus - minus) / (2.0 * delta_bohr);
+        }
+    }
+    Ok(gradient)
+}
+
+/// 固定密度矩阵下的 `E_xc`（网格按 `molecule` 的**当前**几何重建）。
+fn xc_energy_at(
+    registry: &Registry,
+    molecule: &Molecule,
+    basis_name: &str,
+    grid_name: &str,
+    density: &qwb_linalg::Matrix,
+    terms: &[Box<dyn qwb_xc::FunctionalTerm>],
+) -> Result<f64, EngineError> {
+    let basis = qwb_basis::InternalBasis::build(registry.get_basis(basis_name)?, molecule)?;
+    let grid = qwb_grid::molecular_grid(registry.get_grid(grid_name)?, molecule)
+        .map_err(|err| EngineError::Data(format!("grid: {err}")))?;
+    let (energy, _potential) = qwb_scf::rks::evaluate_xc(&basis, &grid, density, terms)?;
+    Ok(energy)
 }
 
 /// 给定几何的总能量（单点 SCF）。空 functional 名表示走 HF 分支。

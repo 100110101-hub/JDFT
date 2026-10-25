@@ -1,0 +1,25 @@
+# T8 的最小 opt 输入：H2 / STO-3G / PBE 几何优化（解析梯度）。
+# 跑法（在 qwb-core 下）：cargo run -q -p qwb-cli --bin qwb -- run examples/h2_sto3g_pbe_opt.yaml --out results
+molecule:
+  atoms:
+    - symbol: H
+      position_angstrom: [0.0, 0.0, -0.40]
+    - symbol: H
+      position_angstrom: [0.0, 0.0, 0.40]
+  charge: 0
+  multiplicity: 1
+basis_name: sto-3g
+method_name: pbe
+grid_level: normal
+solvent: vacuum
+jobtype: opt
+options:
+  scf_max_iter: 128
+  scf_energy_threshold_hartree: 1.0e-8
+  scf_density_threshold: 1.0e-6
+  diis_history: 8
+  threads: 0
+  max_opt_steps: 60
+  opt_gradient_threshold_hartree_per_bohr: 4.5e-4
+  freq_step_angstrom: 0.01
+  ecp_name: null

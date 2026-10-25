@@ -15,8 +15,12 @@ fail=0
 for manifest in "$root"/qwb-core/crates/*/Cargo.toml; do
     section=""
     lineno=0
-    while IFS= read -r line; do
+    while IFS= read -r rawline; do
         lineno=$((lineno + 1))
+        # 本仓库的 Windows 工作区开了 `core.autocrlf=true`：磁盘上的文件可能是 CRLF，
+        # 而 `read` 只按 LF 切行，行尾会留下 `\r`。不剥掉的话空行（"")变成非空（"\r"），
+        # 会被当成"没写 workspace = true 的依赖"报错 —— 那是假阳性，不是真违规。
+        line="${rawline%$'\r'}"
         case "$line" in
             \[dependencies\]* | \[dev-dependencies\]* | \[build-dependencies\]*)
                 section="deps"

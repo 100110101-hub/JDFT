@@ -119,3 +119,29 @@ class GuiProject(QObject):
         for view in self.tasks():
             self.taskStateChanged.emit(view.task_id, view.state)
         self.projectChanged.emit()
+
+    # -- 恢复（T8 第三条判据：崩溃后重启恢复未完成视图）---------------------
+
+    def restore(self) -> dict[str, Any]:
+        """启动时重建视图：磁盘队列 → Task Panel。
+
+        语义与 `qwb batch` / 调度器一致（K3 的状态机）：
+
+        * `queued` 的任务**保持 queued**，用户点"运行队列"就能接着做；
+        * 停在 `running` 的任务说明上一个进程没写终态就死了（GUI 被杀/断电）。
+          K3 没有 `running → queued` 这条边，所以按 K3 唯一合法的出路落 `failed`，
+          `reason` 写明是被打断 —— 不静默丢掉，也不假装它还在跑。
+
+        返回 `{"restored": [...TaskView], "interrupted": [task_id, ...]}`，
+        主窗口据此刷新面板并把"上次被打断"这件事打到日志里。
+        """
+        self.scheduler.load()
+        interrupted = self.scheduler.recover()
+        views = self.tasks()
+        self.projectChanged.emit()
+        for view in views:
+            self.taskStateChanged.emit(view.task_id, view.state)
+        return {
+            "restored": views,
+            "interrupted": [entry.task_id for entry in interrupted],
+        }

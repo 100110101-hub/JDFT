@@ -86,23 +86,70 @@ class Molecule3D:
         return Molecule3D(atoms=tuple(moved), bonds=self.bonds, source=self.source)
 
 
+def read_xyz(path: str | Path) -> list[Atom3D]:
+    """读 XYZ（Å）。`opt` 作业的 `artifacts/optimized.xyz` 就是它。"""
+    source = Path(path)
+    try:
+        text = source.read_text(encoding="utf-8")
+    except OSError as exc:
+        raise SceneError(f"读不了 {source}: {exc}") from exc
+    lines = text.splitlines()
+    if len(lines) < 2:
+        raise SceneError(f"{source} 不像 XYZ（少于 2 行）")
+    try:
+        count = int(lines[0].strip())
+    except ValueError as exc:
+        raise SceneError(f"{source} 第一行不是原子数：{lines[0]!r}") from exc
+    atoms: list[Atom3D] = []
+    for line in lines[2:]:
+        if not line.strip():
+            continue
+        fields = line.split()
+        if len(fields) < 4:
+            raise SceneError(f"{source} 的原子行格式不对：{line!r}")
+        atoms.append(
+            Atom3D(
+                symbol=fields[0],
+                position_angstrom=(float(fields[1]), float(fields[2]), float(fields[3])),
+            )
+        )
+    if len(atoms) != count:
+        raise SceneError(f"{source} 声明 {count} 个原子，实际读到 {len(atoms)} 个")
+    return atoms
+
+
 def load_result_scene(result_dir: str | Path) -> Molecule3D:
-    """从 K3 结果目录读分子 + S-06 电荷（ESP 着色要用）。"""
+    """从 K3 结果目录读分子 + S-06 电荷（ESP 着色要用）。
+
+    `opt` 作业的几何在 `artifacts/optimized.xyz`（K3 允许的自由形态产物）：**优先**用它。
+    `input.yaml` 里是**初值**几何 —— 画初值就等于把"优化过的分子"画错。
+    """
     root = Path(result_dir)
     try:
         directory = open_result_dir(root)  # 缺 env.json 等会被这里挡住
     except ResultDirError as exc:
         raise SceneError(str(exc)) from exc
-    document = yaml_loads(directory.input_yaml)
-    if not isinstance(document, dict) or "molecule" not in document:
-        raise SceneError(f"{root}/input.yaml 里没有 molecule")
-    raw_atoms = document["molecule"].get("atoms") or []
     charges: list[float] | None = None
     populations = root / ARTIFACTS_DIR / "populations.json"
     if populations.is_file():
         payload = json.loads(populations.read_text(encoding="utf-8"))
         charges = payload.get("lowdin_charges") or payload.get("mulliken_charges")
-    atoms: list[Atom3D] = []
+
+    optimized = root / ARTIFACTS_DIR / "optimized.xyz"
+    if optimized.is_file():
+        atoms = read_xyz(optimized)
+        if charges is not None and len(charges) == len(atoms):
+            atoms = [
+                Atom3D(atom.symbol, atom.position_angstrom, float(charges[index]))
+                for index, atom in enumerate(atoms)
+            ]
+        return Molecule3D(atoms=tuple(atoms), bonds=guess_bonds(atoms), source=root)
+
+    document = yaml_loads(directory.input_yaml)
+    if not isinstance(document, dict) or "molecule" not in document:
+        raise SceneError(f"{root}/input.yaml 里没有 molecule")
+    raw_atoms = document["molecule"].get("atoms") or []
+    atoms = []
     for index, raw in enumerate(raw_atoms):
         symbol = str(raw.get("symbol", "?"))
         position = raw.get("position_angstrom") or [0.0, 0.0, 0.0]

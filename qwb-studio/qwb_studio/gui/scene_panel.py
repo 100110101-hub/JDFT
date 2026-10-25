@@ -135,6 +135,10 @@ class Scene3DPanel(QWidget):
     def pixmap(self) -> QPixmap | None:
         return self.image_label.pixmap()
 
+    def scene_atoms(self):
+        """当前场景里的原子（测试与"3D 画的是不是优化后的几何"用）。"""
+        return self._scene.molecule.atoms if self._scene is not None else ()
+
     # -- 内部 ---------------------------------------------------------------
 
     def _refresh(self) -> None:

@@ -7,6 +7,13 @@
 //!    （库仑 + 交换，`F = H + J − ½K`）。纯泛函根本没有 HF 交换，杂化泛函要乘
 //!    `α_hf` —— 直接塞一个 `H + J − ½K + v_xc` 进去会差 8.8e-2 Ha/Bohr。
 //!
+//! **这个测试验的是"部分解析"那一半。** 2026-10-26 发现它还缺**第三个**缺口：
+//! `xc_gradient_terms` 没算网格自己随核移动（Becke 权重导数），在 H2 上被对称性抹平
+//! （所以这里一直是 8.4e-7），在 H2O 上是 3.30e-4。生产路径改用
+//! `rks_analytic_gradient_with_xc` + 固定密度的 XC 几何差分；对称破缺体系上的验收在
+//! `tests/g01_gradient_localize.rs`（H2O/STO-3G/PBE 1.48e-7）与
+//! `tests/g01_analytic_def2svp.rs`（H2O/def2-SVP/PBE 1.59e-7）。
+//!
 //! 判据（§6 G-01）：PBE/STO-3G 的 H2（拉长到 1.1 Å）上，解析 vs 数值 < 5e-6。
 //! LSDA 用同一条代码路径作对照，把「v_xc 接线」与「σ 通道二阶导数」分开。
 #![allow(clippy::field_reassign_with_default)]

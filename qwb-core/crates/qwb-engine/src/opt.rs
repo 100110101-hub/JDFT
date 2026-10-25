@@ -8,10 +8,14 @@
 //!
 //! # 梯度来源
 //!
-//! 优先用解析梯度（`qwb_scf::analytic_gradient`），它只支持 **s 型基组 + HF**（见
-//! `docs/status.yaml` 的 G-01）；拿不到时退到数值梯度（`gradient::numerical_gradient`，
-//! 每次位移重跑 SCF）。退化的规则写在返回值里（`OptResult.used_analytic_gradient`），
-//! 不靠调用方猜。
+//! 优先用解析梯度：HF 走 `qwb_scf::analytic_gradient`，KS（LDA/GGA/hybrid）走
+//! `qwb_scf::rks::rks_analytic_gradient`（含 `α_hf` 缩放、`v_xc` 进 Pulay、XC 的
+//! σ/`∇²ρ` 显式项 —— 见 docs/choices.md 的三十八节）。只有解析路径**报错**时才退到
+//! 数值梯度（`gradient::numerical_gradient`，每次位移重跑 SCF），并把原因留在
+//! `OptResult.analytic_fallback` 里 —— 不靠调用方猜，也不静默降级。
+//!
+//! 解析梯度把每一步的代价从「`6N` 次 SCF」降到「1 次 SCF + 1 次梯度」：水分子
+//! （`N=3`，`6N=18`）差 18 倍，T8 的 PBE/def2-SVP 优化就是靠这条才跑得动。
 //!
 //! # 收敛
 //!
@@ -20,11 +24,17 @@
 
 use qwb_engine_api::{EngineError, Molecule};
 use qwb_registry::Registry;
-use qwb_scf::rks::{RksOptions, rks_from_data, rks_scf};
+use qwb_scf::rks::{RksOptions, rks_scf};
 
 use crate::gradient::{GradientOptions, numerical_gradient};
 
 const ANGSTROM_PER_BOHR: f64 = 0.529_177_210_903;
+
+/// XC 几何导数的差分步长（Bohr）。
+///
+/// 与数值梯度的 `δ = 1e-3` 同一个量级：`O(δ²)` 误差在 `δ=1e-3` 上约 1e-8 Ha/Bohr
+/// （实测见 `tests/g01_analytic_def2svp.rs` 与 `g01_gradient_localize.rs`）。
+pub(crate) const XC_DERIVATIVE_DELTA_BOHR: f64 = 1.0e-3;
 
 /// 优化器的选项。
 #[derive(Debug, Clone)]
@@ -42,6 +52,12 @@ pub struct OptOptions {
     pub force_threshold: f64,
     /// 单步步长上限（Bohr）。
     pub max_step_bohr: f64,
+    /// 每一步 SCF 的最大迭代步数。
+    pub scf_max_iter: u32,
+    /// 每一步 SCF 的能量收敛阈值（Hartree）。
+    pub scf_energy_threshold: f64,
+    /// 每一步 SCF 的密度收敛阈值。
+    pub scf_density_threshold: f64,
 }
 
 impl OptOptions {
@@ -59,7 +75,20 @@ impl OptOptions {
             max_iterations: 60,
             force_threshold: 4.5e-4,
             max_step_bohr: 0.2,
+            // 与 `RksOptions::default` 的取值一致：优化里的每一步 SCF 都要真的收敛，
+            // 否则梯度就是"未收敛密度"的梯度，BFGS 会沿着噪声走。
+            scf_max_iter: 400,
+            scf_energy_threshold: 1.0e-8,
+            scf_density_threshold: 1.0e-6,
         }
+    }
+
+    fn scf_options(&self) -> RksOptions {
+        let mut options = RksOptions::default();
+        options.max_iter = self.scf_max_iter;
+        options.energy_threshold = self.scf_energy_threshold;
+        options.density_threshold = self.scf_density_threshold;
+        options
     }
 }
 
@@ -78,8 +107,26 @@ pub struct OptResult {
     pub converged: bool,
     /// 本次是否用了解析梯度（false = 数值梯度）。
     pub used_analytic_gradient: bool,
+    /// 走数值梯度的**原因**（解析梯度成功时为 `None`）。
+    ///
+    /// 有这一条，"解析梯度可用" 这件事就不是靠 `used_analytic_gradient == true` 猜的：
+    /// 一旦解析路径因为基组角动量/XC 导数实现不全而报错，原因会一路带到结果目录的
+    /// `artifacts/optimization.json`。
+    pub analytic_fallback: Option<String>,
     /// 每一步的 `(能量, 最大力)`，第 0 项是初值（G-03 的「多步轨迹」）。
     pub trajectory: Vec<(f64, f64)>,
+}
+
+/// 一步的观测值（优化过程中回调给调用方，用来打进度）。
+#[derive(Debug, Clone, Copy)]
+#[non_exhaustive]
+pub struct OptStep {
+    /// 第几步（0 = 初值）。
+    pub iteration: u32,
+    /// 这一步的能量（Hartree）。
+    pub energy_hartree: f64,
+    /// 这一步的最大力分量（Ha/Bohr）。
+    pub max_force: f64,
 }
 
 /// 把几何摊成 `[x1, y1, z1, x2, …]`（单位 Bohr）。
@@ -112,55 +159,81 @@ fn flatten_gradient(gradient: &[[f64; 3]]) -> Vec<f64> {
     out
 }
 
-/// 能量 + 梯度。优先解析（s 型 + HF），否则数值。
+/// 一次「SCF + 解析梯度」：同一次 SCF 的密度同时喂给能量和梯度，不做重复收敛。
+///
+/// XC 的**几何**导数（网格权重/网格点随核移动那一半）走
+/// [`crate::gradient::xc_geometric_derivative`]（固定密度的中心差分）—— 见
+/// `qwb_scf::rks::rks_analytic_gradient_with_xc` 的文档。
+///
+/// 公开是给"要在这个价位上做梯度"的调用方（Hessian、梯度验收测试）用的：
+/// 生产梯度只有这一条路，测试和生产不能各走一条。
+///
+/// # Errors
+///
+/// 基组/网格/泛函数据不可用，SCF 未收敛，或梯度实现覆盖不到的角动量。
+pub fn analytic_energy_and_gradient(
+    registry: &Registry,
+    molecule: &Molecule,
+    options: &OptOptions,
+) -> Result<(f64, Vec<[f64; 3]>), EngineError> {
+    let basis = qwb_basis::InternalBasis::build(registry.get_basis(&options.basis)?, molecule)?;
+    let one = qwb_integrals::one_electron::one_electron(&basis, molecule)?;
+    let tensor = qwb_integrals::two_electron::two_electron(&basis, molecule)?;
+    let grid = qwb_grid::molecular_grid(registry.get_grid(&options.grid)?, molecule)
+        .map_err(|err| EngineError::Data(format!("grid: {err}")))?;
+    let (terms, hf_exchange) = crate::terms_and_hf_exchange(registry, &options.functional)?;
+
+    let mut scf_options = options.scf_options();
+    scf_options.hf_exchange = hf_exchange;
+    let result = rks_scf(&basis, molecule, &tensor, &grid, &terms, scf_options)?;
+    let xc = crate::gradient::xc_geometric_derivative(
+        registry,
+        molecule,
+        &options.basis,
+        &options.grid,
+        &result.density,
+        &terms,
+        XC_DERIVATIVE_DELTA_BOHR,
+    )?;
+    let gradient = qwb_scf::rks::rks_analytic_gradient_with_xc(
+        &basis,
+        molecule,
+        &grid,
+        &one.core_hamiltonian,
+        &tensor,
+        &result.density,
+        &terms,
+        hf_exchange,
+        &xc,
+    )?;
+    Ok((result.energy_hartree, gradient))
+}
+
+/// 一次"能量 + 梯度"的结果：`(能量, 梯度, 退到数值梯度的原因)`。
+type EnergyAndGradient = (f64, Vec<[f64; 3]>, Option<String>);
+
+/// 能量 + 梯度：先解析，解析失败才退数值（并把原因交给调用方）。
 fn energy_and_gradient(
     registry: &Registry,
     molecule: &Molecule,
     options: &OptOptions,
-) -> Result<(f64, Vec<[f64; 3]>, bool), EngineError> {
-    let mut scf_options = RksOptions::default();
-    scf_options.max_iter = 400;
-
-    // 解析路径目前只对 **HF** 成立：KS 还缺一项「XC 能量的显式基组运动项」
-    // `∫ v_xc·(∂ρ/∂R)|_{P 固定}`（见 tests/g01_analytic_pbe.rs 与 status.yaml 的 G-01）。
-    if options.functional.is_empty() {
-        let basis_k1 = registry.get_basis(&options.basis)?;
-        let basis = qwb_basis::InternalBasis::build(basis_k1, molecule)?;
-        let one = qwb_integrals::one_electron::one_electron(&basis, molecule)?;
-        let tensor = qwb_integrals::two_electron::two_electron(&basis, molecule)?;
-        let grid = qwb_grid::molecular_grid(registry.get_grid(&options.grid)?, molecule)
-            .map_err(|err| EngineError::Data(format!("grid: {err}")))?;
-        let terms = functional_terms(registry, options)?;
-        let result = rks_scf(&basis, molecule, &tensor, &grid, &terms, scf_options)?;
-        let mut fock = qwb_scf::build_fock(&one.core_hamiltonian, &tensor, &result.density)
-            .map_err(|err| EngineError::Internal(format!("build_fock: {err}")))?
-            .fock;
-        if !terms.is_empty() {
-            // KS：Pulay 项要求 F 是**完整的** Kohn–Sham Fock，即 H + J + v_xc
-            let (_, v_xc) = qwb_scf::rks::evaluate_xc(&basis, &grid, &result.density, &terms)?;
-            for mu in 0..fock.nrows() {
-                for nu in 0..fock.ncols() {
-                    fock.set(mu, nu, fock.get(mu, nu) + v_xc.get(mu, nu));
-                }
-            }
-        }
-        if let Ok(gradient) =
-            qwb_scf::analytic_gradient::analytic_gradient(&basis, molecule, &result.density, &fock)
-        {
-            return Ok((result.energy_hartree, gradient, true));
+) -> Result<EnergyAndGradient, EngineError> {
+    match analytic_energy_and_gradient(registry, molecule, options) {
+        Ok((energy, gradient)) => Ok((energy, gradient, None)),
+        Err(analytic_error) => {
+            // 数值路径（任何基组/泛函）。这是**降级**，不是等价路径：把解析失败的原因
+            // 带出去，别让"梯度算出来了"看起来像"解析梯度没问题"。
+            let mut gradient_options = GradientOptions::new(
+                options.basis.clone(),
+                options.functional.clone(),
+                options.grid.clone(),
+            );
+            gradient_options.delta_bohr = 1.0e-3;
+            let gradient = numerical_gradient(registry, molecule, &gradient_options)?;
+            let energy = single_point(registry, molecule, options)?;
+            Ok((energy, gradient, Some(analytic_error.to_string())))
         }
     }
-
-    // 数值路径（任何基组/泛函）
-    let mut gradient_options = GradientOptions::new(
-        options.basis.clone(),
-        options.functional.clone(),
-        options.grid.clone(),
-    );
-    gradient_options.delta_bohr = 1.0e-3;
-    let gradient = numerical_gradient(registry, molecule, &gradient_options)?;
-    let energy = single_point(registry, molecule, options)?;
-    Ok((energy, gradient, false))
 }
 
 fn single_point(
@@ -168,49 +241,16 @@ fn single_point(
     molecule: &Molecule,
     options: &OptOptions,
 ) -> Result<f64, EngineError> {
-    let mut scf_options = RksOptions::default();
-    scf_options.max_iter = 400;
-    if options.functional.is_empty() {
-        let basis_k1 = registry.get_basis(&options.basis)?;
-        let basis = qwb_basis::InternalBasis::build(basis_k1, molecule)?;
-        let tensor = qwb_integrals::two_electron::two_electron(&basis, molecule)?;
-        let grid = qwb_grid::molecular_grid(registry.get_grid(&options.grid)?, molecule)
-            .map_err(|err| EngineError::Data(format!("grid: {err}")))?;
-        Ok(rks_scf(&basis, molecule, &tensor, &grid, &[], scf_options)?.energy_hartree)
-    } else {
-        Ok(rks_from_data(
-            registry,
-            molecule,
-            &options.basis,
-            &options.functional,
-            &options.grid,
-            scf_options,
-        )?
-        .energy_hartree)
-    }
+    let basis = qwb_basis::InternalBasis::build(registry.get_basis(&options.basis)?, molecule)?;
+    let tensor = qwb_integrals::two_electron::two_electron(&basis, molecule)?;
+    let grid = qwb_grid::molecular_grid(registry.get_grid(&options.grid)?, molecule)
+        .map_err(|err| EngineError::Data(format!("grid: {err}")))?;
+    let (terms, hf_exchange) = crate::terms_and_hf_exchange(registry, &options.functional)?;
+    let mut scf_options = options.scf_options();
+    scf_options.hf_exchange = hf_exchange;
+    Ok(rks_scf(&basis, molecule, &tensor, &grid, &terms, scf_options)?.energy_hartree)
 }
 
-/// 从注册表构造泛函项（空名字表示 HF）。
-fn functional_terms(
-    registry: &qwb_registry::Registry,
-    options: &OptOptions,
-) -> Result<Vec<Box<dyn qwb_xc::FunctionalTerm>>, EngineError> {
-    let mut terms: Vec<Box<dyn qwb_xc::FunctionalTerm>> = Vec::new();
-    if options.functional.is_empty() {
-        return Ok(terms);
-    }
-    let functional = registry.get_functional(&options.functional)?;
-    for component in &functional.components {
-        // hybrid 的 HF 交换比例由调用方处理（本函数只建网格上的能量密度项）
-        if component.id == "HfExchange" {
-            continue;
-        }
-        let term = qwb_xc::build_term(&component.id, &functional.parameters)
-            .map_err(|err| EngineError::Data(format!("functional `{}`: {err}", functional.name)))?;
-        terms.push(qwb_xc::scale_term(term, component.weight));
-    }
-    Ok(terms)
-}
 fn max_force(gradient: &[f64]) -> f64 {
     gradient
         .iter()
@@ -236,9 +276,29 @@ pub fn optimize(
     molecule: &Molecule,
     options: &OptOptions,
 ) -> Result<OptResult, EngineError> {
+    optimize_with_progress(registry, molecule, options, &mut |_| true)
+}
+
+/// 与 [`optimize`] 相同，但每走一步都把 `(步数, 能量, 最大力)` 回调出去。
+///
+/// 回调返回 `false` 表示**中止**（协作取消；返回
+/// [`EngineError::InvalidInput`]，与 K2 的"启动前被取消"同一个变体）。
+///
+/// 存在的理由：T8 的 `opt` 作业要跑几分钟到几十分钟，GUI 的 Job Monitor 需要有东西
+/// 可看。回调在**工作线程**里执行（引擎本来就是阻塞调用），调用方自己保证线程安全。
+///
+/// # Errors
+///
+/// 同 [`optimize`]，外加回调中止时的 [`EngineError::InvalidInput`]。
+pub fn optimize_with_progress(
+    registry: &Registry,
+    molecule: &Molecule,
+    options: &OptOptions,
+    on_step: &mut dyn FnMut(&OptStep) -> bool,
+) -> Result<OptResult, EngineError> {
     let dimension = molecule.atoms.len() * 3;
     let mut coordinates = flatten(molecule);
-    let (mut energy, mut gradient, used_analytic) =
+    let (mut energy, mut gradient, mut analytic_fallback) =
         energy_and_gradient(registry, molecule, options)?;
     let mut flat_gradient = flatten_gradient(&gradient);
 
@@ -254,6 +314,15 @@ pub fn optimize(
     let mut iterations = 0;
     let mut converged = max_force(&flat_gradient) < options.force_threshold;
     let mut trajectory = vec![(energy, max_force(&flat_gradient))];
+    if !on_step(&OptStep {
+        iteration: 0,
+        energy_hartree: energy,
+        max_force: max_force(&flat_gradient),
+    }) {
+        return Err(EngineError::InvalidInput(
+            "job cancelled during optimisation".into(),
+        ));
+    }
 
     while !converged && iterations < options.max_iterations {
         iterations += 1;
@@ -306,7 +375,10 @@ pub fn optimize(
             break;
         };
 
-        let (_, new_gradient, _) = energy_and_gradient(registry, &new_molecule, options)?;
+        let (_, new_gradient, fallback) = energy_and_gradient(registry, &new_molecule, options)?;
+        if analytic_fallback.is_none() {
+            analytic_fallback = fallback;
+        }
         let new_flat = flatten_gradient(&new_gradient);
 
         // BFGS 逆 Hessian 更新：H ← (I − ρ s yᵀ) H (I − ρ y sᵀ) + ρ s sᵀ
@@ -354,6 +426,15 @@ pub fn optimize(
         flat_gradient = new_flat;
         converged = max_force(&flat_gradient) < options.force_threshold;
         trajectory.push((energy, max_force(&flat_gradient)));
+        if !on_step(&OptStep {
+            iteration: iterations,
+            energy_hartree: energy,
+            max_force: max_force(&flat_gradient),
+        }) {
+            return Err(EngineError::InvalidInput(
+                "job cancelled during optimisation".into(),
+            ));
+        }
     }
 
     Ok(OptResult {
@@ -362,7 +443,8 @@ pub fn optimize(
         gradient,
         iterations,
         converged,
-        used_analytic_gradient: used_analytic,
+        used_analytic_gradient: analytic_fallback.is_none(),
+        analytic_fallback,
         trajectory,
     })
 }

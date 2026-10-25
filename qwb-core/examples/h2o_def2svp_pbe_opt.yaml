@@ -1,0 +1,32 @@
+# T8 判据点名的慢档：H2O / PBE / def2-SVP / opt（解析梯度）。
+#
+# 跑法（release，分钟级）：
+#   cargo run --release -p qwb-cli --bin qwb -- run examples/h2o_def2svp_pbe_opt.yaml --out results
+#
+# 初值取实验平衡几何附近（O–H = 0.96 Å、∠HOH ≈ 104.5°），PBE/def2-SVP 的极小点
+# 在 0.968 Å 附近，所以三步左右收敛；实测数字记在 docs/status.yaml 的 T8 条目里。
+molecule:
+  atoms:
+    - symbol: O
+      position_angstrom: [0.0, 0.0, 0.0]
+    - symbol: H
+      position_angstrom: [0.0, 0.757, 0.586]
+    - symbol: H
+      position_angstrom: [0.0, -0.757, 0.586]
+  charge: 0
+  multiplicity: 1
+basis_name: def2-svp
+method_name: pbe
+grid_level: normal
+solvent: vacuum
+jobtype: opt
+options:
+  scf_max_iter: 128
+  scf_energy_threshold_hartree: 1.0e-8
+  scf_density_threshold: 1.0e-6
+  diis_history: 8
+  threads: 0
+  max_opt_steps: 30
+  opt_gradient_threshold_hartree_per_bohr: 4.5e-4
+  freq_step_angstrom: 0.01
+  ecp_name: null

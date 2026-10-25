@@ -42,6 +42,8 @@ from PySide6.QtWidgets import (
 )
 
 from ..resultdir import ResultDirError, open_result_dir
+from ..runner import find_data_root
+from .builder import MoleculeBuilder
 from .logview import LogView
 from .scene_panel import Scene3DPanel
 from .model import GuiProject
@@ -60,7 +62,14 @@ STATE_COLORS = {
 class MainWindow(QMainWindow):
     """一个工程窗口。"""
 
-    def __init__(self, out_root: str | Path, *, workers: int = 2, runner: str = "mock") -> None:
+    def __init__(
+        self,
+        out_root: str | Path,
+        *,
+        workers: int = 2,
+        runner: str = "mock",
+        data_root: str | Path | None = None,
+    ) -> None:
         super().__init__()
         self.setWindowTitle("QuantumWorkbench Studio")
         self.resize(1100, 700)
@@ -68,6 +77,7 @@ class MainWindow(QMainWindow):
         self.project = GuiProject(out_root, workers=workers, runner=runner)
         self.bridge = SchedulerBridge(self.project, self)
         self._rows: dict[str, int] = {}
+        self._data_root = data_root
 
         splitter = QSplitter(Qt.Orientation.Horizontal)
         splitter.addWidget(self._build_tree())
@@ -81,6 +91,9 @@ class MainWindow(QMainWindow):
         self.bridge.stateChanged.connect(self._on_state_changed)
         self.bridge.runFinished.connect(self._on_run_finished)
         self.bridge.runFailed.connect(self._on_run_failed)
+        # T8 第三条判据：崩溃后重启 → 从磁盘队列重建视图（running 落 failed/interrupted，
+        # queued 留着可以直接接着跑）
+        self._restore_unfinished_view()
         self._refresh_monitor()
 
         quit_action = QAction("退出", self)
@@ -101,6 +114,11 @@ class MainWindow(QMainWindow):
 
     def _build_right(self) -> QWidget:
         tabs = QTabWidget()
+        # "建分子 → 提交" 是 T8 的主流程，所以 Build 放第一个。
+        self.builder = MoleculeBuilder(self._data_root)
+        self.builder.submitRequested.connect(self._on_builder_submit)
+        self.builder.statusChanged.connect(self._on_builder_status)
+        tabs.addTab(self.builder, "Build")
         tabs.addTab(self._build_task_panel(), "Task")
         tabs.addTab(self._build_monitor(), "Job Monitor")
         tabs.addTab(self._build_result_panel(), "Result")
@@ -202,6 +220,51 @@ class MainWindow(QMainWindow):
             return
         self.bridge.start()
         self._status.setText("运行中…")
+
+    def _on_builder_status(self, message: str) -> None:
+        self._status.setText(message)
+
+    def _on_builder_submit(self, input_yaml: str) -> str | None:
+        """Build 页点"提交真作业"：登记成 engine 任务（worker = `qwb run`）。"""
+        task_id = self.id_edit.text().strip() or f"build{len(self._rows)}"
+        try:
+            view = self.project.submit_engine(task_id, input_yaml)
+        except (FileNotFoundError, OSError) as exc:
+            self._status.setText(f"提交失败：{exc}")
+            self.log_view.appendPlainText(f"提交失败：{exc}")
+            return None
+        self.id_edit.setText(_next_task_id(task_id))
+        self.input_edit.setText(input_yaml)
+        self._sync_tree()
+        self._refresh_monitor()
+        self.log_view.appendPlainText(f"已登记 {view.task_id}（{view.state}）：{input_yaml}")
+        self._status.setText(f"已登记 {view.task_id}（Build 页）")
+        return view.task_id
+
+    def _restore_unfinished_view(self) -> None:
+        """启动时把磁盘上的任务表读回来（T8：崩溃后重启恢复未完成视图）。"""
+        try:
+            outcome = self.project.restore()
+        except Exception as exc:  # noqa: BLE001 - 队列文件坏了不该让窗口起不来
+            self.log_view.appendPlainText(f"恢复失败：{exc}")
+            self._status.setText(f"恢复失败：{exc}")
+            return
+        restored = outcome["restored"]
+        interrupted = outcome["interrupted"]
+        if restored:
+            self.log_view.appendPlainText(
+                f"恢复 {len(restored)} 个任务：" + ", ".join(f"{view.task_id}={view.state}" for view in restored)
+            )
+        for task_id in interrupted:
+            self.log_view.appendPlainText(
+                f"{task_id} 上次停在 running（进程被杀）：K3 没有 running→queued，已落 failed，"
+                "请用新的 task id 重提"
+            )
+        if restored:
+            queued = sum(1 for view in restored if view.state == "queued")
+            self._status.setText(
+                f"恢复了 {len(restored)} 个任务（{queued} 个 queued 可继续跑，{len(interrupted)} 个被打断）"
+            )
 
     def cancel_selected(self) -> None:
         task_id = self.selected_task_id()
@@ -328,6 +391,19 @@ class MainWindow(QMainWindow):
         if self.bridge.is_running():
             self.bridge.wait(30_000)
         super().closeEvent(event)
+
+
+def _next_task_id(previous: str) -> str:
+    """`t3` → `t4`；带前缀的（`build3`）只递增末尾的数字。"""
+    digits = ""
+    for character in reversed(previous):
+        if not character.isdigit():
+            break
+        digits = character + digits
+    if not digits:
+        return f"{previous}1"
+    stem = previous[: len(previous) - len(digits)]
+    return f"{stem}{int(digits) + 1}"
 
 
 def build_application(argv: list[str] | None = None):

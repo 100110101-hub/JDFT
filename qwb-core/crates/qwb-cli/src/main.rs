@@ -257,15 +257,25 @@ fn execute_job(input: &JobInput, task_id: &str, out_root: &Path) -> CliResult<f6
     let root = find_data_root()?;
     let registry = qwb_registry::Registry::open(&root).map_err(|e| CliError::from_engine(&e))?;
     let handle = registry.engine_handle();
-    let backend = Box::new(qwb_engine::RksBackend::new(registry));
+    let opt_sink = qwb_engine::OptSink::new();
+    let backend = Box::new(qwb_engine::RksBackend::new(registry).with_opt_sink(opt_sink.clone()));
     let engine = qwb_engine_api::Engine::with_backend(&handle, backend)
         .map_err(|e| CliError::from_engine(&e))?;
 
     let reporter = CliReporter::new();
-    let result = engine
-        .run(input, &reporter)
-        .map_err(|e| CliError::from_engine(&e))?;
+    let run = engine.run(input, &reporter);
+    // `opt` 的旁路产物（优化后的几何/轨迹）在成功与"没收敛"两种情况下都要落盘，
+    // 所以先取出来，再处理错误 —— 失败的结果目录同样需要 `artifacts/optimization.json`
+    // 才能让人看出停在哪一步。
+    let opt_report = opt_sink.take();
     let lines = reporter.into_lines();
+    let result = run.map_err(|e| {
+        if let Some(report) = &opt_report {
+            // 尽力写出（写不出来也不掩盖原始错误）
+            let _ = write_optimisation_artifacts(out_root, task_id, report);
+        }
+        CliError::from_engine(&e)
+    })?;
 
     let task_dir = out_root.join(task_id);
     std::fs::create_dir_all(task_dir.join("artifacts"))
@@ -298,9 +308,78 @@ fn execute_job(input: &JobInput, task_id: &str, out_root: &Path) -> CliResult<f6
     log.push_str(&result.log);
     log.push('\n');
     write("log.txt", log.into_bytes())?;
+    if let Some(report) = &opt_report {
+        write_optimisation_artifacts(out_root, task_id, report)?;
+        println!(
+            "opt     {} steps, max|grad| = {:.3e} Ha/Bohr",
+            report.iterations,
+            report
+                .gradient
+                .iter()
+                .flat_map(|row| row.iter())
+                .fold(0.0_f64, |acc, value| acc.max(value.abs()))
+        );
+        println!(
+            "geometry {}",
+            task_dir.join("artifacts").join("optimized.xyz").display()
+        );
+    }
     write_visual_artifacts(&root, input, &result, &task_dir)?;
     println!("scf     converged = {}", result.scf_converged);
     Ok(result.energy_hartree)
+}
+
+/// 写 `opt` 作业的产物：`artifacts/optimized.xyz`（优化后的几何）+ `artifacts/optimization.json`。
+///
+/// 为什么在 `artifacts/` 而不是 `result.json`：K2 的 `JobResult` 没有几何字段，而 K2 是
+/// 冻结契约；K3 明确写了 `artifacts/**` 是自由形态。XYZ 用 Ångström（与 `input.yaml`
+/// 的 `position_angstrom` 同一单位），GUI 的 3D 面板直接读它。
+fn write_optimisation_artifacts(
+    out_root: &Path,
+    task_id: &str,
+    report: &qwb_engine::OptReport,
+) -> CliResult<()> {
+    let artifacts = out_root.join(task_id).join("artifacts");
+    std::fs::create_dir_all(&artifacts)
+        .map_err(|e| CliError::internal(format!("cannot create {}: {e}", artifacts.display())))?;
+
+    let mut xyz = format!("{}\n", report.molecule.atoms.len());
+    xyz.push_str(&format!(
+        "qwb opt: E = {:.10} Ha, steps = {}, converged = {}\n",
+        report.energy_hartree, report.iterations, report.converged
+    ));
+    for atom in &report.molecule.atoms {
+        let [x, y, z] = atom.position_angstrom;
+        xyz.push_str(&format!(
+            "{:<3} {:>18.12} {:>18.12} {:>18.12}\n",
+            atom.symbol, x, y, z
+        ));
+    }
+    std::fs::write(artifacts.join("optimized.xyz"), xyz.into_bytes())
+        .map_err(|e| CliError::internal(format!("cannot write optimized.xyz: {e}")))?;
+
+    let payload = serde_json::json!({
+        "iterations": report.iterations,
+        "converged": report.converged,
+        "used_analytic_gradient": report.used_analytic_gradient,
+        "analytic_fallback": report.analytic_fallback,
+        "energy_hartree": report.energy_hartree,
+        // `[[step, E, max|grad|], …]`，第 0 项是初值
+        "trajectory": report
+            .trajectory
+            .iter()
+            .enumerate()
+            .map(|(step, (energy, max_force))| serde_json::json!([step, energy, max_force]))
+            .collect::<Vec<_>>(),
+        "gradient_hartree_per_bohr": report.gradient,
+    });
+    std::fs::write(
+        artifacts.join("optimization.json"),
+        serde_json::to_vec_pretty(&payload)
+            .map_err(|e| CliError::internal(format!("cannot serialise optimization.json: {e}")))?,
+    )
+    .map_err(|e| CliError::internal(format!("cannot write optimization.json: {e}")))?;
+    Ok(())
 }
 
 /// 写可视化的附带产物到 `artifacts/`（K3 允许，`artifacts/**` 是自由形态）。

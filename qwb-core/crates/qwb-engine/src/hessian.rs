@@ -138,55 +138,20 @@ fn gradient_at(
 
 /// 用**解析梯度**算某一几何的梯度；算不出来时返回空向量，由调用方退回数值梯度。
 ///
-/// KS 也走这条路：`rks_analytic_gradient` 把 `α_hf` 缩放、`v_xc` 进 Pulay、
-/// XC 的 σ / `∇²ρ` 显式项都算进去了。这一步把 Hessian 的代价从
-/// 「`6N` 个位移 × 每个位移一次**数值**梯度（`3N×2` 次 SCF）」降到
-/// 「`6N` 个位移 × 每次 1 次 SCF」—— 也就是 `3N` 倍。
+/// KS 也走这条路：`rks_analytic_gradient_with_xc` 把 `α_hf` 缩放、`v_xc` 进 Pulay、
+/// XC 的 σ / `∇²ρ` 显式项都算进去了；XC **几何**那一半（网格权重/网格点随核移动）
+/// 由 `gradient::xc_geometric_derivative` 以固定密度中心差分补上 —— 2026-10-26 实测：
+/// 不补这一半，H2O/STO-3G/PBE 的梯度差 3.30e-4 Ha/Bohr（H2 上被对称性掩盖）。
+///
+/// 这一步把 Hessian 的代价从「`6N` 个位移 × 每个位移一次**数值**梯度（`3N×2` 次 SCF）」
+/// 降到「`6N` 个位移 × 每次 1 次 SCF + `6N` 次 XC 求值」—— 依然是 `3N` 倍量级。
 fn analytic_gradient_flat(
     registry: &Registry,
     molecule: &Molecule,
     options: &OptOptions,
 ) -> Result<Vec<f64>, EngineError> {
-    let mut scf_options = qwb_scf::rks::RksOptions::default();
-    scf_options.max_iter = 400;
-    let basis = qwb_basis::InternalBasis::build(registry.get_basis(&options.basis)?, molecule)?;
-    let one = qwb_integrals::one_electron::one_electron(&basis, molecule)?;
-    let tensor = qwb_integrals::two_electron::two_electron(&basis, molecule)?;
-    let grid = qwb_grid::molecular_grid(registry.get_grid(&options.grid)?, molecule)
-        .map_err(|err| EngineError::Data(format!("grid: {err}")))?;
-
-    // 泛函 → terms + α_hf（与 `rks_from_data` 同一套规则：`HfExchange` 不是密度项）
-    let mut terms: Vec<Box<dyn qwb_xc::FunctionalTerm>> = Vec::new();
-    if !options.functional.is_empty() {
-        let functional = registry.get_functional(&options.functional)?;
-        let parameters: std::collections::BTreeMap<String, f64> = functional.parameters.clone();
-        for component in &functional.components {
-            if component.id == "HfExchange" {
-                scf_options.hf_exchange += component.weight;
-                continue;
-            }
-            let term = qwb_xc::build_term(&component.id, &parameters)
-                .map_err(|err| EngineError::Data(format!("functional: {err}")))?;
-            terms.push(qwb_xc::scale_term(term, component.weight));
-        }
-    }
-    let hf_exchange = if options.functional.is_empty() {
-        1.0
-    } else {
-        scf_options.hf_exchange
-    };
-
-    let result = qwb_scf::rks::rks_scf(&basis, molecule, &tensor, &grid, &terms, scf_options)?;
-    let gradient = qwb_scf::rks::rks_analytic_gradient(
-        &basis,
-        molecule,
-        &grid,
-        &one.core_hamiltonian,
-        &tensor,
-        &result.density,
-        &terms,
-        hf_exchange,
-    )?;
+    // 与 `opt` 走**同一条**生产路径（解析 1e/2e/Pulay + XC 几何项的固定密度差分）。
+    let (_, gradient) = crate::opt::analytic_energy_and_gradient(registry, molecule, options)?;
     let mut flat = Vec::with_capacity(gradient.len() * 3);
     for row in &gradient {
         flat.extend_from_slice(row);

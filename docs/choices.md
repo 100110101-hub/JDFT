@@ -1123,3 +1123,164 @@ dE_2e/dR = Σ_{quartets} [ ½ P_ab P_cd − ¼ P_ac P_bd ] · d(ab|cd)/dR
 `g01_components`（逐项对固定密度差分）、`gga_xc_gradient`（4 例）、`g01_analytic_water`
 （6.7e-7）、`g01_analytic_pbe`（LSDA 1.24e-6 / PBE 8.40e-7）、`t6_b3lyp_gradient`（7.29e-8）
 —— 全部继续成立。这也是敢动这块代码的原因：判据足够密、足够严，写错会立刻红。
+
+## 四十、KS 梯度的第三个缺口：网格自己也在动（2026-10-26）
+
+### 怎么发现的
+
+T8 要把 `JobType::Opt` 接到 `EngineBackend` 上，判据点名 **PBE/def2-SVP/opt**。接完先跑了一次
+H2O/PBE/def2-SVP/opt，得到 O–H **0.9745 Å**、∠HOH **102.08°**、E = −76.2725558279 Ha（5 步，
+最大力 1.42e-4）。数字本身不"炸"，但和 T3 记的 PBE/def2-SVP 的 0.9682 Å 对不上。
+
+于是问了一个更基本的问题：**"解析梯度对不对"这件事，到底在哪些体系上验过？**
+
+答案很难看：`g01_analytic`、`g01_analytic_water`、`g01_analytic_pbe`、`t6_b3lyp_gradient`
+**全是 STO-3G**。H2 只有 s 函数，H2O/STO-3G 只有 s/p。而判据点名的是 def2-SVP（O 上有 d）；
+更糟的是，**除了 H2 以外，没有任何一个体系验过 KS 梯度在对称破缺几何上的表现**。
+
+### 四象限定位
+
+新写了两条慢档测试（`g01_gradient_localize.rs`、`g01_analytic_def2svp.rs`），把"是不是 d 壳层"
+和"是不是 XC 的网格项"分开：
+
+| | s/p 基组（STO-3G） | d 基组（def2-SVP） |
+| --- | --- | --- |
+| **HF**（无 XC） | 6.7e-7 ✓（旧测试） | **1.138e-7** ✓ |
+| **PBE**（有 XC 网格） | **3.304e-4** ✗ | **2.282e-4** ✗ |
+
+结论很干脆：**跟 d 壳层没关系**（HF 在 def2-SVP 上就是 1e-7），是 **XC 的几何导数**。
+
+### 缺的到底是哪一项
+
+`xc_gradient_terms` 算的是"**密度**随原子移动"：
+
+```text
+Σ_g w_g [ (ε + ρ ε_ρ)·∂ρ/∂R + (ρ ε_σ)·∂σ/∂R + (∇²ρ 通道) ]
+```
+
+但有限网格上的 XC 能量是 `E_xc = Σ_g w_g(R) ε(r_g(R))` —— **网格点和权重也随原子动**：
+
+```text
+dE_xc/dR = Σ_g [ (∂w_g/∂R) ε_g + w_g (∂ε_g/∂r)·(∂r_g/∂R) + w_g ∂ε_g/∂(ρ,∇ρ)·∂(ρ,∇ρ)/∂R ]
+```
+
+第三项是 `xc_gradient_terms` 算的；**前两项没算**。前两项在 H2 上被镜像对称抹掉（所以
+`g01_analytic_pbe` 一直是 8.4e-7），在 H2O 上是 3.3e-4 —— 足以把平衡几何带偏 0.006 Å / 2°。
+
+旧文档里我写的是"网格权重导数是通行做法省略的，通常 1e-6 量级或更小"。**这句话是错的**，
+错在拿 H2 的结果外推到所有体系。已在 `xc_gradient_terms` 的文档里改正并写明实测值。
+
+### 修法：固定密度的 XC 几何差分
+
+两条路：
+
+1. **解析**地算 Becke 权重导数（`∂w_g/∂R_A` 涉及所有原子对距离比的切换函数导数，O(N²)/点）；
+2. 在**固定密度**下对 `E_xc(R)` 做中心差分：
+
+```text
+∂E_xc[P]/∂R_A,x = ( E_xc[P](R + δe) − E_xc[P](R − δe) ) / (2δ)
+```
+
+选 2，理由是量级：每算一次梯度多 `6N` 次 **XC 求值**（不用重跑 SCF），水分子上约 1.2 s/次，
+一次梯度 ≈ 20 s；而解析权重导数要写 O(N²) 的切换函数导数并重新验证，收益只是省掉这 20 s。
+**它是精确包含两项的**（AO 随核动 + 网格随核动），所以是**替代** `xc_gradient_terms`，
+不是叠加 —— 叠加就把第三项算两遍了。
+
+代价与边界都写清楚：
+
+* 入口是 `qwb_scf::rks::rks_analytic_gradient_with_xc(.., xc_gradient)`；
+  `xc_gradient_terms` 保留（它仍是"部分解析"那一半，单独有测试）；
+* 生产路径（`opt`、Hessian）只走 `rks_analytic_gradient_with_xc` +
+  `qwb_engine::gradient::xc_geometric_derivative`；
+* **还没做**：Becke 权重导数的解析版本。现在的 XC 几何导数是 `O(δ²)` 的差分（δ = 1e-3 Bohr），
+  实测与全数值梯度的总差 1.5e-7 Ha/Bohr（下面），比"差分误差"还小，够用。
+
+### 修好之后的实测
+
+| 体系 | 修之前 | 修之后 |
+| --- | --- | --- |
+| H2O/STO-3G/PBE（最大分量差） | 3.304e-4 | **1.480e-7** |
+| H2O/def2-SVP/PBE | 2.282e-4 | **1.589e-7** |
+| H2O/def2-SVP/HF（对照，本来就没问题） | 1.138e-7 | 1.138e-7 |
+
+判据是 < 5e-6（与 `g01_analytic_pbe` 同一量级）。这两条测试是 `#[ignore]` 的慢档
+（def2-SVP 的数值参照要 18 次 SCF，release 下 1.5–3 分钟），数字写在这里与 status.yaml 里。
+
+### 顺手记下的两件事（不是这次要修的）
+
+1. **T3 的数字是 grid-coarse 的，T8 这次是 grid-normal 的。** 两个网格等级的 PBE/def2-SVP
+   总能量差 9.4e-5 Ha（T2 测过），足以让平衡键长动 0.006 Å —— 所以"0.9682（T3，coarse）
+   vs 0.9745（T8，normal）"不是矛盾，是**网格敏感度**。为确认这一点，直接算了两个几何的单点：
+   我们优化出的几何（0.9745 Å / 102.04°）比文献几何（0.9685 Å / 104.4°）**低 3.8e-5 Ha**
+   —— 在**我们这条 PBE/def2-SVP/grid-normal 面**上，优化器找到的确实是极小点
+   （梯度已验到 1.6e-7）。要消掉这 0.006 Å，得先解决网格；不是优化器或梯度的事。
+2. **H2O/def2-SVP/PBE 在 grid-fine 上 SCF 不收敛**（128 步与 400 步都不收敛，grid-normal 正常）。
+   这是新暴露的**已知失败**，记在 status.yaml 的 G-01/known-failure 里，不在这一节修。
+
+## 四十一、把 `opt` 接进引擎时的五个决定（2026-10-26）
+
+T8 要"GUI 里选 PBE/def2-SVP/opt 就能跑"，而 `opt` 在此之前只是一个库函数
+（`qwb_engine::opt::optimize`，T3 用过、测试调过），**没有**接到 K2 的 `EngineBackend` 上。
+接线时碰到五处"契约没给答案"的地方，逐个决定如下。
+
+### ① 优化后的几何放在哪（K2 没有这个字段）
+
+K2 的 `JobResult` 只有能量/梯度/Hessian/偶极/轨道/日志，**没有几何**；K2 是冻结契约，
+`qwb-io` 的 `k3_schema_docs` 与 K6 的 `.pyi` 都跟着它走，加字段要三方一起动。
+
+决定：几何走**旁路**。引擎通过 `OptSink`（`Arc<Mutex<Option<OptReport>>>`）把
+`OptReport`（几何/轨迹/步数/是否解析梯度/退化原因）交给调用方，`qwb-cli` 写进
+`<task>/artifacts/optimized.xyz`（标准 XYZ，Å）与 `artifacts/optimization.json`。
+依据是 K3 自己写的"`artifacts/**` 是自由形态"。
+
+为什么用 `Arc<Mutex>` 而不是 `&mut`：`EngineBackend::run` 是 `&self`（K2 冻结），
+而 `Engine::with_backend` 会把后端装箱搬走，调用方拿不回 `&mut`。槽只放一次，读完即空。
+
+副作用（好的那种）：GUI 的 3D 面板因此能画**优化后**的分子，而不是 `input.yaml` 里的初值。
+
+### ② 优化没收敛怎么报
+
+K2 的 `EngineError` 没有"优化未收敛"变体。加一个变体看起来合理（契约文档说变体只允许新增），
+但会牵连两处冻结面：K5 的退出码表（`error.rs` 的 `exit_code` 表）与 K6 的
+`.pyi` 异常层次（`qwb_engine.ScfNotConvergedError` 这类名字是桩里写死的）。
+
+决定：**不加变体**，复用 `ScfNotConverged { iters, max }`，语义按 K5 的"2 = 收敛失败"读，
+`iters/max` 就是优化步数/上限。代价是错误文案仍然是 K2 的 "scf not converged"，
+CLI 在 stderr 里另有一段人话（`qwb: ... force threshold ...`）。等哪天 K2 真要加变体，
+这里换成 `OptNotConverged` 即可，调用方只看退出码 2。
+
+### ③ `method_name = "hf"` 怎么办
+
+K2 规定 HF 用 `method_name = "hf"`，但 `qwb-data/functional/` 里**没有** `hf.yaml` ——
+HF 不是泛函数据，它是"没有 XC 项 + `α_hf = 1`"。在此之前 `JobInput{method_name:"hf"}`
+会以"unknown functional hf"失败，也就是 K2 文档写的用法**根本走不通**。
+
+决定：引擎里唯一一处翻译（`lib.rs::functional_name_from_method`）：`"hf"`（大小写不敏感）
+→ 空名字，再由 `terms_and_hf_exchange` 走"空 terms + α_hf = 1"。**不在数据层伪造 `hf.yaml`**：
+那会让注册表里出现一个不是泛函的"泛函"，K1 的 `functional` schema 也要求 components。
+
+验收：H2/STO-3G 的 HF 单点 = −1.116759（外部参考，容差 1e-3），见
+`qwb-engine/tests/t8_opt_jobtype.rs` 与 `qwb-studio/tests/test_engine_opt.py`。
+
+### ④ GUI 的下拉框从哪来
+
+决定：从 `qwb-data/registry.yaml` 读（`qwb_studio/data_catalog.py`）。理由：基组/泛函/
+网格名是**数据**，写死在界面里就会落后；而且"界面上能选的就是数据里有的"天然成立 ——
+`b3lyp` 不在注册表里（`requires.laplacian = true` 被 K1 的 phase-1 门禁拒绝），
+下拉框里就不该出现它。元素列表按所选基组的 `elements:` 过滤，免得用户选 Cr 之后
+才拿到"data load failed"。
+
+`freq` **不提供**：`JobType::Freq` 还没接到 `EngineBackend`（`hessian::numerical_hessian`
+是有的，F-01/F-02 的测试直接用），给一个必然失败的选项等于骗用户。给了的是 `sp` / `opt`。
+
+### ⑤ 崩溃后重启：`running` 的任务算什么
+
+T7 的 Rust 侧 `qwb batch` 对"队列里停在 running"的处理是**报告但不改状态**
+（它的 `QueueEntry` 没有 reason 字段，只能等人用新 task id 重提）。Python 侧的
+`QueueEntry` 有 `reason`，于是可以让它落终态。
+
+决定：GUI 启动时 `GuiProject.restore()` → `Scheduler::recover()`，把 `running` 落
+`failed`（reason 写明 interrupted），`queued` 保持 `queued` 以便"运行队列"接着跑。
+依据：K3 没有 `running → queued` 这条边，`running → failed` 是合法边；落终态也符合
+"崩溃后重启恢复未完成视图"的字面意思 —— 用户能看到**哪些任务被打断了**，而不是看到
+一个永远不会动的 running。
