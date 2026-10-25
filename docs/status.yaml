@@ -38,7 +38,17 @@ C-06:
   state: done
   ts: "2026-10-22T22:53:00Z"
   artifact: "qwb-core workspace + 根 rust-toolchain.toml（1.97.1）+ qwb-core/deny.toml + .github/workflows/ci.yml + 三个门禁脚本 + scripts/{verify.sh,verify.ps1}"
-  verification: "scripts/verify.ps1 与 scripts/verify.sh 各 15/15 通过（fmt/clippy/test/deny/schema/data/mypy/门禁脚本）"
+  verification: "scripts/verify.ps1 与 scripts/verify.sh 覆盖**同一清单**（bash 门禁 / K2 / core fmt-clippy-test-deny-schema-data / D-15 / 10.6 账本 / K6 mypy / P-01 pytest / P-02 夹具新鲜度）；2026-10-25 本轮实测 21/21 全绿（见 note）"
+  note: |
+    本轮修掉一个**门禁自身的漏洞**：`scripts/check_unsafe.sh` 的 step 2（扫描 unsafe 用法）
+    在"没有命中"时直接 `exit 0`，把 step 1（每个 crate 必须声明 `#![deny(unsafe_code)]`）的
+    失败吞掉了。后果不是假想：`qwb-props` 从创建起就**没有**这条 deny，而这个脚本一直退出 0，
+    于是之前几轮的"ALL GATES GREEN"在这一项上是空的。修法：两个 step 计入同一个 `$fail`，
+    末尾统一 exit，并补上 `ok: unsafe policy satisfied` 的正向输出。
+    验证修法真的有效（不是换个写法继续假绿）：临时把 `qwb-props/src/lib.rs` 的 deny 行去掉 →
+    `bash scripts/check_unsafe.sh` 打印 `FAIL qwb-core/crates/qwb-props: missing #![deny(unsafe_code)]`
+    并 exit 1；恢复后 exit 0。同时给 `qwb-props` 补上 `#![deny(unsafe_code)]` 与
+    `#![deny(missing_docs)]`（clippy 全绿说明它的公开项文档齐全）。
 
 # ─────────────────────────── D 轨（数据）───────────────────────────
 
@@ -480,18 +490,222 @@ F-02:
   note: |
     本模块给出的波数是**谐振近似**下的值。STO-3G 会系统性高估（H2 5477 vs 实验 4401，
     高 24%），这是基组与谐振近似的双重结果，不是实现错误——所以没有拿它去凑实验值。
-P-01: {state: pending, depends: [C-03], note: "qwb-studio/（Python + pydantic v2）尚未创建"}
-P-02: {state: pending, depends: [P-01, C-04], note: "Rust 侧 .qwb 已可用；P-02 = Python zipfile 实现 + 与 Rust 互操作"}
-P-03: {state: pending, depends: [P-01, C-05], note: "取消 queued/running 依赖 K3 的两条 cancelled 边（已冻结）"}
-P-04: {state: pending, depends: [P-01, C-02], note: "EnvInfo 类型与 G5 校验已在 K2/K3 落地"}
-P-05: {state: pending, depends: [P-01], note: "K5 CLI 已实现；P-05 = Python shell 转发层"}
-P-06: {state: pending, depends: [C-02, P-04], note: "K6 .pyi 已冻结并通过 mypy；P-06 = pyo3 + maturin（abi3-py39）"}
+P-01:
+  state: done
+  ts: "2026-10-25T06:38:14Z"
+  artifact: "qwb-studio/（pyproject.toml + qwb_studio/{__init__,models,yaml_min}.py + tests/{test_models,test_yaml_roundtrip}.py）：Project/Molecule/Atom/Task/Result/EnvInfo 的 pydantic v2 模型、TaskState 6 条冻结转移、minimal block-YAML 读写（依赖白名单 §2.4 无 PyYAML）"
+  verification: |
+    & .venv\\Scripts\\python.exe -m pytest tests/test_models.py tests/test_yaml_roundtrip.py -q → 35 passed（gate 新增 'P-01: qwb-studio pytest' 一项；整个 qwb-studio 套件当前 60 例，另 25 例属 P-02）。验收四条逐条落地：
+    * 单测通过：35 例全绿，覆盖状态机 36 对全矩阵（6 合法 + 30 非法）、id/sha256 正则、必填性、JSON 往返；
+    * YAML/JSON roundtrip：models → yaml_dumps → yaml_loads → models 逐字段相等（Task/Result/Project/Molecule 各一例），输出幂等，含换行/引号/反斜杠/中文/科学计数等棘手标量；
+    * 非法状态转移抛 ValueError：IllegalTransitionError 继承 ValueError，30 条非法边全部 pytest.raises(ValueError) 通过；failed→queued 明确不存在（重试 = 新 task id）；
+    * 与 task.schema.yaml 字段一一对应：test_models.py 直接解析 qwb-contracts/studio/{task,result}.schema.yaml 文本（不引入 PyYAML），断言 Task/Result/EnvInfo 的 model_fields 集合 == 契约 properties 键集合、契约 required 全部 is_required()、TaskState 枚举与 x-state-machine 的 6 条转移 + initial + terminal 逐条相等。
+    反向自检：给 Task 临时加一个 mutation_probe 字段后该测试立即失败（Extra items in the left set），证明比对不是空断言；改回后全绿。
+  note: "yaml_min 只实现 block 风格子集（映射/序列/引号标量/空容器/注释），锚点、流式非空集合、块标量、多文档一律显式抛 YamlError —— 已在 tests 里逐项验证，不静默猜。P-02 的 .qwb 读写会直接复用这套 YAML。"
+P-02:
+  state: done
+  ts: "2026-10-25T07:10:00Z"
+  artifact: |
+    qwb-studio/qwb_studio/container.py（`ProjectMeta` + `QwbContainer` + `check_entry_name` + `task_entry_path`，
+    纯 `zipfile`，K5 退出码语义与 Rust 一致：结构性 3 / IO 4）+ qwb-studio/tests/test_container.py（25 例）
+    + scripts/gen_p02_fixture.py（夹具生成器 / `--check`）+ qwb-studio/tests/fixtures/python_written.qwb（入库夹具）
+    + qwb-core/crates/qwb-io/tests/p02_interop.rs（5 例：Rust 读 Python 写的容器）
+  verification: |
+    双向互操作，两个方向都有可复跑的用例：
+    * **Rust 写 → Python 读**：`QwbContainer.open('qwb-contracts/studio/examples/example.qwb')`（Rust 生成、入库）
+      读出 meta name=example-project / task_count=1 / schema_version=1.0.0，条目
+      (meta.json, data_snapshot.json, tasks/demo-0001/input.yaml)，`validate()` 通过，`task_ids()==['demo-0001']`，
+      `tasks/demo-0001/input.yaml` 可文本读回（含 serde_yaml 写出的块状 `position_angstrom`）。
+      再把它整容器 Python 重写（`write_files({})`）后逐条目字节不变。
+    * **Python 写 → Rust 读**：`cargo test -p qwb-io --test p02_interop` → **5 passed**。
+      夹具由 Python `zipfile` 写出（1753 字节，6 条目：meta.json 第一 + artifacts/mo-energies.txt +
+      data_snapshot.json + tasks/{t1/input.yaml,t1/log.txt,t2/input.yaml}），Rust 侧：
+      ① 能 open + `validate()`（task_count=2 == tasks/ 目录数），meta 字段被 `ProjectMeta` 接受；
+      ② 两个 `input.yaml` 都 `serde_yaml` → `JobInput` → `validate()` 通过（t1 = H2 2 原子、t2 = H2O 3 原子）；
+      ③ `data_snapshot.json` → `DataSnapshot`，3 条摘要全部通过 64 位小写 sha256 校验（摘要取自
+      `qwb-data/registry.yaml` 的真实值，脚本用自家 YAML 读取器解析 registry，不手抄）；
+      ④ Rust 规范化重写（`write_files(vec![])`）后条目顺序与内容逐字节不变；
+      ⑤ 截断容器与坏 meta.json 都被拒（后者 exit_code 3）。
+    * **夹具不会悄悄过期**：`python scripts/gen_p02_fixture.py --check` 断言入库夹具 == 当前写入器输出
+      （meta 逐字段 + 每个条目字节），已作为 gate 的 `P-02: .qwb fixture freshness` 一项；
+      `tests/test_container.py` 里也有一条同样的断言。
+    * **K4 结构性约束逐条被拒**（Python 侧 25 例）：损坏 zip / 截断 zip → `ZipFailure`(3)；缺 meta → `MetaMissing`；
+      meta 不是首条目 → `MetaInvalid`；meta 非法 JSON / 未知字段 / 缺字段 / 空 name → `MetaInvalid`；
+      重复条目 → `DuplicateEntry`；目录条目 / `..` 穿越 / 盘符 / 空段 → `InvalidEntry`；
+      `task_count` 与 `tasks/` 目录数不符 → `validate()` 报 `MetaInvalid`。
+    * **导出字节可复现**：同内容两次导出逐字节相同（本实现内部；跨语言的 zlib 与 Rust Deflate 不保证同样字节流，
+      所以跨语言只承诺语义互操作 —— 这一点写在 `container.py` 的模块文档里，没有含糊过去）。
+  note: |
+    `.qwb` 里刻意**不放** result.json / env.json：结果的 provenance 必须来自真实一次 `qwb run`（P-04/P-08 补），
+    不为了"看起来完整"手写环境信息。`example.qwb`（Rust 侧 C-04 的入库样例）同样只有 input.yaml + data_snapshot.json。
+P-03:
+  state: done
+  ts: "2026-10-25T07:16:21Z"
+  artifact: |
+    qwb-studio/qwb_studio/scheduler.py（`TaskQueue` + `QueueEntry` + `CancelToken` + `Scheduler` +
+    `python -m qwb_studio.scheduler` CLI/mock worker）+ qwb-studio/tests/test_scheduler.py（11 例）
+  verification: |
+    逐条对应 P-03 的三个判据，全部有可复跑的测试：
+    * **10 个 mock 任务并发**（`test_ten_mock_tasks_run_concurrently`）：10 个任务 × 0.4 s、4 个 worker 槽，
+      实测 wall **2.19 s**（串行至少 4.0 s）、区间重叠峰值 **4**、**10 个不同 pid** ——
+      并发不是"跑得快所以大概并发"，而是按每个 worker 自己写下的 pid 与起止时间戳算出来的。
+      `pytest qwb-studio/tests/test_scheduler.py` → 11 passed（整个 qwb-studio 套件 111 passed）。
+    * **取消 queued**（`test_cancel_queued_task_never_starts`）：`queued → cancelled` 立即落盘；
+      该任务从未启动 —— 目录里没有 `worker.log`、也没有 `mock_result.json`。
+    * **取消 running**：协作路径（`test_cancel_running_task_stops_cooperatively`，mock runner 在轮询点
+      自己退出，落 `cancelled` 且**不写** `mock_result.json`，只写 `cancel_ack.json`）；
+      硬杀路径（`test_cancel_running_task_that_ignores_the_flag_is_killed`，`stubborn` runner 故意
+      不看取消标志，`grace_seconds=0.5` 后被 `kill()`，仍然落 `cancelled`）。
+      终态再取消由状态机拒绝（`IllegalTransitionError`，`test_cancel_after_terminal_state_is_illegal`）。
+    * **`kill -9` 恢复**（`test_kill9_then_restart_recovers_queued_and_fails_running`）：
+      用 `python -m qwb_studio.scheduler` 起一个**真进程**（4 个任务、`--hold 3`、1 个 worker），
+      等队列里出现 `running` 且仍有 `queued` 后 `taskkill /F /T` 整棵进程树；
+      重启后断言 `t00` 从 `running → failed`（`reason` 含 `interrupted`）且**没有** `mock_result.json`，
+      其余三个 `queued` 全部跑成 `converged`。
+    * **队列与 Rust `qwb batch` 同格式**：`queue.json` 每项恰好 `{input, task_id, state}`（与
+      `qwb-cli::QueueEntry` 逐字一致，`state` 用 K3 状态名），原子写（`.tmp` + `os.replace`，
+      跑完不留 `.tmp` 残骸）；能直接吃一份"Rust 写的" `queue.json`；坏 JSON / 未知状态给出明确错误。
+  note: |
+    两个刻意的差异，写在代码注释里没有含糊：
+    ① Rust `qwb batch` 遇到上次停在 `running` 的任务是**报告但不改状态**（它没有 reason 字段，
+       等人用新 task id 重提）；Python 走 K3 的合法边 `running → failed` 并记 reason，两边都符合 K3。
+    ② worker 现在是 mock（P-03 的判据就是 mock 任务）；P-07 会把 worker 换成真正调用 `qwb run` 的子进程，
+       调度器本身不需要改结构。
+    另外 `mock_result.json` 的语义是"这个任务真的出了结果"，所以取消只写 `cancel_ack.json` ——
+    否则"有结果文件"这个判据会被取消污染。
+    **本 WP 抓到的真 bug（Windows 语义，不是调度逻辑）**：`kill -9` 测试在全量测试 + 门禁同时跑机器时
+    失败过两次、单独跑总是绿。根因是 `os.replace` 在 Windows 上遇到"目标文件正被别的进程打开"会抛
+    `PermissionError`(ERROR_SHARING_VIOLATION)，读者 `open()` 期间写方也会被拒；而 `queue.json`
+    的语义就是多进程同时看。修法：`qwb_studio/_fs.py` 的 `atomic_replace`（写侧退避重试）与
+    `read_text_retry`（读侧退避重试），接在 `TaskQueue.save/load`、`write_env_json/read_env_json`、
+    `QwbContainer.write_files` 上；回归钉在 `tests/test_atomic_write.py`（3 例，含一个真并发读写用例）。
+    详细复盘见 docs/choices.md §三十七。
+P-04:
+  state: done
+  ts: "2026-10-25T07:21:08Z"
+  artifact: |
+    qwb-studio/qwb_studio/env.py（`collect_env` / `write_env_json` / `read_env_json` / `sha256_file` /
+    `data_snapshot` / `crate_versions` / `toolchain_channel` / `os_description`）+ qwb_studio/resultdir.py
+    （`ResultDirectory.check` / `open_result_dir`，K3 布局 + G5）+ `EnvInfo.check()/validate()`（models.py，
+    判据与 Rust `EnvInfo::validate` 逐条相同）+ tests/test_env.py（8 例）+ tests/test_resultdir.py（10 例）
+  verification: |
+    字段全部**实测**，并用独立重算交叉验证（不是生成器自己跟自己对）：
+    * `rustc_version` = `rustc 1.97.1 (8bab26f4f 2026-07-14)`（`rustc --version` 首行原文）；
+    * `cargo_lock_sha256` = `f0be8f16cd36f1b3dbfc9c36a6b1cc6d714081bc1c648c19e2dc5f1d50c725b1`，
+      与测试里用 `hashlib` 直接算 `qwb-core/Cargo.lock` 的结果逐位相同；
+    * `data_snapshot` = 12 条（4 basis + 4 functional + 4 grid），与测试里用正则从
+      `qwb-data/registry.yaml` 抠出的 `path -> sha256` 字典完全相等；sha256 不是重算而是**注册表自己的值**；
+    * `crate_versions` = 222 条，`serde` 的版本与 `Cargo.lock` 文本里的 `name = "serde"` 段一致；
+    * `toolchain_channel` = `1.97.1`（读根 `rust-toolchain.toml`）；`os` = `windows x86_64`
+      （与 Rust `env.rs` 的 `"{OS} {ARCH}"` 同格式）；`threads` = 1（引擎当前单线程，I-04）。
+    * **Rust 接受我们生成的 env.json**：`qwb inspect <dir>` 退出 0，输出
+      `env     rustc rustc 1.97.1 (8bab26f4f 2026-07-14), threads 1, os windows x86_64` +
+      `env     data snapshot: 12 file(s)` + `status  ok`（这条路径内部就是 `EnvInfo::validate`）；
+      删掉 env.json 后同一命令退出 **3** 且报 `env.json is missing`。
+    * **缺 env.json 时 Result 构造失败**：pydantic 的 `Result.env` 是必填字段（`ValidationError`）；
+      结果目录层 `open_result_dir` 抛 `MissingEnvJson`（`code == 3`，G5 文案）。
+    * **Python 能读真实引擎输出**：`qwb run examples/h2_sto3g_svwn5.yaml` → energy `-1.1570005110 Ha`，
+      `open_result_dir` 成功解析 result.json / env.json / data_snapshot.json，能量与 `qwb run` 打印值
+      在 1e-9 内一致（打印只有 10 位小数），`has_artifacts` 为真。
+    * 比 Rust `inspect` **更严**的两条一致性判据（K3 说 data_snapshot "同内容"）：result.json 的 env
+      必须等于 env.json、result.json 的 data_snapshot 必须等于 data_snapshot.json；各有一个反向用例
+      （改 threads、换 snapshot）证明它们真的会报 `InconsistentResult`。
+    * `pytest qwb-studio` 全绿：89 passed。
+  note: |
+    `threads` 的口径写在模块文档里：K3 要的是"实际生效线程数"，引擎自己写的 env.json 是权威值（当前记 1）；
+    本模块是给"Python 侧要写一份 env.json"的场景（GUI 预览、测试、外部工具）用的，默认也记 1，
+    调用方确实并行时才传真实值，避免默认值假装成"实际线程数"。
+    `crate_versions` 我们比 Rust 侧更全（Rust `env.rs` 目前留空 `{}`，字段存在但没有内容）——
+    这是超集，`EnvInfo::validate` 不因此失败，也不影响互操作。
+P-05:
+  state: done
+  ts: "2026-10-25T07:36:01Z"
+  artifact: |
+    qwb-studio/qwb_studio/cli.py（`engine_command` / `run_engine` / `main`，含 `QWB_ENGINE_BIN` 覆盖与
+    `python -m qwb_studio` 入口 __main__.py）+ tests/test_cli.py（19 例）
+  verification: |
+    "薄壳"不是口头承诺，测试逐条钉住：
+    * **全部子命令 `--help` 通过**：`--help` / `run` / `batch` / `inspect` / `replay` / `data` /
+      `data list|show|verify|sign` 共 10 个用例，`python -m qwb_studio <args>` 退出 0，
+      且 **stdout 与直接运行 Rust 二进制逐字节相同**（壳不改写输出、不吞 stderr）。
+    * **退出码与 K5 一致**：6 个用例（`run` 合法输入 → 0、坏 input.yaml → 1、
+      `inspect` 缺 env.json → 3、`inspect` 不存在的目录 → 3、`data verify` 坏文件 → 3、
+      `data list` → 0）每个都同时跑壳与真二进制，断言 ① 两者退出码相同 ② 码值等于 K5 表里的值；
+      另外 `QWB_ENGINE_BIN` 指向不存在的文件 → 壳自己退出 4（K5 的"内部错误"，不是随便挑的码）。
+    * 定位顺序实测：`QWB_ENGINE_BIN` > 已构建的 `qwb-core/target/debug/qwb` > `cargo run -q -p qwb-cli`；
+      前两条各有一个用例（`engine_command` 的返回值与 cwd）。
+    * `pytest qwb-studio` 全绿（107 passed）。
+  note: |
+    写这个壳时撞到一个真实的 Windows 坑：Rust CLI 输出是 UTF-8（含中文），而 Python 的
+    `subprocess(..., text=True)` 默认按 locale（这台机器是 GBK）解码，会抛 `UnicodeDecodeError`
+    并让 `stdout` 变成 `None`。壳本身用**继承 stdio**（不 decode），所以产品代码没有这个问题；
+    测试里显式写 `encoding="utf-8", errors="replace"` 才能稳定断言 —— 这条经验留在测试文件顶部。
+P-06:
+  state: done
+  ts: "2026-10-25T07:59:08Z"
+  artifact: |
+    qwb-studio/rust/qwb-py/（pyo3 0.22 + abi3-py39 的 `qwb_engine` 扩展：`Atom/Molecule/TaskOptions/
+    JobInput/DataSnapshot/EnvInfo/JobResult/Engine/run_job` + K5 异常族；`Cargo.toml` 是**独立 workspace**，
+    避免 `extension-module` 的链接属性传染 qwb-core）+ pyproject.toml（maturin）+ tests/test_engine_binding.py（12 例）
+  verification: |
+    * **与冻结桩一致**：`tests/test_engine_binding.py` 直接解析 `qwb_engine.pyi` 的文本，
+      断言运行时 `__all__` == 桩的 `__all__` 减去三个**纯类型层**名字（`GridLevel`/`JobType`/`Reporter`：
+      桩里是 `Literal`/`Protocol`，运行时不存在）；桩里每个 `class` 的每个 `def` 在运行时对象上都有。
+      K6 的 `mypy --strict`（桩 + typed consumer）本来就在 gate 里跑，两件事合起来是"类型面 + 运行面"都对齐。
+    * **数值一致**：`qwb_engine.run_job(H2/STO-3G/SVWN5, 'qwb-data')` → **−1.1570005110367827 Ha**，
+      与 Rust CLI 写进 `result.json` 的能量**逐位相同**（同一个后端、同一份数据）。
+      `JobResult.to_json()` 的输出能被 `qwb_studio.models.Result` 直接校验（P-01/P-06 互通）。
+    * **GIL 真的释放**（P-06 的核心判据，两条独立证据）：
+      ① 计算期间一个纯 Python 计数线程仍在推进（作业持续 > 0.05 s 时计数 > 1000 次；
+         若 GIL 被占住，这期间它一次都跑不了）；
+      ② 两个 H2O 作业并发：**单次 1.000 s，两并发 1.078 s**（串行本该 2.000 s），两次能量相同。
+    * **错误映射**：`DataError`(3)、`InvalidInputError`(1)、`UnsupportedError`(4)、
+      `ScfNotConvergedError`(2，且带 `iters`/`max_iters`)；`Engine('不存在的目录')` → `DataError`。
+    * **Reporter 批量推送**：引擎在 `allow_threads` 里跑，日志先收进 Rust 缓冲，跑完再整批交给
+      Python 的 `log/progress`（K6 明确禁止逐行跨 GIL 回调）。
+    * gate 新增四项：pyo3 crate 的 `fmt`、`clippy -D warnings`、`maturin build --release` + 安装
+      （wheel 名 `qwb_engine-0.1.0-cp39-abi3-win_amd64.whl`，abi3 ⇒ 一个 wheel 覆盖 Python ≥ 3.9），
+      然后才是 `qwb-studio` 的 pytest（当前 123 passed）。
+  note: |
+    三点如实记录：
+    ① **`cargo deny` 覆盖不到这个 crate**：它是独立 workspace，`qwb-core` 的 `cargo deny check` 不会看
+       pyo3 的依赖树。要覆盖得给它单独拷贝一份 `deny.toml` 并加一项 gate；本轮没做，记在这里而不是假装覆盖了。
+    ② **maturin 打的是"包"布局**（`qwb_engine/__init__.py` + `qwb_engine/qwb_engine.pyd`），
+       而冻结桩是单文件 `qwb_engine.pyi`。运行面一致，类型面靠 gate 里以桩所在目录为 cwd 的 mypy 检查，
+       两者不冲突；但 `site-packages` 里没有 `.pyi`，所以第三方装了 wheel 后 mypy 会看不到类型 —— 已知缺口。
+    ③ 两个 pyo3 宏带来的 lint 是**上游问题**，不是我们的代码：`create_exception!` 展开出
+       `cfg(feature = "gil-refs")`，`#[pymethods]` 包装层做了一次 `PyErr → PyErr` 的 `?`。
+       处理方式是 crate 级 `#![allow(unexpected_cfgs)]` 与 `#![allow(clippy::useless_conversion)]`
+       并写明缘由，而不是关掉 clippy。
 P-07:
-  state: in_progress
-  ts: "2026-10-23T01:16:00Z"
-  artifact: "qwb-core/crates/qwb-engine（RksBackend 实现 K2 EngineBackend + env.rs 真实 env.json）+ qwb-cli 的 `run` 写 K3 结果目录 + examples/h2_sto3g_svwn5.yaml"
-  verification: "cargo run -q -p qwb-cli --bin qwb -- run examples/h2_sto3g_svwn5.yaml --out <dir> → 退出 0，energy = −1.1570004991 Ha，scf converged；结果目录含 input.yaml/result.json/env.json/log.txt/data_snapshot.json（artifacts/ 空目录）；随后 qwb inspect 该目录 → status ok，env 显示真实 rustc 1.97.1、7 个数据文件快照"
-  note: "**未完成**：P-06（pyo3 绑定）没做，所以 P-07 里『Python 侧也能跑』这半没有；CLI 路径已端到端可用。env.json 的 cargo_lock_sha256 是编译期嵌入的 qwb-core/Cargo.lock 的真实 sha256，toolchain_channel 从 rust-toolchain.toml 读，created_at_utc 用手写历法（不引入时间库）。"
+  state: done
+  ts: "2026-10-25T08:12:00Z"
+  artifact: |
+    qwb-core/crates/qwb-engine（RksBackend 实现 K2 EngineBackend + env.rs 真实 env.json）+ qwb-cli 的 `run`
+    写 K3 结果目录 + examples/h2_sto3g_svwn5.yaml + **Python 侧**：qwb-studio/qwb_studio/runner.py
+    （`run_job_to_dir` / `find_data_root` / `RunOutcome`）+ tests/test_runner.py（6 例）
+  verification: |
+    "跑通 T1"在两条路上都成立：
+    * **CLI 路**：`cargo run -q -p qwb-cli --bin qwb -- run examples/h2_sto3g_svwn5.yaml --out <dir>` →
+      退出 0，energy = −1.1570005110 Ha（2026-10-25 复测；本行原先记录的 −1.1570004991 是 AO 缓存重构
+      之前的数，差 1.2e-8 Ha，远小于 T1 的 1e-6 判据），scf converged；结果目录含
+      input.yaml/result.json/env.json/log.txt/data_snapshot.json（artifacts/ 空目录）；
+      随后 qwb inspect 该目录 → status ok，env 显示真实 rustc 1.97.1、12 个数据文件快照。
+    * **Python 路（P-06 之后才可能）**：`qwb_studio.runner.run_job_to_dir(job, out, "py-h2")` →
+      一次 `qwb_engine` 计算写出**完整 K3 目录**（六个条目），能量 `-1.1570005110367827 Ha`
+      与 CLI 写进 result.json 的值**逐位相同**；写完后立刻 `open_result_dir` 自检（缺文件/不自洽就抛错）。
+    * **跨语言复现**（这是 P-08 判据的跨语言版）：Rust 对**Python 写的**结果目录
+      `qwb inspect` → `status  ok`；`qwb replay` → `energy recorded -1.157000511037 /
+      replay -1.157000511037 / delta 0.000e0 Ha / status reproduced`，退出 0。
+      即 Python 写的 input.yaml / result.json / env.json 对 Rust 来说是真正可重算的结果，
+      不是"格式上像"。
+    * `pytest qwb-studio` 全绿：129 passed。
+  note: |
+    env.json 用引擎返回值逐字段写（不手抄）：rustc 版本、Cargo.lock sha256、12 条数据快照、
+    toolchain channel、threads=1 都来自 `JobResult.env`；`data_snapshot.json` 与 result.json 里的
+    快照同源，`open_result_dir` 会交叉校验这两处一致（K3 的"同内容"是判据，不是约定）。
+    数据根定位：显式参数 > `QWB_DATA_ROOT` > 向上搜索 `qwb-data/`（与 Rust `find_data_root` 同规则），
+    找不到就报错，不猜。Python 侧目前记录 `threads = 1`（引擎单线程，I-04），不假装并行。
 P-08:
   state: done
   ts: "2026-10-23T03:05:00Z"

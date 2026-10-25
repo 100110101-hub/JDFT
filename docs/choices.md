@@ -974,3 +974,44 @@ N2 的 0.684 Ha 不是数值噪声。已排除：
 回归钉在 `qwb-scf/tests/t06_n2_multistart.rs`。**教训**：外部基准给出 0.68 Ha 这种量级的偏差
 时，先怀疑"SCF 收敛到了别的解"，而不是积分或泛函——占据轨道能级（简并结构、HOMO 高度）
 是最快的判别手段。
+
+## 三十七、Windows 的 `os.replace` 不是"原子写"就完事：读者也会被拒（2026-10-25）
+
+P-03 的 `kill -9` 测试在**全量测试 + 门禁同时跑机器**时失败过两次，单独跑却总是绿的。
+先怀疑"机器慢"，但把 12 个 CPU 占用进程拉满再跑，测试依然 100% 通过 —— 所以不是慢，
+是并发访问。
+
+根因不是调度逻辑，是**平台语义**：
+
+* `os.replace` 在 POSIX 上是原子的 `rename`，永远成功；
+* 在 Windows 上是 `MoveFileEx(..., MOVEFILE_REPLACE_EXISTING)`，当目标文件**正被别的进程
+  打开**（Python 的 `open()` / `Path.read_text()` 不带 `FILE_SHARE_DELETE`）时，
+  抛 `PermissionError`(ERROR_SHARING_VIOLATION)；
+* 反过来也成立：写方正在 replace 时，读者的 `open()` 同样可能被拒。
+
+而 `queue.json` 的语义恰恰是"多进程同时看"：调度器不断原子替换，测试 / GUI 每 10 ms 读一次。
+于是：子进程在 `save()` 时抛 `PermissionError` → CLI 退出 → 队列永远停在 `queued` →
+测试的"等到 running+queued"逻辑白等 120 秒（表面症状是超时，真凶在别处）。
+
+修法（`qwb_studio/_fs.py`）：
+
+| 方向 | 函数 | 做法 |
+| --- | --- | --- |
+| 写 | `atomic_replace(tmp, target)` | `os.replace` 遇 `PermissionError` 就退避重试（≈2.4 s 预算），POSIX 上就是一次 rename |
+| 读 | `read_text_retry(path)` | 读被原子替换的文件时同样退避重试；`FileNotFoundError` 照旧上抛 |
+
+用到的位置：`TaskQueue.save/load`、`write_env_json/read_env_json`、`QwbContainer.write_files`。
+
+回归钉在 `qwb-studio/tests/test_atomic_write.py`（3 例）：
+
+1. 把 `os.replace` 前 3 次换成抛 `PermissionError`，第 4 次成功 → 断言重试确实发生且目标内容正确；
+2. 永远抛 → 必须在重试预算耗尽后**大声失败**，不许静默丢写；
+3. 真并发：一个线程每 2 ms 读一次 `queue.json`，另一个线程连续 `save()` 60 次 →
+   两边都不许抛，最终文件仍是合法 JSON。
+
+**教训**：跨平台项目里"原子写"的判据不只是"内容不撕裂"，还包括"并发读者不会被拒"。
+Windows 上后者要单独写，而且只有并发用例能测出来 —— 单线程跑一万次也绿。
+
+**另一个教训（关于工具，不是关于代码）**：用 PowerShell 的 `Add-Content` 追加中文内容后，
+在 GBK 控制台上看到的乱码是**显示**问题，不是文件问题 —— 判断编码要看"按 UTF-8 解码是否成功
+且不含 U+FFFD"，不要看终端长什么样。我曾据此把一段本来正确的记录删了重写。

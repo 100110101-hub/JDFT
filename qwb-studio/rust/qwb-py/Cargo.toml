@@ -1,0 +1,24 @@
+[package]
+name = "qwb-py"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "qwb_engine：QuantumWorkbench 引擎的 Python 绑定（K6 / P-06）"
+
+[lib]
+# lib 名 = 扩展模块名：maturin 用 `[lib] name` 决定 `.pyd` 的名字，而 `#[pymodule]`
+# 的符号 `PyInit_<name>` 必须与之一致。依赖里的 `qwb_engine`（qwb-engine 包）在本文件
+# 里用 `::qwb_engine::...` 全路径引用，避免被这里的同名模块遮蔽。
+name = "qwb_engine"
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+pyo3 = { version = "0.22", features = ["extension-module", "abi3-py39"] }
+serde_json = "1"
+qwb-engine-api = { path = "../../../qwb-contracts/engine-api" }
+qwb-engine = { path = "../../../qwb-core/crates/qwb-engine" }
+qwb-registry = { path = "../../../qwb-core/crates/qwb-registry" }
+
+# 独立的 workspace：pyo3 的 `extension-module` 链接属性不能传染给 qwb-core
+# （那会让 `cargo test --workspace` 因为缺 Python 符号而链接失败）。
+[workspace]

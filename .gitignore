@@ -23,3 +23,6 @@ __pycache__/
 
 # CCCBDB 抓取的中间快照（用 scripts/fetch_cccbdb_reference.py 可重建；进仓库的是 CSV）
 cccbdb-raw.json
+
+# qwb-studio 的 pyo3 扩展：wheel 由 gate 现场用 maturin 构建，不入库
+/qwb-studio/rust/qwb-py/dist/

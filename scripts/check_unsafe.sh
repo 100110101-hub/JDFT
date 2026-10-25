@@ -29,21 +29,25 @@ mapfile -t hits < <(
 
 if [ "${#hits[@]}" -eq 0 ]; then
     echo "ok: no unsafe keyword in product code"
-    exit 0
+else
+    for hit in "${hits[@]}"; do
+        file="${hit%%:*}"
+        if [ -f "$allowlist" ] && grep -qxF "$(realpath --relative-to="$root" "$file")" "$allowlist"; then
+            echo "allowed: $hit"
+        else
+            echo "FAIL unsafe outside allowlist: $hit"
+            fail=1
+        fi
+    done
 fi
 
-for hit in "${hits[@]}"; do
-    file="${hit%%:*}"
-    if [ -f "$allowlist" ] && grep -qxF "$(realpath --relative-to="$root" "$file")" "$allowlist"; then
-        echo "allowed: $hit"
-    else
-        echo "FAIL unsafe outside allowlist: $hit"
-        fail=1
-    fi
-done
-
+# 注意：step 2 干净时**不能**提前 `exit 0` —— 那会把 step 1 的失败吞掉。
+# 这不是假想的：qwb-props 曾经少了 `#![deny(unsafe_code)]`，脚本却仍然退出 0，
+# 于是门禁全绿而 R-16 实际被违反。两个 step 都要计入同一个 $fail。
 if [ "$fail" -ne 0 ]; then
     echo
-    echo "unsafe 需要人批准 + // SAFETY: 注释 + 白名单登记（R-16）。"
+    echo "unsafe 需要人批准 + // SAFETY: 注释 + 白名单登记（R-16）；每个 crate 都必须声明 #![deny(unsafe_code)]。"
+    exit 1
 fi
-exit "$fail"
+echo "ok: unsafe policy satisfied (deny declared + no unapproved unsafe)"
+exit 0

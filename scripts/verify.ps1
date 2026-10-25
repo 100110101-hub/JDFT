@@ -123,12 +123,12 @@ Step -Name '10.6: docs/status.yaml ledger validity' -Dir '.' -Body {
     & python scripts/check_status.py
 }
 
-# ---- K6 Python type gate (repo .venv) ----
+# ---- Python gates (repo .venv): K6 stubs + P-01 model layer ----
 $py = Join-Path $root '.venv\Scripts\python.exe'
 if (-not (Test-Path $py)) {
     $script:fail++
     $script:failedNames += 'K6 mypy: .venv python not found'
-    Write-Host "!! FAILED: missing $py (create it with: python -m venv .venv; pip install mypy numpy)" -ForegroundColor Red
+    Write-Host "!! FAILED: missing $py (create it with: python -m venv .venv; pip install mypy numpy pydantic pytest)" -ForegroundColor Red
 }
 else {
     # Run mypy from the stub directory: the cwd is itself a module search root, so
@@ -138,6 +138,30 @@ else {
     }
     Step -Name 'K6: mypy --strict (typed consumer)' -Dir 'qwb-contracts/studio/python' -Body {
         & $py -m mypy --strict tests/consumer_example.py
+    }
+    # P-06: the pyo3 binding crate (own workspace). fmt + clippy here because
+    # `cargo clippy --workspace` in qwb-core cannot see it.
+    Step -Name 'P-06: pyo3 crate fmt' -Dir 'qwb-studio/rust/qwb-py' -Body { cargo fmt --check }
+    Step -Name 'P-06: pyo3 crate clippy -D warnings' -Dir 'qwb-studio/rust/qwb-py' -Body {
+        cargo clippy --all-targets -- -D warnings
+    }
+    # P-06 acceptance needs the built extension: maturin wheel (abi3-py39) then
+    # install it into the same venv that runs the Python tests.
+    Step -Name 'P-06: build + install qwb_engine (maturin, abi3-py39)' -Dir 'qwb-studio/rust/qwb-py' -Body {
+        & $py -m maturin build --release -o dist
+        if ($LASTEXITCODE -ne 0) { return }
+        $wheel = Get-ChildItem dist\*.whl | Select-Object -First 1
+        & $py -m pip install --force-reinstall --no-deps --quiet $wheel.FullName
+    }
+    # P-01 acceptance: pydantic models match task.schema.yaml field by field,
+    # YAML/JSON roundtrip, illegal state transitions raise ValueError.
+    Step -Name 'P-01/P-03/P-04/P-05/P-06: qwb-studio pytest' -Dir 'qwb-studio' -Body {
+        & $py -m pytest -q
+    }
+    # P-02: the committed Python-written .qwb must still be what the current
+    # writer produces; qwb-io's p02_interop test reads it from the Rust side.
+    Step -Name 'P-02: .qwb fixture freshness' -Dir '.' -Body {
+        & $py scripts\gen_p02_fixture.py --check
     }
 }
 

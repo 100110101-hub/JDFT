@@ -48,6 +48,14 @@ elif command -v python3 >/dev/null 2>&1 && python3 -c 'import mypy' >/dev/null 2
     PY="$(command -v python3)"
 fi
 
+# P-01 需要 pydantic v2 + pytest（依赖白名单 §2.4 允许 pydantic；pytest 只在 test extra 里）。
+PY_STUDIO=""
+if [ -x "$root/.venv/Scripts/python.exe" ]; then
+    PY_STUDIO="$root/.venv/Scripts/python.exe"
+elif command -v python3 >/dev/null 2>&1 && python3 -c 'import pydantic, pytest' >/dev/null 2>&1; then
+    PY_STUDIO="$(command -v python3)"
+fi
+
 # ---- 门禁脚本 ----
 step "data: DATA_LICENSES.md 与数据一致（D-15）"
 python scripts/gen_data_licenses.py --check
@@ -85,6 +93,21 @@ if [ -z "$PY" ]; then
 else
     step "K6: mypy --strict (stub)" bash -c "cd qwb-contracts/studio/python && \"\$0\" -m mypy --strict qwb_engine.pyi" "$PY"
     step "K6: mypy --strict (typed consumer)" bash -c "cd qwb-contracts/studio/python && \"\$0\" -m mypy --strict tests/consumer_example.py" "$PY"
+    if [ -z "$PY_STUDIO" ]; then
+        fail=$((fail + 1))
+        names_failed="$names_failed
+  - P-01 qwb-studio: no python with pydantic+pytest"
+        printf '\n!! FAILED: P-01 — 找不到带 pydantic 与 pytest 的 python（pip install pydantic pytest）\n'
+    else
+        # P-06：pyo3 绑定是独立 workspace，qwb-core 的 clippy 看不到它，所以单独跑。
+        step "P-06: pyo3 crate fmt" bash -c "cd qwb-studio/rust/qwb-py && \"\$0\" fmt --check" "$CARGO"
+        step "P-06: pyo3 crate clippy -D warnings" bash -c "cd qwb-studio/rust/qwb-py && \"\$0\" clippy --all-targets -- -D warnings" "$CARGO"
+        step "P-06: build + install qwb_engine (maturin, abi3-py39)" bash -c "cd qwb-studio/rust/qwb-py && \"\$0\" -m maturin build --release -o dist && \"\$0\" -m pip install --force-reinstall --no-deps --quiet dist/*.whl" "$PY_STUDIO"
+        # P-01 验收：模型与 task.schema.yaml 逐字段一致、YAML/JSON 往返、非法转移抛 ValueError。
+        step "P-01/P-03/P-04/P-05/P-06: qwb-studio pytest" bash -c "cd qwb-studio && \"\$0\" -m pytest -q" "$PY_STUDIO"
+        # P-02：入库的 Python 写的 .qwb 必须仍是当前写入器的输出（Rust 侧 p02_interop 读它）。
+        step "P-02: .qwb fixture freshness" bash -c "\"\$0\" scripts/gen_p02_fixture.py --check" "$PY_STUDIO"
+    fi
 fi
 
 printf '\n────────────────────────────────────────\n'

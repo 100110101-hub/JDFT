@@ -12,6 +12,9 @@
 //! 注意：Mulliken 布居对基组敏感（甚至可能为负、可能 > 2），Löwdin 更稳；
 //! 两者数值不同但**和相同**。
 
+#![deny(unsafe_code)]
+#![deny(missing_docs)]
+
 use qwb_basis::InternalBasis;
 use qwb_engine_api::Molecule;
 use qwb_linalg::{LinalgError, Matrix, matmul, symmetric_eigen};
