@@ -712,7 +712,35 @@ P-08:
   artifact: "qwb-core/crates/qwb-cli/src/main.rs::cmd_replay（读回 input.yaml → 真重算 → 与 result.json 比对）+ tests/p08_replay.rs"
   verification: "cargo test -p qwb-cli --test p08_replay（2 例）：① H2/STO-3G/SVWN5 结果目录 replay 后 delta = 0.000e0 Ha（< 1e-10），退出码 0 且打印 reproduced；② 把 result.json 的能量改 1 µHa 后 replay 必须失败（stderr 含『不可复现』）——证明这不是只读退出码的假门禁。手工端到端：qwb run → qwb replay 输出 recorded/replay 两行能量 + delta"
   note: "阈值 REPLAY_TOLERANCE_HARTREE = 1e-10 Ha，与 project.md 的 P-08 验收一致。replay 用 QWB_DATA_ROOT 解析数据根，与 run 走同一条 find_data_root 路径。"
-P-09: {state: pending, depends: [P-07, P-08]}
+P-09:
+  state: done
+  ts: "2026-10-25T20:40:00Z"
+  artifact: |
+    qwb-studio/qwb_studio/gui/（`mainwindow.py` 项目树 + Task Panel + Job Monitor + Result + Log 五个区域、
+    `model.py` 把 P-03 调度器包成 Qt 可观察对象、`runner.py` 用 QThread 把执行搬到工作线程、
+    `logview.py` 块数有上限的流式日志、`__main__.py` 入口 `python -m qwb_studio.gui --out <dir>`）
+    + tests/test_gui.py（5 例，`QT_QPA_PLATFORM=offscreen` headless）
+  verification: |
+    判据（§7 P-09：创建/提交/查看 mock 任务不阻塞 UI；大日志 > 100 MB 滚动不卡）逐条实测：
+    * **不阻塞 UI**（`test_submit_and_monitor_do_not_block_the_ui`）：登记 3 个 mock 任务、
+      2 个 worker 跑完（0.3 s × 3），全程用 0 ms `QTimer` 数事件循环圈数 —— 运行期间
+      事件循环转了 **> 50 圈**（实测远超阈值），三个任务终态全部 `converged`；
+      结构上界面线程从不做计算：提交只写队列，执行在 `SchedulerBridge` 的 QThread 里。
+    * **取消**（`test_cancel_from_ui`）：UI 选中行 → `cancel_selected()` → 20 s 的 mock 任务
+      落到 `cancelled` 且工作线程正常退出（测试里踩到并修掉一个真问题：直接 `thread.wait()`
+      会阻塞主线程、收不到工作线程排过来的 `finished` 队列信号 —— 必须继续转事件循环）。
+    * **大日志**（`test_big_log_streams_without_freezing_the_ui`）：**102.8 MB / 1,540,096 行**
+      流式追加耗时 **66.7 s**，期间事件循环转了 **3081 圈**（没有卡死），
+      文档块数被 `setMaximumBlockCount(5000)` 截住 ⇒ 内存有界，不是把整文件塞进控件。
+    * **结果面板**（`test_result_panel_shows_a_real_result`）：喂一个**真实**的 K3 结果目录
+      （P-07 的 `run_job_to_dir` 产出）→ 能量 −1.157… Ha、偶极、SCF 收敛、`env.json` 的 rustc/threads
+      都显示出来；结果目录损坏（缺 env.json）时明确显示"不可用"，不是静默空白。
+    * `pytest qwb-studio` 现在 134 例（新增 GUI 5 例）。
+  note: |
+    PySide6 是**运行期/测试期**依赖，不在 §2.4 的产品依赖白名单争议范围内（它只做界面），
+    已写进 README 的 `.venv` 安装行；测试用**硬导入**（缺它就让测试失败，不是 skip），
+    免得 GUI 验收在缺依赖的机器上"静悄悄通过"。
+    P-10（VTK 3D：分子/轨道/ESP/振动）还没做，T8 仍不算完成。
 P-10: {state: pending, depends: [P-09, G-02, F-02]}
 
 # ─────────────────────────── V 轨（验证）───────────────────────────

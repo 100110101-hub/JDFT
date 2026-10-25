@@ -34,7 +34,7 @@ bash scripts/verify.sh
 
 ```powershell
 python -m venv .venv
-.venv\Scripts\python.exe -m pip install mypy numpy pydantic pytest maturin
+.venv\Scripts\python.exe -m pip install mypy numpy pydantic pytest maturin PySide6
 ```
 
 当前状态：**24 项全绿**（2026-10-25 第 44 轮；fmt / clippy `-D warnings` / test / `cargo deny` /
