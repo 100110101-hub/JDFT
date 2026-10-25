@@ -38,7 +38,7 @@ C-06:
   state: done
   ts: "2026-10-22T22:53:00Z"
   artifact: "qwb-core workspace + 根 rust-toolchain.toml（1.97.1）+ qwb-core/deny.toml + .github/workflows/ci.yml + 三个门禁脚本 + scripts/{verify.sh,verify.ps1}"
-  verification: "scripts/verify.ps1 与 scripts/verify.sh 覆盖**同一清单**（3 个 bash 门禁 / K2 fmt-clippy-doc-test / core fmt-clippy-test + I-06 + I-00 + deny + K1 schema + G2 data / D-15 / 10.6 账本 / K6 mypy ×2 / P-06 pyo3 fmt-clippy-构建安装 / Python 侧 pytest / P-02 夹具新鲜度）；2026-10-25 第 44 轮实测 **24/24 全绿**（见 note）"
+  verification: "scripts/verify.ps1 与 scripts/verify.sh 覆盖**同一清单**（3 个 bash 门禁 / K2 fmt-clippy-doc-test / core fmt-clippy-test + I-06 + I-00 + deny + K1 schema + G2 data / D-15 / 10.6 账本 / K6 mypy ×2 / P-06 pyo3 fmt-clippy-构建安装 / Python 侧 pytest / P-02 夹具新鲜度）；2026-10-25 第 45 轮实测 **24/24 全绿**（含本轮新增的 KS 解析梯度测试）（见 note）"
   note: |
     本轮修掉一个**门禁自身的漏洞**：`scripts/check_unsafe.sh` 的 step 2（扫描 unsafe 用法）
     在"没有命中"时直接 `exit 0`，把 step 1（每个 crate 必须声明 `#![deny(unsafe_code)]`）的
