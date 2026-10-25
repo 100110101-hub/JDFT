@@ -507,18 +507,21 @@ V-01: {state: pending, depends: [S-02]}
 V-02: {state: pending, depends: [G-01]}
 V-03:
   state: in_progress
-  ts: "2026-11-02T18:00:00Z"
-  artifact: "crates/qwb-scf/tests/reference/cccbdb_{energies,geometries}.csv + scripts/fetch_cccbdb_reference.py + scripts/gen_cccbdb_reference.py"
+  ts: "2026-11-03T06:00:00Z"
+  artifact: "crates/qwb-scf/tests/reference/cccbdb_{energies,geometries}.csv（120 条能量 / 489 条几何行）+ scripts/{fetch,gen}_cccbdb_reference.py"
   verification: |
-    已覆盖：H2 / H2O / CO / C6H6 × HF、LSDA(SVWN5)、PBEPBE、B3LYP（另抓 B1B95 只作对照）
-    × STO-3G / 6-31G* / 6-311G**，逐行带 `energy3x.asp` URL（CCCBDB Release 22, SRD 101）。
-    生成脚本自带自检：用解析出的坐标重算核排斥能，抓串行时会差 3 倍以上（真发生过：
-    距离矩阵的首列也是 `C1`/`O1`，混进来就把 E_nuc 算成 3 倍）。
-    CI 里只启用 STO-3G 的比对（HF/LSDA 判 1e-4 Ha，B3LYP 在 H2 上判 2 mHa）。
+    已覆盖 **7 个体系**：H2 / H2O / CO / CH4 / NH3 / N2 / C6H6 × HF、LSDA(SVWN5)、PBEPBE、
+    BLYP、B3LYP（另抓 B1B95 作对照）× STO-3G / 6-31G* / 6-311G**，逐行带
+    `energy3x.asp` URL（CCCBDB Release 22, SRD 101）。
+    CI 实测（STO-3G，CCCBDB 自己的几何，STO-3G 避开 5d/6d 约定差）：
+    H2/H2O/CO/CH4 五个模型化学全部 ≤ 4e-6 Ha；NH3 ≤ 1.1e-4 Ha；苯的 B3LYP 在慢档实测
+    -1.16 mHa（grid-normal）。**N2 不符**（HF 就差 +0.684 Ha），已排除在判据外并立项待查
+    （docs/choices.md 三十六节）。
   note: |
-    未完成：① 缺 CH4 / NH3 / N2（project.md 的清单里有）；② 6-31G*/6-311G** 的行先不进判据——
-    Gaussian 默认 6d、本项目数据层是 spherical(5d)，混进 1–3 mHa 的基组约定差，要先解决；
-    ③ `tolerance` 列暂时统一写 2 mHa，等 GGA 曲线对上外部基准后按 §7 收紧。
+    未完成：① N2 的 0.684 Ha 不符要定位；② 6-31G*/6-311G** 的行仍不进判据（Gaussian 默认 6d、
+    本项目数据层是 spherical(5d)，混进 1–3 mHa 的约定差）；③ `tolerance` 列统一写 2 mHa，
+    等 GGA 曲线稳定后按 §7 收紧。生成脚本自带"重算核排斥能"的自检（抓串行时差 3 倍以上）。
+
 V-04: {state: pending, depends: [all], note: "C 轨子集已在 scripts/verify.{ps1,sh} 与 .github/workflows/ci.yml"}
 V-05:
   state: done
