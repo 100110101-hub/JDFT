@@ -93,6 +93,11 @@ $defs:
           - $ref: "#/$defs/Multipoles"
           - type: "null"
         description: 多极展开（四极/八极，phase-2 RS-08）。
+      numerics_report:
+        anyOf:
+          - $ref: "#/$defs/NumericsReport"
+          - type: "null"
+        description: 数值路径留痕（K10：用了近似必须能看见，phase-2 §4.5）。
   SpinResult:
     type: object
     additionalProperties: false
@@ -272,6 +277,50 @@ $defs:
             items: {type: number}
       isotropic_au: {type: number}
       anisotropy_au: {type: number}
+  NumericsReport:
+    type: object
+    additionalProperties: false
+    required: [path, accuracy_level, energy_hartree, wall_time_s]
+    description: 数值路径报告（K10）。近似路径必须带对应的留痕块，否则不算通过。
+    properties:
+      path:
+        type: string
+        enum: [analytic, ri, pseudospectral]
+      accuracy_level:
+        type: integer
+        minimum: 1
+        maximum: 5
+      grid:
+        type: object
+        additionalProperties: false
+        required: [radial, angular, cutoff_bohr]
+        properties:
+          radial: {type: integer, minimum: 1}
+          angular: {type: integer, minimum: 1}
+          cutoff_bohr: {type: number}
+      ri:
+        type: object
+        additionalProperties: false
+        required: [aux_basis_name, fit_error_hartree]
+        properties:
+          aux_basis_name: {type: string}
+          fit_error_hartree: {type: number}
+      ps:
+        type: object
+        additionalProperties: false
+        required:
+          [collocation_points_per_atom, de_aliasing, coulomb_error_hartree, exchange_error_hartree]
+        properties:
+          collocation_points_per_atom: {type: integer, minimum: 1}
+          de_aliasing: {type: boolean}
+          coulomb_error_hartree: {type: number}
+          exchange_error_hartree: {type: number}
+      energy_hartree:
+        type: number
+        description: 与 JobResult.energy_hartree 一致（对账用）。
+      wall_time_s:
+        type: number
+        minimum: 0
   Multipoles:
     type: object
     additionalProperties: false

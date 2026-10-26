@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 use crate::correlation::{Mp2Options, ScfType};
 use crate::error::EngineError;
 use crate::molecule::Molecule;
+use crate::numerics::NumericsOptions;
 use crate::properties::ExcitedStateMethod;
 use crate::solvation::SolventModel;
 
@@ -107,6 +108,9 @@ pub struct TaskOptions {
     /// （`solvent: vacuum` 时永远是气相，不接受覆盖）。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub solvent_model: Option<SolventModel>,
+    /// 数值路径与精度等级（K10）；`None` = 解析路径 + 等级 3，与阶段一逐位相同。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub numerics: Option<NumericsOptions>,
 }
 
 /// 激发态选项（`TaskOptions.excited_states`）。
@@ -153,6 +157,7 @@ impl Default for TaskOptions {
             mp2: None,
             excited_states: None,
             solvent_model: None,
+            numerics: None,
         }
     }
 }
@@ -185,6 +190,13 @@ impl TaskOptions {
     #[must_use]
     pub fn with_solvent_model(mut self, solvent_model: SolventModel) -> Self {
         self.solvent_model = Some(solvent_model);
+        self
+    }
+
+    /// 挂上数值路径与精度等级（阶段二 K10）。
+    #[must_use]
+    pub fn with_numerics(mut self, numerics: NumericsOptions) -> Self {
+        self.numerics = Some(numerics);
         self
     }
 
@@ -231,6 +243,9 @@ impl TaskOptions {
         // ── 阶段二新增选项的区间检查（缺省时全部跳过，旧输入行为不变）──
         if let Some(mp2) = &self.mp2 {
             mp2.validate()?;
+        }
+        if let Some(numerics) = &self.numerics {
+            numerics.validate()?;
         }
         if let Some(excited) = &self.excited_states
             && excited.n_states == 0

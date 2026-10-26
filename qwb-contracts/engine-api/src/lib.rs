@@ -23,6 +23,7 @@ pub mod engine;
 pub mod error;
 pub mod input;
 pub mod molecule;
+pub mod numerics;
 pub mod properties;
 pub mod registry;
 pub mod reporter;
@@ -34,6 +35,9 @@ pub use engine::{Engine, EngineBackend, SUPPORTED_FEATURES};
 pub use error::EngineError;
 pub use input::{ExcitedStatesOptions, GridLevel, JobInput, JobType, TaskOptions};
 pub use molecule::{Atom, Molecule};
+pub use numerics::{
+    GridSummary, NumericsOptions, NumericsPath, NumericsReport, PsSummary, RiSummary,
+};
 pub use properties::{
     ExcitedStateMethod, ExcitedStates, Multipoles, NmrReference, NmrShieldings, NucleusShielding,
     Polarizability, SumRules, Transition, TransitionContribution,

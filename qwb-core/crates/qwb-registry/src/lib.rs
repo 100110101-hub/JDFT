@@ -27,6 +27,7 @@ pub mod functional;
 pub mod grid;
 pub mod loader;
 pub mod molecule;
+pub mod numerics;
 pub mod registry;
 pub mod schema;
 pub mod sha256;
@@ -41,6 +42,7 @@ pub use functional::{Functional, FunctionalComponent, FunctionalRequires, Stabil
 pub use grid::{GridLevelDef, GridLevelName};
 pub use loader::Registry;
 pub use molecule::{MoleculeAtom, MoleculeFile};
+pub use numerics::{AccuracyLevel, EquivalenceTolerance, NumericsDef, PsSettings};
 pub use registry::{RegistryEntry, RegistryManifest};
 pub use solvent::{CavityModel, Solvent};
 pub use thirdparty::MissingData;

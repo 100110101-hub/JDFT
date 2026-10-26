@@ -207,7 +207,16 @@ fn result_schema_matches_job_result() {
             ])
             .expect("tensor"),
         )
-        .with_multipoles(qwb_engine_api::Multipoles::new([0.0, 0.0, 0.0]));
+        .with_multipoles(qwb_engine_api::Multipoles::new([0.0, 0.0, 0.0]))
+        .with_numerics_report(
+            qwb_engine_api::NumericsReport::new(
+                qwb_engine_api::NumericsPath::Analytic,
+                3,
+                1.5,
+                0.5,
+            )
+            .with_grid(qwb_engine_api::GridSummary::new(75, 302, 20.0)),
+        );
     let actual = json_keys(&serde_json::to_value(&result).expect("serialize"));
 
     assert_eq!(

@@ -640,6 +640,15 @@ fn reject_unimplemented_options(input: &JobInput) -> Result<(), EngineError> {
             "options.excited_states is not wired yet (CIS/TDA is phase-2 M4 / RS-02..03)".into(),
         ));
     }
+    if options.numerics.is_some() {
+        // 精度等级/近似路径现在没有任何代码在读它：放过就等于"静默忽略"。
+        // 想用近似路径，得等 IN-03（PS）或 IN-04（RI-J/JK）落地并过 K10 三条门禁。
+        return Err(EngineError::Unsupported(
+            "options.numerics is not wired yet (approximation paths are phase-2 IN-03/IN-04, \
+             gated by K10 equivalence)"
+                .into(),
+        ));
+    }
     if let Some(model) = options.solvent_model
         && model != qwb_engine_api::SolventModel::Vacuum
     {

@@ -40,6 +40,7 @@ use crate::common::DataCommon;
 use crate::ecp::Ecp;
 use crate::functional::Functional;
 use crate::grid::{GridLevelDef, GridLevelName};
+use crate::numerics::NumericsDef;
 use crate::registry::{RegistryEntry, RegistryManifest};
 use crate::solvent::Solvent;
 use crate::thirdparty::MissingData;
@@ -60,6 +61,7 @@ pub struct Registry {
     functionals: BTreeMap<String, Functional>,
     grids: BTreeMap<String, GridLevelDef>,
     solvents: BTreeMap<String, Solvent>,
+    numerics: BTreeMap<String, NumericsDef>,
     missing: Vec<MissingData>,
 }
 
@@ -131,6 +133,28 @@ impl Registry {
             None,
             &mut missing,
         )?;
+        let numerics = load_all::<NumericsDef>(
+            &root,
+            "numerics",
+            &manifest.numerics,
+            NumericsDef::check_structure,
+            None,
+            &mut missing,
+        )?;
+
+        // 跨文件引用：精度等级里写的 `grid_level` 必须是真实存在的网格条目。
+        // 这种检查 `qwb data verify` 做不了（它是逐文件的），所以放在加载器里。
+        for (name, def) in &numerics {
+            for reference in def.grid_level_refs() {
+                if !grids.contains_key(reference) {
+                    return Err(EngineError::Data(format!(
+                        "numerics/{name}: level refers to grid `{reference}`, which is not in \
+                         registry.yaml (known: [{}])",
+                        grids.keys().cloned().collect::<Vec<_>>().join(", ")
+                    )));
+                }
+            }
+        }
 
         Ok(Self {
             root,
@@ -140,6 +164,7 @@ impl Registry {
             functionals,
             grids,
             solvents,
+            numerics,
             missing,
         })
     }
@@ -192,6 +217,20 @@ impl Registry {
     /// 溶剂键名。
     pub fn solvent_names(&self) -> impl Iterator<Item = &str> {
         self.solvents.keys().map(String::as_str)
+    }
+
+    /// 数值路径配置键名（阶段二 K10；字典序）。
+    pub fn numerics_names(&self) -> impl Iterator<Item = &str> {
+        self.numerics.keys().map(String::as_str)
+    }
+
+    /// 按名字取数值路径配置。
+    ///
+    /// # Errors
+    ///
+    /// [`EngineError::Data`]：未索引该名字（消息里列出可用名字）。
+    pub fn get_numerics(&self, name: &str) -> Result<&NumericsDef, EngineError> {
+        self.lookup_checked(&self.numerics, "numerics", name)
     }
 
     /// 取基组。

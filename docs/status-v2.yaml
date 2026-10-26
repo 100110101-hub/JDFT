@@ -36,8 +36,13 @@ KV-03:
   verification: "① `cargo test -p qwb-engine-api` 里的 6 个新单测覆盖选项：旧 JSON 无新键仍解析（4 个新字段 = None）、新选项缺省不序列化、`scf_type` ↔ 方法族、开壳层 ↔ 多重度、MP2 只许闭壳层、`solvent_model` ↔ 溶剂名、`n_states ≥ 1`。② `cargo test -p qwb-engine --test kv_phase2_options` **7 例绿**：`scf_type: uks` / `mp2` / `excited_states` / `solvent_model: cosmo` 各自以 `Unsupported` 拒绝且消息带 WP 编号（SC-01 / SC-04 / RS-02 / SV-01）；`rks`/`rhf`/`vacuum` **不**被拒且 H2/STO-3G 真算出收敛能量；拒绝发生在毫秒级（`rejection_happens_before_any_numerics` < 50 ms）。③ `cargo test -p qwb-registry -p qwb-io -p qwb-cli -p qwb-engine` 退出码 0；`pytest -q` **182 passed**。④ 门禁 `scripts/verify.ps1` 第 61 轮 **26/26 全绿**（含阶段一全部回归）。"
   note: "**这一步的重点不是类型，而是「不许静默忽略」**：契约能让用户写出 `scf_type: uks`，但引擎只会算闭壳层。如果不显式拒绝，用户会拿到一个看起来成功的 RKS 结果却以为是 UKS —— 那正是 project-phase2.md §10.3 禁止的静默降级。守卫的判据写得比「字段非空就拒」更细：与阶段一行为等价的写法（`rks`/`rhf`/`vacuum`）放过，否则旧输入会被无故拒绝。`JobType` 仍只有 sp/opt/freq（ts/irc/scan 留给 KV-05 与 RP 轨）。"
 KV-04:
-  state: pending
-  note: "K10 NumericsReport + numerics.yaml + data verify 支持新类型"
+  state: done
+  ts: "2026-11-06T11:30:00Z"
+  artifact: "qwb-registry/src/numerics.rs（K1 `NumericsDef`/`AccuracyLevel`/`PsSettings`/`EquivalenceTolerance`）+ qwb-data/numerics/numerics.yaml（5 级 + 等价容差）+ registry.yaml 的 `numerics:` 段与版本 0.4.0→0.5.0 + `Registry::get_numerics`/`numerics_names` + 加载器的跨文件引用校验 + `DataKind::Numerics` 与 numerics.schema.{json,yaml} + engine-api/src/numerics.rs（K10 `NumericsReport`）+ `JobResult.numerics_report` + `TaskOptions.numerics` + 引擎守卫 + K3 `result.schema.yaml` 与 pydantic"
+  verification: "① `qwb data verify` **17 file(s) checked, 17 passed**（新增 numerics 一个文件；registry 版本 0.5.0）。② `qwb-gen-schemas --check` = `all K1 schemas match the Rust types`（新增 numerics.schema.{json,yaml}）。③ `cargo test -p qwb-registry --test kv04_numerics` **4 例绿**：仓库里那份数据过 `data verify` 且 `NumericsDef::check` 全空、5 级且第 3 级绑 grid-normal、RI 容差比 PS 严、等级引用的网格在仓库 registry 里都存在；等级重复/容差 >1e-3 被拒；等级指向 `grid-ultrafine` 时 `Registry::open` 返回 `Data` 且消息含该名字；`get_numerics` 与 `numerics_names` 可用、未知名字的错误里列出 available。④ `cargo test -p qwb-engine-api` **50 例绿**（新增 5 例：路径拼写、等级 1..5 校验、解析路径恒在容差内、近似路径缺留痕则 `validate` 报错且 `within_tolerance` 为 false、往返 + 缺省块不出现）。⑤ `cargo test -p qwb-engine --test kv_phase2_options` **8 例绿**（新增 numerics 被拒且消息含 IN-03/K10）。⑥ `pytest tests/test_models.py tests/test_resultdir.py` 32 例绿（pydantic 侧 `numerics_report` 与 schema 一致）。"
+  note: "**原计划的文件位置改了并已在 §8.5 标注**：本来打算放 `qwb-data/numerics.yaml`（数据根下），但 K1 每个数据域都在自己的子目录，而且 `scripts/gen_data_licenses.py` 按子目录扫生产数据 —— 放根目录会让这份数据的许可**静默漏掉**（D-15 的比对不会报错，只是少一行）。实际落在 `numerics/numerics.yaml`，生成器加了一个子目录名，DATA_LICENSES 从 16 变 17 个文件。**第二处设计取舍**：`levels[].grid_level` 只存名字不存数值 —— 网格参数在 `grid/*.yaml` 里已经有一份，再抄一份就是两个真值源；跨文件引用校验放在加载器（`data verify` 是逐文件的，做不了这件事）。**第三处**：`TaskOptions.numerics` 现在一律被引擎拒绝 —— 等级/路径没有任何代码在读它，放过就是「静默忽略精度意图」，和上一轮 scf_type 的理由相同。"
+
+
 KV-05:
   state: pending
   note: "K5 加性子命令（props/scan/ts/irc）+ K6 .pyi + cli.md/qwb-format.md"

@@ -59,6 +59,12 @@ properties:
   name:
     description: 注册表名（如 `qwb-data`）。
     type: string
+  numerics:
+    default: []
+    description: 数值路径的精度等级与等价容差条目（阶段二 K10）。
+    items:
+      $ref: '#/$defs/RegistryEntry'
+    type: array
   schema_version:
     description: K1 版本（`crate::K1_VERSION`）。
     type: string

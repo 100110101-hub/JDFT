@@ -3,6 +3,21 @@
 数据仓独立 semver（§8.6）。**任何数据改动都必须 bump version 并在此登记**，
 否则 CI 拒绝（§8.6「变更必须 bump version」）。
 
+## 0.5.0 — 2026-11-06
+
+### 新增：`numerics/numerics.yaml`（阶段二 KV-04 / K10，`project-phase2.md` §8.5）
+- 新的数据**域** `numerics`（`registry.yaml` 新增 `numerics:` 段；K1 新增 `NumericsDef`：
+  `levels[]` + `equivalence_tolerance`）。
+- 五级精度：`1..5`，每级**只引用** `grid/*.yaml` 的 `name`（`grid-coarse`/`grid-normal`/
+  `grid-fine`/`grid-veryfine`），网格参数仍然只有一份；加载器会校验引用存在。
+- pseudospectral 配点：30 → 60 → 90 → 120 → 180（每原子），去别名从第 3 级起打开且**不许关回去**
+  （K10 条件 ② 的数据侧一半，`NumericsDef::check_monotone` 强制）。
+- **等价容差是我们自己的判据**，不是文献值：RI 1e-6 Ha、pseudospectral 5e-5 Ha
+  （比 RI 松，见 phase-2 §9.3）。它们进数据是因为**改判据要留痕**：改这个 = 改验收标准，
+  必须 bump 本文件版本 + 在 PR body 里说明。
+- 许可：自研，`Apache-2.0`（可商用、可再分发）。
+- `registry.yaml` 0.4.0 → 0.5.0；`DATA_LICENSES.md` 自动重新生成（16 → 17 个生产数据文件）。
+
 ## 0.4.0 — 2026-10-23
 
 ### 新增：`basis/def2-svp.yaml`（D-04，H/C/N/O）

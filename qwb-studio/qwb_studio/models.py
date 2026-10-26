@@ -313,6 +313,50 @@ class Multipoles(BaseModel):
     origin_angstrom: list[float]
 
 
+class GridSummary(BaseModel):
+    """XC 网格摘要（K10 留痕）。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    radial: int = Field(ge=1)
+    angular: int = Field(ge=1)
+    cutoff_bohr: float
+
+
+class RiSummary(BaseModel):
+    """RI 路径的留痕（K10）。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    aux_basis_name: str
+    fit_error_hartree: float
+
+
+class PsSummary(BaseModel):
+    """pseudospectral 路径的留痕（K10）。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    collocation_points_per_atom: int = Field(ge=1)
+    de_aliasing: bool
+    coulomb_error_hartree: float
+    exchange_error_hartree: float
+
+
+class NumericsReport(BaseModel):
+    """数值路径报告（K10）：用了近似必须能看见。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    path: str = Field(pattern=r"^(analytic|ri|pseudospectral)$")
+    accuracy_level: int = Field(ge=1, le=5)
+    grid: GridSummary | None = None
+    ri: RiSummary | None = None
+    ps: PsSummary | None = None
+    energy_hartree: float
+    wall_time_s: float = Field(ge=0)
+
+
 class Result(BaseModel):
     """结果（`result.json` + `env.json` 的合并视图，对应 `result.schema.yaml` 的 `JobResult`）。"""
 
@@ -337,6 +381,7 @@ class Result(BaseModel):
     nmr_shieldings: NmrShieldings | None = None
     polarizability: Polarizability | None = None
     multipoles: Multipoles | None = None
+    numerics_report: NumericsReport | None = None
 
 
 class Project(BaseModel):

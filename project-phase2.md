@@ -403,7 +403,7 @@ NumericsReport {
 | KV-01 | 基线 | K7 结果块：`ExcitedStates`/`NmrShieldings`/`Polarizability`/`Multipoles`（`engine-api` 的 Rust 类型 + `studio/result.schema.yaml` 的 `$defs` + `qwb_studio.models` 的 pydantic 模型） | `qwb-io/tests/k3_schema_docs.rs` 的 `result.schema.yaml` ↔ `JobResult` **逐字段一致**（手写 schema + 一致性测试 = C-03 的约定；`engine-api` 保持零 schema 依赖）；`test_models.py` 的 pydantic ↔ schema 一致；新增块全部可选，旧 `result.json` 仍解析（回归测试） |
 | KV-02 | KV-01 | K8 溶剂化类型 + `Solvent` 加性字段（`refractive_index`/`radii_set`/`surface_tension`/`ionic_strength`）+ `JobInput.options.solvent_model` | `qwb-gen-schemas --check` 不漂移（K1 schema 重新生成）；旧 `solvent/*.yaml` 仍 `qwb data verify` 通过；SMD 缺 n 或半径集时 verify 明确报错；`n² ≤ ε` 的自洽检查有单测 |
 | KV-03 | KV-01 | K9 开壳层/相关方法类型 + `TaskOptions.scf_type`/`mp2`/`excited_states` + `JobResult.spin`/`correlation` + 跨字段校验 | 旧 `input.yaml` 全部仍可解析（`phase1_options_json_still_parses_without_the_new_keys`）；`SUPPORTED_FEATURES` 只增不删；**引擎对未实现的选项显式拒绝**（`Unsupported`，退出码 4，消息带 WP 编号），与阶段一等价的写法（`rks`/`rhf`/`vacuum`）放过 |
-| KV-04 | KV-01 | K10 `NumericsReport` + `numerics.yaml` 数据（`equiv_tol_hartree`、level 表）+ `data verify` 支持新类型 | schema 校验通过；`equiv_tol` 缺省值有单测；`qwb data list` 能看到新类型 |
+| KV-04 | KV-01 | K10 `NumericsReport`（K2）+ `numerics` 数据域（K1 `NumericsDef`、`qwb-data/numerics/numerics.yaml`、`registry.yaml` 的 `numerics:` 段）+ `data verify` / `data list` 支持新域 + 加载器的跨文件引用校验 | `qwb data verify` 17/17 通过（新增 1 个数据文件）；`numerics.schema.{json,yaml}` 生成且 `--check` 绿；等级重复/越界、容差过松、PS 配点不单调、去别名回退各有单测；等级指向不存在的网格时 `Registry::open` 返回 `Data`；`NumericsReport` 的 `within_tolerance` 与 `validate`（无留痕不算通过）有单测 |
 | KV-05 | KV-02..04 | K5 加性子命令（`props`/`scan`/`ts`/`irc`）+ K6 `.pyi` 更新 + `cli.md`/`qwb-format.md` 同步 | 全部子命令 `--help` 退出 0；`mypy --strict` 桩 + typed consumer 0 issue；K5 退出码表未变（回归测试比对） |
 
 ### 6.2 数据轨（DA）
@@ -736,7 +736,12 @@ qwb inspect results\<task>
 **规则**：拿不到外部值的，允许用"内部独立路径"（如 PS vs 解析、RI vs canonical），
 但必须在 `note` 写明"内部独立路径，非文献值"，并进 `docs/error-budget.md`。
 
-### 8.5 `numerics.yaml`（K10 的配置数据）
+### 8.5 `numerics/numerics.yaml`（K10 的配置数据）
+
+> **实施时的修正**：本节原本写的是数据根下的 `numerics.yaml`，但 K1 的每个数据域都在
+> 自己的子目录里（`basis/`、`grid/`、…），而且 `qwb-data/DATA_LICENSES.md` 的生成器
+> 按子目录扫生产数据 —— 放在根目录会让它**静默漏掉**这份数据的许可。所以实际落在
+> `qwb-data/numerics/numerics.yaml`，并在 `registry.yaml` 的 `numerics:` 段登记。
 
 ```yaml
 schema_version: 1.0.0
@@ -905,7 +910,7 @@ qwb-data/
   dispersion/        # 新：d3bj.yaml / d4.yaml
   solvent/           # + cosmo/smd 参数与半径集（8 溶剂）
   basis/             # + RI 辅助基（按需取回）
-  numerics.yaml      # 新：accuracy level 与等价容差（K10）
+  numerics/          # 新：accuracy level 与等价容差（K10；registry.yaml 的 numerics 段）
 
 qwb-core/crates/
   qwb-response/      # 新：CPHF/CPKS、TDDFT/CIS、GIAO、极化率、Raman/VCD

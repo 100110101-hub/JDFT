@@ -10,6 +10,7 @@ use crate::ecp::Ecp;
 use crate::functional::Functional;
 use crate::grid::GridLevelDef;
 use crate::molecule::MoleculeFile;
+use crate::numerics::NumericsDef;
 use crate::registry::RegistryManifest;
 use crate::solvent::Solvent;
 use crate::verify::DataKind;
@@ -23,6 +24,7 @@ pub fn schema_for_kind(kind: DataKind) -> schemars::Schema {
         DataKind::Functional => schema_for!(Functional),
         DataKind::Grid => schema_for!(GridLevelDef),
         DataKind::Solvent => schema_for!(Solvent),
+        DataKind::Numerics => schema_for!(NumericsDef),
         DataKind::Molecule => schema_for!(MoleculeFile),
         DataKind::Registry => schema_for!(RegistryManifest),
     }
@@ -82,6 +84,7 @@ mod tests {
             DataKind::Functional,
             DataKind::Grid,
             DataKind::Solvent,
+            DataKind::Numerics,
         ]
     }
 

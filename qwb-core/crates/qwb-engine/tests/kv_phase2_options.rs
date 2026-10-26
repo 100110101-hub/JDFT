@@ -18,8 +18,8 @@ use qwb_engine::RksBackend;
 use qwb_engine_api::reporter::NullReporter;
 use qwb_engine_api::{
     Atom, CorrelationResult, EngineBackend, EngineError, ExcitedStateMethod, ExcitedStatesOptions,
-    GridLevel, JobInput, JobType, Molecule, Mp2Kind, Mp2Options, ScfType, SolventModel, SpinResult,
-    TaskOptions,
+    GridLevel, JobInput, JobType, Molecule, Mp2Kind, Mp2Options, NumericsOptions, NumericsPath,
+    ScfType, SolventModel, SpinResult, TaskOptions,
 };
 use qwb_registry::Registry;
 
@@ -110,6 +110,17 @@ fn implicit_solvent_models_are_rejected_with_their_wp() {
     let message = unsupported(&job);
     assert!(message.contains("SV-01"), "{message}");
     assert!(message.contains("cosmo"), "{message}");
+}
+
+#[test]
+fn numerics_path_selection_is_rejected_with_its_wp() {
+    // 精度等级本身没有任何代码在读：放过就是静默忽略（K10 要求近似必须留痕）。
+    for path in [NumericsPath::Analytic, NumericsPath::Ri] {
+        let options = TaskOptions::default().with_numerics(NumericsOptions::new(path, 3));
+        let message = unsupported(&input("svwn5", 1, options));
+        assert!(message.contains("IN-03"), "{message}");
+        assert!(message.contains("K10"), "{message}");
+    }
 }
 
 #[test]

@@ -392,7 +392,7 @@ qwb data install --all --force    # 全部重下（摘要已正确也重下）
 ```text
 ok   basis       ../qwb-data/basis/sto-3g.yaml (0 error(s), 0 warning(s))
 ...
-16 file(s) checked, 16 passed, 0 failed
+17 file(s) checked, 17 passed, 0 failed
 ```
 
 没取回第三方数据时，那 7 个条目会被**单独**记为失败（不是"整个注册表坏了"），
@@ -401,7 +401,7 @@ ok   basis       ../qwb-data/basis/sto-3g.yaml (0 error(s), 0 warning(s))
 ```text
 FAIL basis       qwb-data\basis/sto-3g.yaml (1 error(s), 0 warning(s))
        [registry.path] cannot read qwb-data\basis/sto-3g.yaml: ...（第三方数据，本地未取回：跑 `qwb data install`）
-16 file(s) checked, 9 passed, 7 failed
+17 file(s) checked, 10 passed, 7 failed
 ```
 
 **数据根**怎么找：`QWB_DATA_ROOT` 环境变量 > 从当前目录逐级向上找 `qwb-data/`。
@@ -542,7 +542,20 @@ ecp         lanl2dz-cu    ecp/lanl2dz-cu.yaml     Cu 10 芯 / z_eff 19
 ecp         lanl2dz-zn    ecp/lanl2dz-zn.yaml     Zn 18 芯 / z_eff 12
 functional  pbe svwn5 pbe0 b88
 grid        grid-coarse / grid-normal / grid-fine / grid-veryfine
+numerics    numerics（K10 精度等级 1..5 + 等价容差）
 ```
+
+### 8.1.1 `numerics` 域（阶段二 K10）
+
+`qwb-data/numerics/numerics.yaml` 是**精度等级与等价容差**的数据（`project-phase2.md` §8.5）：
+
+* `levels[].grid_level` 只是**引用** `grid/*.yaml` 的 `name` —— 网格参数仍然只有一份；
+  引用了不存在的网格，加载器会直接报 `Data` 错误（`data verify` 是逐文件的，查不了跨文件引用）；
+* `levels[].ps` 是 pseudospectral 路径的配点配置；等级越高配点必须越多，
+  去别名一旦打开不许关回去（K10 条件 ② 的数据侧一半）；
+* `equivalence_tolerance` 是**验收判据**（RI < PS），不是文献值：改它等于改判据，要 bump 版本。
+
+现在写 `options.numerics` 会得到退出码 4（§3.4）—— 近似路径要等 `IN-03`/`IN-04` 落地并过 K10。
 
 ### 8.2 一份数据文件长什么样
 

@@ -1,0 +1,48 @@
+sha256: fea96fd0bd356da0acba2bf2c2b3de28596e1914b0668c114bbecaeae2096def
+name: numerics
+version: 1.0.0
+notes: "K10 accuracy levels and equivalence tolerances (project-phase2.md 4.5 / 8.5). The LEVELS only BIND a grid level name to a pseudospectral configuration - the grid parameters themselves live in grid/*.yaml and are not duplicated here. The TOLERANCES are this project's acceptance gates (not literature values): an approximation path is admitted only if its total energy matches the analytic path within these numbers, so changing one is a change of acceptance criteria and must bump the data version. PS collocation counts start at 30/atom with de-aliasing off and grow to 180/atom with de-aliasing on; K10 condition 2 (error decreases as the level rises) is asserted by VF-06 once IN-03 exists."
+citation:
+  - title: A multicenter numerical integration scheme for polyatomic molecules (Becke partitioning)
+    doi: 10.1063/1.454033
+  - title: New Methods For Electronic Structure Calculations on Large Molecules (pseudospectral approach)
+    doi: 10.1146/annurev.pc.42.100191.002013
+license:
+  spdx: Apache-2.0
+  commercial_ok: true
+  redistribute_ok: true
+created: 2026-11-06T10:00:00Z
+levels:
+  - level: 1
+    grid_level: grid-coarse
+    description: Fastest. Coarse XC grid, PS collocation without de-aliasing.
+    ps:
+      collocation_points_per_atom: 30
+      de_aliasing: false
+  - level: 2
+    grid_level: grid-coarse
+    description: Coarse grid, denser PS collocation, still no de-aliasing.
+    ps:
+      collocation_points_per_atom: 60
+      de_aliasing: false
+  - level: 3
+    grid_level: grid-normal
+    description: Default. Normal XC grid; PS turns on de-aliasing (never turned off again).
+    ps:
+      collocation_points_per_atom: 90
+      de_aliasing: true
+  - level: 4
+    grid_level: grid-fine
+    description: Fine XC grid, more PS collocation points.
+    ps:
+      collocation_points_per_atom: 120
+      de_aliasing: true
+  - level: 5
+    grid_level: grid-veryfine
+    description: Most accurate. Very fine XC grid, densest PS collocation.
+    ps:
+      collocation_points_per_atom: 180
+      de_aliasing: true
+equivalence_tolerance:
+  ri: 1.0e-6
+  pseudospectral: 5.0e-5

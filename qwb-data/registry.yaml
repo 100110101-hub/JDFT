@@ -3,7 +3,7 @@
 # （否则 grid 的 normal 等级会有两个定义、get_grid_by_level 歧义）。
 schema_version: 1.0.0
 name: qwb-data
-version: 0.4.0
+version: 0.5.0
 created: 2026-10-22T22:53:00Z
 features:
   - "jobtype:sp"
@@ -68,3 +68,10 @@ grids:
   - name: grid-veryfine
     path: grid/grid-veryfine.yaml
     sha256: 5c630f5a1ec0688de0682e38f6baeed11c475439bd122edaa4196c8c60fabff2
+
+# 阶段二 K10：数值路径的精度等级与等价容差（project-phase2.md 4.5 / 8.5）。
+# 文件里只引用 grid 的名字，网格参数仍然只有 grid/*.yaml 一份。
+numerics:
+  - name: numerics
+    path: numerics/numerics.yaml
+    sha256: fea96fd0bd356da0acba2bf2c2b3de28596e1914b0668c114bbecaeae2096def

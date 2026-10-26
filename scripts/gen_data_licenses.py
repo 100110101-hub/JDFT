@@ -31,7 +31,7 @@ OUTPUT = ROOT / "DATA_LICENSES.md"
 SOURCES = DATA / "sources.json"
 
 # 生产数据所在的子目录（与 registry.yaml 的引用一致）。
-SUBDIRECTORIES = ("basis", "functional", "grid", "ecp", "solvent")
+SUBDIRECTORIES = ("basis", "functional", "grid", "ecp", "solvent", "numerics")
 
 
 def parse_scalar(block: dict, key: str) -> str | None:

@@ -11,6 +11,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::correlation::{CorrelationResult, SpinResult};
 use crate::error::EngineError;
+use crate::numerics::NumericsReport;
 use crate::properties::{ExcitedStates, Multipoles, NmrShieldings, Polarizability};
 use crate::solvation::SolvationResult;
 
@@ -338,6 +339,9 @@ pub struct JobResult {
     /// 多极展开（四极/八极，phase-2 `RS-08`）。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub multipoles: Option<Multipoles>,
+    /// 数值路径留痕（K10：用了近似必须能看见）。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub numerics_report: Option<NumericsReport>,
 }
 
 impl JobResult {
@@ -368,6 +372,7 @@ impl JobResult {
             nmr_shieldings: None,
             polarizability: None,
             multipoles: None,
+            numerics_report: None,
         }
     }
 
@@ -460,6 +465,13 @@ impl JobResult {
     #[must_use]
     pub fn with_multipoles(mut self, multipoles: Multipoles) -> Self {
         self.multipoles = Some(multipoles);
+        self
+    }
+
+    /// 挂上数值路径留痕（K10）。
+    #[must_use]
+    pub fn with_numerics_report(mut self, numerics_report: NumericsReport) -> Self {
+        self.numerics_report = Some(numerics_report);
         self
     }
 }

@@ -52,17 +52,21 @@ pub struct RegistryManifest {
     /// 溶剂条目。
     #[serde(default)]
     pub solvents: Vec<RegistryEntry>,
+    /// 数值路径的精度等级与等价容差条目（阶段二 K10）。
+    #[serde(default)]
+    pub numerics: Vec<RegistryEntry>,
 }
 
 impl RegistryManifest {
     /// 全部条目，附所属域（域名字与 `qwb-data` 子目录一致）。
     pub fn all_entries(&self) -> impl Iterator<Item = (&'static str, &RegistryEntry)> {
-        let groups: [(&'static str, &Vec<RegistryEntry>); 5] = [
+        let groups: [(&'static str, &Vec<RegistryEntry>); 6] = [
             ("basis", &self.bases),
             ("ecp", &self.ecps),
             ("functional", &self.functionals),
             ("grid", &self.grids),
             ("solvent", &self.solvents),
+            ("numerics", &self.numerics),
         ];
         groups
             .into_iter()
@@ -145,6 +149,7 @@ mod tests {
             functionals: Vec::new(),
             grids: Vec::new(),
             solvents: Vec::new(),
+            numerics: Vec::new(),
         }
     }
 
