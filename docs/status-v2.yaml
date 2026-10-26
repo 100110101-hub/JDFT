@@ -114,8 +114,17 @@ FX-04:
 # ───────────────────── SCF / 相关 / 开壳层轨（SC，6）─────────────────────
 
 SC-01:
+  state: done
+  ts: "2026-11-06T16:30:00Z"
+  artifact: "qwb-scf/src/uhf.rs（uhf_scf：双套密度、F_σ = H + J(P) − K(P_σ)、⟨S²⟩、双通道 DIIS、阻尼/能级移动/ECP）+ qwb-scf/src/guess.rs（自旋平均的原子密度初猜 SAD + 基态多重度表）+ qwb-basis 的 sub_basis_of_atom + qwb-engine 的 run_uhf_single_point（scf_type: uhf → K9 spin 块）+ scripts/pyscf_open_shell_reference.py + tests/reference/uhf_open_shell.csv + qwb-scf/tests/sc01_uhf.rs + qwb-engine/tests/sc01_uhf_engine.rs + examples/o2_uhf_sto3g.yaml"
+  verification: "① `cargo test -p qwb-scf --test sc01_uhf` **7 例绿**：闭壳层退化（H2 的 UHF == RHF，α/β 密度逐元素相同、⟨S²⟩ < 1e-10）；O2 三重态 E = −147.633969642 vs PySCF −147.633969608（差 **3.4e-8**）、⟨S²⟩ = 2.0034110 vs 2.0034109；OH 双峰 E = −74.36266922 vs −74.36266919、⟨S²⟩ = 0.753261942 vs 0.753261942；电数自洽 Tr[P_σ S] = n_σ（< 1e-8）；两次运行逐位相同；多重度与电子数矛盾 → InvalidInput。② O2 的**第二个解**：core guess 落在 −147.378901（PySCF 用 init_guess='hcore' 同值，差 2e-8），与变分极小差 0.255 Ha —— CSV 里两个解都记着，测试两个都验（这条证明「换初猜」是真差距，不是数值噪声）。③ `cargo test -p qwb-engine --test sc01_uhf_engine` **4 例绿**：引擎把 E 与 spin 块写进结果、uhf+DFT 与 uhf+opt 显式拒绝（消息指向 SC-01b/SC-02）、闭壳层体系 uhf 与默认路径同值。④ 端到端实测：`qwb run examples/o2_uhf_sto3g.yaml` → `energy −147.6339696424 Ha`、`result.json` 的 `spin` = {n_alpha 9, n_beta 7, multiplicity 3, s_squared 2.003411, spin_contamination 3.41e-3}。"
+  note: "**三个实测发现**：① **能量公式漏项**：先写成 E = ½ Σ_σ Tr[P_σ F_σ]（F_σ 已含 H），H2 差 1.25 Ha；正确的 ½ Σ_σ Tr[P_σ(H + F_σ)] 才对 —— 是外部参照把这个错立刻照出来的。② **解的选择**：O2 的 UHF 有两个 SCF 解（−147.379 与 −147.634，差 0.255 Ha），core guess 稳定落到高的那个，而 PySCF 用 init_guess='hcore' 也落在**同一个** −147.379（差 2e-8）—— 这不是我们的 bug，是初猜决定收敛到哪个解。解法是**自旋平均的原子密度初猜**（SAD，Van Lenthe–Baerends）：片段用同一套基组做原子 SCF，把总密度对半分给 α/β 再叠加；球对称的初猜不破坏 π_g 简并，于是收敛到变分极小。③ **容差敏感性**：OH 的 ⟨S²⟩ 在 (1e-8,1e-6) 收敛判据下与 PySCF 差 3.4e-5，收紧到 (1e-11,1e-10) 后差 5e-10 —— 能量是二阶量、⟨S²⟩ 是一阶量，判据要按后者定。**范围**：ROHF 与 UKS 拆到 SC-01b（UKS 需要给 VWN5/PBE-C/LYP 写自旋插值，是另一个量级的活）；`uhf` 只支持 `sp`，且只支持 HF（配 DFT 泛函会被显式拒绝并指向 SC-01b）。"
+
+
+SC-01b:
   state: pending
-  note: "UHF/ROHF/UKS + ⟨S²⟩ + 自旋污染报告"
+  note: "ROHF（纯自旋，⟨S²⟩=S(S+1) 精确）+ UKS（自旋分辨 XC：交换 ½[E_x(2ρ_α)+E_x(2ρ_β)] + VWN5/PBE-C/LYP 的自旋插值）"
+
 SC-02:
   state: pending
   note: "开壳层解析梯度 + opt 接线"
@@ -269,8 +278,17 @@ ST-05:
 # ───────────────────────── 里程碑（M1–M8 + M-PS）─────────────────────────
 
 M1:
+  state: done
+  ts: "2026-11-06T16:40:00Z"
+  artifact: "开壳层第一步（UHF）端到端：examples/o2_uhf_sto3g.yaml + qwb run 的全链路"
+  verification: "① 端到端命令 `qwb run qwb-core/examples/o2_uhf_sto3g.yaml --out <dir>` 退出码 0，stdout `energy -147.6339696424 Ha`，结果目录里 `result.json` 的 `spin` 块完整（n_alpha 9 / n_beta 7 / s_squared 2.003411 / contamination 3.41e-3）；② 四条断言分别在 sc01_uhf（crate 级）与 sc01_uhf_engine（引擎级）里钉住：闭壳层退化、O2 能量与 ⟨S²⟩ 对 PySCF、OH 同值、污染落盘；③ 门禁 `scripts/verify.ps1` 第 65 轮 **26/26 全绿**（阶段一 26 项无回归，Python 侧 182 例）。"
+  note: "**M1 的断言被改过一次**（原版要求 O2 的 ⟨S²⟩ 与 2.0 差 < 1e-6，对 UHF/UKS 物理上不可能）—— 详见 docs/choices.md 四十七与 project-phase2.md §7 的修正版。ROHF 的纯自旋（=2.0 精确）与 UKS 拆到 SC-01b / M1b。"
+
+
+M1b:
   state: pending
-  note: "开壳层（O2/OH）；⟨S²⟩ 与自旋污染"
+  note: "开壳层第二步：ROHF（O2 的 ⟨S²⟩=2.0 精确）与 UKS（O2/OH 与 PySCF 同值）"
+
 M2:
   state: pending
   note: "meta-GGA（M06-2X）+ 色散（D3）"

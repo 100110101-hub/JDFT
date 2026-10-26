@@ -155,12 +155,12 @@ pub struct RksResult {
     pub checkpoint: crate::checkpoint::ScfCheckpoint,
 }
 
-fn linalg(err: LinalgError) -> EngineError {
+pub(crate) fn linalg(err: LinalgError) -> EngineError {
     EngineError::Internal(format!("linear algebra: {err}"))
 }
 
 /// 求 `S^{-1/2}`（对称正交化）。
-fn inverse_sqrt_symmetric(s: &Matrix) -> Result<Matrix, EngineError> {
+pub(crate) fn inverse_sqrt_symmetric(s: &Matrix) -> Result<Matrix, EngineError> {
     let (values, vectors) = symmetric_eigen(s).map_err(linalg)?;
     let n = s.nrows();
     let largest = (0..n).map(|i| values.get(i)).fold(0.0_f64, f64::max);
@@ -213,7 +213,7 @@ using rank-truncated orthogonalization (basis is nearly linearly dependent)"
 
 /// 核排斥能 `Σ_{A>B} Z_A Z_B / R_AB`（`charges` 是每个原子对电子的核电荷；
 /// 有 ECP 的原子传 `z_eff`）。
-fn nuclear_repulsion(charges: &[f64], molecule: &Molecule) -> Result<f64, EngineError> {
+pub(crate) fn nuclear_repulsion(charges: &[f64], molecule: &Molecule) -> Result<f64, EngineError> {
     let mut centers: Vec<([f64; 3], f64)> = Vec::with_capacity(molecule.n_atoms());
     for (atom, charge) in molecule.atoms.iter().zip(charges) {
         centers.push((atom.position_bohr(), *charge));
@@ -236,7 +236,7 @@ fn nuclear_repulsion(charges: &[f64], molecule: &Molecule) -> Result<f64, Engine
 /// # Errors
 ///
 /// 元素表里没有的符号 → [`EngineError::Internal`]（IC-05：ECP 的 `z_eff` 由调用方覆盖）。
-fn default_charges(molecule: &Molecule) -> Result<Vec<f64>, EngineError> {
+pub(crate) fn default_charges(molecule: &Molecule) -> Result<Vec<f64>, EngineError> {
     let mut charges = Vec::with_capacity(molecule.n_atoms());
     for atom in &molecule.atoms {
         let z = atomic_number(&atom.symbol)

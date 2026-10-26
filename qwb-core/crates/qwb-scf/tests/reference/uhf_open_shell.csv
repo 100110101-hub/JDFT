@@ -1,0 +1,21 @@
+# 开壳层参考集（M1 / SC-01）。**外部来源**：PySCF 2.14.0 黑盒计算（§14 #12）。
+#
+# 生成：`python3 scripts/pyscf_open_shell_reference.py`（WSL；需要 pyscf）。
+# 校验：`python3 scripts/pyscf_open_shell_reference.py --check`（门禁**不**跑它：
+#       PySCF 只装在 WSL 里，Windows 侧没有；数值已经钉在这份 CSV 里）。
+#
+# basis 一律 sto-3g；几何（Å）与 `qwb-core/crates/qwb-scf/tests/sc01_uhf.rs` 逐字一致：
+#   H2  z = ±0.37           （闭壳层退化：UHF 必须复现 RHF）
+#   O2  z = 0, 1.208        （三重态；UHF 有自旋污染，ROHF 是纯自旋态）
+#   OH  z = 0, 0.970        （双峰自由基）
+#
+# 列：species,method,basis,guess,multiplicity,energy_hartree,s_squared,tolerance_hartree,source_url,note
+species,method,basis,guess,multiplicity,energy_hartree,s_squared,tolerance_hartree,source_url,note
+H2,RHF,sto-3g,atom,1,-1.116759307396,0.000000000000,1e-06,https://pyscf.org/,closed shell: UHF must reproduce RHF exactly (degeneracy check) (PySCF black-box reference, not our implementation)
+H2,UHF,sto-3g,atom,1,-1.116759307396,0.000000000000,1e-06,https://pyscf.org/,closed shell: UHF must reproduce RHF exactly (degeneracy check) (PySCF black-box reference, not our implementation)
+O2,UHF,sto-3g,atom,3,-147.633969608496,2.003410903584,1e-06,https://pyscf.org/,triplet; UHF is spin-contaminated by the degenerate pi*, ROHF is spin-pure (PySCF black-box reference, not our implementation)
+O2,UHF,sto-3g,hcore,3,-147.378901175973,2.012738960133,1e-06,https://pyscf.org/,triplet; UHF is spin-contaminated by the degenerate pi*, ROHF is spin-pure (PySCF black-box reference, not our implementation)
+O2,ROHF,sto-3g,atom,3,-147.632191001313,2.000000000000,1e-06,https://pyscf.org/,triplet; UHF is spin-contaminated by the degenerate pi*, ROHF is spin-pure (PySCF black-box reference, not our implementation)
+O2,ROHF,sto-3g,hcore,3,-147.632191001313,2.000000000000,1e-06,https://pyscf.org/,triplet; UHF is spin-contaminated by the degenerate pi*, ROHF is spin-pure (PySCF black-box reference, not our implementation)
+OH,UHF,sto-3g,atom,2,-74.362669194767,0.753261942346,1e-06,https://pyscf.org/,doublet radical; the classic UHF spin-contamination case (PySCF black-box reference, not our implementation)
+OH,ROHF,sto-3g,atom,2,-74.361561957933,0.750000000000,1e-06,https://pyscf.org/,doublet radical; the classic UHF spin-contamination case (PySCF black-box reference, not our implementation)

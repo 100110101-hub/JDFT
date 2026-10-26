@@ -1,0 +1,33 @@
+# M1：O2 三重态 / STO-3G / UHF（开壳层）。
+#
+# 判据（project-phase2.md §6.5 SC-01 / §7 M1）：
+#   E = -147.6339696 Ha（PySCF 黑盒同值，差 < 1e-6）
+#   <S^2> = 2.0034（UHF 的 O2 **有自旋污染**：不是 2.0；纯自旋要 ROHF）
+#   n_alpha = 9, n_beta = 7
+#
+# 几何与 `scripts/pyscf_open_shell_reference.py` 逐字一致（R = 1.208 Å）。
+# 注意：UHF 不碰 XC 网格（grid_level 只是为了 K4 的字段完整）。
+molecule:
+  atoms:
+    - symbol: O
+      position_angstrom: [0.0, 0.0, 0.0]
+    - symbol: O
+      position_angstrom: [0.0, 0.0, 1.208]
+  charge: 0
+  multiplicity: 3
+basis_name: sto-3g
+method_name: hf
+grid_level: coarse
+solvent: vacuum
+jobtype: sp
+options:
+  scf_max_iter: 200
+  scf_energy_threshold_hartree: 1.0e-8
+  scf_density_threshold: 1.0e-6
+  diis_history: 8
+  threads: 0
+  max_opt_steps: 100
+  opt_gradient_threshold_hartree_per_bohr: 4.5e-4
+  freq_step_angstrom: 0.01
+  ecp_name: null
+  scf_type: uhf

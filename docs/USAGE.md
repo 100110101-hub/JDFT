@@ -206,6 +206,7 @@ options:
   opt_gradient_threshold_hartree_per_bohr: 4.5e-4   # opt 的力判据（最大分量）
   freq_step_angstrom: 0.01                 # 预留给 freq（尚未接线）
   ecp_name: null                           # null = 全电子；有 ECP 时写名字，见 §3.2
+  scf_type: null                           # null / rhf / rks / uhf；见 §3.5
 ```
 
 ### 3.1 几何与单位
@@ -254,7 +255,7 @@ options:
 
 ### 3.3 从哪抄模板
 
-`qwb-core/examples/` 下的六个文件覆盖了常见组合：
+`qwb-core/examples/` 下的七个文件覆盖了常见组合：
 
 | 文件 | 体系 | 作业 |
 |---|---|---|
@@ -264,6 +265,48 @@ options:
 | `h2o_def2svp_pbe_opt.yaml` | H2O / def2-SVP / PBE | opt（慢档，分钟级） |
 | `cuh_lanl2dz_pbe.yaml` | CuH / LANL2DZ+ECP / PBE | sp |
 | `zno_lanl2dz_pbe.yaml` | ZnO / LANL2DZ+ECP / PBE | sp（SCF 需要退火退路） |
+| `o2_uhf_sto3g.yaml` | O2 三重态 / STO-3G / UHF | sp（开壳层，`scf_type: uhf`） |
+
+### 3.5 开壳层：`scf_type: uhf`（M1，已实装）
+
+自由基要用非限制性 Hartree–Fock：`method_name: hf` + `scf_type: uhf` + `jobtype: sp`
+（DFT 泛函要等 UKS，见 §3.4；`opt` 要等开壳层梯度，SC-02）。
+
+```yaml
+molecule:
+  atoms: [{symbol: O, position_angstrom: [0, 0, 0]}, {symbol: O, position_angstrom: [0, 0, 1.208]}]
+  charge: 0
+  multiplicity: 3          # 三重态
+basis_name: sto-3g
+method_name: hf
+grid_level: coarse          # UHF 不碰 XC 网格；字段只是为了完整
+jobtype: sp
+options:
+  scf_type: uhf
+```
+
+实测（`qwb run examples/o2_uhf_sto3g.yaml`）：
+
+```text
+scf     converged = true
+energy  -147.6339696424 Ha
+```
+
+结果目录的 `result.json` 里会多一个 `spin` 块 —— **自旋污染必须看得见**：
+
+```json
+"spin": {"n_alpha": 9, "n_beta": 7, "multiplicity": 3,
+         "s_squared": 2.003411, "spin_contamination": 0.003411, "broken_symmetry": false}
+```
+
+三条要知道的事实：
+
+1. **UHF 不是纯自旋态**：O2 的 `⟨S²⟩ = 2.0034`（不是 2.0）、OH 是 `0.7533`（不是 0.75）。
+   纯自旋态要 ROHF（`SC-01b`，未实装）。`spin_contamination` 就是差值，不要把它当 bug。
+2. **初猜决定解**：O2 的 UHF 有两个 SCF 解（差 0.255 Ha）。默认用**自旋平均的原子密度**
+   初猜（SAD），落在变分极小；`H_core` 初猜会落到较高的那个（PySCF 用
+   `init_guess='hcore'` 也是同一个数）。
+3. `mo_energies_hartree` / `mo_coeffs` 是 **α** 的那一套；β 的 HOMO/LUMO 写进 `log.txt`。
 
 ### 3.4 阶段二预留的字段（**契约已就位，引擎会显式拒绝**）
 
@@ -273,7 +316,7 @@ options:
 
 ```yaml
 options:
-  scf_type: uks            # rhf|rohf|uhf|rks|uks。开壳层未实现 → exit 4（M1 / SC-01）
+  # scf_type: rhf|rks 与阶段一行为等价；uhf 已实装（见 §3.5）；rohf/uks 未实现 → exit 4（SC-01b）
   mp2:                     # 相关方法未实现 → exit 4（M3 / SC-04..05）
     kind: ri-mp2           # mp2|ri-mp2；RI 要 aux_basis_name
     aux_basis_name: def2-svp-ri
@@ -678,6 +721,7 @@ python scripts\fetch_data.py --all --force              # 全部重下
 | `method_name` | 类型 | 状态 |
 |---|---|---|
 | `hf` | 闭壳层 RHF | 能算（引擎内部翻译成"空 terms + α_hf = 1"） |
+| `hf` + `scf_type: uhf` | 非限制性 UHF（开壳层） | 能算（M1：O2/OH 与 PySCF 同值，`spin` 块落盘） |
 | `svwn5` | LDA（VWN5） | 能算 |
 | `pbe` | GGA | 能算 |
 | `b88` | GGA 交换（单独的 B88） | 能算，一般作为组件 |

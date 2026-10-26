@@ -296,4 +296,44 @@ impl InternalBasis {
             .map(InternalShell::n_functions)
             .sum()
     }
+
+    /// 只含某个原子的**子基组**（壳层搬到原点、AO 下标从 0 重新编号）。
+    ///
+    /// 用途：原子密度初猜（`qwb_scf::guess`）需要在"同一套基组"上对一个原子单独做 SCF，
+    /// 再把密度搬回分子基。子基组的壳层顺序与原子里该原子的壳层顺序**一致**，所以
+    /// 搬运只是块对角拷贝（这是 SAD 初猜正确性的前提）。
+    ///
+    /// # Errors
+    ///
+    /// `atom_index` 越界，或该原子没有任何壳层。
+    pub fn sub_basis_of_atom(&self, atom_index: usize) -> Result<Self, EngineError> {
+        if atom_index >= self.atom_shells.len() {
+            return Err(EngineError::Internal(format!(
+                "atom index {atom_index} is out of range ({} atoms)",
+                self.atom_shells.len()
+            )));
+        }
+        let mut shells = Vec::new();
+        let mut atom_shells = Vec::new();
+        let mut first = 0usize;
+        for shell in self.shells_of_atom(atom_index) {
+            let mut copy = shell.clone();
+            copy.center_bohr = [0.0, 0.0, 0.0];
+            copy.first_function = first;
+            first += copy.n_functions();
+            atom_shells.push(shells.len());
+            shells.push(copy);
+        }
+        if shells.is_empty() {
+            return Err(EngineError::Internal(format!(
+                "atom {atom_index} has no shells; cannot build a sub-basis"
+            )));
+        }
+        Ok(Self {
+            angular: self.angular,
+            atom_shells: vec![atom_shells],
+            shells,
+            n_functions: first,
+        })
+    }
 }

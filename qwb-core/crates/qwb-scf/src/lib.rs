@@ -25,8 +25,10 @@ pub mod analytic_gradient;
 pub mod checkpoint;
 pub mod diis;
 pub mod ecp;
+pub mod guess;
 pub mod pulay;
 pub mod rks;
+pub mod uhf;
 
 use qwb_integrals::two_electron::TwoElectronIntegrals;
 use qwb_linalg::{LinalgError, Matrix};
