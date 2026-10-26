@@ -1,73 +1,95 @@
-# QuantumWorkbench (QWB) v2.1
+# QuantumWorkbench (QWB) v2.1 · JDFT
 
-分子 DFT 软件（**产品面模仿 Jaguar**，算法面全部自研）。
+分子 DFT 软件（**产品面模仿 Jaguar**，算法面全部自研：不调用 PySCF/ORCA/Gaussian/QE/Psi4/libxc/ase）。
 
-**唯一开工依据是 [`project.md`](./project.md)** —— 本 README 只说明"目录长什么样"和
-"一条命令怎么验"，不构成规范。新会话请从 `project.md` §0 开始。
+- **用法请看 [`docs/USAGE.md`](./docs/USAGE.md)** —— 安装、`input.yaml` 逐字段说明、CLI、Python API、
+  GUI、结果目录、数据仓、故障排查，都在那一份里。
+- **规范与验收判据看 [`project.md`](./project.md)** —— 契约 K1–K6、WBS、垂直切片 T1–T8、§7.0 参考值政策。
+- **进度与实测数字看 [`docs/status.yaml`](./docs/status.yaml)** —— 每个 WP 的 `state`、
+  artifact、verification（含实测值与来源）。
+- **为什么这么做看 [`docs/choices.md`](./docs/choices.md)** —— 按时间编号的决策与踩坑日志。
+
+## 30 秒验证它真的能算
+
+```powershell
+cd qwb-core
+cargo run --release -q -p qwb-cli --bin qwb -- run examples/h2_sto3g_svwn5.yaml --out results
+```
+
+```text
+scf     converged = true
+energy  -1.1570005110 Ha
+task    results\h2_sto3g_svwn5
+```
+
+`results/h2_sto3g_svwn5/` 是一个完整的 K3 结果目录（`result.json` / `env.json` /
+`data_snapshot.json` / `log.txt` / `input.yaml` / `artifacts/`），可以用
+`qwb inspect` 检查、用 `qwb replay` 重算比对。
+
+## 一条命令跑完所有门禁
+
+```powershell
+# Windows（三个 bash 门禁会通过 WSL 跑）
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\verify.ps1
+# Linux / CI / WSL
+bash scripts/verify.sh
+```
+
+需要仓库根的 `.venv`（Python 侧检查 + pyo3 扩展构建都用它）：
+
+```powershell
+python -m venv .venv
+.venv\Scripts\python.exe -m pip install mypy numpy pydantic pytest maturin PySide6 vtk
+```
+
+当前状态：**24/24 全绿**（第 56 轮，Python 侧 154 个测试）。逐项与最近轮次记在
+[`docs/status.yaml`](./docs/status.yaml) 的 C-06。
 
 ## 目录
 
 | 目录 | 内容 | 契约 |
 |---|---|---|
-| `qwb-contracts/` | K1 schema（schemars 生成）、K2 `qwb-engine-api` crate、K3 task/result schema、K4 格式定义、K5 CLI 约定、K6 Python 桩 | K1–K6 |
-| `qwb-data/` | 数据仓：`registry.yaml`、`basis/ ecp/ functional/ grid/ solvent/`、`examples/`（K1 样例，非交付物） | K1 |
-| `qwb-core/` | Cargo workspace：`qwb-registry`（K1 + 校验）、`qwb-io`（K3 状态机 + K4 容器）、`qwb-cli`（K5） | K2/K4/K5 |
-| `qwb-studio/` | Python 产品（P 轨）：`qwb_studio`（pydantic 模型 / `.qwb` / 调度器 / `env.json` / 结果目录 / CLI 壳 / 端到端 runner）+ `rust/qwb-py`（pyo3 `qwb_engine` 扩展） | K3/K4/K6 |
-| `docs/` | `status.yaml`（WBS 状态）、`choices.md`（决策日志）、`unblock.md`、`error-budget.md` | — |
-| `scripts/` | `verify.ps1` / `verify.sh`（一条命令跑完全部门禁）+ 三个 G 门禁脚本 + 数据/夹具生成脚本 | G6/G7 |
+| `qwb-contracts/` | K1 schema（`schemars` 从 Rust 类型生成，勿手改）、K2 `qwb-engine-api`、K3 task/result schema、K4 `.qwb` 定义、K5 CLI 约定、K6 Python 桩 | K1–K6 |
+| `qwb-data/` | 数据仓：`registry.yaml`、`basis/ ecp/ functional/ grid/`、`examples/`（K1 样例，非交付物） | K1 |
+| `qwb-core/` | Cargo workspace：`qwb-registry` / `qwb-basis` / `qwb-integrals` / `qwb-xc` / `qwb-grid` / `qwb-linalg` / `qwb-scf` / `qwb-props` / `qwb-engine` / `qwb-io` / `qwb-cli` | K2/K4/K5 |
+| `qwb-studio/` | Python 产品层：`qwb_studio`（pydantic 模型 / `.qwb` / 调度器 / `env.json` / 结果目录 / CLI 薄壳 / GUI）+ `rust/qwb-py`（pyo3 `qwb_engine`） | K3/K4/K6 |
+| `docs/` | `USAGE.md`（使用手册）、`status.yaml`（进度账本）、`choices.md`（决策日志）、`HANDOVER.md`、`unblock.md`、`error-budget.md` | — |
+| `scripts/` | `verify.ps1` / `verify.sh`（全部门禁一条命令）+ 三个 G 门禁脚本 + 数据/夹具/外部基准生成脚本 | G6/G7 |
 
-> 三个"仓"（contracts / data / core）当前在**同一个 git 工作树**里，靠目录隔离；
-> `qwb-core` 以 path 依赖引用 `qwb-contracts/engine-api`。原因与拆仓触发条件见
-> `project.md` §14 #2 / #21。
+三个"仓"（contracts / data / core）在**同一个 git 工作树**里，靠目录隔离；
+`qwb-core` 以 path 依赖引用 `qwb-contracts/engine-api`（理由见 `project.md` §14 #2 / #21）。
 
-## 一条命令验收
+## 能力一览（实测，不是宣称）
 
-```powershell
-# Windows 本地
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts\verify.ps1
+**已实装并用外部基准验证**
 
-# Linux / CI / WSL
-bash scripts/verify.sh
-```
+| 能力 | 证据 |
+|---|---|
+| 闭壳层 RHF / LDA(SVWN5) / GGA(PBE, B88) / hybrid(B3LYP², PBE0) | CCCBDB Release 22，STO-3G，7 体系 × 5 模型化学，差 ≤ 4e-6 Ha |
+| 苯的 B3LYP/PBE（36 个基函数） | 距 CCCBDB grid-coarse −0.01/−0.04 mHa，grid-normal −1.16/−1.33 mHa（判据 2 mHa） |
+| 几何优化（BFGS + 解析梯度） | PBE0/def2-SVP 的 H2O O–H 0.9623 Å（实验 0.9572）；PBE/def2-TZVP 4 步到 2.67e-4 Ha/Bohr |
+| 频率（数值 Hessian + 标度因子 + 热化学 + IR） | PBE/6-311G(d,p)×0.991 最差 21.5 cm⁻¹（判据 30）；PBE0 60.5 cm⁻¹ 作为不通过对照组记录 |
+| ECP（LANL2DZ，Cu/Zn） | 矩阵元与解析解 3e-14；CuH/ZnO 单点跑通（ZnO 需 SCF 退火） |
+| 基组 | STO-3G / def2-SVP / def2-TZVP / 6-311G(d,p) / LANL2DZ（+LANL2DZ 价基）；数据逐项对 BSE 导出 diff < 1e-12 |
+| 工作流 | K3 状态机 + 结果目录、`qwb batch` 持久化队列与 `kill -9` 恢复、`qwb replay` 复现（delta 0.000e0） |
+| GUI（PySide6 + VTK） | Build→提交→Job Monitor→3D 全链路；102.8 MB 日志不卡；崩溃后重启恢复未完成视图 |
+| Python API（pyo3，abi3-py39） | 与 CLI 能量逐位相同；GIL 真释放（单次 1.000 s vs 两个并发 1.078 s） |
 
-门禁需要仓库根的 `.venv`（Python 侧四类检查 + pyo3 扩展构建都跑它）：
+² B3LYP 只能在测试里程序化构造：K1 的 phase-1 语义门禁拒绝 `requires.laplacian = true`（冻结契约）。
 
-```powershell
-python -m venv .venv
-.venv\Scripts\python.exe -m pip install mypy numpy pydantic pytest maturin PySide6
-```
+**没做（不要当成能用）**
 
-当前状态：**24 项全绿**（2026-10-25 第 44 轮；fmt / clippy `-D warnings` / test / `cargo deny` /
-K1 schema 不漂移 / G2 数据校验 / 三个门禁脚本 / `mypy --strict` ×2 / pyo3 扩展的
-fmt-clippy-构建安装 / Python 侧 129 个单测 / `.qwb` 夹具新鲜度；两个 Rust workspace
-加 Python 侧都覆盖）。各项与最近一次通过的轮次记在 `docs/status.yaml` 的 C-06。
+- `JobType::Freq` 未接到 `EngineBackend`（会以退出码 4 拒绝）；频率代码由测试直接调用。
+- 带 ECP 的 `opt`/`freq`（ECP 对核坐标的导数还没实现）。
+- 隐式溶剂（只有 `vacuum`）、meta-GGA、ROHF/UKS、TDDFT、NBO、TS/IRC/scan。
+- 积分层并行（`--threads` 只记账）；ECP 的解析权重导数（Hessian 因此比理想情况慢）。
 
-退出码契约见 K5：`0` 成功 / `1` 输入错误 / `2` 收敛失败 / `3` 数据校验失败 / `4` 内部错误。
+完整的"能算什么/不能算什么"、判据数字与出处见 [`docs/USAGE.md`](./docs/USAGE.md) §9
+与 [`docs/status.yaml`](./docs/status.yaml)。
 
-## 现在能做什么、还不能做什么（诚实说明）
+## 许可
 
-**已实装**
-
-* **契约层**：K1 数据模型 + schema 生成 + 数据校验（`qwb data list|show|verify|sign`）、
-  K3 状态机与结果目录布局、K4 `.qwb` 容器（Rust 与 Python 双向互操作）、
-  K5 CLI（9 个子命令）、K6 Python 类型桩 + 真正的 pyo3 绑定。
-* **数值内核**：闭壳层 RHF / LDA / GGA(PBE, BLYP) / hybrid(B3LYP, PBE0) 的 SCF，
-  解析梯度（H2O/CH4 等小体系）、几何优化、数值 Hessian + 热化学 + IR，
-  STO-3G / def2-SVP / def2-TZVP / 6-311G(d,p) 基组。与 CCCBDB 的 STO-3G 外部基准
-  对得上（H2/H2O/CO/CH4/NH3/N2 五个模型化学都在 1e-4 Ha 内，详见 `docs/status.yaml` T6/V-03）。
-* **产品层（P 轨）**：Python 侧从模型层到端到端全通 —— 建模、`.qwb` 读写、本地调度器
-  （并发 / 取消 / `kill -9` 恢复）、`env.json` 生成、结果目录 G5 校验、`qwb` 薄壳、
-  pyo3 绑定（与 CLI 能量逐位相同、GIL 真释放）、Python 端到端跑通 T1
-  （写出的结果目录 Rust `qwb replay` 能重算，delta `0.000e0 Ha`）。
-
-**还没实装（不要当成能用）**
-
-* **作业类型**：`EngineBackend` 目前只接 `sp`；`opt` / `freq` 走 CLI 或 pyo3 会被拒
-  （退出码 4）。优化/Hessian 代码存在并被测试覆盖，但还没接到 `run` 的作业分发上。
-* **ECP**（T5）：数据缺 D-07/D-08，且 K1 的 ECP 语义要人类拍板，故仍 `blocked`。
-* **频率判据**（T4）：谐振频率已能算，但要压到「与实验差 < 30 cm⁻¹」还差 2e 导数预筛；
-  目前 STO-3G 标度后仍差 +377/+107/+236 cm⁻¹，如实记在 `docs/status.yaml`。
-* **KS 解析梯度的基组运动项**（T6）：B3LYP 解析梯度还没到 1e-6，已知缺口写在 G-01。
-* **GUI**（P-09 / P-10）：还没开始（项目树 / Task Panel / Job Monitor / VTK 3D）。
-* **溶剂**：只有 `vacuum` 能算，隐式溶剂是接口占位。
-
+代码 `Apache-2.0`。数据许可见 [`DATA_LICENSES.md`](./DATA_LICENSES.md)：
+自研/自转录数据为 `Apache-2.0`；**外部来源**（BSE 导出的 STO-3G/def2/6-311G/6-311G(d,p)、
+LANL2DZ 的基组与 ECP）逐条登记，其中 LANL2DZ 的 ECP 两项因为原始论文没有明确再分发条款，
+标成 `commercial_ok: false` / `redistribute_ok: false` —— 对外分发前请先确认。
