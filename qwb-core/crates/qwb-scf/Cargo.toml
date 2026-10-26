@@ -19,11 +19,11 @@ thiserror.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 
-
-
 [dev-dependencies]
 qwb-registry.workspace = true
 qwb-basis.workspace = true
+qwb-linalg.workspace = true
+serde_yaml.workspace = true
 
 [lints]
 workspace = true

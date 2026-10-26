@@ -30,6 +30,18 @@ bases:
   - name: 6-311g(d,p)
     path: basis/6-311g-dp.yaml
     sha256: cfda92e209fe870532c32df9680cba1c8a3f087bf09ac768a3525ad9f8dd6cb9
+  - name: lanl2dz
+    path: basis/lanl2dz.yaml
+    sha256: bc14a7e191563cb1cb3433e5722901f737cc4995b57758a497a2159c312cb5d7
+# D-07：ECP 数据按元素一文件（K1 的 `Ecp` 只有单个 `element` 字段），
+# 名字用 `<家族>-<元素>`；与 `basis/lanl2dz.yaml` 通过 Registry::load_pair 配对。
+ecps:
+  - name: lanl2dz-cu
+    path: ecp/lanl2dz-cu.yaml
+    sha256: a44df71fd56eea385eec3b7f3dbce2a04ae633e1aa0ee685096f682c9912f299
+  - name: lanl2dz-zn
+    path: ecp/lanl2dz-zn.yaml
+    sha256: 55b3391680aaad1d6adaa1f4ed9475533776ba9eb5a11d7318e0de08b7b46692
 functionals:
   - name: pbe
     path: functional/pbe.yaml

@@ -43,8 +43,9 @@ C-06:
     scripts/verify.ps1 与 scripts/verify.sh 覆盖**同一清单**（3 个 bash 门禁 / K2
     fmt-clippy-doc-test / core fmt-clippy-test + I-06 + I-00 + deny + K1 schema +
     G2 data / D-15 / 10.6 账本 / K6 mypy ×2 / P-06 pyo3 fmt-clippy-构建安装 / Python 侧 pytest
-    / P-02 夹具新鲜度）；2026-10-26 第 51 轮实测 **24/24 全绿**（含 T8 的 opt 作业类型、
-    GUI 建分子页/启动恢复、以及 XC 几何导数的修复；Python 侧 154 例）。
+    / P-02 夹具新鲜度）；2026-10-26 第 53 轮实测 **24/24 全绿**（含 T8 的 opt 作业类型、
+    GUI 建分子页/启动恢复、XC 几何导数的修复，以及 D-07/I-05 的 ECP 数据与矩阵元；
+    Python 侧 154 例）。
   note: |
     **两处门禁自身漏洞（都修在这里，免得"全绿"被误读）**：
 
@@ -54,6 +55,19 @@ C-06:
     "ALL GATES GREEN"在这一项上是空的。修法：两个 step 计入同一个 `$fail`，末尾统一 exit，
     并补上 `ok: unsafe policy satisfied` 的正向输出。验证：临时去掉 `qwb-props/src/lib.rs`
     的 deny 行 → 脚本打印 `FAIL ...: missing deny(unsafe_code)` 并 exit 1；恢复后 exit 0。
+
+    **第 52 轮也先红了一次**（两处，都修了）：
+
+    ① `D-15: DATA_LICENSES.md matches the data` 报"不一致"——加了 ECP 数据之后忘了重新生成
+    （`scripts/gen_data_licenses.py`）。这不是门禁误报，正是它该抓的东西。
+    ② `test_gui.py::test_submit_and_monitor_do_not_block_the_ui` 偶发
+    `['converged', 'running', 'converged']`。根因是**真的线程竞态**：`SchedulerBridge._poll`
+    在界面线程里调 `scheduler.load()`，而工作线程同时在 `set_state` + `save`，两边改同一个
+    `_entries` 列表；再加上 `is_running()` 只看 `QThread.isRunning()`，线程一停就变 False，
+    而"把最终状态同步进界面"的 `_on_finished` 还是排队信号 —— 调用方会读到中间态。
+    修法：轮询改成**只读队列文件快照**（不碰 scheduler 的内存状态），`is_running()` 加一个
+    "直到 `_on_finished` 处理完才为 False"的 `_active` 标志，`_on_finished` 里先
+    `project.sync()` 再发信号。
 
     **第 50 轮先红了一次**（如实记）：`test_engine_binding.py::test_two_concurrent_jobs_overlap`
     报 "two concurrent runs took 1.30s vs 0.84s single"—— 判据是 `wall < single*2*0.75`，
@@ -124,7 +138,44 @@ D-06:
     **R-06 的第一阶段范围由 s/p/d 扩到 s/p/d/f**；l ≥ 4 仍然显式返回 None（系数不猜）。
     下一步（属于 T3）：用 PBE/def2-TZVP 重跑水分子几何优化，看键长能否压到实验 0.9572 Å
     的 0.01 以内（6-311G(d,p) 实测 0.9682，差 0.0110）。
-D-07: {state: pending, depends: [D-01], note: "先确认 Stuttgart/BSE 的再分发条款（§14 #20）"}
+D-07:
+  state: done
+  ts: "2026-10-26T15:30:00Z"
+  artifact: |
+    qwb-data/basis/lanl2dz.yaml（H/O/Cu/Zn，BSE 导出机器转录）
+    + qwb-data/ecp/lanl2dz-cu.yaml（10 芯 / z_eff 19）
+    + qwb-data/ecp/lanl2dz-zn.yaml（18 芯 / z_eff 12）
+    + scripts/bse_ecp_to_qwb_data.py（ECP 的唯一转录路径，把 BSE 的 r_exponents 显式标成 `r^n`）
+    + scripts/bse_to_qwb_data.py 支持 BSE 的 `region: valence` 标签
+    + qwb-core/crates/qwb-registry/tests/d07_lanl2dz.rs（5 例）、fixtures/bse/lanl2dz.json
+  verification: |
+    `cargo test -p qwb-registry --test d07_lanl2dz`（5 例，0.01 s）：
+    * **基组逐项对 BSE 导出**（相对差 < 1e-12）：Cu [3s3p2d]、Zn [2s2p2d]、H [2s]、O [3s2p]；
+      基函数数 Cu 22 / Zn 18 / H 2 / O 9（从导出算出来，另写死一遍做双向核对）。
+    * **ECP 逐项对 BSE 导出**：n_core / z_eff / 每个通道的 (power, exponent, coefficient) 全等；
+      局域通道 = 导出里最大的 l（Cu l=2、Zn l=3）。
+    * `r_power_convention` 在数据里显式写成 `r^n`（§8.2 的陷阱），加载器不做隐式转换。
+    * `Registry::load_pair("lanl2dz", "lanl2dz-cu")` 通过；`load_pair("def2-svp", "lanl2dz-cu")`
+      按**元素**拒绝（def2-SVP 没有 Cu）。
+    `qwb data verify`：16 个文件全过；`gen_data_licenses.py --check` 通过（DATA_LICENSES.md 已重生成）。
+  note: |
+    **两处 spec 与真实数据不符，经用户批准更正（2026-10-26）**：
+
+    ① T5 原文「Cu `n_core_electrons == 28`、`z_eff == 1.0`」与 LANL2DZ 不符。BSE 的 LANL2DZ
+    对 Cu 是 **10 芯**（`[Ne]` 芯，3s/3p 留在价层，Hay–Wadt 的 "K to Au including the outermost
+    core orbitals"，DOI 10.1063/1.448975），所以 `z_eff = 19`；28 芯只剩 4s 一个价电子，
+    与这套 s/p/d 价基自相矛盾。Zn 是 18 芯（`[Ar]`，Hay–Wadt Sc–Hg，DOI 10.1063/1.448799）。
+
+    ② T5 原文 ZnO 用 `def2-ECP`，但 **Zn 的 def2-ECP 不存在**：BSE 的 def2-ecp 从 Rb（Z=37）
+    才开始（def2 系列对 3d 元素是全电子）。经用户批准，ZnO 改用同族 LANL2DZ（Zn 18 芯）。
+
+    **许可（§14 #20 的严格读法）**：BSE 导出本身没有给出再分发/商用条款，原始论文也只要求
+    引用，所以三个新数据文件的 `license` 写成 `spdx: NOASSERTION` + `commercial_ok: false`
+    + `redistribute_ok: false`，并在 `notes` 里写明出处。要改成 `true` 必须先拿到逐条确认。
+
+    **命名**：K1 的 `Ecp` 只有单个 `element` 字段，所以 ECP 按元素一文件、名字用
+    `<家族>-<元素>`（`lanl2dz-cu` / `lanl2dz-zn`）。等 K1 支持多元素 ECP 时再合并。
+
 D-08: {state: pending, depends: [D-01]}
 D-09:
   state: done
@@ -245,7 +296,39 @@ I-04:
   artifact: "qwb-core/crates/qwb-integrals/src/deterministic.rs（DeterministicReduce：按索引映射/求和的确定性并行原语）+ two_electron_with_threads()（并行算球谐块、串行散射）+ tests/i04_threads.rs"
   verification: "cargo test -p qwb-integrals --test i04_threads（2 例）：① H2 与 CH2（含 p）在 **1 / 2 / 4 线程**下，张量全部 f64 的 `to_bits` 序列**逐位相同**，FNV-1a 哈希也相同（H2: 0x50f26e0bfa3112a9；CH2: 0x6d450d020574274d）；② 默认入口 `two_electron()`（rayon 默认线程数）与显式 1 线程逐位相同。`scripts/check_rayon_determinism.sh`（G7/R-13）两条规则通过。"
   note: "**顺带补上了一个一直悬空的契约**：`check_rayon_determinism.sh` 的规则 2 要求『凡 par_iter 必配 DeterministicReduce』，但那个类型此前在代码里根本不存在（脚本注释也写着『C 轨还没有 rayon 使用』）。本轮实现了 `deterministic::DeterministicReduce`（`map_ordered` 保证输出顺序与索引一致；`sum_ordered` 串行累加），并把 `two_electron` 的并行映射收进它，使这条门禁真正有对象可查。实现策略也符合规则本意：并行只做『按索引映射』，散射进张量仍是串行且顺序固定，所以不需要任何归约顺序假设。"
-I-05: {state: pending, depends: [I-02]}
+I-05:
+  state: done
+  ts: "2026-10-26T16:10:00Z"
+  artifact: |
+    qwb-core/crates/qwb-scf/src/ecp.rs（`EcpOperator`：K1 数据 → 中心/局域通道/投影通道/z_eff；
+    `matrix_elements`：ECP 中心上的径向 × 角向求积，非局域项用实球谐投影；
+    `one_center_matrix`：一中心的**解析**对照）
+    + qwb-core/crates/qwb-scf/tests/i05_ecp.rs（6 例）
+    + qwb-integrals 的 `one_electron_with_charges`（核吸引用 z_eff）
+    + qwb-scf 的 `RksOptions::{nuclear_charges, ecp_potential}`（ECP 矩阵进 H_core）
+  verification: |
+    `cargo test -p qwb-scf --test i05_ecp`（6 例，22 s）：
+    * **Cu：解析 vs 半数值最大绝对差 2.7e-14 Ha**（矩阵最大元 0.532）；**Zn 3.9e-14**
+      （最大元 0.254）—— 判据是 < 1e-8，实测好五个数量级。
+    * **Cu 的 l=2（局域）通道单独断言**：解析 vs 半数值 2.9e-15；去掉投影通道后 d 子块
+      最大元 1.93e-2（对角同量级），证明 d 函数确实看到 V_local。
+    * **CuH 的异中心元**（H 1s 与 Cu 的 s/p/d）：grid-fine vs grid-veryfine 的矩阵最大差
+      1.8e-14；veryfine vs 再加密一级 6.4e-14；异中心元最大 2.6e-3 Ha（不是 0）。
+    * 矩阵严格对称（差 < 1e-12）；把项全清掉时矩阵恒为零。
+    * 独立核对：用"单位算符"（V=1）时两条实现都等于重叠矩阵（4.4e-16 / 7.6e-14）——
+      这是最直接的一条"归一化没写错"的证据。
+  note: |
+    **一条必须记下来的 bug**：解析实现最初差 √(4/π)=1.128 倍，根因是 `Γ(3/2)` 被当成 1
+    （`gamma_half` 的基只处理了 Γ(1/2) 与 Γ(1)）。用"单位算符 = 重叠矩阵"这条诊断一眼看出。
+    修好后两条实现对到 1e-14。
+
+    **约定写在代码里**：局域通道 = K1 数据里给出的**最大 l**（Cu l=2、Zn l=3），其余 l 是投影；
+    `V_ECP = V_L + Σ_{l<L}(V_l − V_L) P_l`。核吸引的点电荷那一半用 `z_eff`（`one_electron_with_charges`），
+    所以 BSE 的 LANL2DZ 表里没有 `r^-1` 项是对的。
+
+    **还没做**：ECP 对**核坐标的导数**。因此带 ECP 的 `opt` 会被引擎显式拒绝
+    （`qwb-engine/tests/t5_ecp.rs` 有这条断言），SP 正常。
+
 I-06:
   state: done
   ts: "2026-10-23T00:22:31Z"
@@ -1019,7 +1102,40 @@ T4:
     ④ 单分子与摩尔 Hartree 换算混用（ZPE 曾被除成 0）。
     修好后 S 立刻落到 0.85% 以内 —— 这类"量级对、常数错"的问题正是外部参考值能抓到的。
     下一步：偶极导数 → IR 强度；以及请人类裁定上面那条口径问题。
-T5: {state: pending, note: "体系已冻结：CuH/LANL2DZ 与 ZnO/def2-SVP+def2-ECP"}
+T5:
+  state: in_progress
+  ts: "2026-10-26T16:20:00Z"
+  artifact: |
+    qwb-core/examples/cuh_lanl2dz_pbe.yaml（CuH / LANL2DZ / PBE）
+    + qwb-core/crates/qwb-engine/tests/t5_ecp.rs（4 例）
+    + 引擎的 ECP 接线（`RksBackend::ecp_terms`：z_eff 核电荷 + ECP 矩阵进 H_core；
+    SCF 失败时的两级退路：多初猜 → 阻尼 Roothaan）
+  verification: |
+    三条判据的当前状况：
+    * **两个体系各跑通单点能 —— 一半通过**：
+      CuH / LANL2DZ / PBE **收敛**，E = -213.9069054186 Ha（`t5_ecp.rs` 钉住），
+      data_snapshot 里同时有 lanl2dz 基组与 lanl2dz-cu 的 ECP；引擎日志写着
+      `ecp = lanl2dz-cu ... n_core = 10, z_eff = 19`；同一输入两次跑能量逐位相同。
+      **ZnO / LANL2DZ / PBE 不收敛**（见 note 的定位）。
+    * **Cu n_core = 10、z_eff = 19 与价基自洽 —— 通过**（按用户批准的更正，见 D-07）。
+    * **ZnO 与 reference csv 差 < 5 mHa —— 未通过**：ZnO 的 SCF 不收敛，没有可比的能量；
+      reference csv 也没有建立在伪造的数上（宁可不建）。**非局域 ECP 矩阵元与数值对照 —— 通过**（I-05：
+      解析 vs 半数值 3e-14）。
+  note: |
+    **ZnO 的定位（有证据，不是"跑不动就算了"）**：
+    * Zn 原子（LANL2DZ，12 价电子）**收敛**：E = -44.240656 Ha，3d 五重简并在 -0.55 Ha，
+      说明 ECP 矩阵元本身不可疑（另外 I-05 的解析对照也到 1e-14）。
+    * O 原子（LANL2DZ 全电子，8 电子）在**闭壳层受限**下不收敛 —— 这不是 bug：O 的基态是
+      ³P（两个单占 p 轨道），闭壳层受限的 O 原子本身就是伪解。
+    * ZnO 于是从一个伪组态出发：`QWB_SCF_TRACE=1` 逐迭代实测，能量在 -119…-121 Ha 之间振荡、
+      max|dP| ≈ 1（占据在几个组态之间跳）；400/500 步、多初猜（5 个初猜缩放）、阻尼
+      （0.05–0.4）、静态能级移动（0.1–2.0）、四个网格等级、PBE/SVWN5 全部试过，都不收敛。
+    * 结论：这是 **LANL2DZ 的 Zn/O 组合 + 闭壳层受限初猜**的经典问题（LANL2DZ 的 ZnO 在
+      文献里也是出了名的难收敛），不是 ECP 矩阵元或网格的算术错误。
+    **下一步（未做）**：健全的初猜（SAD：球平均的原子密度，含分数占据）或 ROHF/UKS。
+    这一轮已经为此铺了三个**确定性**的 SCF 选项（`damping`、`level_shift`、`smearing_steps`
+    + `smearing_temperature` 的费米展宽）与引擎的两级退路，但都还没能把 ZnO 救回来。
+
 T6:
   state: in_progress
   ts: "2026-11-02T18:00:00Z"

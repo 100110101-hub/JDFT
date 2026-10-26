@@ -3,7 +3,7 @@
 本文件由 `scripts/gen_data_licenses.py` 生成。重跑必须得到**逐字节相同**的结果
 （排序固定 + 不含时间戳），所以它可以直接进 CI 比对。
 
-共 13 个生产数据文件。`qwb-data/examples/` 下的 SPECIMEN 不计入
+共 16 个生产数据文件。`qwb-data/examples/` 下的 SPECIMEN 不计入
 （它们是形状示例，不在 manifest 里）。
 
 | 数据 | 版本 | 许可 | 商用 | 可再分发 | sha256（前 16 位） |
@@ -11,7 +11,10 @@
 | `qwb-data/basis/6-311g-dp.yaml` | 1.0.0 | Apache-2.0 | true | true | `cfda92e209fe8705` |
 | `qwb-data/basis/def2-svp.yaml` | 1.0.0 | Apache-2.0 | true | true | `177675559ef883e0` |
 | `qwb-data/basis/def2-tzvp.yaml` | 1.0.0 | Apache-2.0 | true | true | `263b684f8c936200` |
+| `qwb-data/basis/lanl2dz.yaml` | 1.0.1 | NOASSERTION | false | false | `bc14a7e191563cb1` |
 | `qwb-data/basis/sto-3g.yaml` | 1.0.0 | Apache-2.0 | true | true | `fce3af14b8b3ea12` |
+| `qwb-data/ecp/lanl2dz-cu.yaml` | 1.0.0 | NOASSERTION | false | false | `a44df71fd56eea38` |
+| `qwb-data/ecp/lanl2dz-zn.yaml` | 1.0.0 | NOASSERTION | false | false | `55b3391680aaad1d` |
 | `qwb-data/functional/b88.yaml` | 1.0.0 | Apache-2.0 | true | true | `efa0fa7b9f8aa98d` |
 | `qwb-data/functional/pbe.yaml` | 1.0.0 | Apache-2.0 | true | true | `6f9c7a390d0d813e` |
 | `qwb-data/functional/pbe0.yaml` | 1.0.0 | Apache-2.0 | true | true | `0af62e0946c2f563` |
@@ -36,9 +39,21 @@
 
 - Balanced basis sets of split valence, triple zeta valence and quadruple zeta valence quality for H-Rn (Weigend & Ahlrichs, PCCP 7, 3297, 2005)
 
+### `qwb-data/basis/lanl2dz.yaml`（lanl2dz 1.0.1）
+
+- Ab initio effective core potentials for molecular calculations. Potentials for K to Au including the outermost core orbitals
+
 ### `qwb-data/basis/sto-3g.yaml`（sto-3g 1.0.0）
 
 - Self-Consistent Molecular-Orbital Methods. I. Use of Gaussian Expansions of Slater-Type Atomic Orbitals
+
+### `qwb-data/ecp/lanl2dz-cu.yaml`（lanl2dz-cu 1.0.0）
+
+- Ab initio effective core potentials for molecular calculations. Potentials for K to Au including the outermost core orbitals
+
+### `qwb-data/ecp/lanl2dz-zn.yaml`（lanl2dz-zn 1.0.0）
+
+- Ab initio effective core potentials for molecular calculations. Potentials for the transition metal atoms Sc to Hg
 
 ### `qwb-data/functional/b88.yaml`（b88 1.0.0）
 

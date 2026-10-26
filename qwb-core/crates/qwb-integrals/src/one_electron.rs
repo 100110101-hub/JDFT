@@ -350,6 +350,9 @@ pub struct OneElectronIntegrals {
 
 /// 计算一个分子基组下的全部一电子积分。
 ///
+/// 核电荷取元素表里的 `Z`（全电子）。有 ECP 的体系用
+/// [`one_electron_with_charges`] 传入有效核电荷。
+///
 /// # Errors
 ///
 /// 分子里出现元素表之外的符号（拿不到核电荷）→ [`EngineError::Internal`]。
@@ -357,6 +360,41 @@ pub fn one_electron(
     basis: &InternalBasis,
     molecule: &Molecule,
 ) -> Result<OneElectronIntegrals, EngineError> {
+    let mut charges = Vec::with_capacity(molecule.n_atoms());
+    for atom in &molecule.atoms {
+        let z = atomic_number(&atom.symbol).ok_or_else(|| {
+            EngineError::Internal(format!(
+                "unknown element `{}` while building nuclear attraction",
+                atom.symbol
+            ))
+        })?;
+        charges.push(f64::from(z));
+    }
+    one_electron_with_charges(basis, molecule, &charges)
+}
+
+/// 与 [`one_electron`] 相同，但核电荷由调用方给（I-05：ECP 元素的核吸引用 `z_eff`）。
+///
+/// `charges[i]` 是第 `i` 个原子对**电子**的核电荷。ECP 的电子-核有效势里，
+/// 点电荷吸引那一半用 `z_eff = Z − n_core`，其余（局域 + 非局域投影）由
+/// `qwb_scf::ecp` 单独算成矩阵再加进 `H_core`。
+///
+/// # Errors
+///
+/// `charges` 长度与分子原子数不符 → [`EngineError::Internal`]；球谐变换缺失 →
+/// [`EngineError::Unsupported`]。
+pub fn one_electron_with_charges(
+    basis: &InternalBasis,
+    molecule: &Molecule,
+    charges: &[f64],
+) -> Result<OneElectronIntegrals, EngineError> {
+    if charges.len() != molecule.n_atoms() {
+        return Err(EngineError::Internal(format!(
+            "one_electron_with_charges: {} charges for {} atoms",
+            charges.len(),
+            molecule.n_atoms()
+        )));
+    }
     // 每个壳层一个变换（l<=1 是单位阵；l=2 是 6x5；l>=3 未实现 → 显式报错）。
     let mut transforms = Vec::with_capacity(basis.shells().len());
     for shell in basis.shells() {
@@ -382,16 +420,10 @@ pub fn one_electron(
     let mut kinetic = Matrix::zeros(n, n);
     let mut nuclear = Matrix::zeros(n, n);
 
-    // 核电荷（ECP 会在 I-05 改成有效核电荷；这里先全电子）。
+    // 核电荷：全电子用元素表的 Z；有 ECP 时由调用方传入 z_eff（I-05）。
     let mut nuclei: Vec<([f64; 3], f64)> = Vec::with_capacity(molecule.n_atoms());
-    for atom in &molecule.atoms {
-        let z = atomic_number(&atom.symbol).ok_or_else(|| {
-            EngineError::Internal(format!(
-                "unknown element `{}` while building nuclear attraction",
-                atom.symbol
-            ))
-        })?;
-        nuclei.push((atom.position_bohr(), f64::from(z)));
+    for (atom, charge) in molecule.atoms.iter().zip(charges) {
+        nuclei.push((atom.position_bohr(), *charge));
     }
 
     let shells: Vec<ShellPrimitives> = basis.shells().iter().map(shell_primitives).collect();

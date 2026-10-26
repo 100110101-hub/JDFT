@@ -211,7 +211,37 @@ impl RksBackend {
         })
     }
 
-    /// 单点能（`Sp` 的全部逻辑，也是 `opt` 收尾时复用的那段）。
+    /// ECP 的两样东西：每个原子对电子的核电荷（ECP 原子用 `z_eff`）与 ECP 矩阵元。
+    ///
+    /// 求积用同一个网格等级（`grid_name`）——ECP 的求积与 XC 的求积用同一套参数，
+    /// 不在代码里塞点数（I-05 的精度见 `qwb-scf/tests/i05_ecp.rs`：解析 vs 半数值 3e-14，
+    /// 网格加密 6e-14）。
+    fn ecp_terms(
+        &self,
+        input: &JobInput,
+        basis: &qwb_basis::InternalBasis,
+        grid_name: &str,
+        ecp_name: &str,
+    ) -> Result<(Vec<f64>, qwb_linalg::Matrix), EngineError> {
+        let ecp = self.registry.get_ecp(ecp_name)?;
+        let operator = qwb_scf::ecp::EcpOperator::from_ecp(ecp, &input.molecule)?;
+        let mut charges = Vec::with_capacity(input.molecule.n_atoms());
+        for atom in &input.molecule.atoms {
+            let z = qwb_registry::elements::atomic_number(&atom.symbol).ok_or_else(|| {
+                EngineError::Internal(format!("unknown element `{}`", atom.symbol))
+            })?;
+            charges.push(if atom.symbol == operator.element {
+                operator.z_eff
+            } else {
+                f64::from(z)
+            });
+        }
+        let level = self.registry.get_grid(grid_name)?;
+        let potential = qwb_scf::ecp::matrix_elements(basis, &operator, level)?;
+        Ok((charges, potential))
+    }
+
+    /// 单点能（`Sp` 的全部逻辑，也是 `opt` 收尾时复用的那一段）。
     fn run_single_point(
         &self,
         input: &JobInput,
@@ -250,15 +280,70 @@ impl RksBackend {
         options.energy_threshold = input.options.scf_energy_threshold_hartree;
         options.density_threshold = input.options.scf_density_threshold;
         options.hf_exchange = spec.hf_exchange;
+        // K2 的 `TaskOptions.diis_history` 真的接到 DIIS 子空间长度上（之前漏掉了）。
+        options.diis_max_vectors = input.options.diis_history as usize;
 
-        let result = qwb_scf::rks::rks_scf(
+        // I-05：ECP。核吸引用 z_eff，超出的部分作为矩阵元加进 H_core。
+        if let Some(ecp_name) = &input.options.ecp_name {
+            let (charges, potential) = self.ecp_terms(input, &basis, &spec.grid_name, ecp_name)?;
+            reporter.log(&format!(
+                "ecp = {ecp_name} on {} (n_core = {}, z_eff = {:.0}); \
+                 ECP matrix elements added to H_core",
+                self.registry.get_ecp(ecp_name)?.element,
+                self.registry.get_ecp(ecp_name)?.n_core_electrons,
+                self.registry.get_ecp(ecp_name)?.z_eff
+            ));
+            options.nuclear_charges = Some(charges);
+            options.ecp_potential = Some(potential);
+        }
+
+        let result = match qwb_scf::rks::rks_scf(
             &basis,
             &input.molecule,
             &tensor,
             &grid,
             &spec.terms,
-            options,
-        )?;
+            options.clone(),
+        ) {
+            Ok(result) => result,
+            Err(first_error) => {
+                // 单初猜不收敛时的两级退路（近简并体系：N2、含 d/f 的重元素、ECP 体系）。
+                // 两条都**确定**：初猜序列固定、无随机化 ⇒ 同样的输入给同样的输出。
+                reporter.log(&format!(
+                    "scf: single guess failed ({first_error}), retrying with multistart"
+                ));
+                match qwb_scf::rks::rks_scf_multistart(
+                    &basis,
+                    &input.molecule,
+                    &tensor,
+                    &grid,
+                    &spec.terms,
+                    options.clone(),
+                ) {
+                    Ok(result) => result,
+                    Err(second_error) => {
+                        reporter.log(&format!(
+                            "scf: multistart failed ({second_error}), retrying with damped \
+                             Roothaan iterations (no DIIS, damping 0.3)"
+                        ));
+                        let mut plain = options.clone();
+                        plain.use_diis = false;
+                        plain.damping = 0.3;
+                        // **不改用户给的 `scf_max_iter`**：K2 的 `TaskOptions` 是输入契约，
+                        // 引擎不能"为了收敛"偷偷跑更多步（`test_scf_not_converged_carries_iters`
+                        // 就是钉这一点的）。
+                        qwb_scf::rks::rks_scf(
+                            &basis,
+                            &input.molecule,
+                            &tensor,
+                            &grid,
+                            &spec.terms,
+                            plain,
+                        )?
+                    }
+                }
+            }
+        };
         reporter.log(&format!(
             "scf {} in {} iterations: E = {:.10} Ha, E_xc = {:.10} Ha",
             if result.scf_converged {
@@ -317,6 +402,15 @@ impl RksBackend {
         input: &JobInput,
         reporter: &dyn Reporter,
     ) -> Result<JobResult, EngineError> {
+        if let Some(ecp_name) = &input.options.ecp_name {
+            // I-05 只做了 ECP 的**矩阵元**（能量）；ECP 对核坐标的导数还没实现，
+            // 所以带 ECP 的几何优化会给出没有 ECP 导数项的梯度 —— 那是错的，显式拒绝。
+            return Err(EngineError::Unsupported(format!(
+                "geometry optimisation with an ECP (`{ecp_name}`) is not implemented yet: \
+                 the ECP derivative w.r.t. nuclear coordinates is missing (I-05 covers the \
+                 matrix elements only). Single-point jobs with ECP are supported"
+            )));
+        }
         let spec = self.spec(input)?;
         let mut options = opt::OptOptions::new(
             &input.basis_name,
@@ -421,11 +515,6 @@ impl RksBackend {
 
 impl EngineBackend for RksBackend {
     fn run(&self, input: &JobInput, reporter: &dyn Reporter) -> Result<JobResult, EngineError> {
-        if input.options.ecp_name.is_some() {
-            return Err(EngineError::Unsupported(
-                "ECP is not implemented yet (I-05)".to_string(),
-            ));
-        }
         if input.solvent != "vacuum" {
             return Err(EngineError::Unsupported(format!(
                 "solvent `{}` is not implemented (first phase: vacuum only, 8.5)",

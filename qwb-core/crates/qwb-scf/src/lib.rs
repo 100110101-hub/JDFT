@@ -24,6 +24,7 @@
 pub mod analytic_gradient;
 pub mod checkpoint;
 pub mod diis;
+pub mod ecp;
 pub mod pulay;
 pub mod rks;
 

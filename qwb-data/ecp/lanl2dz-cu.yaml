@@ -1,0 +1,60 @@
+sha256: a44df71fd56eea385eec3b7f3dbce2a04ae633e1aa0ee685096f682c9912f299
+name: lanl2dz-cu
+version: 1.0.0
+notes: 'LANL2DZ ECP for Cu, transcribed from the BSE export (revision 2013-03-25). 10 core electrons ([Ne] core), so 3s/3p stay in the valence: the Hay-Wadt K..Au paper (10.1063/1.448975). Local channel = l=2 (the highest l in the export); l=0,1 are the nonlocal projectors. The valence basis is qwb-data/basis/lanl2dz.yaml (same family); K1 pairs them through Registry::load_pair. License: BSE export, the original paper states no explicit commercial/redistribution terms, so both flags are false (project.md 14 #20 strict reading).'
+citation:
+- title: Ab initio effective core potentials for molecular calculations. Potentials for K to Au including the outermost core orbitals
+  doi: 10.1063/1.448975
+  url: https://www.basissetexchange.org/basis/lanl2dz/
+license:
+  spdx: NOASSERTION
+  commercial_ok: false
+  redistribute_ok: false
+created: 2026-10-26T14:00:00Z
+element: Cu
+n_core_electrons: 10
+z_eff: 19.0
+r_power_convention: r^n
+local_part:
+  id: 'l=2 (BSE local channel: the highest l in the export)'
+  terms:
+  - power: 1
+    exponent: 511.9951763
+    coefficient: -10.0
+  - power: 2
+    exponent: 93.2801074
+    coefficient: -72.5548282
+  - power: 2
+    exponent: 23.2206669
+    coefficient: -12.7450231
+nonlocal_parts:
+- l: 0
+  id: l=0 (BSE projector channel)
+  terms:
+  - power: 0
+    exponent: 173.1180854
+    coefficient: 3.0
+  - power: 1
+    exponent: 185.2419886
+    coefficient: 23.8351825
+  - power: 2
+    exponent: 73.1517847
+    coefficient: 473.8930488
+  - power: 2
+    exponent: 14.6884157
+    coefficient: 157.6345823
+- l: 1
+  id: l=1 (BSE projector channel)
+  terms:
+  - power: 0
+    exponent: 100.7191369
+    coefficient: 5.0
+  - power: 1
+    exponent: 130.8345665
+    coefficient: 6.4990936
+  - power: 2
+    exponent: 53.868372
+    coefficient: 351.4605395
+  - power: 2
+    exponent: 14.0989469
+    coefficient: 85.5016036

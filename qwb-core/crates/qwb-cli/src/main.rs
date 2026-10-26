@@ -412,7 +412,16 @@ fn write_visual_artifacts(
         .molecule
         .atoms
         .iter()
-        .map(|atom| atomic_number(&atom.symbol).map_or(0, |z| z as i32))
+        .map(|atom| {
+            // I-05：有 ECP 的元素按 z_eff 数价电子（Cu/LANL2DZ 是 19，不是 29）。
+            match &input.options.ecp_name {
+                Some(name) => match registry.get_ecp(name) {
+                    Ok(ecp) if ecp.element == atom.symbol => ecp.z_eff as i32,
+                    _ => atomic_number(&atom.symbol).map_or(0, |z| z as i32),
+                },
+                None => atomic_number(&atom.symbol).map_or(0, |z| z as i32),
+            }
+        })
         .sum::<i32>()
         - input.molecule.charge;
     if electrons <= 0 || electrons % 2 != 0 {

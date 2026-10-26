@@ -1,0 +1,40 @@
+D-07 + I-05 判 done：LANL2DZ 的 Cu/Zn ECP 落地，ECP 矩阵元与解析对照到 1e-14；T5 的 CuH 跑通、ZnO 收敛失败如实记
+
+D-07（ECP 数据）：
+* qwb-data/basis/lanl2dz.yaml（H/O/Cu/Zn，BSE 导出机器转录，`normalization: none` + 球谐 d）
+* qwb-data/ecp/lanl2dz-cu.yaml（10 芯 / z_eff 19）、lanl2dz-zn.yaml（18 芯 / z_eff 12）
+* scripts/bse_ecp_to_qwb_data.py：ECP 的唯一转录路径（BSE 的 r_exponents 显式标 `r^n`，
+  局域通道 = 导出里最大的 l）；bse_to_qwb_data.py 支持 BSE 的 `region: valence`
+* d07_lanl2dz.rs（5 例）：基组/ECP 与 BSE 导出逐项 diff < 1e-12；load_pair 按元素校验
+* 许可按 §14 #20 严格读法：NOASSERTION + commercial_ok=false + redistribute_ok=false
+* 两处 spec 更正（已经用户批准）：Cu 是 10 芯（不是 28）、Zn 的 def2-ECP 不存在
+  （BSE 的 def2-ecp 从 Rb 开始），ZnO 改用同族 LANL2DZ
+
+I-05（ECP 矩阵元）：
+* qwb-scf/src/ecp.rs：`EcpOperator`（K1 → 中心/通道/z_eff）、`matrix_elements`
+  （ECP 中心的径向×角向求积 + 实球谐投影，一中心/异中心同一套公式）、
+  `one_center_matrix`（解析对照）
+* 核吸引用 z_eff：qwb-integrals 的 `one_electron_with_charges`；
+  ECP 矩阵进 H_core：`RksOptions::{nuclear_charges, ecp_potential}`
+* i05_ecp.rs（6 例）：Cu 解析 vs 半数值 2.7e-14、Zn 3.9e-14；Cu 的 l=2 通道 2.9e-15；
+  异中心加密自收敛 1.8e-14 / 6.4e-14；"单位算符 = 重叠矩阵"这条探针抓到了
+  Γ(3/2) 被当成 1 的 bug（解析实现曾大 √(4/π) 倍）
+
+T5（ECP + 重元素，in_progress）：
+* CuH/LANL2DZ/PBE 收敛，E = −213.9067554378 Ha（grid-coarse，门禁版；
+  grid-normal 的 −213.9069054186 放 #[ignore] 慢档）；ECP 日志行 + data_snapshot
+  同时含基组与 ECP + 两次跑逐位相同；带 ECP 的 opt 显式拒绝（ECP 对核坐标的导数未实现）
+* ZnO/LANL2DZ/PBE **不收敛**：定位到闭壳层受限的 O 原子本身是伪解（O 基态是 ³P），
+  core guess 从伪组态出发在几个组态之间跳（QWB_SCF_TRACE 实测能量 −119…−121 Ha 振荡、
+  max|dP|≈1）；多初猜/阻尼/能级移动/费米展宽/四个网格/PBE+SVWN5 全试过。没有伪造 reference csv
+* 为这条路顺带加了三个默认关闭的确定性 SCF 选项（damping / level_shift / 费米展宽）
+  与引擎的两级退路（多初猜 → 阻尼 Roothaan）
+
+另外修了两个真问题：
+* `scf_max_iter` 契约：引擎的"阻尼重试"曾经把上限抬到 500，违反 K2 的输入语义
+  （`test_scf_not_converged_carries_iters` 抓到了），现在一律用用户给的上限
+* GUI 的 SchedulerBridge 竞态：界面线程轮询调 `scheduler.load()` 与工作线程的
+  `set_state`+`save` 抢同一个列表 → 偶发 ['converged','running','converged']；
+  改成只读队列文件快照 + `is_running()` 直到 `_on_finished` 处理完才为 False
+
+gate 第 53 轮：24/24 全绿（Python 154 例）。

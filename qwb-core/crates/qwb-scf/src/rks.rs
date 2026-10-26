@@ -31,7 +31,7 @@ use std::collections::BTreeMap;
 use qwb_basis::{InternalBasis, cartesian_components};
 use qwb_engine_api::{EngineError, Molecule};
 use qwb_grid::{Grid, GridPoint};
-use qwb_integrals::one_electron::{one_electron, primitive_norm};
+use qwb_integrals::one_electron::primitive_norm;
 use qwb_integrals::two_electron::{TwoElectronIntegrals, two_electron};
 use qwb_linalg::{LinalgError, Matrix, Vector, matmul, symmetric_eigen};
 use qwb_registry::elements::atomic_number;
@@ -71,6 +71,32 @@ pub struct RksOptions {
     pub checkpoint_path: Option<std::path::PathBuf>,
     /// 每多少步写一次检查点（0 = 只在结束时写）。
     pub checkpoint_every: u32,
+    /// I-05：每个原子对**电子**的核电荷。`None` = 用元素表里的 `Z`（全电子）；
+    /// 有 ECP 的原子传 `z_eff = Z − n_core`。
+    pub nuclear_charges: Option<Vec<f64>>,
+    /// I-05：ECP 的电子-核有效势矩阵元（`n_ao × n_ao`），会被加进 `H_core`。
+    /// `None` = 没有 ECP。用 [`crate::ecp::matrix_elements`] 算。
+    pub ecp_potential: Option<Matrix>,
+    /// 静态能级移动 `λ`：把虚轨道抬起来，抑制电荷振荡（`0` = 不做）。
+    ///
+    /// 作用在 Fock 上：`F ← F + λ (S − ½ S P S)`（闭壳层下这就是 `λ S P_virtual S`）。
+    /// 近简并 / 强电荷转移体系（LANL2DZ 的 ZnO 是典型）上纯 DIIS 会一直在几个占据
+    /// 组态之间跳，能级移动是标准对策之一。
+    pub level_shift: f64,
+    /// 前多少步用**费米展宽**（分数占据）跑 SCF；`0` = 不做。
+    ///
+    /// 用途：给"初始猜测很差"的体系一个平滑的入轨路径（退火）。典型是
+    /// LANL2DZ 的 ZnO —— 闭壳层受限的 O 原子本身就是伪解（O 的 ³P 有两个单占 p 轨道），
+    /// core guess 于是从一个伪组态出发、在几个组态之间跳。展宽让占据连续变化，
+    /// 走完 `smearing_steps` 步后切回整数占据。
+    pub smearing_steps: u32,
+    /// 展宽温度（Hartree）。`0.2`–`0.5` 通常够；只在 `smearing_steps` 内生效。
+    pub smearing_temperature: f64,
+    /// 密度的线性混合系数（`0` = 直接替换；常用 `0.2`–`0.4`）。
+    ///
+    /// 近简并 / 电荷转移体系（含 d¹⁰ 的重元素、ECP 体系）上纯 DIIS 会震荡，
+    /// 阻尼是标准对策。默认 0（不改变既有行为）。
+    pub damping: f64,
 }
 
 impl Default for RksOptions {
@@ -86,6 +112,12 @@ impl Default for RksOptions {
             resume_from: None,
             checkpoint_path: None,
             checkpoint_every: 0,
+            nuclear_charges: None,
+            ecp_potential: None,
+            level_shift: 0.0,
+            smearing_steps: 0,
+            smearing_temperature: 0.0,
+            damping: 0.0,
         }
     }
 }
@@ -179,25 +211,39 @@ using rank-truncated orthogonalization (basis is nearly linearly dependent)"
     matmul(&scaled, &vectors_t).map_err(linalg)
 }
 
-/// 核排斥能 `Σ_{A>B} Z_A Z_B / R_AB`。
-fn nuclear_repulsion(molecule: &Molecule) -> Result<f64, EngineError> {
+/// 核排斥能 `Σ_{A>B} Z_A Z_B / R_AB`（`charges` 是每个原子对电子的核电荷；
+/// 有 ECP 的原子传 `z_eff`）。
+fn nuclear_repulsion(charges: &[f64], molecule: &Molecule) -> Result<f64, EngineError> {
+    let mut centers: Vec<([f64; 3], f64)> = Vec::with_capacity(molecule.n_atoms());
+    for (atom, charge) in molecule.atoms.iter().zip(charges) {
+        centers.push((atom.position_bohr(), *charge));
+    }
+    let mut energy = 0.0;
+    for i in 0..centers.len() {
+        for j in (i + 1)..centers.len() {
+            let distance = (0..3)
+                .map(|axis| (centers[i].0[axis] - centers[j].0[axis]).powi(2))
+                .sum::<f64>()
+                .sqrt();
+            energy += centers[i].1 * centers[j].1 / distance;
+        }
+    }
+    Ok(energy)
+}
+
+/// 全电子时的核电荷表（`Z` 来自元素表）。
+///
+/// # Errors
+///
+/// 元素表里没有的符号 → [`EngineError::Internal`]（IC-05：ECP 的 `z_eff` 由调用方覆盖）。
+fn default_charges(molecule: &Molecule) -> Result<Vec<f64>, EngineError> {
     let mut charges = Vec::with_capacity(molecule.n_atoms());
     for atom in &molecule.atoms {
         let z = atomic_number(&atom.symbol)
             .ok_or_else(|| EngineError::Internal(format!("unknown element {}", atom.symbol)))?;
-        charges.push((atom.position_bohr(), f64::from(z)));
+        charges.push(f64::from(z));
     }
-    let mut energy = 0.0;
-    for i in 0..charges.len() {
-        for j in (i + 1)..charges.len() {
-            let distance = (0..3)
-                .map(|axis| (charges[i].0[axis] - charges[j].0[axis]).powi(2))
-                .sum::<f64>()
-                .sqrt();
-            energy += charges[i].1 * charges[j].1 / distance;
-        }
-    }
-    Ok(energy)
+    Ok(charges)
 }
 
 /// 一个 AO 在给定点处的值（只支持 l <= 1）。pub 是为了让测试能直接查有限性。
@@ -762,11 +808,24 @@ pub fn rks_scf(
             "two-electron tensor size does not match the basis".to_string(),
         ));
     }
+    // I-05：有 ECP 时核电荷用 z_eff（点电荷吸引那一半），电子数也按 z_eff 数。
+    let charges = match &options.nuclear_charges {
+        Some(charges) => {
+            if charges.len() != molecule.n_atoms() {
+                return Err(EngineError::Internal(format!(
+                    "RksOptions::nuclear_charges has {} entries for {} atoms",
+                    charges.len(),
+                    molecule.n_atoms()
+                )));
+            }
+            charges.clone()
+        }
+        None => default_charges(molecule)?,
+    };
     let mut electrons = 0i64 - i64::from(molecule.charge);
-    for atom in &molecule.atoms {
-        let z = atomic_number(&atom.symbol)
-            .ok_or_else(|| EngineError::Internal(format!("unknown element {}", atom.symbol)))?;
-        electrons += i64::from(z);
+    for charge in &charges {
+        // z_eff 是整数（Z − n_core），这里按最近整数累加，避免 f64 截断。
+        electrons += charge.round() as i64;
     }
     if electrons <= 0 || electrons % 2 != 0 {
         return Err(EngineError::InvalidInput(format!(
@@ -775,11 +834,28 @@ pub fn rks_scf(
     }
     let n_occ = (electrons / 2) as usize;
 
-    let integrals = one_electron(basis, molecule)?;
+    let integrals =
+        qwb_integrals::one_electron::one_electron_with_charges(basis, molecule, &charges)?;
     let overlap = &integrals.overlap;
-    let hcore = &integrals.core_hamiltonian;
+    // H_core = T + V(z_eff) + V_ECP（ECP 的电子-核有效势由调用方算好传进来）。
+    let mut hcore = integrals.core_hamiltonian.clone();
+    if let Some(potential) = &options.ecp_potential {
+        if potential.nrows() != n || potential.ncols() != n {
+            return Err(EngineError::Internal(format!(
+                "RksOptions::ecp_potential is {}x{}, expected {n}x{n}",
+                potential.nrows(),
+                potential.ncols()
+            )));
+        }
+        for mu in 0..n {
+            for nu in 0..n {
+                hcore[(mu, nu)] += potential[(mu, nu)];
+            }
+        }
+    }
+    let hcore = &hcore;
     let x = inverse_sqrt_symmetric(overlap)?;
-    let e_nuc = nuclear_repulsion(molecule)?;
+    let e_nuc = nuclear_repulsion(&charges, molecule)?;
     let mut diis = if options.use_diis {
         Some(Diis::new(options.diis_max_vectors))
     } else {
@@ -905,6 +981,17 @@ pub fn rks_scf(
             }
         }
 
+        // 静态能级移动：F ← F + λ (S − ½ S P S)，即把虚轨道抬高 λ（闭壳层）。
+        // 放在 DIIS 之前：DIIS 外推的是"已经抬过"的 Fock，误差向量也按抬过的算。
+        if options.level_shift > 0.0 {
+            let sp = matmul(overlap, &density).map_err(linalg)?;
+            for i in 0..n {
+                for j in 0..n {
+                    fock[(i, j)] += options.level_shift * (overlap[(i, j)] - 0.5 * sp[(i, j)]);
+                }
+            }
+        }
+
         // DIIS：把当步 Fock 与交换子误差推入子空间，用外推的 Fock 去对角化。
         let mut fock_used = fock.clone();
         if let Some(accelerator) = diis.as_mut() {
@@ -919,19 +1006,39 @@ pub fn rks_scf(
         let xt = x.transpose();
         let f_prime = matmul(&matmul(&xt, &fock_used).map_err(linalg)?, &x).map_err(linalg)?;
         let (values, vectors) = symmetric_eigen(&f_prime).map_err(linalg)?;
-        mo_energies = values;
+        mo_energies = values.clone();
         let coefficients = matmul(&x, &vectors).map_err(linalg)?;
         final_coefficients = coefficients.clone();
 
-        // 新密度：P = 2 Σ_{i<n_occ} c_i c_iᵀ
+        // 新密度：P = Σ_i f_i c_i c_i^T（整数占据时 f_i = 2；展宽阶段用费米权重）
+        let occupations = if options.smearing_steps > 0
+            && step < options.smearing_steps
+            && options.smearing_temperature > 0.0
+        {
+            fermi_occupations(
+                values.as_slice(),
+                electrons as f64,
+                options.smearing_temperature,
+            )?
+        } else {
+            let mut integer = vec![0.0_f64; n];
+            for slot in integer.iter_mut().take(n_occ.min(n)) {
+                *slot = 2.0;
+            }
+            integer
+        };
         let mut new_density = Matrix::zeros(n, n);
         for i in 0..n {
             for j in 0..n {
                 let mut sum = 0.0;
-                for orbital in 0..n_occ.min(n) {
-                    sum += coefficients[(i, orbital)] * coefficients[(j, orbital)];
+                for orbital in 0..n {
+                    let weight = occupations[orbital];
+                    if weight == 0.0 {
+                        continue;
+                    }
+                    sum += weight * coefficients[(i, orbital)] * coefficients[(j, orbital)];
                 }
-                new_density[(i, j)] = 2.0 * sum;
+                new_density[(i, j)] = sum;
             }
         }
 
@@ -972,8 +1079,28 @@ pub fn rks_scf(
         } else {
             (energy - previous_energy).abs()
         };
-        density = new_density;
+        // 线性混合（`damping`，0 = 直接替换）：`P ← (1−α)P_old + α P_new`。
+        // 近简并/电荷转移体系（ZnO/LANL2DZ 这类含 d10 的体系）上纯 DIIS 会来回震荡，
+        // 阻尼是标准对策；DIIS 与阻尼可以同时开（DIIS 外推 Fock，阻尼作用在密度上）。
+        if options.damping > 0.0 && options.damping < 1.0 {
+            let alpha = options.damping;
+            for i in 0..n {
+                for j in 0..n {
+                    density[(i, j)] = (1.0 - alpha) * density[(i, j)] + alpha * new_density[(i, j)];
+                }
+            }
+        } else {
+            density = new_density;
+        }
         previous_energy = energy;
+
+        // 诊断（QWB_SCF_TRACE=1）：逐迭代打印能量与密度变化。只在排查收敛时用，
+        // 不写进结果（产品面的日志走 `Reporter`）。
+        if std::env::var_os("QWB_SCF_TRACE").is_some() {
+            eprintln!(
+                "scf step {iterations}: E = {energy:+.9}  dE = {last_change:.3e}  max|dP| = {max_dp:.3e}"
+            );
+        }
 
         // S-05：按间隔落盘，进程被 kill 也能从最近一步续算。
         if let Some(path) = options.checkpoint_path.as_deref()
@@ -989,7 +1116,10 @@ pub fn rks_scf(
             crate::checkpoint::save_checkpoint(path, &snapshot)?;
         }
 
-        if last_change < options.energy_threshold && max_dp < options.density_threshold {
+        if last_change < options.energy_threshold
+            && max_dp < options.density_threshold
+            && step >= options.smearing_steps
+        {
             converged = true;
             break;
         }
@@ -1034,6 +1164,60 @@ pub fn rks_scf(
         grid_points: grid.len(),
         checkpoint,
     })
+}
+
+/// 费米展宽下的轨道占据（每个轨道最多 2 个电子）：
+/// `f_i = 2 / (1 + exp((ε_i − μ)/T))`，μ 由 `Σ f_i = n_electrons` 二分求出。
+///
+/// 用途是 SCF 的**退火**：从分数占据平滑地过渡到整数占据，避开"初始猜测很差 →
+/// 在几个组态之间跳"的死循环（LANL2DZ 的 ZnO 是活生生的例子：闭壳层受限的 O 原子
+/// 本身就是伪解，core guess 从一个伪组态出发）。展宽只在 `smearing_steps` 内生效，
+/// 之后切回整数占据，所以**收敛解与能量定义不变**。
+///
+/// # Errors
+///
+/// 电子数超出 `[0, 2n]`，或温度非正 → [`EngineError::InvalidInput`]。
+pub fn fermi_occupations(
+    energies: &[f64],
+    n_electrons: f64,
+    temperature: f64,
+) -> Result<Vec<f64>, EngineError> {
+    let n = energies.len();
+    if !(temperature.is_finite() && temperature > 0.0) {
+        return Err(EngineError::InvalidInput(format!(
+            "fermi_occupations: temperature {temperature} must be positive"
+        )));
+    }
+    if n_electrons <= 0.0 || n_electrons > 2.0 * n as f64 {
+        return Err(EngineError::InvalidInput(format!(
+            "fermi_occupations: {n_electrons} electrons for {n} orbitals"
+        )));
+    }
+    let fill = |mu: f64| -> f64 {
+        energies
+            .iter()
+            .map(|energy| 2.0 / (1.0 + ((energy - mu) / temperature).exp()))
+            .sum()
+    };
+    // μ 落在 [min−40T, max+40T] 里一定能把电子数夹住（exp(±40) 已是机器精度外）。
+    let mut low = energies.iter().copied().fold(f64::INFINITY, f64::min) - 40.0 * temperature;
+    let mut high = energies.iter().copied().fold(f64::NEG_INFINITY, f64::max) + 40.0 * temperature;
+    for _ in 0..200 {
+        let middle = 0.5 * (low + high);
+        if fill(middle) > n_electrons {
+            low = middle;
+        } else {
+            high = middle;
+        }
+        if (high - low).abs() < 1.0e-14 {
+            break;
+        }
+    }
+    let mu = 0.5 * (low + high);
+    Ok(energies
+        .iter()
+        .map(|energy| 2.0 / (1.0 + ((energy - mu) / temperature).exp()))
+        .collect())
 }
 
 /// 初猜密度：对角化 `H_core` 并占据前 `n_occ` 个轨道（`P = 2 sum c c^T`）。

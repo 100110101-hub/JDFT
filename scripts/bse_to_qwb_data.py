@@ -57,8 +57,12 @@ def split_shells(entry: dict) -> list[dict]:
     """把一个 BSE electron_shell 拆成 K1 的 Shell 列表。"""
     if entry.get("function_type") not in ("gto", "gto_spherical"):
         raise SystemExit(f"unsupported function_type: {entry.get('function_type')!r}")
-    if entry.get("region"):
-        raise SystemExit(f"unsupported region: {entry['region']!r} (only full-range shells)")
+    # BSE 的 `region` 只是个标签：`valence` 表示这是价基（LANL2DZ 这类 ECP 基组全都这么标），
+    # `unknown` 出现在老导出里。K1 的 `Shell` 没有"区域"概念，所以这几个都按整壳层转录。
+    # 其它取值（例如 `core`、`semicore`）意味着导出被裁剪过，必须显式拒绝。
+    region = entry.get("region")
+    if region not in (None, "", "valence", "unknown"):
+        raise SystemExit(f"unsupported region: {region!r} (only full-range/valence shells)")
 
     exps = [num(e) for e in entry["exponents"]]
     columns = [[num(c) for c in column] for column in entry["coefficients"]]
@@ -132,6 +136,12 @@ def main(argv: list[str]) -> int:
     parser.add_argument("--spdx", default="Apache-2.0")
     parser.add_argument("--commercial-ok", dest="commercial_ok", action="store_true", default=True)
     parser.add_argument(
+        "--no-commercial",
+        dest="commercial_ok",
+        action="store_false",
+        help="原始条款没写清商用许可时用这个（§14 #20 的严格读法）",
+    )
+    parser.add_argument(
         "--no-redistribute",
         dest="redistribute_ok",
         action="store_false",
@@ -149,10 +159,21 @@ def main(argv: list[str]) -> int:
     with open(args.input, "r", encoding="utf-8") as handle:
         data = json.load(handle)
 
-        allowed = {"gto", "gto_spherical"}
+    # `function_types` 是整份导出的清单：ECP 基组（LANL2DZ 等）会同时带 `scalar_ecp`，
+    # 那是 ECP 参数（由 scripts/bse_ecp_to_qwb_data.py 转录），不影响基组转录。
+    # 但 `electron_shells` 里只允许 gto / gto_spherical —— 别的（如 `sto`）不能假装成 gto。
+    orbital_types = {"gto", "gto_spherical"}
     seen = set(data.get("function_types") or [])
-    if not seen <= allowed:
-        raise SystemExit(f"unsupported function_types: {sorted(seen)}")
+    unexpected = seen - orbital_types - {"scalar_ecp"}
+    if unexpected:
+        raise SystemExit(f"unsupported function_types: {sorted(unexpected)}")
+    for key, element in data["elements"].items():
+        for entry in element.get("electron_shells") or []:
+            if entry.get("function_type") not in orbital_types:
+                raise SystemExit(
+                    f"element {key}: unsupported electron_shell function_type "
+                    f"{entry.get('function_type')!r}"
+                )
     if "gto_spherical" in seen and args.angular != "spherical":
         raise SystemExit("BSE export contains spherical shells; use --angular spherical")
 
