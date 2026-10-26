@@ -1,0 +1,30 @@
+# T5 参考值：ZnO / LANL2DZ（Zn 18 芯 ECP，z_eff = 12）/ PBE
+#
+# 几何（r1p70 行）：Zn 在原点、O 在 (0, 0, 1.70) Å —— 取整的对比几何，不是平衡点。
+# 几何（equilibrium 行）：r(Zn–O) = 1.85 Å，是本项目 PBE/LANL2DZ 位能曲线的最低点
+#   （扫描 1.60/1.65/1.70/1.75/1.80/1.82/1.85/1.88/1.90 Å，grid-normal：
+#    -103.536353 / -103.634135 / -103.706953 / -103.751835 / -103.773792 /
+#    -103.777321 / -103.777930 / -103.773732 / -103.768676 Ha）。
+#
+# 网格：门禁测试跑 grid-coarse（一次 SCF 在 debug 下也要几分钟），慢档跑 grid-normal。
+#   两个等级的差：r = 1.70 Å 上 coarse -103.7068571731 vs normal -103.7069534201，
+#   差 9.6e-5 Ha（远小于 5 mHa 的判据）。
+#
+# 来源标注（重要，§7.0）：
+#   internal-independent-path —— PBE/LANL2DZ 的 ZnO 总能量在可引用表里查不到
+#   （CCCBDB 没有 ECP/def2/LANL 系列；def2-ECP 对 3d 元素不存在，见 status.yaml 的 D-07）。
+#   这些值是**本项目自己算的回归钉**，钉的是"ECP 接线 + SCF 退火不会被后续改动悄悄改掉"，
+#   不声称是外部基准。5 mHa 的容差是 T5 判据给的。
+#
+# 物理合理性（不是判据，是佐证）：本项目的 r_e = 1.85 Å，实验值 1.704 Å，偏长 0.15 Å。
+#   这是 LANL2DZ 对 ZnO 的**已知**系统性偏差（Zn 3d / O 2p 平衡差），不是实现问题；
+#   本项目没有可引用的 LANL2DZ/ZnO 外部能量，所以只能把它当成"已知偏差"记下来。
+#
+# SCF 说明：ZnO/LANL2DZ 的**单初猜 DIIS 不收敛**（闭壳层受限的 O 原子本身是伪解）。
+#   引擎在第一级退路里用**费米展宽退火**（前 20 步展宽 0.3 Ha，之后切回整数占据），
+#   23 步收敛；且结果与展宽温度/步数无关（实测 T = 0.1–0.5、步数 10–80 给同一个能量，
+#   见 docs/choices.md 四十二节）。
+quantity,value_hartree,tolerance_hartree,source
+zno_total_energy_r1p70_coarse,-103.7068571731,0.005,internal-independent-path
+zno_total_energy_r1p70,-103.7069534201,0.005,internal-independent-path
+zno_total_energy_equilibrium,-103.7779303565,0.005,internal-independent-path

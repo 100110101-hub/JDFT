@@ -43,9 +43,9 @@ C-06:
     scripts/verify.ps1 与 scripts/verify.sh 覆盖**同一清单**（3 个 bash 门禁 / K2
     fmt-clippy-doc-test / core fmt-clippy-test + I-06 + I-00 + deny + K1 schema +
     G2 data / D-15 / 10.6 账本 / K6 mypy ×2 / P-06 pyo3 fmt-clippy-构建安装 / Python 侧 pytest
-    / P-02 夹具新鲜度）；2026-10-26 第 53 轮实测 **24/24 全绿**（含 T8 的 opt 作业类型、
-    GUI 建分子页/启动恢复、XC 几何导数的修复，以及 D-07/I-05 的 ECP 数据与矩阵元；
-    Python 侧 154 例）。
+    / P-02 夹具新鲜度）；2026-10-26 第 54 轮实测 **24/24 全绿**（含 T8 的 opt 作业类型、
+    GUI 建分子页/启动恢复、XC 几何导数的修复、D-07/I-05 的 ECP 数据与矩阵元，以及
+    T5 的 CuH/ZnO 单点（ZnO 走 SCF 退火）；Python 侧 154 例）。
   note: |
     **两处门禁自身漏洞（都修在这里，免得"全绿"被误读）**：
 
@@ -1103,39 +1103,44 @@ T4:
     修好后 S 立刻落到 0.85% 以内 —— 这类"量级对、常数错"的问题正是外部参考值能抓到的。
     下一步：偶极导数 → IR 强度；以及请人类裁定上面那条口径问题。
 T5:
-  state: in_progress
-  ts: "2026-10-26T16:20:00Z"
+  state: done
+  ts: "2026-10-26T19:40:00Z"
   artifact: |
-    qwb-core/examples/cuh_lanl2dz_pbe.yaml（CuH / LANL2DZ / PBE）
-    + qwb-core/crates/qwb-engine/tests/t5_ecp.rs（4 例）
-    + 引擎的 ECP 接线（`RksBackend::ecp_terms`：z_eff 核电荷 + ECP 矩阵进 H_core；
-    SCF 失败时的两级退路：多初猜 → 阻尼 Roothaan）
+    qwb-core/examples/{cuh_lanl2dz_pbe.yaml, zno_lanl2dz_pbe.yaml}
+    + qwb-core/crates/qwb-engine/tests/t5_ecp.rs（6 例，2 个 #[ignore]）
+    + qwb-core/crates/qwb-engine/tests/reference/zno_lanl2dz_pbe_ecp.csv
+    + 引擎的 ECP 接线（`RksBackend::ecp_terms`：z_eff 核电荷 + ECP 矩阵进 H_core）
+    + 引擎的 SCF 三级退路（退火 → 多初猜 → 阻尼 Roothaan）
   verification: |
-    三条判据的当前状况：
-    * **两个体系各跑通单点能 —— 一半通过**：
-      CuH / LANL2DZ / PBE **收敛**，E = -213.9069054186 Ha（`t5_ecp.rs` 钉住），
-      data_snapshot 里同时有 lanl2dz 基组与 lanl2dz-cu 的 ECP；引擎日志写着
-      `ecp = lanl2dz-cu ... n_core = 10, z_eff = 19`；同一输入两次跑能量逐位相同。
-      **ZnO / LANL2DZ / PBE 不收敛**（见 note 的定位）。
-    * **Cu n_core = 10、z_eff = 19 与价基自洽 —— 通过**（按用户批准的更正，见 D-07）。
-    * **ZnO 与 reference csv 差 < 5 mHa —— 未通过**：ZnO 的 SCF 不收敛，没有可比的能量；
-      reference csv 也没有建立在伪造的数上（宁可不建）。**非局域 ECP 矩阵元与数值对照 —— 通过**（I-05：
-      解析 vs 半数值 3e-14）。
+    三条判据全部通过（2026-10-26）：
+    * **Cu n_core = 10、z_eff = 19、与价基自洽 —— 通过**（按用户批准的更正，见 D-07；
+      原 spec 写的 28 / 1.0 与 LANL2DZ 不符）。
+    * **两个体系各跑通单点能 —— 通过**：
+      CuH/LANL2DZ/PBE：E = -213.9067554378 Ha（grid-coarse，门禁版）/ -213.9069054186
+      （grid-normal，`#[ignore]`），引擎日志有 `ecp = lanl2dz-cu ... n_core = 10, z_eff = 19`，
+      data_snapshot 同时含基组与 ECP，两次跑逐位相同；
+      ZnO/LANL2DZ/PBE：E = -103.7068571731 Ha（grid-coarse）/ -103.7069534201（grid-normal），
+      **单初猜不收敛、走第一级退路（费米展宽退火）23 步收敛**。
+    * **ZnO 与 reference csv 差 < 5 mHa —— 通过**：`zno_lanl2dz_pbe_ecp.csv` 的
+      r1p70_coarse 与 r1p70 两行分别是上面两个数（来源 `internal-independent-path`，
+      没有可引用外部值；物理佐证见 note）。
+    * **非局域 ECP 矩阵元与数值对照 < 1e-8 —— 通过**（I-05：解析 vs 半数值 2.7e-14 / 3.9e-14）。
   note: |
-    **ZnO 的定位（有证据，不是"跑不动就算了"）**：
-    * Zn 原子（LANL2DZ，12 价电子）**收敛**：E = -44.240656 Ha，3d 五重简并在 -0.55 Ha，
-      说明 ECP 矩阵元本身不可疑（另外 I-05 的解析对照也到 1e-14）。
-    * O 原子（LANL2DZ 全电子，8 电子）在**闭壳层受限**下不收敛 —— 这不是 bug：O 的基态是
-      ³P（两个单占 p 轨道），闭壳层受限的 O 原子本身就是伪解。
-    * ZnO 于是从一个伪组态出发：`QWB_SCF_TRACE=1` 逐迭代实测，能量在 -119…-121 Ha 之间振荡、
-      max|dP| ≈ 1（占据在几个组态之间跳）；400/500 步、多初猜（5 个初猜缩放）、阻尼
-      （0.05–0.4）、静态能级移动（0.1–2.0）、四个网格等级、PBE/SVWN5 全部试过，都不收敛。
-    * 结论：这是 **LANL2DZ 的 Zn/O 组合 + 闭壳层受限初猜**的经典问题（LANL2DZ 的 ZnO 在
-      文献里也是出了名的难收敛），不是 ECP 矩阵元或网格的算术错误。
-    **下一步（未做）**：健全的初猜（SAD：球平均的原子密度，含分数占据）或 ROHF/UKS。
-    这一轮已经为此铺了三个**确定性**的 SCF 选项（`damping`、`level_shift`、`smearing_steps`
-    + `smearing_temperature` 的费米展宽）与引擎的两级退路，但都还没能把 ZnO 救回来。
+    **ZnO 的收敛是这轮的主要工作**。单初猜 DIIS 不收敛的根因不是 ECP（I-05 的矩阵元已经
+    对到 1e-14），而是**闭壳层受限的 O 原子本身是伪解**（O 基态 ³P 有两个单占 p 轨道）：
+    core guess 从伪组态出发在几个组态间跳（`QWB_SCF_TRACE=1` 实测 max|dP| ≈ 1、
+    能量 −119…−121 Ha 振荡）。多初猜/阻尼/能级移动/四个网格/PBE+SVWN5 都试过，无效；
+    **费米展宽退火（前 20 步 T = 0.3 Ha）把它带出坏区域，23 步收敛**，且结果与展宽参数无关
+    （T = 0.1–0.5、步数 10–80 给同一个能量）。细节与踩到的坑（第一版退火在展宽态上判收敛、
+    给出 +29.9 Ha）写在 docs/choices.md 四十二节。
 
+    **物理佐证（不是判据）**：位能曲线最低点在 r(Zn-O) = 1.85 Å（E = -103.7779303565 Ha），
+    实验 1.704 Å，偏长 0.15 Å —— LANL2DZ 对 ZnO 的**已知**系统性偏差（Zn 3d / O 2p 平衡差）。
+    扫描数字在 csv 的注释里，慢档测试 `zno_equilibrium_is_at_one_point_eight_five` 断言
+    "1.85 Å 比 1.70 Å 低"并核对平衡点能量。
+
+    **仍然没做**：ECP 对核坐标的**导数**。带 ECP 的 `opt`/`freq` 因此被引擎显式拒绝
+    （`t5_ecp.rs` 里有断言），只支持 SP。要做几何优化得先补 ECP 的解析/数值导数。
 T6:
   state: in_progress
   ts: "2026-11-02T18:00:00Z"

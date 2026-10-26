@@ -24,13 +24,20 @@
 //! 两个值都是 **internal-independent-path**（§7.0 的 fallback）：PBE/LANL2DZ 的 CuH
 //! 在可引用表里查不到，它们是回归钉 —— 钉的是"ECP 接线不会被后续改动悄悄改掉"。
 //!
-//! # ZnO 的状态（如实记）
+//! # ZnO：一开始不收敛，退火之后收敛
 //!
-//! ZnO/LANL2DZ/PBE 的 SCF **不收敛**（400/500 步、多初猜、阻尼、能级移动、四个网格、
-//! PBE/SVWN5 都不行）。定位到的根因不是 ECP 矩阵元（I-05 已验到 1e-14），而是**闭壳层受限的
-//! O 原子本身是伪解**（O 的 ³P 有两个单占 p 轨道）：core guess 从一个伪组态出发、在几个组态
-//! 之间跳（`QWB_SCF_TRACE=1` 实测 max|dP| ≈ 1、能量在 −119…−121 Ha 之间振荡）。
-//! 记录在 `docs/status.yaml` 的 T5（未通过项）里，不在这个测试里假装通过。
+//! ZnO/LANL2DZ/PBE 的单初猜 DIIS **不收敛**（400/500 步、多初猜、阻尼、能级移动、
+//! 四个网格、PBE/SVWN5 都不行）。根因不是 ECP 矩阵元（I-05 已验到 1e-14），而是
+//! **闭壳层受限的 O 原子本身是伪解**（O 的 ³P 有两个单占 p 轨道）：core guess 从一个
+//! 伪组态出发、在几个组态之间跳（`QWB_SCF_TRACE=1` 实测 max|dP| ≈ 1、能量在 −119…−121 Ha
+//! 之间振荡）。
+//!
+//! 修法是引擎的**第一级 SCF 退路：费米展宽退火**（前 20 步 T = 0.3 Ha 的分数占据，
+//! 之后切回整数占据）—— 23 步收敛。展宽参数不影响结果：T = 0.1/0.2/0.3/0.5、
+//! 步数 10/20/40/80 给同一个能量（逐位相同）。
+//!
+//! 能量钉在 `tests/reference/zno_lanl2dz_pbe_ecp.csv`（来源 `internal-independent-path`，
+//! 5 mHa 容差是 T5 判据给的；PBE/LANL2DZ 的 ZnO 没有可引用外部值）。
 use std::path::PathBuf;
 
 use qwb_engine::RksBackend;
@@ -215,4 +222,120 @@ fn optimisation_with_ecp_is_refused() {
         }
         other => panic!("期望 Unsupported，实际 {other:?}"),
     }
+}
+
+// ---------------------------------------------------------------------------
+// ZnO：T5 的第二个体系。判据是"与 reference csv 差 < 5 mHa"。
+// ---------------------------------------------------------------------------
+
+fn zno(distance_angstrom: f64) -> Molecule {
+    Molecule::new(
+        vec![
+            Atom::new("Zn", [0.0, 0.0, 0.0]),
+            Atom::new("O", [0.0, 0.0, distance_angstrom]),
+        ],
+        0,
+        1,
+    )
+}
+
+fn zno_job(distance_angstrom: f64, grid: GridLevel) -> JobInput {
+    let mut options = TaskOptions::default();
+    // 故意给一个**不大的**上限：单初猜反正会失败（ZnO/LANL2DZ 是闭壳层受限 O 的伪解问题），
+    // 40 步足够让第一级退路（退火，实测 23 步收敛）接手。给 200 步只是让 debug 构建里
+    // 白白烧掉三倍时间。
+    options.scf_max_iter = 40;
+    options.ecp_name = Some("lanl2dz-zn".to_string());
+    JobInput::new(
+        zno(distance_angstrom),
+        "lanl2dz",
+        "pbe",
+        grid,
+        "vacuum",
+        JobType::Sp,
+        options,
+    )
+}
+
+/// 读 `tests/reference/zno_lanl2dz_pbe_ecp.csv` 里某个量的 `(值, 容差)`。
+fn reference(quantity: &str) -> (f64, f64) {
+    let path =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/reference/zno_lanl2dz_pbe_ecp.csv");
+    let text = std::fs::read_to_string(&path)
+        .unwrap_or_else(|err| panic!("读不到 {}: {err}", path.display()));
+    for line in text.lines() {
+        let line = line.trim();
+        if line.is_empty() || line.starts_with('#') || line.starts_with("quantity,") {
+            continue;
+        }
+        let fields: Vec<&str> = line.split(',').collect();
+        assert_eq!(fields.len(), 4, "参考值行格式错误：{line}");
+        if fields[0] == quantity {
+            return (
+                fields[1].parse().expect("value"),
+                fields[2].parse().expect("tolerance"),
+            );
+        }
+    }
+    panic!("{quantity} 不在参考 csv 里");
+}
+
+#[test]
+fn zno_lanl2dz_single_point_matches_the_reference() {
+    // ZnO/LANL2DZ 的单初猜 DIIS **不收敛**（闭壳层受限的 O 原子本身是伪解），
+    // 引擎的第一级退路是费米展宽退火 —— 这里同时断言"退火真的被用上了"。
+    let backend = RksBackend::new(registry());
+    let reporter = Collecting::new();
+    let result = backend
+        .run(&zno_job(1.70, GridLevel::Coarse), &reporter)
+        .expect("ZnO/LANL2DZ/PBE 单点");
+    println!(
+        "ZnO/LANL2DZ/PBE (r = 1.70 Å, grid-coarse): E = {:.10} Ha",
+        result.energy_hartree
+    );
+    let log = reporter.joined();
+    assert!(
+        log.contains("annealed smearing"),
+        "ZnO 应该走退火这条退路，日志里没有：{log}"
+    );
+
+    let (expected, tolerance) = reference("zno_total_energy_r1p70_coarse");
+    let difference = (result.energy_hartree - expected).abs();
+    println!("参考 {expected:.10} ± {tolerance}，差 {difference:.2e}");
+    assert!(
+        difference < tolerance,
+        "ZnO 能量 {:.10} 与参考 {expected:.10} 差 {difference:.2e}（容差 {tolerance}）",
+        result.energy_hartree
+    );
+}
+
+#[test]
+#[ignore = "慢档（ZnO 平衡点附近再跑两次 SCF，debug 下几分钟）：位能曲线在 1.85 Å 处最低"]
+fn zno_equilibrium_is_at_one_point_eight_five() {
+    // 物理佐证（不是 T5 判据的一部分）：位能曲线的最低点在 r ≈ 1.85 Å，
+    // 实验 1.704 Å，偏长 0.15 Å —— LANL2DZ 对 ZnO 的已知系统偏差。
+    // 判据只要求"1.85 Å 的能量低于 1.70 Å"，并把平衡点的能量钉进参考 csv。
+    let backend = RksBackend::new(registry());
+    let loose = backend
+        .run(&zno_job(1.70, GridLevel::Normal), &Silent)
+        .expect("1.70 Å");
+    let tight = backend
+        .run(&zno_job(1.85, GridLevel::Normal), &Silent)
+        .expect("1.85 Å");
+    println!(
+        "ZnO: r=1.70 → {:.10} Ha，r=1.85 → {:.10} Ha",
+        loose.energy_hartree, tight.energy_hartree
+    );
+    assert!(
+        tight.energy_hartree < loose.energy_hartree,
+        "1.85 Å 的能量没有低于 1.70 Å（{:.10} vs {:.10}）",
+        tight.energy_hartree,
+        loose.energy_hartree
+    );
+    let (expected, tolerance) = reference("zno_total_energy_equilibrium");
+    assert!(
+        (tight.energy_hartree - expected).abs() < tolerance,
+        "平衡点能量 {:.10} 与参考 {expected:.10} 差超过 {tolerance}",
+        tight.energy_hartree
+    );
 }

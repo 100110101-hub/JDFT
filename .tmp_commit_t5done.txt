@@ -1,0 +1,17 @@
+T5 判 done：ZnO 用费米展宽退火收敛（23 步），ECP 体系两个单点都跑通并钉进参考 csv
+
+* 引擎的 SCF 退路改成三级且**先试退火**：费米展宽（前 20 步 T = 0.3 Ha）→ 多初猜 →
+  阻尼 Roothaan。三条都确定性（固定温度/步数/初猜序列），都写进 Reporter 日志
+* ZnO/LANL2DZ/PBE 从此收敛：E = −103.7068571731 Ha（grid-coarse）/ −103.7069534201
+  （grid-normal），23 步。根因定位（上一轮的记录）是闭壳层受限 O 原子本身是伪解，
+  退火把密度带出坏区域；展宽参数不影响结果（T = 0.1–0.5、步数 10–80 给同一个能量）
+* 新增 tests/reference/zno_lanl2dz_pbe_ecp.csv（来源 internal-independent-path，
+  5 mHa 容差是 T5 判据给的）+ t5_ecp.rs 的 ZnO 两例（门禁版 grid-coarse；
+  #[ignore] 慢档断言 1.85 Å 比 1.70 Å 低并核对平衡点能量）
+* 物理佐证（记在 csv 注释与 status）：r_e = 1.85 Å vs 实验 1.704 Å，偏长 0.15 Å ——
+  LANL2DZ 对 ZnO 的已知系统偏差
+* D-08 记明"对 T5 不适用"：BSE 的 def2-ecp 从 Rb 开始，Zn 的 def2-ECP 不存在
+* 踩到并修掉的坑：第一版退火把收敛判据也用在展宽阶段，于是在展宽态上"收敛"并给出
+  +29.9 Ha 的垃圾能量 —— 现在 `step >= smearing_steps` 才允许判收敛
+
+gate 第 54 轮：24/24 全绿（Python 154 例）。

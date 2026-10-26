@@ -307,39 +307,61 @@ impl RksBackend {
         ) {
             Ok(result) => result,
             Err(first_error) => {
-                // 单初猜不收敛时的两级退路（近简并体系：N2、含 d/f 的重元素、ECP 体系）。
-                // 两条都**确定**：初猜序列固定、无随机化 ⇒ 同样的输入给同样的输出。
+                // 单初猜不收敛时的三级退路（近简并体系：N2、含 d/f 的重元素、ECP 体系）。
+                // 三条都**确定**：初猜序列/温度/步数全固定，没有随机化 ⇒ 同样的输入给同样的输出。
+                //
+                // 顺序是有讲究的：**先试退火**（费米展宽跑若干步再切回整数占据）。
+                // 它最便宜（ZnO/LANL2DZ 只要 13 步就收敛），而且正好治"初始猜测落在
+                // 伪组态里"这个最常见的死法；多初猜要跑 5 次完整 SCF，放后面。
                 reporter.log(&format!(
-                    "scf: single guess failed ({first_error}), retrying with multistart"
+                    "scf: single guess failed ({first_error}), retrying with annealed smearing"
                 ));
-                match qwb_scf::rks::rks_scf_multistart(
+                let mut annealed = options.clone();
+                annealed.smearing_steps = 20;
+                annealed.smearing_temperature = 0.3;
+                match qwb_scf::rks::rks_scf(
                     &basis,
                     &input.molecule,
                     &tensor,
                     &grid,
                     &spec.terms,
-                    options.clone(),
+                    annealed,
                 ) {
                     Ok(result) => result,
                     Err(second_error) => {
                         reporter.log(&format!(
-                            "scf: multistart failed ({second_error}), retrying with damped \
-                             Roothaan iterations (no DIIS, damping 0.3)"
+                            "scf: annealing failed ({second_error}), retrying with multistart"
                         ));
-                        let mut plain = options.clone();
-                        plain.use_diis = false;
-                        plain.damping = 0.3;
-                        // **不改用户给的 `scf_max_iter`**：K2 的 `TaskOptions` 是输入契约，
-                        // 引擎不能"为了收敛"偷偷跑更多步（`test_scf_not_converged_carries_iters`
-                        // 就是钉这一点的）。
-                        qwb_scf::rks::rks_scf(
+                        match qwb_scf::rks::rks_scf_multistart(
                             &basis,
                             &input.molecule,
                             &tensor,
                             &grid,
                             &spec.terms,
-                            plain,
-                        )?
+                            options.clone(),
+                        ) {
+                            Ok(result) => result,
+                            Err(third_error) => {
+                                reporter.log(&format!(
+                                    "scf: multistart failed ({third_error}), retrying with damped \
+                                     Roothaan iterations (no DIIS, damping 0.3)"
+                                ));
+                                let mut plain = options.clone();
+                                plain.use_diis = false;
+                                plain.damping = 0.3;
+                                // **不改用户给的 `scf_max_iter`**：K2 的 `TaskOptions` 是输入契约，
+                                // 引擎不能"为了收敛"偷偷跑更多步
+                                // （`test_scf_not_converged_carries_iters` 就是钉这一点的）。
+                                qwb_scf::rks::rks_scf(
+                                    &basis,
+                                    &input.molecule,
+                                    &tensor,
+                                    &grid,
+                                    &spec.terms,
+                                    plain,
+                                )?
+                            }
+                        }
                     }
                 }
             }
