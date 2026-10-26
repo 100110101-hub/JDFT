@@ -297,6 +297,49 @@ impl RksBackend {
             options.ecp_potential = Some(potential);
         }
 
+        // SCF 的三级退路（近简并体系：N2、含 d/f 的重元素、ECP 体系）。全部**确定**：
+        // 初猜序列/温度/步数都固定，没有随机化 ⇒ 同一输入给同一输出。
+        //
+        // 顺序是试出来的，不是猜的（2026-10-26 的实测）：
+        //  * **多初猜在前**：苯/STO-3G/PBE 的单初猜 300 步不收敛，但 `initial_guess_scale`
+        //    = 0.5 / 1.5 分别 40 / 15 步收敛到 -229.1170417 Ha（CCCBDB -229.117005，差
+        //    0.04 mHa）。每次尝试给 `min(scf_max_iter, 60)` 步的预算，别把一次退路变成
+        //    五分钟的等待。
+        //  * **退火在后**：ZnO/LANL2DZ 只有它管用（多初猜 5 个都失败，退火 23 步收敛）。
+        //    但退火**可能停在错误的解上**：同一套参数下苯/STO-3G/PBE 退火会收敛到
+        //    -209.9115 Ha（比 CCCBDB 高 19 Ha 的伪态）。所以退火之后再做一次**有界**
+        //    多初猜交叉验证，两者都收敛时取**能量更低**的那个 —— 这一条正是苯的教训。
+        //  * **阻尼 Roothaan 兜底**：前面都不收敛时最后试一次（关 DIIS、密度阻尼 0.3）。
+        //
+        // `scf_max_iter` 是 K2 的输入契约：退路只允许**少于**它的步数，绝不允许偷偷加步
+        //（`test_scf_not_converged_carries_iters` 钉的就是这一点）。
+        const RETRY_MAX_ITER: u32 = 60;
+        let retry_budget = options.max_iter.min(RETRY_MAX_ITER);
+        let attempt_multistart = |label: &str| -> Option<qwb_scf::rks::RksResult> {
+            let mut retry = options.clone();
+            retry.max_iter = retry_budget;
+            match qwb_scf::rks::rks_scf_multistart(
+                &basis,
+                &input.molecule,
+                &tensor,
+                &grid,
+                &spec.terms,
+                retry,
+            ) {
+                Ok(result) => {
+                    reporter.log(&format!(
+                        "scf: {label} multistart converged in {} iterations: E = {:.10} Ha",
+                        result.iterations, result.energy_hartree
+                    ));
+                    Some(result)
+                }
+                Err(err) => {
+                    reporter.log(&format!("scf: {label} multistart failed ({err})"));
+                    None
+                }
+            }
+        };
+
         let result = match qwb_scf::rks::rks_scf(
             &basis,
             &input.molecule,
@@ -307,51 +350,56 @@ impl RksBackend {
         ) {
             Ok(result) => result,
             Err(first_error) => {
-                // 单初猜不收敛时的三级退路（近简并体系：N2、含 d/f 的重元素、ECP 体系）。
-                // 三条都**确定**：初猜序列/温度/步数全固定，没有随机化 ⇒ 同样的输入给同样的输出。
-                //
-                // 顺序是有讲究的：**先试退火**（费米展宽跑若干步再切回整数占据）。
-                // 它最便宜（ZnO/LANL2DZ 只要 13 步就收敛），而且正好治"初始猜测落在
-                // 伪组态里"这个最常见的死法；多初猜要跑 5 次完整 SCF，放后面。
                 reporter.log(&format!(
-                    "scf: single guess failed ({first_error}), retrying with annealed smearing"
+                    "scf: single guess failed ({first_error}), retrying with multistart"
                 ));
-                let mut annealed = options.clone();
-                annealed.smearing_steps = 20;
-                annealed.smearing_temperature = 0.3;
-                match qwb_scf::rks::rks_scf(
-                    &basis,
-                    &input.molecule,
-                    &tensor,
-                    &grid,
-                    &spec.terms,
-                    annealed,
-                ) {
-                    Ok(result) => result,
-                    Err(second_error) => {
-                        reporter.log(&format!(
-                            "scf: annealing failed ({second_error}), retrying with multistart"
-                        ));
-                        match qwb_scf::rks::rks_scf_multistart(
+                match attempt_multistart("retry") {
+                    Some(result) => result,
+                    None => {
+                        reporter.log(
+                            "scf: retrying with annealed smearing (Fermi broadening, then \
+                             integer occupations)",
+                        );
+                        let mut annealed = options.clone();
+                        annealed.smearing_steps = 20;
+                        annealed.smearing_temperature = 0.3;
+                        match qwb_scf::rks::rks_scf(
                             &basis,
                             &input.molecule,
                             &tensor,
                             &grid,
                             &spec.terms,
-                            options.clone(),
+                            annealed,
                         ) {
-                            Ok(result) => result,
-                            Err(third_error) => {
+                            Ok(annealed_result) => {
                                 reporter.log(&format!(
-                                    "scf: multistart failed ({third_error}), retrying with damped \
+                                    "scf: annealing converged in {} iterations: E = {:.10} Ha",
+                                    annealed_result.iterations, annealed_result.energy_hartree
+                                ));
+                                // 退火可能停在伪态上（苯/STO-3G/PBE 实测高 19 Ha）：
+                                // 再跑一次有界多初猜，取更低的那个。
+                                match attempt_multistart("annealing cross-check") {
+                                    Some(better)
+                                        if better.energy_hartree
+                                            < annealed_result.energy_hartree - 1.0e-9 =>
+                                    {
+                                        reporter.log(
+                                            "scf: multistart found a lower state than annealing; \
+                                             using it (annealing may stop in a spurious branch)",
+                                        );
+                                        better
+                                    }
+                                    _ => annealed_result,
+                                }
+                            }
+                            Err(second_error) => {
+                                reporter.log(&format!(
+                                    "scf: annealing failed ({second_error}), retrying with damped \
                                      Roothaan iterations (no DIIS, damping 0.3)"
                                 ));
                                 let mut plain = options.clone();
                                 plain.use_diis = false;
                                 plain.damping = 0.3;
-                                // **不改用户给的 `scf_max_iter`**：K2 的 `TaskOptions` 是输入契约，
-                                // 引擎不能"为了收敛"偷偷跑更多步
-                                // （`test_scf_not_converged_carries_iters` 就是钉这一点的）。
                                 qwb_scf::rks::rks_scf(
                                     &basis,
                                     &input.molecule,

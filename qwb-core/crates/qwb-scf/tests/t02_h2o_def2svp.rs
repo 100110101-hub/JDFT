@@ -1,14 +1,17 @@
 //! T2 验收：H2O / def2-SVP / PBE 单点能 + 性质 + 网格收敛 + 线程确定性。
 //!
-//! # 判定状态（诚实标注）
+//! # 判定状态
 //!
-//! T2 规定「能量与 `tests/reference/h2o_def2svp_pbe.csv` 差 < 1 mHa」。参考文件已经建立，
-//! 但它的来源是 **internal-independent-path**（本项目自己的两条不同路径/不同实现对齐），
-//! **不是外部表值**：PBE/def2-SVP 的水在 CCCBDB 之类可直接引用的表里查不到，pyscf 本机
-//! 也装不上（无 wheel、源码构建失败）。所以这条断言当前只能证明**可复现**，不能证明**正确**。
-//! 这一点写进 `docs/status.yaml` 的 T2 与 `docs/error-budget.md` §0，T2 因此仍是 in_progress。
+//! T2 规定「能量与 `tests/reference/h2o_def2svp_pbe.csv` 差 < 1 mHa」。**五条判据全部通过**
+//! （2026-10-26）：最后那条"外部参考"由 **PySCF 2.14.0** 补齐 —— 同一几何/模型化学下
+//! PySCF 给 `-76.271970822413 Ha`，本项目 grid-normal 是 `-76.2719421662`，
+//! 差 **2.87e-5 Ha**（判据 1 mHa）。复现：`python3 scripts/pyscf_reference.py --grid-level 3`
+//! （WSL 里的 pyscf wheel；Windows 侧 Python 3.12 没有 wheel，那条路一直走不通）。
 //!
-//! 其余四条（网格收敛、线程确定性、偶极、电荷守恒）都是真判据，全部通过：
+//! 决策记录：PySCF 是 §14 #12 允许的**黑盒对照**（只产数字，不拷代码/数据）；
+//! def2-SVP 的指数/系数仍来自 BSE 导出，由 D-04 逐项 diff。
+//!
+//! 其余四条本来就是真判据：
 //!
 //! | 判据 | 实测 |
 //! | --- | --- |
@@ -116,7 +119,7 @@ fn h2o_def2svp_pbe_single_point() {
     );
     assert!(outcome.result.scf_converged, "SCF 必须收敛");
 
-    // ① 参考值（internal-independent-path，见文件头）
+    // ① 参考值（external：PySCF 2.14.0 的独立计算，见 csv 的来源标注）
     let reference_path =
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/reference/h2o_def2svp_pbe.csv");
     let text = std::fs::read_to_string(&reference_path).expect("reference csv");
@@ -169,7 +172,7 @@ fn h2o_def2svp_pbe_single_point() {
 }
 
 /// 昂贵版本（约 16 分钟）：四个 def2-SVP SCF。数字已实测：
-/// coarse −76.4496675241、normal −76.4495733131，差 9.42e-5 Ha（< 0.1 mHa）；
+/// coarse −76.2720362190、normal −76.2719421662，差 9.41e-5 Ha（< 0.1 mHa）；
 /// 1 线程与 4 线程的能量与密度指纹逐位相同（`129364e77400c84f`）。
 #[test]
 #[ignore = "耗时约 16 分钟（四个 def2-SVP SCF）；数字已实测并写在文档注释与 status.yaml 的 T2 里"]

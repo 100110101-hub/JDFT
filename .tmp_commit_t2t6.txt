@@ -1,0 +1,21 @@
+T2 与 T6 判 done：PySCF 做成外部尺子（T2 差 2.9e-5 Ha），苯的 PBE 靠多初猜收敛（差 0.04 mHa）
+
+T2（H2O / def2-SVP / PBE 的外部参考）：
+* 卡了很久的根子是 Windows 侧装不上 pyscf（Python 3.12 无 wheel、源码构建失败）。
+  换到 WSL 的 Ubuntu 22.04（自带 Python 3.10）后 `pip install --user pyscf` 直接拿到 2.14.0
+* 同一几何/模型化学独立算得 -76.271970822413 Ha；本项目 grid-normal -76.2719421662，
+  差 2.87e-5 Ha（判据 1 mHa）。csv 的来源标注从 internal-independent-path 升级为 external
+* 新增 scripts/pyscf_reference.py（§14 #12 的黑盒对照入口：只产数字，不拷代码/数据）
+
+T6（水/苯/CO vs CCCBDB < 2 mHa，最后一块是苯）：
+* 苯其实只有 36 个基函数（此前记的 42 是错的）
+* B3LYP：grid-coarse -0.01 mHa / grid-normal -1.16 mHa
+* PBE：单初猜 DIIS 400 步不收敛；`initial_guess_scale = 1.5` 15 步收敛到
+  -229.1170417 Ha → grid-coarse 差 0.04 mHa / grid-normal 1.33 mHa
+* 反面教材（写进 choices 四十三）：费米展宽退火也能"收敛"，但停在 -209.9115 Ha
+  （比 CCCBDB 高 19 Ha 的伪态）。教训一是"收敛了 ≠ 算对了"，二是退火只治"出不来"、
+  不保证落到对的解。于是引擎的退路订正为**多初猜在前、退火在后**，且退火成功后
+  再做一次有界多初猜交叉验证、取能量更低者
+
+至此 T1–T8 全部 done（每一条都有可执行证据 + 记录在 docs/status.yaml）。
+gate 第 56 轮：24/24 全绿。

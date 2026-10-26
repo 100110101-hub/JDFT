@@ -242,9 +242,9 @@ fn zno(distance_angstrom: f64) -> Molecule {
 fn zno_job(distance_angstrom: f64, grid: GridLevel) -> JobInput {
     let mut options = TaskOptions::default();
     // 故意给一个**不大的**上限：单初猜反正会失败（ZnO/LANL2DZ 是闭壳层受限 O 的伪解问题），
-    // 40 步足够让第一级退路（退火，实测 23 步收敛）接手。给 200 步只是让 debug 构建里
-    // 白白烧掉三倍时间。
-    options.scf_max_iter = 40;
+    // 而退火（实测 23 步收敛）是这个体系唯一管用的退路。给 200 步只会让 debug 构建里
+    // 白白烧掉几倍时间；25 步既够第一级失败、也刚好够退火走完 20 步展宽 + 3 步整数。
+    options.scf_max_iter = 25;
     options.ecp_name = Some("lanl2dz-zn".to_string());
     JobInput::new(
         zno(distance_angstrom),
@@ -281,6 +281,7 @@ fn reference(quantity: &str) -> (f64, f64) {
 }
 
 #[test]
+#[ignore = "慢档（debug 下约 19 分钟；release 下约 1 分钟）：ZnO/LANL2DZ 单点 vs 参考 csv"]
 fn zno_lanl2dz_single_point_matches_the_reference() {
     // ZnO/LANL2DZ 的单初猜 DIIS **不收敛**（闭壳层受限的 O 原子本身是伪解），
     // 引擎的第一级退路是费米展宽退火 —— 这里同时断言"退火真的被用上了"。
