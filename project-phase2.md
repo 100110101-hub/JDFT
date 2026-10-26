@@ -231,6 +231,10 @@ Bessel/erfc/球谐求值都在现有 `qwb-grid`/`qwb-integrals` 里，不引入 
 | **K5** | 新增子命令 `qwb props`、`qwb scan`、`qwb ts`、`qwb irc`（全部加性）；退出码表**不变** | 旧脚本继续工作 |
 | **K6** | `.pyi` 增加新类/新方法/新字段（全部可选参数） | `mypy --strict` 保绿 |
 
+> **K6 的扩展与 PR-02 同步做**（阶段二实施时的澄清）：`.pyi` 是 `qwb_engine` 绑定的**类型桩**，
+> 桩里声明了而 binding 没实现，就等于桩在撒谎（`mypy` 会绿，运行时 `AttributeError`）。
+> 所以 KV-05 只落 CLI；`TaskOptions`/`JobResult` 的新字段进桩必须与 pyo3 侧同一提交（§6.9 PR-02）。
+
 ### 4.2 K7 · 响应与性质契约（新增）
 
 `qwb-props` 的第二套能力面，供 CPHF/TDDFT/NMR/极化率共用。**下面只是形态示意**：
@@ -404,7 +408,7 @@ NumericsReport {
 | KV-02 | KV-01 | K8 溶剂化类型 + `Solvent` 加性字段（`refractive_index`/`radii_set`/`surface_tension`/`ionic_strength`）+ `JobInput.options.solvent_model` | `qwb-gen-schemas --check` 不漂移（K1 schema 重新生成）；旧 `solvent/*.yaml` 仍 `qwb data verify` 通过；SMD 缺 n 或半径集时 verify 明确报错；`n² ≤ ε` 的自洽检查有单测 |
 | KV-03 | KV-01 | K9 开壳层/相关方法类型 + `TaskOptions.scf_type`/`mp2`/`excited_states` + `JobResult.spin`/`correlation` + 跨字段校验 | 旧 `input.yaml` 全部仍可解析（`phase1_options_json_still_parses_without_the_new_keys`）；`SUPPORTED_FEATURES` 只增不删；**引擎对未实现的选项显式拒绝**（`Unsupported`，退出码 4，消息带 WP 编号），与阶段一等价的写法（`rks`/`rhf`/`vacuum`）放过 |
 | KV-04 | KV-01 | K10 `NumericsReport`（K2）+ `numerics` 数据域（K1 `NumericsDef`、`qwb-data/numerics/numerics.yaml`、`registry.yaml` 的 `numerics:` 段）+ `data verify` / `data list` 支持新域 + 加载器的跨文件引用校验 | `qwb data verify` 17/17 通过（新增 1 个数据文件）；`numerics.schema.{json,yaml}` 生成且 `--check` 绿；等级重复/越界、容差过松、PS 配点不单调、去别名回退各有单测；等级指向不存在的网格时 `Registry::open` 返回 `Data`；`NumericsReport` 的 `within_tolerance` 与 `validate`（无留痕不算通过）有单测 |
-| KV-05 | KV-02..04 | K5 加性子命令（`props`/`scan`/`ts`/`irc`）+ K6 `.pyi` 更新 + `cli.md`/`qwb-format.md` 同步 | 全部子命令 `--help` 退出 0；`mypy --strict` 桩 + typed consumer 0 issue；K5 退出码表未变（回归测试比对） |
+| KV-05 | KV-02..04 | K5 加性子命令（`props`/`ts`/`irc`/`scan`：签名 + `--help` + 明确的 `Unsupported` 退出码 4）+ `cli.md` 同步。**K6 `.pyi` 与 pyo3 binding 的扩展移到 PR-02**（理由见 §4.6 末尾） | 四个子命令 `--help` 退出 0；未实现时退出码 4 且消息指出归属 WP；输入文件不存在时退出码 1（不被 4 盖掉）；既有子命令的签名与退出码未变（K5 冻结表）；`cli.md` 与实际 `--help` 一致 |
 
 ### 6.2 数据轨（DA）
 

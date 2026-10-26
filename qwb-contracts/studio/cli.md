@@ -9,7 +9,11 @@ qwb run    input.yaml [--out DIR] [--threads N]
 qwb batch  DIR/*.yaml [--parallel N]
 qwb inspect DIR
 qwb replay DIR [--dry-run]
-qwb data list|show|verify
+qwb data list|show|verify|sign|install
+qwb props  input.yaml [--out DIR] [--states N]     # 阶段二加性（KV-05）
+qwb ts     input.yaml [--out DIR]                 # 阶段二加性（KV-05）
+qwb irc    input.yaml [--out DIR]                 # 阶段二加性（KV-05）
+qwb scan   input.yaml [--out DIR]                 # 阶段二加性（KV-05）
 ```
 
 ## 退出码（冻结）
@@ -40,6 +44,24 @@ C 轨只做契约与结构，数值执行属 I/X/S/G 轨 + `P-07`。因此下面
 | `data list` | 完全实装（读 `registry.yaml`） |
 | `data show <name>` | 完全实装（含条目文件校验） |
 | `data verify [PATH...]` | 完全实装（无参数时校验整个注册表） |
+
+## 阶段二加性子命令（KV-05，2026-11-06）
+
+`props` / `ts` / `irc` / `scan` 是 `project-phase2.md` §4.1 里 K5 的**加性**扩展：
+签名先落（含 `--help`），实现随里程碑跟上。当前行为**明确且一致**：
+
+| 子命令 | 现状 | 归属 |
+|---|---|---|
+| `props` | 退出码 `4`：`declared in K5 ... not implemented yet` | M4（RS-02）起，M7 收口 |
+| `ts` | 同上 | M6（RP-01） |
+| `irc` | 同上 | M6（RP-02） |
+| `scan` | 同上 | M6（RP-03） |
+
+两条边界（都有单测）：
+
+1. **输入文件不存在 → 退出码 `1`**（输入错误），不会被"功能没实现"盖掉 ——
+   否则用户会以为功能存在、只是坏了；
+2. 既有子命令的签名与退出码**一个都没变**（K5 冻结表的 0/1/2/3/4 映射不变）。
 
 ## 对冻结签名的**增量**（不破坏既有用法，待人类确认）
 

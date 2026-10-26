@@ -407,6 +407,26 @@ FAIL basis       qwb-data\basis/sto-3g.yaml (1 error(s), 0 warning(s))
 **数据根**怎么找：`QWB_DATA_ROOT` 环境变量 > 从当前目录逐级向上找 `qwb-data/`。
 CLI 没有 `--data-root` 参数（§14 #17 的决定）；Python 侧的数据入口有 `--data-root`。
 
+### 4.7 阶段二预留的子命令（**签名已落、实现未跟**）
+
+| 子命令 | 现状 | 归属 |
+|---|---|---|
+| `qwb props <input.yaml> [--out DIR] [--states N]` | 退出码 **4** + 说明 | M4（RS-02）起，M7 收口 |
+| `qwb ts <input.yaml> [--out DIR]` | 退出码 **4** + 说明 | M6（RP-01） |
+| `qwb irc <input.yaml> [--out DIR]` | 退出码 **4** + 说明 | M6（RP-02） |
+| `qwb scan <input.yaml> [--out DIR]` | 退出码 **4** + 说明 | M6（RP-03） |
+
+```text
+$ qwb props examples/h2o_tddft.yaml
+qwb: `qwb props` is declared in K5 (phase-2 KV-05) but not implemented yet:
+      excited states / NMR / polarizability land with M4-M7 (RS-02..RS-08)
+$ echo $LASTEXITCODE
+4
+```
+
+两条边界（有单测）：`--help` 全部可用；**输入文件不存在时报退出码 1**（输入错误），
+不会被"功能没实现"的 4 盖掉 —— 否则会让人以为功能存在、只是坏了。
+
 ---
 
 ## 5. Python API（pyo3）

@@ -6,6 +6,10 @@
 //! qwb inspect DIR
 //! qwb replay DIR [--dry-run]
 //! qwb data list|show|verify|sign|install
+//! qwb props  input.yaml [--out DIR] [--states N]   # 阶段二 KV-05（未实现 → 退出码 4）
+//! qwb ts     input.yaml [--out DIR]               # 阶段二 KV-05（未实现 → 退出码 4）
+//! qwb irc    input.yaml [--out DIR]               # 阶段二 KV-05（未实现 → 退出码 4）
+//! qwb scan   input.yaml [--out DIR]               # 阶段二 KV-05（未实现 → 退出码 4）
 //! ```
 //!
 //! 退出码（K5 冻结）：`0` 成功 / `1` 输入错误 / `2` 收敛失败 / `3` 数据校验失败 / `4` 内部错误。
@@ -63,6 +67,14 @@ enum Command {
     Replay(ReplayArgs),
     /// 数据仓库操作
     Data(DataArgs),
+    /// 性质与响应（激发态/NMR/极化率/多极）；阶段二 KV-05 只落签名，未实现
+    Props(PropsArgs),
+    /// 过渡态搜索；阶段二 KV-05 只落签名，未实现
+    Ts(PathArgs),
+    /// 内禀反应坐标；阶段二 KV-05 只落签名，未实现
+    Irc(PathArgs),
+    /// 势能面扫描；阶段二 KV-05 只落签名，未实现
+    Scan(PathArgs),
 }
 
 #[derive(Debug, Args)]
@@ -85,6 +97,28 @@ struct BatchArgs {
     #[arg(long)]
     parallel: Option<u32>,
     /// 结果根目录（队列写在 `<out>/queue.json`）
+    #[arg(long)]
+    out: Option<PathBuf>,
+}
+
+#[derive(Debug, Args)]
+struct PropsArgs {
+    /// 输入文件（K4 input.yaml；激发态/NMR 等由 options 决定）
+    input_yaml: PathBuf,
+    /// 结果输出目录
+    #[arg(long)]
+    out: Option<PathBuf>,
+    /// 激发态个数（覆盖 `options.excited_states.n_states`）
+    #[arg(long)]
+    states: Option<u32>,
+}
+
+/// `ts` / `irc` / `scan` 的共同参数（三者都只是"带一条反应路径的 input.yaml"）。
+#[derive(Debug, Args)]
+struct PathArgs {
+    /// 输入文件（K4 input.yaml）
+    input_yaml: PathBuf,
+    /// 结果输出目录
     #[arg(long)]
     out: Option<PathBuf>,
 }
@@ -222,7 +256,46 @@ fn dispatch(cli: &Cli) -> CliResult<()> {
             DataCommand::Sign { paths, check } => cmd_data_sign(paths, *check),
             DataCommand::Install(args) => cmd_data_install(args),
         },
+        Command::Props(args) => cmd_not_implemented(
+            "props",
+            "excited states / NMR / polarizability land with M4-M7 (RS-02..RS-08)",
+            Some(&args.input_yaml),
+        ),
+        Command::Ts(args) => cmd_not_implemented(
+            "ts",
+            "transition-state search lands with M6 (RP-01)",
+            Some(&args.input_yaml),
+        ),
+        Command::Irc(args) => cmd_not_implemented(
+            "irc",
+            "intrinsic reaction coordinate lands with M6 (RP-02)",
+            Some(&args.input_yaml),
+        ),
+        Command::Scan(args) => cmd_not_implemented(
+            "scan",
+            "PES scans land with M6 (RP-03)",
+            Some(&args.input_yaml),
+        ),
     }
+}
+
+/// K5 的加性子命令：**签名先落、实现后跟**（phase-2 KV-05）。
+///
+/// 行为与阶段一的"未接线"一致：明确退出码 `4` 并说清归哪个 WP，而不是悄悄做点别的。
+/// 先校验输入文件存在，这样 `qwb props typo.yaml` 报的是文件错（退出码 1）而不是
+/// "功能没实现"（4）—— 两者混在一起会让人以为功能存在只是坏了。
+fn cmd_not_implemented(name: &str, owner: &str, input: Option<&PathBuf>) -> CliResult<()> {
+    if let Some(path) = input
+        && !path.is_file()
+    {
+        return Err(CliError::input(format!(
+            "cannot read {}: no such file",
+            path.display()
+        )));
+    }
+    Err(CliError::internal(format!(
+        "`qwb {name}` is declared in K5 (phase-2 KV-05) but not implemented yet: {owner}"
+    )))
 }
 
 // ---------------------------------------------------------------- run / batch
@@ -1351,7 +1424,7 @@ fn ensure_third_party(for_input: Option<&Path>) {
 
 #[cfg(test)]
 mod tests {
-    use super::{expand_pattern, load_input};
+    use super::{cmd_not_implemented, expand_pattern, load_input};
     use std::path::PathBuf;
 
     fn fixture_dir(tag: &str) -> PathBuf {
@@ -1404,6 +1477,37 @@ options:
         let err = load_input(&path).expect_err("invalid");
         assert_eq!(err.code, 1, "K5: 输入错误 → 退出码 1");
         std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn phase2_subcommands_are_declared_but_explicitly_unimplemented() {
+        // KV-05：签名先落（K5 加性），实现后跟。四个子命令都必须**明确**失败，
+        // 并说清归属的 WP —— 悄悄做别的事比报错更糟。
+        for (name, owner_hint) in [
+            ("props", "RS-02"),
+            ("ts", "RP-01"),
+            ("irc", "RP-02"),
+            ("scan", "RP-03"),
+        ] {
+            let error = cmd_not_implemented(name, owner_hint, None).unwrap_err();
+            assert_eq!(error.code, 4, "{name}: K5 的 exit 4");
+            assert!(error.message.contains(name), "{}", error.message);
+            assert!(
+                error.message.contains(owner_hint),
+                "消息里要指出归哪个 WP：{}",
+                error.message
+            );
+        }
+    }
+
+    #[test]
+    fn phase2_subcommands_report_a_missing_input_before_unimplemented() {
+        // 文件不存在是输入错误（退出码 1），不该被"功能没实现"（4）盖掉 ——
+        // 否则用户会以为功能存在、只是坏了。
+        let missing = std::env::temp_dir().join("qwb-cli-definitely-missing.yaml");
+        let error = cmd_not_implemented("props", "RS-02", Some(&missing)).unwrap_err();
+        assert_eq!(error.code, 1, "{}", error.message);
+        assert!(error.message.contains("cannot read"), "{}", error.message);
     }
 
     #[test]

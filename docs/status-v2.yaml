@@ -44,8 +44,11 @@ KV-04:
 
 
 KV-05:
-  state: pending
-  note: "K5 加性子命令（props/scan/ts/irc）+ K6 .pyi + cli.md/qwb-format.md"
+  state: done
+  ts: "2026-11-06T13:00:00Z"
+  artifact: "qwb-cli/src/main.rs 的四个加性子命令（Props/Ts/Irc/Scan 的 Args + dispatch + cmd_not_implemented）+ qwb-contracts/studio/cli.md 的阶段二加性子命令一节 + docs/USAGE.md 4.7 + 两个单测"
+  verification: "① `qwb props|ts|irc|scan --help` 全部退出 0（clap 用法串正确）。② 未实现时**退出码 4** 且消息含归属 WP：`qwb props examples/h2o_tddft.yaml` → 「declared in K5 (phase-2 KV-05) but not implemented yet: excited states / NMR / polarizability land with M4-M7 (RS-02..RS-08)」。③ **输入文件不存在 → 退出码 1**（`qwb ts nope.yaml` → `cannot read nope.yaml: no such file`）：输入错误不许被「功能没实现」盖掉。④ `cargo test -p qwb-cli` 5 例绿（新增 2 例钉上面两条）；`cargo clippy -p qwb-cli --all-targets -- -D warnings` 干净。⑤ 既有子命令的签名与退出码未变（K5 冻结表 0/1/2/3/4；`test_cli.py` 的 Python 壳 ↔ Rust 比对仍绿）。"
+  note: "**范围修正（已回填 §4.1/§6.1）**：原计划 KV-05 含 K6 `.pyi` 更新，但 `.pyi` 是 `qwb_engine` 绑定的**类型桩** —— 桩里声明了而 pyo3 侧没实现，等于桩在撒谎（`mypy --strict` 会绿，运行时 AttributeError）。所以 `.pyi` 与 binding 的新字段（`TaskOptions.scf_type` 等、`JobResult.spin` 等）必须与 PR-02 同一个提交落地，KV-05 只落 CLI。这条不是偷懒：它正是「不得把未实装能力标 done」在类型桩上的具体形态。"
 
 # ───────────────────────── 数据轨（DA，8）─────────────────────────
 
