@@ -44,6 +44,7 @@ from PySide6.QtWidgets import (
 from ..resultdir import ResultDirError, open_result_dir
 from ..runner import find_data_root
 from .builder import MoleculeBuilder
+from .datapanel import DataPanel
 from .logview import LogView
 from .scene_panel import Scene3DPanel
 from .model import GuiProject
@@ -84,6 +85,7 @@ class MainWindow(QMainWindow):
         splitter.addWidget(self._build_right())
         splitter.setStretchFactor(1, 3)
         self.setCentralWidget(splitter)
+        self._build_menu()
 
         self._status = QLabel("就绪")
         self.statusBar().addWidget(self._status)
@@ -126,8 +128,23 @@ class MainWindow(QMainWindow):
         tabs.addTab(self.log_view, "Log")
         self.scene_panel = Scene3DPanel()
         tabs.addTab(self.scene_panel, "3D")
+        # 第三方数据（基组/ECP）不在仓库里：这里给一个手动下载/校验的入口。
+        self.data_panel = DataPanel(self._data_root)
+        tabs.addTab(self.data_panel, "Data")
         self.tabs = tabs
         return tabs
+
+    def _build_menu(self) -> None:
+        """菜单栏：数据动作也放到菜单里（和 Data 页是同一批槽，状态因此一致）。"""
+        menu = self.menuBar().addMenu("数据")
+        for label, slot in (
+            ("刷新状态", self.data_panel.refresh),
+            ("下载缺失", lambda: self.data_panel.start_fetch(force=False)),
+            ("全部重下", lambda: self.data_panel.start_fetch(force=True)),
+        ):
+            action = QAction(label, self)
+            action.triggered.connect(slot)
+            menu.addAction(action)
 
     def _build_task_panel(self) -> QWidget:
         panel = QWidget()
@@ -423,10 +440,15 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="qwb-studio-gui", description="QuantumWorkbench Studio GUI（P-09 骨架）")
     parser.add_argument("--out", default="studio-out", help="工程输出目录（queue.json 与任务子目录）")
     parser.add_argument("--workers", type=int, default=2)
+    parser.add_argument(
+        "--data-root",
+        default=None,
+        help="qwb-data 目录（默认 QWB_DATA_ROOT 或从当前目录向上找）",
+    )
     args = parser.parse_args(argv)
 
     app = build_application([sys_argv0()])
-    window = MainWindow(args.out, workers=args.workers)
+    window = MainWindow(args.out, workers=args.workers, data_root=args.data_root)
     window.show()
     return app.exec()
 

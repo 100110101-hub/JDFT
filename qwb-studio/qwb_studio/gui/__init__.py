@@ -9,11 +9,14 @@
   每次追加少量行（由 `QTimer` 驱动），所以 100 MB 日志也不会把事件循环占死。
 * **headless 可测**：测试用 `QT_QPA_PLATFORM=offscreen` 跑，断言的是"事件循环在任务运行
   期间仍在转"（QTimer 计数），不是"看起来不卡"。
+* **数据页**（`datapanel`）：第三方基组/ECP 不在仓库里，下载同样在工作线程里跑，
+  界面只收信号（与 `SchedulerBridge` 同一套做法）。
 """
 
+from .datapanel import DataPanel
 from .logview import LogView
 from .mainwindow import MainWindow
 from .model import GuiProject
 from .runner import SchedulerBridge
 
-__all__ = ["GuiProject", "LogView", "MainWindow", "SchedulerBridge"]
+__all__ = ["DataPanel", "GuiProject", "LogView", "MainWindow", "SchedulerBridge"]

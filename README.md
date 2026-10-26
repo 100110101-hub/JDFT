@@ -26,6 +26,16 @@ task    results\h2_sto3g_svwn5
 `data_snapshot.json` / `log.txt` / `input.yaml` / `artifacts/`），可以用
 `qwb inspect` 检查、用 `qwb replay` 重算比对。
 
+**第一次跑会先自动取回这次要用的基组/ECP**（约 1 秒，需要网络）。仓库**故意不含**
+这 7 个从 Basis Set Exchange 导出的第三方数据文件（再分发条款），只含配方与 sha256 钉；
+想一次备齐：
+
+```powershell
+qwb data install                    # 或 python scripts\fetch_data.py --all
+```
+
+取回一次之后就是纯本地。细节见 [`docs/USAGE.md`](./docs/USAGE.md) §8.4。
+
 ## 一条命令跑完所有门禁
 
 ```powershell
@@ -42,7 +52,7 @@ python -m venv .venv
 .venv\Scripts\python.exe -m pip install mypy numpy pydantic pytest maturin PySide6 vtk
 ```
 
-当前状态：**24/24 全绿**（第 56 轮，Python 侧 154 个测试）。逐项与最近轮次记在
+当前状态：**25/25 全绿**（第 58 轮，Python 侧 182 个测试）。逐项与最近轮次记在
 [`docs/status.yaml`](./docs/status.yaml) 的 C-06。
 
 ## 目录
@@ -50,7 +60,7 @@ python -m venv .venv
 | 目录 | 内容 | 契约 |
 |---|---|---|
 | `qwb-contracts/` | K1 schema（`schemars` 从 Rust 类型生成，勿手改）、K2 `qwb-engine-api`、K3 task/result schema、K4 `.qwb` 定义、K5 CLI 约定、K6 Python 桩 | K1–K6 |
-| `qwb-data/` | 数据仓：`registry.yaml`、`basis/ ecp/ functional/ grid/`、`examples/`（K1 样例，非交付物） | K1 |
+| `qwb-data/` | 数据仓：`registry.yaml`、`sources.json`（第三方数据配方）、`functional/ grid/ solvent/`、`examples/`（K1 样例，非交付物）；`basis/ ecp/` 里的第三方文件按需取回 | K1 |
 | `qwb-core/` | Cargo workspace：`qwb-registry` / `qwb-basis` / `qwb-integrals` / `qwb-xc` / `qwb-grid` / `qwb-linalg` / `qwb-scf` / `qwb-props` / `qwb-engine` / `qwb-io` / `qwb-cli` | K2/K4/K5 |
 | `qwb-studio/` | Python 产品层：`qwb_studio`（pydantic 模型 / `.qwb` / 调度器 / `env.json` / 结果目录 / CLI 薄壳 / GUI）+ `rust/qwb-py`（pyo3 `qwb_engine`） | K3/K4/K6 |
 | `docs/` | `USAGE.md`（使用手册）、`status.yaml`（进度账本）、`choices.md`（决策日志）、`HANDOVER.md`、`unblock.md`、`error-budget.md` | — |
@@ -70,7 +80,7 @@ python -m venv .venv
 | 几何优化（BFGS + 解析梯度） | PBE0/def2-SVP 的 H2O O–H 0.9623 Å（实验 0.9572）；PBE/def2-TZVP 4 步到 2.67e-4 Ha/Bohr |
 | 频率（数值 Hessian + 标度因子 + 热化学 + IR） | PBE/6-311G(d,p)×0.991 最差 21.5 cm⁻¹（判据 30）；PBE0 60.5 cm⁻¹ 作为不通过对照组记录 |
 | ECP（LANL2DZ，Cu/Zn） | 矩阵元与解析解 3e-14；CuH/ZnO 单点跑通（ZnO 需 SCF 退火） |
-| 基组 | STO-3G / def2-SVP / def2-TZVP / 6-311G(d,p) / LANL2DZ（+LANL2DZ 价基）；数据逐项对 BSE 导出 diff < 1e-12 |
+| 基组 | STO-3G / def2-SVP / def2-TZVP / 6-311G(d,p) / LANL2DZ（+LANL2DZ 价基）；数据逐项对 BSE 导出 diff < 1e-12；文件按需从 BSE 取回并核对 sha256 钉 |
 | 工作流 | K3 状态机 + 结果目录、`qwb batch` 持久化队列与 `kill -9` 恢复、`qwb replay` 复现（delta 0.000e0） |
 | GUI（PySide6 + VTK） | Build→提交→Job Monitor→3D 全链路；102.8 MB 日志不卡；崩溃后重启恢复未完成视图 |
 | Python API（pyo3，abi3-py39） | 与 CLI 能量逐位相同；GIL 真释放（单次 1.000 s vs 两个并发 1.078 s） |
@@ -90,6 +100,7 @@ python -m venv .venv
 ## 许可
 
 代码 `Apache-2.0`（见 [`LICENSE`](./LICENSE)）。数据许可见 [`DATA_LICENSES.md`](./DATA_LICENSES.md)：
-自研/自转录数据为 `Apache-2.0`；**外部来源**（BSE 导出的 STO-3G/def2/6-311G/6-311G(d,p)、
+自研/自转录数据为 `Apache-2.0`；**外部来源**（BSE 导出的 STO-3G/def2/6-311G(d,p)、
 LANL2DZ 的基组与 ECP）逐条登记，其中 LANL2DZ 的 ECP 两项因为原始论文没有明确再分发条款，
-标成 `commercial_ok: false` / `redistribute_ok: false` —— 对外分发前请先确认。
+标成 `commercial_ok: false` / `redistribute_ok: false` —— 所以这 7 个文件**不进仓库**，
+由使用者从上游取回（`qwb data install`），仓库只带配方与摘要钉。

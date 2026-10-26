@@ -302,6 +302,7 @@ pub fn verify_registry(manifest_path: &Path) -> Result<Vec<Report>, VerifyError>
     };
 
     let base = manifest_path.parent().unwrap_or_else(|| Path::new("."));
+    let third_party = crate::thirdparty::third_party_paths(base).unwrap_or_default();
     let mut reports = Vec::new();
     for (domain, entry) in manifest.all_entries() {
         let path = base.join(&entry.path);
@@ -332,7 +333,37 @@ pub fn verify_registry(manifest_path: &Path) -> Result<Vec<Report>, VerifyError>
                 reports.push(report);
             }
             Err(err) => {
-                manifest_report.error("registry.path", format!("{domain}/{}: {err}", entry.name))
+                // 第三方数据缺失是**正常状态**（仓库不提交它们，见 `crate::thirdparty`），
+                // 所以那类缺失要把"怎么装"写进错误里，否则读的人会以为数据坏了；
+                // 自研数据缺失（不在 sources.json 里）是数据根被裁剪，不该被这句提示淡化。
+                let is_third_party =
+                    third_party.contains(&crate::thirdparty::normalize(&entry.path));
+                let hint = match &err {
+                    VerifyError::Io { source, .. }
+                        if source.kind() == std::io::ErrorKind::NotFound && is_third_party =>
+                    {
+                        "（第三方数据，本地未取回：跑 `qwb data install`）"
+                    }
+                    VerifyError::Io { source, .. }
+                        if source.kind() == std::io::ErrorKind::NotFound =>
+                    {
+                        "（该文件不是第三方数据：数据根被裁剪过，请从仓库恢复）"
+                    }
+                    _ => "",
+                };
+                // 文件读不出：能推断类别就记成**该文件的**失败报告（这样 `N file(s) checked`
+                // 的计数与真实条目数一致），推断不出才退回清单层。
+                match infer_kind(&path) {
+                    Some(kind) => {
+                        let mut report = Report::new(kind, path.display().to_string());
+                        report.error("registry.path", format!("{err}{hint}"));
+                        reports.push(report);
+                    }
+                    None => manifest_report.error(
+                        "registry.path",
+                        format!("{domain}/{}: {err}{hint}", entry.name),
+                    ),
+                }
             }
         }
     }

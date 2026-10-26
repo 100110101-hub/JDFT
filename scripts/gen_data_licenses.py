@@ -7,6 +7,10 @@
   * 扫描 `qwb-data/` 下所有**生产数据**（`registry.yaml` 引用的 basis / functional /
     grid / ecp / solvent 文件，以及 registry 自身），逐个读出
     `name`、`version`、`license.spdx`、`citation`、`sha256`；
+  * **第三方数据缺失时从 `qwb-data/sources.json` 补行**：仓库不提交那些文件
+    （再分发条款，见 project.md §14 #20），但许可、引用与摘要钉都在清单里。
+    所以"数据在不在本地"不改变本文件的内容 —— 否则这份文件会随下载状态漂移，
+    而它恰恰是要回答"这份数据能不能用"的。
   * 输出一份按路径排序的 Markdown——**排序保证幂等**（同样的输入永远得到同样的字节）；
   * 任一文件缺 license / citation / sha256 时，脚本以非零退出码失败，并在文档里
     标出缺失项，所以它既是生成器也是门禁。
@@ -17,12 +21,14 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 DATA = ROOT / "qwb-data"
 OUTPUT = ROOT / "DATA_LICENSES.md"
+SOURCES = DATA / "sources.json"
 
 # 生产数据所在的子目录（与 registry.yaml 的引用一致）。
 SUBDIRECTORIES = ("basis", "functional", "grid", "ecp", "solvent")
@@ -101,6 +107,7 @@ def collect() -> tuple[list[dict], list[str]]:
         if directory.is_dir():
             targets.extend(sorted(directory.glob("*.yaml")))
 
+    present: set[str] = set()
     for path in targets:
         lines = path.read_text(encoding="utf-8").splitlines()
         block = {"lines": lines}
@@ -111,6 +118,7 @@ def collect() -> tuple[list[dict], list[str]]:
         citations = scoped_list_titles(block, "citation")
         recorded = parse_scalar(block, "sha256")
         relative = path.relative_to(ROOT).as_posix()
+        present.add(relative)
 
         # `registry.yaml` 是 manifest（索引），不承载许可与引用——许可在各数据文件里。
         is_manifest = path.name == "registry.yaml"
@@ -137,8 +145,55 @@ def collect() -> tuple[list[dict], list[str]]:
             }
         )
 
+    records.extend(declared_but_absent(present, problems))
     records.sort(key=lambda record: record["path"])
     return records, problems
+
+
+def declared_but_absent(present: set[str], problems: list[str]) -> list[dict]:
+    """`sources.json` 里声明、但本地没有的第三方数据 → 与文件在本地时**完全相同**的行。
+
+    字段来自清单的 `transcribe` 段与摘要钉；渲染出来的表格和"文件已取回"时逐字节一致，
+    所以 `--check` 不依赖网络、也不依赖本地下载状态。
+    """
+    if not SOURCES.is_file():
+        return []
+    try:
+        payload = json.loads(SOURCES.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        problems.append(f"qwb-data/sources.json: 读不出（{error}）")
+        return []
+
+    rows: list[dict] = []
+    for entry in payload.get("entries") or []:
+        relative = "qwb-data/" + str(entry["path"]).replace("\\", "/")
+        if relative in present:
+            continue
+        spec = entry.get("transcribe") or {}
+        license_map = spec.get("license") or {}
+        spdx = license_map.get("spdx") or "?"
+        titles = [citation.get("title", "(缺)") for citation in spec.get("citations") or []]
+        pin = entry.get("sha256") or "—"
+        if spdx in ("?", "", "null"):
+            problems.append(f"{relative}: sources.json 缺 license.spdx")
+        if not titles:
+            problems.append(f"{relative}: sources.json 缺 citation")
+        if pin == "—":
+            problems.append(f"{relative}: sources.json 缺 sha256 钉")
+        rows.append(
+            {
+                "path": relative,
+                "name": spec.get("name") or "(未命名)",
+                "version": spec.get("version") or "?",
+                "spdx": spdx,
+                "commercial_ok": str(license_map.get("commercial_ok", "?")).lower(),
+                "redistribute_ok": str(license_map.get("redistribute_ok", "?")).lower(),
+                "citations": titles or ["(缺)"],
+                "is_manifest": False,
+                "sha256": pin,
+            }
+        )
+    return rows
 
 
 def render(records: list[dict], problems: list[str]) -> str:
@@ -150,6 +205,12 @@ def render(records: list[dict], problems: list[str]) -> str:
         "",
         f"共 {len(records)} 个生产数据文件。`qwb-data/examples/` 下的 SPECIMEN 不计入",
         "（它们是形状示例，不在 manifest 里）。",
+        "",
+        "其中 `qwb-data/basis/` 与 `qwb-data/ecp/` 的部分文件是从 Basis Set Exchange 导出的",
+        "第三方数据：仓库**不提交**这些文件（再分发条款，见 `qwb-data/sources.json` 的",
+        "`redistribute_ok`），按需用 `qwb data install`（或 `python -m qwb_studio.datafetch --all`）",
+        "取回并核对摘要钉。下表因此不区分「已取回」与「未取回」——许可、引用与摘要都由清单",
+        "钉住，与本机是否下载过无关。",
         "",
         "| 数据 | 版本 | 许可 | 商用 | 可再分发 | sha256（前 16 位） |",
         "| --- | --- | --- | --- | --- | --- |",

@@ -78,6 +78,20 @@ else {
     }
 }
 
+# ---- third-party data (deliberately not in the repo; see qwb-data/README.md) ----
+# The basis/ECP files exported from BSE are NOT committed (redistribution terms,
+# project.md 14 #20): the repo ships the recipe (qwb-data/sources.json) plus the
+# sha256 pins. Every later step that opens qwb-data needs them, so fetch once here.
+# Needs network access on a fresh clone; afterwards the files are local and this is
+# a no-op. `qwb data install` / `python scripts/fetch_data.py --all` do the same.
+Step -Name 'data: third-party data present (fetch once if missing)' -Dir '.' -Body {
+    & python scripts/fetch_data.py --check
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host '  (missing third-party data - fetching from Basis Set Exchange...)'
+        & python scripts/fetch_data.py --all
+    }
+}
+
 # ---- K2 contract crate ----
 Step -Name 'contracts(K2): fmt' -Dir 'qwb-contracts/engine-api' -Body { cargo fmt --check }
 Step -Name 'contracts(K2): clippy -D warnings' -Dir 'qwb-contracts/engine-api' -Body {

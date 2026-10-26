@@ -31,6 +31,7 @@ pub mod registry;
 pub mod schema;
 pub mod sha256;
 pub mod solvent;
+pub mod thirdparty;
 pub mod verify;
 
 pub use basis::{Angular, BasisRole, BasisSet, ContractionType, Normalization, Shell, ShellBlock};
@@ -42,6 +43,7 @@ pub use loader::Registry;
 pub use molecule::{MoleculeAtom, MoleculeFile};
 pub use registry::{RegistryEntry, RegistryManifest};
 pub use solvent::{CavityModel, Solvent};
+pub use thirdparty::MissingData;
 pub use verify::{DataKind, Issue, Report, Severity};
 
 /// 本 crate 实现的 K1 版本。

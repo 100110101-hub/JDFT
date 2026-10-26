@@ -65,6 +65,13 @@ step "gate: deps centralized" bash scripts/check_deps_centralized.sh
 step "gate: no unsafe outside allowlist" bash scripts/check_unsafe.sh
 step "gate: rayon determinism" bash scripts/check_rayon_determinism.sh
 
+# ---- 第三方数据（仓库故意不含这些文件，见 qwb-data/README.md）----
+# BSE 导出的基组/ECP **不提交**（再分发条款，project.md §14 #20）：仓库带的是配方
+# （qwb-data/sources.json）与 sha256 钉。后面每一步打开 qwb-data 都需要这些文件，
+# 所以在这里取一次；新 clone 需要网络，取回之后就是纯本地。
+# 等价入口：`qwb data install` / `python scripts/fetch_data.py --all`。
+step "data: 第三方数据就位（缺则取回）" bash -c "python scripts/fetch_data.py --check || python scripts/fetch_data.py --all"
+
 # ---- K2 契约 crate ----
 step "contracts(K2): fmt" bash -c "cd qwb-contracts/engine-api && \"\$0\" fmt --check" "$CARGO"
 step "contracts(K2): clippy -D warnings" bash -c "cd qwb-contracts/engine-api && \"\$0\" clippy --all-targets -- -D warnings" "$CARGO"

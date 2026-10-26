@@ -1415,3 +1415,56 @@ ZnO 仍然只能靠退火（多初猜 5 个尺度全失败），所以两条路�
 另外记一句网格敏感度：苯的 B3LYP/PBE 在 grid-coarse 上差 -0.01 / -0.04 mHa，
 在 grid-normal 上反而是 -1.16 / -1.33 mHa（都在 2 mHa 判据内，但 coarse 更接近）。
 这和 G-01 记的"网格权重导数没算"是同一类问题的两个侧面，等要做更细的能量时一起解决。
+
+## 四十四、第三方数据不进仓库：配方入库，文件按需取回（2026-11-05）
+
+**触发**：把仓库推到 GitHub 之后，`qwb-data/basis/` 与 `qwb-data/ecp/` 里的 7 个文件
+（STO-3G / def2-SVP / def2-TZVP / 6-311G(d,p) / LANL2DZ + 两个 LANL2DZ ECP）是
+从 Basis Set Exchange 导出的第三方数据。`DATA_LICENSES.md` 里自己就写着 LANL2DZ 的 ECP
+是 `redistribute_ok: false`（原始论文没给明确的再分发条款，§14 #20）——
+**这等于自我矛盾**：许可标记说不能再分发，仓库里却躺着这两个文件。
+
+**决定**：仓库只提交**配方**与**摘要钉**，文件由使用者从上游取回。
+
+- 新增 `qwb-data/sources.json`：每条数据的 `fetch`（BSE 的 basis 名 + 元素）、
+  `transcribe`（名字/版本/引用/许可/形态）、`sha256` 钉；
+- `registry.yaml` 不变（K1 的索引仍然列出全部条目与摘要）——
+  所以"数据结构"没有变，变的只是"文件从哪来"；
+- 取回实现只有一份：`qwb-studio/qwb_studio/bse_data.py`（转录）+
+  `datafetch.py`（下载 → 转录 → 调 `qwb data sign` 打戳 → 核对钉 → 原子替换）。
+  `scripts/bse_to_qwb_data.py` / `bse_ecp_to_qwb_data.py` 从两个**各有一套转录逻辑**的脚本
+  降级成薄封装——转录规则一旦有两份就一定会漂移，而漂移的后果是静默错数；
+- 三条入口指向同一实现：`qwb data install`（Rust CLI 调度 Python）、
+  `python scripts/fetch_data.py`（独立脚本）、GUI 的 Data 页（工作线程里跑）；
+- **自动取回**：`run` / `batch` 开始前检查，缺则按输入需要的取回（`--for-input` 语义，
+  只下缺的那几个）。取数失败只 warning 不阻断——缺 LANL2DZ 不该挡住一个 STO-3G 的作业；
+  真正需要它的作业会在 `get_basis` 拿到带取数命令的错误（退出码 3）。
+
+**加载器必须跟着改**：`Registry::open` 原本"任一条目文件读不出就整体失败"。如果保持原样，
+一个还没下载数据的 clone 连 STO-3G 的作业都跑不了。现在：
+`sources.json` 里的路径缺失 → 跳过并记进 `Registry::missing_data()`（正常状态），
+其它文件缺失 → 仍然是硬错误（数据根被裁剪过，静默跳过会让"少了一个泛函"变成运行时怪错误）。
+`qwb data verify` 也把缺失的第三方文件记成**该文件的**失败报告（`16 checked / 9 passed /
+7 failed`，而不是把整个清单标红），消息里直接给 `qwb data install`。
+
+**核对**：本次把 7 个文件全部删掉再重新取回，**7/7 摘要与钉逐位相同**
+（`fce3af14…` / `177675559…` / `263b684f…` / `cfda92e2…` / `bc14a7e1…` /
+`a44df71f…` / `55b33916…`）。所以 `registry.yaml` 的钉、结果目录里的
+`data_snapshot.json`、以及之前记的所有验收数字都仍然有效——这条是设计约束，
+不是巧合：摘要算的是"规范化内容"，与文件从哪来、怎么排版无关。
+
+**顺带解决的两个坑**：
+
+1. BSE 把 Pople 系列的极化函数标成 `region: "polarization"`（不是 `valence`）。
+   转录器的 `region` 白名单原本只有 `valence`/`unknown`，于是 6-311G(d,p) 直接转录失败。
+   `region` 只是**标签**，不是"导出被裁剪过"的证据；真正表示裁剪的是 `core`/`semicore`，
+   那两个仍然显式拒绝。
+2. `sources.json` 里 LANL2DZ-Zn 的 citation `url` 一开始误写成 `…/api/basis/lanl2dz/`
+   （API 端点而不是基组页），与另外 6 条不一致，导致 Zn 的 ECP 摘要对不上。
+   这条是**清单错误**，不是上游变了——也说明"摘要不符"的报错方向是对的：
+   它逼人去解释差异，而不是静默接受。
+
+**D-15 也跟着稳定了**：`scripts/gen_data_licenses.py` 原来扫描磁盘上的数据文件，
+数据不在仓库里就会让 `DATA_LICENSES.md` 随下载状态漂移。现在缺失的第三方文件从
+`sources.json` 合成同样的行（名字/版本/许可/引用/摘要钉全都来自清单），
+**"文件在本地"与"不在本地"渲染结果逐字节相同**（实测两次 diff 一致）。

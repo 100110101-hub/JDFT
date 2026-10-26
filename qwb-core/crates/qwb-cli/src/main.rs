@@ -5,10 +5,17 @@
 //! qwb batch  DIR/*.yaml [--parallel N]
 //! qwb inspect DIR
 //! qwb replay DIR [--dry-run]
-//! qwb data list|show|verify
+//! qwb data list|show|verify|sign|install
 //! ```
 //!
 //! 退出码（K5 冻结）：`0` 成功 / `1` 输入错误 / `2` 收敛失败 / `3` 数据校验失败 / `4` 内部错误。
+//!
+//! # 第三方数据按需取回
+//!
+//! `qwb-data/basis|ecp/` 里有一部分是从 BSE 导出的第三方数据，仓库**不提交**它们
+//! （再分发条款，见 `qwb-data/sources.json` 与 [`qwb_registry::thirdparty`]）。所以：
+//! `run` / `batch` 开始前会尽力取回缺失的文件（`QWB_AUTO_FETCH=0` 可关闭），
+//! 也可以手动跑 `qwb data install`。
 //!
 //! # C 轨的边界（诚实说明）
 //!
@@ -128,6 +135,31 @@ enum DataCommand {
         #[arg(long)]
         check: bool,
     },
+    /// 取回第三方数据（仓库不提交这些文件，见 `qwb-data/sources.json`）
+    ///
+    /// 下载与转录由 `python -m qwb_studio.datafetch` 完成（唯一实现），Rust 侧只负责
+    /// 发现缺什么并调度它。`run` / `batch` 会先自动试一次（`QWB_AUTO_FETCH=0` 关闭）。
+    Install(InstallArgs),
+}
+
+/// `qwb data install` 的参数。
+#[derive(Debug, Args)]
+struct InstallArgs {
+    /// 取回清单里的全部条目
+    #[arg(long)]
+    all: bool,
+    /// 只取这些相对路径（如 `basis/lanl2dz.yaml`）
+    #[arg(long, value_name = "PATH", num_args = 1..)]
+    need: Vec<String>,
+    /// 只取这份 input.yaml 需要的条目
+    #[arg(long, value_name = "INPUT_YAML")]
+    for_input: Option<PathBuf>,
+    /// 即使摘要已正确也重新取回
+    #[arg(long)]
+    force: bool,
+    /// 只检查（缺/坏即退出码 1），不下载
+    #[arg(long)]
+    check: bool,
 }
 
 /// CLI 层错误：带 K5 退出码。
@@ -188,6 +220,7 @@ fn dispatch(cli: &Cli) -> CliResult<()> {
             DataCommand::Show { name } => cmd_data_show(name),
             DataCommand::Verify { paths } => cmd_data_verify(paths),
             DataCommand::Sign { paths, check } => cmd_data_sign(paths, *check),
+            DataCommand::Install(args) => cmd_data_install(args),
         },
     }
 }
@@ -234,6 +267,8 @@ impl CliReporter {
 
 fn cmd_run(args: &RunArgs) -> CliResult<()> {
     let input = load_input(&args.input_yaml)?;
+    // 计算前先把这份输入要用的第三方数据取回来（尽力而为，见 `ensure_third_party`）。
+    ensure_third_party(Some(&args.input_yaml));
     if let Some(threads) = args.threads {
         eprintln!(
             "qwb: note: --threads {threads} is recorded but this build is single-threaded (I-04)"
@@ -608,6 +643,8 @@ fn cmd_batch(args: &BatchArgs) -> CliResult<()> {
         )));
     }
     let out_root = args.out.clone().unwrap_or_else(|| PathBuf::from("results"));
+    // 批量作业的输入各用各的基组，逐个按需取数会反复下载同一批文件：一次性补齐。
+    ensure_third_party(None);
     std::fs::create_dir_all(&out_root)
         .map_err(|e| CliError::internal(format!("cannot create {}: {e}", out_root.display())))?;
     let path = queue_path(&out_root);
@@ -1082,6 +1119,200 @@ fn print_report(report: &Report) {
     );
     for issue in &report.issues {
         println!("       [{}] {}", issue.code, issue.message);
+    }
+}
+
+// ------------------------------------------------------- 第三方数据（按需取回）
+
+/// `qwb data install`：把清单里缺的第三方数据取回本地。
+///
+/// 下载与转录不在这里实现 —— 那是 `qwb_studio.bse_data` / `qwb_studio.datafetch`
+/// （Python，`urllib`）唯一的实现，Rust 侧只负责**发现缺什么**并调度它。
+/// 转录规则有两份实现就一定会漂移，而漂移的后果是静默错数。
+fn cmd_data_install(args: &InstallArgs) -> CliResult<()> {
+    let root = find_data_root()?;
+    let mut extra: Vec<String> = Vec::new();
+    if args.all {
+        extra.push("--all".to_string());
+    }
+    if args.check {
+        extra.push("--check".to_string());
+    }
+    if args.force {
+        extra.push("--force".to_string());
+    }
+    if !args.need.is_empty() {
+        extra.push("--need".to_string());
+        extra.extend(args.need.iter().cloned());
+    }
+    if let Some(input) = &args.for_input {
+        extra.push("--for-input".to_string());
+        extra.push(input.display().to_string());
+    }
+    if extra.is_empty() {
+        // 没给具体范围就当成"补齐全部"：这是 `install` 的默认意图。
+        extra.push("--all".to_string());
+    }
+    run_fetcher(&root, &extra).map_err(CliError::data)
+}
+
+/// 一次 `qwb_studio.datafetch` 调用所需的解释器与 `PYTHONPATH` 根。
+struct Fetcher {
+    program: PathBuf,
+    repo: Option<PathBuf>,
+}
+
+/// 候选解释器：`QWB_PYTHON` > 仓库 `.venv` > PATH 上的 `python3` / `python`。
+///
+/// 不检查存在性，只在真正 spawn 时按 `NotFound` 跳过 —— 判断"哪个 python 能用"
+/// 最可靠的办法就是试一下（venv 里可能根本没有 `Scripts/` 或 `bin/`）。
+fn fetcher_candidates(data_root: &Path) -> Vec<Fetcher> {
+    let repo = data_root.parent().map(Path::to_path_buf);
+    let mut out = Vec::new();
+    if let Ok(explicit) = std::env::var("QWB_PYTHON") {
+        out.push(Fetcher {
+            program: PathBuf::from(explicit),
+            repo: repo.clone(),
+        });
+    }
+    if let Some(repo) = &repo {
+        for relative in [
+            ".venv/Scripts/python.exe",
+            ".venv/bin/python",
+            ".venv/bin/python3",
+        ] {
+            let candidate = repo.join(relative);
+            if candidate.is_file() {
+                out.push(Fetcher {
+                    program: candidate,
+                    repo: Some(repo.clone()),
+                });
+            }
+        }
+    }
+    for name in ["python3", "python"] {
+        out.push(Fetcher {
+            program: PathBuf::from(name),
+            repo: repo.clone(),
+        });
+    }
+    out
+}
+
+/// 调 `python -m qwb_studio.datafetch`；失败时返回可直接抄的命令行。
+fn run_fetcher(root: &Path, extra: &[String]) -> Result<(), String> {
+    let mut failure = String::new();
+    for fetcher in fetcher_candidates(root) {
+        let mut command = std::process::Command::new(&fetcher.program);
+        command
+            .arg("-X")
+            .arg("utf8")
+            .arg("-m")
+            .arg("qwb_studio.datafetch")
+            .arg("--data-root")
+            .arg(root)
+            .args(extra);
+        if let Some(repo) = &fetcher.repo {
+            // `qwb_studio` 是仓库里的源码包，没有装进 site-packages 时靠 PYTHONPATH。
+            let studio = repo.join("qwb-studio");
+            if studio.is_dir() {
+                let existing = std::env::var("PYTHONPATH").unwrap_or_default();
+                let joined = if existing.is_empty() {
+                    studio
+                } else {
+                    match std::env::join_paths([studio.clone(), PathBuf::from(existing)]) {
+                        Ok(joined) => PathBuf::from(joined),
+                        Err(_) => studio,
+                    }
+                };
+                command.env("PYTHONPATH", joined);
+            }
+        }
+        // 打 sha256 用的是**当前这个**二进制，避免 `cargo run` 选到的旧构建。
+        if let Ok(exe) = std::env::current_exe() {
+            command.env("QWB_ENGINE_BIN", exe);
+        }
+        match command.status() {
+            Ok(status) if status.success() => return Ok(()),
+            Ok(status) => {
+                failure = format!(
+                    "`{} -m qwb_studio.datafetch` 以退出码 {} 结束",
+                    fetcher.program.display(),
+                    status.code().unwrap_or(-1)
+                );
+            }
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => continue,
+            Err(err) => {
+                failure = format!("`{}`: {err}", fetcher.program.display());
+            }
+        }
+    }
+    if failure.is_empty() {
+        failure = "找不到 Python 解释器（可用 QWB_PYTHON 指定）".to_string();
+    }
+    Err(format!(
+        "{failure}\n  手动取回：python -m qwb_studio.datafetch --data-root {} --all",
+        root.display()
+    ))
+}
+
+/// 计算前的**尽力而为**取数。
+///
+/// 三条边界：
+/// 1. 本地不缺第三方数据 → 什么都不做（也不打印）；
+/// 2. `QWB_AUTO_FETCH=0` → 不联网，只在缺失时提示命令；
+/// 3. 取数失败 → 只警告，不阻断。缺 LANL2DZ 不该挡住一个 STO-3G 的作业；真正需要它的
+///    作业会在 `get_basis` 那里拿到带取数提示的错误（退出码 3）。
+fn ensure_third_party(for_input: Option<&Path>) {
+    let Ok(root) = find_data_root() else {
+        return; // 数据根的问题留给 `Registry::open` 报
+    };
+    let Ok(missing) = qwb_registry::thirdparty::missing_data(&root) else {
+        return;
+    };
+    if missing.is_empty() {
+        return;
+    }
+    let list = missing
+        .iter()
+        .map(|entry| entry.path.as_str())
+        .collect::<Vec<_>>()
+        .join(", ");
+    if std::env::var("QWB_AUTO_FETCH").is_ok_and(|value| value == "0") {
+        eprintln!(
+            "qwb: note: {list} 未安装（QWB_AUTO_FETCH=0，不自动取回）；\
+             需要时跑 `qwb data install`"
+        );
+        return;
+    }
+    eprintln!(
+        "qwb: note: 本地缺 {} 个第三方数据文件（{list}），正在按需取回…",
+        missing.len()
+    );
+    let before = missing.len();
+    let extra: Vec<String> = match for_input {
+        Some(input) => vec!["--for-input".to_string(), input.display().to_string()],
+        None => vec!["--all".to_string()],
+    };
+    if let Err(message) = run_fetcher(&root, &extra) {
+        eprintln!("qwb: warning: 自动取数失败，继续用本地已有数据：{message}");
+        return;
+    }
+    if let Ok(remaining) = qwb_registry::thirdparty::missing_data(&root) {
+        let fetched = before.saturating_sub(remaining.len());
+        if fetched > 0 {
+            eprintln!("qwb: note: 已取回 {fetched} 个第三方数据文件");
+        } else if !remaining.is_empty() {
+            eprintln!(
+                "qwb: note: 取回后仍缺 {} 个（{}）",
+                remaining.len(),
+                remaining
+                    .iter()
+                    .map(|entry| entry.path.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            );
+        }
     }
 }
 

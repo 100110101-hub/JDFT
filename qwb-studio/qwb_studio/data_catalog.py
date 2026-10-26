@@ -124,7 +124,7 @@ class Catalog:
 
 
 def _top_level_element_list(text: str, source: Path) -> tuple[str, ...]:
-    """抽出顶层 `elements:` 之后的 `- X` 项（indentless 或缩进两格都支持）。"""
+    """抽出顶层 `elements:` 的项（块列表两种缩进都支持，也接受 `[H, C, N]` flow 写法）。"""
     out: list[str] = []
     in_block = False
     for line in text.splitlines():
@@ -132,6 +132,14 @@ def _top_level_element_list(text: str, source: Path) -> tuple[str, ...]:
         if not in_block:
             if line.rstrip() == "elements:":
                 in_block = True
+                continue
+            # 容错：`elements: [H, C, N, O, F]`（flow 列表）。数据文件的约定是块列表
+            # （见 qwb_studio.bse_data 的注释），但少一行解析就少一个"明明有却读不到"。
+            if stripped.startswith("elements:") and "[" in stripped:
+                inner = stripped.split("[", 1)[1].rsplit("]", 1)[0]
+                values = [item.strip().strip("\"'") for item in inner.split(",")]
+                out = [value for value in values if value]
+                break
             continue
         if not stripped or stripped.startswith("#"):
             continue

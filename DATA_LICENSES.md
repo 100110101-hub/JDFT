@@ -6,6 +6,12 @@
 共 16 个生产数据文件。`qwb-data/examples/` 下的 SPECIMEN 不计入
 （它们是形状示例，不在 manifest 里）。
 
+其中 `qwb-data/basis/` 与 `qwb-data/ecp/` 的部分文件是从 Basis Set Exchange 导出的
+第三方数据：仓库**不提交**这些文件（再分发条款，见 `qwb-data/sources.json` 的
+`redistribute_ok`），按需用 `qwb data install`（或 `python -m qwb_studio.datafetch --all`）
+取回并核对摘要钉。下表因此不区分「已取回」与「未取回」——许可、引用与摘要都由清单
+钉住，与本机是否下载过无关。
+
 | 数据 | 版本 | 许可 | 商用 | 可再分发 | sha256（前 16 位） |
 | --- | --- | --- | --- | --- | --- |
 | `qwb-data/basis/6-311g-dp.yaml` | 1.0.0 | Apache-2.0 | true | true | `cfda92e209fe8705` |

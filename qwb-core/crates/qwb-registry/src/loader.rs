@@ -18,8 +18,18 @@
 //!
 //! 加载阶段额外做的**索引完整性**检查（属于结构，不是 G2）：
 //! 文件内的 `name` 必须与 `registry.yaml` 索引它的名字一致；重名条目被拒。
+//!
+//! # 本地缺失的第三方数据（`qwb-data/sources.json`）
+//!
+//! 仓库不提交从 BSE 导出的基组/ECP（再分发条款，见 [`crate::thirdparty`]），所以"文件不在
+//! 本地"是**正常状态**，不是注册表损坏：`Registry::open` 会跳过这些条目并记进
+//! [`Registry::missing_data`]，其余数据照常可用 —— 缺 LANL2DZ 不该挡住一个 STO-3G 的作业。
+//! 只有**按名字取到缺失条目**时才是错误，而且错误里直接给出取数命令。
+//!
+//! 非第三方文件（自研的泛函/网格/溶剂，以及任何不在 `sources.json` 里的基组）缺失仍然
+//! 是硬错误：那说明数据根被裁剪过，静默跳过会让"少了一个泛函"变成运行时的怪错误。
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
 use qwb_engine_api::{DataSnapshot, EngineError};
@@ -32,6 +42,7 @@ use crate::functional::Functional;
 use crate::grid::{GridLevelDef, GridLevelName};
 use crate::registry::{RegistryEntry, RegistryManifest};
 use crate::solvent::Solvent;
+use crate::thirdparty::MissingData;
 
 /// 清单文件名（§12.1）。
 pub const MANIFEST_FILE: &str = "registry.yaml";
@@ -49,6 +60,7 @@ pub struct Registry {
     functionals: BTreeMap<String, Functional>,
     grids: BTreeMap<String, GridLevelDef>,
     solvents: BTreeMap<String, Solvent>,
+    missing: Vec<MissingData>,
 }
 
 impl Registry {
@@ -59,6 +71,8 @@ impl Registry {
     /// - [`EngineError::Data`]：数据根不是目录；`registry.yaml` 缺失或解析失败；
     ///   任一条目文件读不出、语法/结构/语义不合法；索引与文件内的 `name` 不一致；
     ///   同名条目重复。
+    ///
+    /// 唯一被放过的读取失败：`sources.json` 列出的第三方数据文件**不存在**（见模块文档）。
     pub fn open(root: impl Into<PathBuf>) -> Result<Self, EngineError> {
         let root = root.into();
         if !root.is_dir() {
@@ -75,26 +89,47 @@ impl Registry {
         let manifest: RegistryManifest = serde_yaml::from_slice(&bytes)
             .map_err(|err| EngineError::Data(format!("{}: {err}", manifest_path.display())))?;
 
-        let bases =
-            load_all::<BasisSet>(&root, "basis", &manifest.bases, BasisSet::check_structure)?;
-        let ecps = load_all::<Ecp>(&root, "ecp", &manifest.ecps, Ecp::check_structure)?;
+        let third_party = crate::thirdparty::third_party_paths(&root)?;
+        let mut missing = Vec::new();
+        let bases = load_all::<BasisSet>(
+            &root,
+            "basis",
+            &manifest.bases,
+            BasisSet::check_structure,
+            Some(&third_party),
+            &mut missing,
+        )?;
+        let ecps = load_all::<Ecp>(
+            &root,
+            "ecp",
+            &manifest.ecps,
+            Ecp::check_structure,
+            Some(&third_party),
+            &mut missing,
+        )?;
         let functionals = load_all::<Functional>(
             &root,
             "functional",
             &manifest.functionals,
             Functional::check_structure,
+            None,
+            &mut missing,
         )?;
         let grids = load_all::<GridLevelDef>(
             &root,
             "grid",
             &manifest.grids,
             GridLevelDef::check_structure,
+            None,
+            &mut missing,
         )?;
         let solvents = load_all::<Solvent>(
             &root,
             "solvent",
             &manifest.solvents,
             Solvent::check_structure,
+            None,
+            &mut missing,
         )?;
 
         Ok(Self {
@@ -105,7 +140,16 @@ impl Registry {
             functionals,
             grids,
             solvents,
+            missing,
         })
+    }
+
+    /// 清单里声明、但本地没装（`sources.json` 列的第三方数据）的文件。
+    ///
+    /// 只用于提示与取数：引擎跑起来不需要它们中就位的那些。
+    #[must_use]
+    pub fn missing_data(&self) -> &[MissingData] {
+        &self.missing
     }
 
     /// 数据根。
@@ -154,9 +198,10 @@ impl Registry {
     ///
     /// # Errors
     ///
-    /// [`EngineError::Data`]：未索引该名字（消息里列出可用名字）。
+    /// [`EngineError::Data`]：未索引该名字（消息里列出可用名字）；或者该名字是清单里
+    /// 声明的第三方数据而本地没装（消息里给出取数命令）。
     pub fn get_basis(&self, name: &str) -> Result<&BasisSet, EngineError> {
-        lookup(&self.bases, "basis", name)
+        self.lookup_checked(&self.bases, "basis", name)
     }
 
     /// 取泛函。
@@ -165,7 +210,7 @@ impl Registry {
     ///
     /// 同 [`Registry::get_basis`]。
     pub fn get_functional(&self, name: &str) -> Result<&Functional, EngineError> {
-        lookup(&self.functionals, "functional", name)
+        self.lookup_checked(&self.functionals, "functional", name)
     }
 
     /// 取 ECP。
@@ -174,7 +219,7 @@ impl Registry {
     ///
     /// 同 [`Registry::get_basis`]。
     pub fn get_ecp(&self, name: &str) -> Result<&Ecp, EngineError> {
-        lookup(&self.ecps, "ecp", name)
+        self.lookup_checked(&self.ecps, "ecp", name)
     }
 
     /// 取网格定义（按名字）。
@@ -183,7 +228,7 @@ impl Registry {
     ///
     /// 同 [`Registry::get_basis`]。
     pub fn get_grid(&self, name: &str) -> Result<&GridLevelDef, EngineError> {
-        lookup(&self.grids, "grid", name)
+        self.lookup_checked(&self.grids, "grid", name)
     }
 
     /// 取溶剂。
@@ -192,7 +237,31 @@ impl Registry {
     ///
     /// 同 [`Registry::get_basis`]。
     pub fn get_solvent(&self, name: &str) -> Result<&Solvent, EngineError> {
-        lookup(&self.solvents, "solvent", name)
+        self.lookup_checked(&self.solvents, "solvent", name)
+    }
+
+    /// 按名字取数据；名字属于"本地缺失的第三方数据"时，错误里补一句怎么装。
+    fn lookup_checked<'a, T>(
+        &'a self,
+        map: &'a BTreeMap<String, T>,
+        domain: &str,
+        name: &str,
+    ) -> Result<&'a T, EngineError> {
+        match lookup(map, domain, name) {
+            Ok(value) => Ok(value),
+            Err(err) => match self
+                .missing
+                .iter()
+                .find(|entry| entry.domain == domain && entry.name == name)
+            {
+                Some(entry) => Err(EngineError::Data(format!(
+                    "{err}\n  hint: `{}` 是第三方数据（{}），仓库不提交它；先取回再跑：\n  \
+                     qwb data install            （或 python -m qwb_studio.datafetch --all）",
+                    name, entry.path
+                ))),
+                None => Err(err),
+            },
+        }
     }
 
     /// 按等级取网格定义（引擎入口：`JobInput.grid_level` → 参数）。
@@ -324,11 +393,16 @@ impl Registry {
 }
 
 /// 加载一个域的全部条目。
+///
+/// `skip_missing`：`Some(清单)` 时，`清单`里的路径**不存在**就跳过并记进 `missing`
+/// （第三方数据按需取回）；`None` 时缺失即错误（自研数据不许悄悄少一个）。
 fn load_all<T>(
     root: &Path,
     domain: &'static str,
     entries: &[RegistryEntry],
     check: fn(&T) -> Vec<String>,
+    skip_missing: Option<&BTreeSet<String>>,
+    missing: &mut Vec<MissingData>,
 ) -> Result<BTreeMap<String, T>, EngineError>
 where
     T: DeserializeOwned + DataCommon,
@@ -336,13 +410,32 @@ where
     let mut map = BTreeMap::new();
     for entry in entries {
         let path = root.join(&entry.path);
-        let bytes = std::fs::read(&path).map_err(|err| {
-            EngineError::Data(format!(
-                "{domain}/{}: cannot read {}: {err}",
-                entry.name,
-                path.display()
-            ))
-        })?;
+        let bytes = match std::fs::read(&path) {
+            Ok(bytes) => bytes,
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+                let relative = crate::thirdparty::normalize(&entry.path);
+                if skip_missing.is_some_and(|allowed| allowed.contains(&relative)) {
+                    missing.push(MissingData {
+                        domain: domain.to_string(),
+                        name: entry.name.clone(),
+                        path: relative,
+                    });
+                    continue;
+                }
+                return Err(EngineError::Data(format!(
+                    "{domain}/{}: cannot read {}: {err}",
+                    entry.name,
+                    path.display()
+                )));
+            }
+            Err(err) => {
+                return Err(EngineError::Data(format!(
+                    "{domain}/{}: cannot read {}: {err}",
+                    entry.name,
+                    path.display()
+                )));
+            }
+        };
         let value: T = serde_yaml::from_slice(&bytes).map_err(|err| {
             EngineError::Data(format!(
                 "{domain}/{} ({}): {err}",

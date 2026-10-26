@@ -40,12 +40,12 @@ C-06:
   artifact: qwb-core workspace + 根 rust-toolchain.toml（1.97.1）+ qwb-core/deny.toml
     + .github/workflows/ci.yml + 三个门禁脚本 + scripts/{verify.sh,verify.ps1}
   verification: |
-    scripts/verify.ps1 与 scripts/verify.sh 覆盖**同一清单**（3 个 bash 门禁 / K2
-    fmt-clippy-doc-test / core fmt-clippy-test + I-06 + I-00 + deny + K1 schema +
+    scripts/verify.ps1 与 scripts/verify.sh 覆盖**同一清单**（第三方数据取回 / 3 个 bash
+    门禁 / K2 fmt-clippy-doc-test / core fmt-clippy-test + I-06 + I-00 + deny + K1 schema +
     G2 data / D-15 / 10.6 账本 / K6 mypy ×2 / P-06 pyo3 fmt-clippy-构建安装 / Python 侧 pytest
-    / P-02 夹具新鲜度）；2026-10-26 第 56 轮实测 **24/24 全绿**（含 T8 的 opt 作业类型、
-    GUI 建分子页/启动恢复、XC 几何导数的修复、D-07/I-05 的 ECP 数据与矩阵元，以及
-    T5 的 CuH/ZnO 单点（ZnO 走 SCF 退火）；Python 侧 154 例）。
+    / P-02 夹具新鲜度）；2026-11-05 第 58 轮实测 **25/25 全绿**（在 T1–T8 之上加了
+    D-16 的第三方数据按需取回：`sources.json` 配方 + `qwb data install` + GUI 的 Data 页，
+    仓库不再提交 BSE 导出的 7 个文件；Python 侧 182 例）。
   note: |
     **两处门禁自身漏洞（都修在这里，免得"全绿"被误读）**：
 
@@ -252,6 +252,12 @@ D-15:
   artifact: "scripts/gen_data_licenses.py + DATA_LICENSES.md（自动生成）+ verify.ps1 / verify.sh 里的 `--check` 门禁"
   verification: "① `python scripts/gen_data_licenses.py` 生成 DATA_LICENSES.md，**重跑两次的 sha256 完全相同**（ADFF9063…：排序固定、无时间戳 ⇒ 幂等）。② `python scripts/gen_data_licenses.py --check` 与门禁实际比对：文档与当前数据一致；任一数据文件缺 license/citation/sha256 时脚本以非零退出。③ 摘要**不自己算**——规则是「YAML 去掉顶层 sha256 后规范化再 hash」（自引用），Python 复刻规范化不现实，所以脚本调用权威工具 `qwb-stamp-data --check` 校验，避免两份实现分叉。④ `scripts/verify.ps1` 与 `verify.sh` 都加了这条检查（项目规则：两边同步）。"
   note: "**过程中修掉两个自己的 bug**：① 最初想对原始文件字节取 hash——但 sha256 字段是自引用的，必然对不上，暴露后改为委托 Rust 工具；② `parse_scalar` 只按前缀匹配，把 manifest 里**嵌套**的 sha256（第一条数据的）当成了 manifest 自己的，于是文档里 registry.yaml 的摘要显示成 sto-3g 的值——已改为只认顶层（不缩进）键。scope 说明：`qwb-data/examples/` 的 SPECIMEN 不在 manifest，不计入；manifest 本身不承载 license/citation（许可在各数据文件里），这两项对它豁免。"
+D-16:
+  state: done
+  ts: "2026-11-05T12:00:00Z"
+  artifact: "qwb-data/sources.json（7 条第三方数据的取数配方 + sha256 钉）+ qwb-studio/qwb_studio/bse_data.py（唯一的转录实现）+ qwb-studio/qwb_studio/datafetch.py（下载/打戳/核对钉/原子替换）+ scripts/fetch_data.py + qwb-core/crates/qwb-registry/src/thirdparty.rs + `qwb data install` + 把 scripts/{bse_to_qwb_data,bse_ecp_to_qwb_data,gen_basis_from_bse}.py 降级成薄封装 + qwb-studio/tests/test_datafetch.py"
+  verification: "① **仓库不再含这 7 个第三方文件**（`git rm --cached` + .gitignore；`git ls-files qwb-data/basis qwb-data/ecp` 为空）。② **取回可复现**：把 7 个文件全部删掉后 `python scripts/fetch_data.py --all` 重新取回，7/7 摘要与 `sources.json` / `registry.yaml` 的钉**逐位相同**（fce3af14…/177675559…/263b684f…/cfda92e2…/bc14a7e1…/a44df71f…/55b33916…），随后 `qwb data verify` = 16/16 通过。③ **缺失是正常状态而不是损坏**：删掉数据后 `qwb data verify` 报 `16 file(s) checked, 9 passed, 7 failed`，每条缺文件的消息带 `（第三方数据，本地未取回：跑 qwb data install）`；自研数据缺失则报「数据根被裁剪过」，两种情形不混淆。④ **自动取回**：数据全删后直接 `qwb run examples/h2_sto3g_svwn5.yaml` 自动只取回 sto-3g（1 个文件）并算出 -1.1570005110 Ha（退出码 0）；`qwb data install --check` 7/7 就绪、退出码 0。⑤ **一份实现**：三个旧脚本不再自带转录逻辑，全部调 `qwb_studio.bse_data`（`scripts/gen_basis_from_bse.py` 实测 def2-TZVP/H,C → 37 个球谐函数自检通过）。⑥ **D-15 不再随下载状态漂移**：`gen_data_licenses.py` 对缺失文件从 `sources.json` 合成同样的行，「文件在本地」与「不在本地」渲染结果**逐字节相同**（实测 diff 一致），仍 16 个文件。⑦ 门禁加了取数步骤（`--check` 失败则 `--all`），`verify.ps1` / `verify.sh` 同步；Python 侧 182 例（新增 28 例：test_datafetch 23 + test_gui_data 5）。"
+  note: "**触发点**：仓库公开之后，`DATA_LICENSES.md` 自己标着 LANL2DZ ECP `redistribute_ok: false`，而这两个文件正躺在仓库里——自相矛盾。决定：只提交配方与摘要钉，文件由使用者从 BSE 取回（§14 #20）。**三个必须一起改的地方**：① `Registry::open` 原本「任一条目读不出即整体失败」，改成只放过 `sources.json` 列出的缺失文件（否则没下载数据的 clone 连 STO-3G 都跑不了），其它文件缺失仍是硬错误；② `data verify` 把缺失文件记成**该文件**的失败报告（计数与条目数一致），消息给出取数命令；③ `qwb_studio/__init__.py` 改成 PEP 562 惰性导出——`import qwb_studio.datafetch` 不能把 pydantic 拖进来（下载基组的用户可能只装了系统 Python），回归测试 `test_datafetch_import_is_stdlib_only` 钉住。**踩到的两个坑**：① BSE 把 Pople 系列的极化函数标成 `region: \"polarization\"`（不是 `valence`），转录器白名单漏了它 → 6-311G(d,p) 转录直接失败；`region` 只是标签，真正表示导出被裁剪的是 `core`/`semicore`（仍拒绝）。② 我第一版把 `elements:` 写成 flow 列表 `[H, C, N, O, F]`，摘要**照样对得上**（摘要算的是解析后的内容），但 GUI 的 `data_catalog` 是按行扫 `- X` 的，于是 `test_gui_build` 红——数据文件的**形态**也是契约的一部分，已改回块列表并在 `data_catalog` 里加了 flow 写法的容错。③ `sources.json` 里 Zn 的 citation URL 误写成 API 端点，导致摘要对不上；报错方向是对的（逼人解释差异），改清单即可。"
 
 # ─────────────────────────── I / X / S / G / F 轨 ───────────────────────────
 

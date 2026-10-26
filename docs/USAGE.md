@@ -41,6 +41,30 @@ cd qwb-core
 cargo run --release -q -p qwb-cli --bin qwb -- run examples/h2_sto3g_svwn5.yaml --out results
 ```
 
+第一次跑会先看到两行取数提示（实测）：
+
+```text
+qwb: note: 本地缺 7 个第三方数据文件（basis/sto-3g.yaml, …, ecp/lanl2dz-zn.yaml），正在按需取回…
+数据缺失/过期：basis/sto-3g.yaml，正在从 BSE 取回…
+fetch   basis/sto-3g.yaml（missing）
+saved   basis/sto-3g.yaml  sha256=fce3af14b8b3ea121844756117a2489b5f7859be452be02b54509dc20b8ff249
+已取回：basis/sto-3g.yaml
+qwb: note: 已取回 1 个第三方数据文件
+```
+
+**为什么不是开箱即算**：`qwb-data/basis/` 与 `qwb-data/ecp/` 里的基组/ECP 是从
+[Basis Set Exchange](https://www.basissetexchange.org/) 导出的第三方数据，仓库**不提交**
+它们（LANL2DZ 的 ECP 原始论文没有明确再分发条款），只提交配方与 sha256 钉。
+`run` / `batch` 会自动把**这份输入要用到的**文件取回来（只下缺的那几个），取回时会核对
+摘要钉，对不上就报错、不落盘。详见 §8.4。想提前一次备齐：
+
+```powershell
+qwb data install                                        # 全部 7 个文件
+python scripts\fetch_data.py --all                      # 等价（不需要 PYTHONPATH）
+```
+
+取回之后就是纯本地：同一台机器上再跑任何作业都不需要网络。
+
 真实输出（实测）：
 
 ```text
@@ -94,6 +118,7 @@ H      -0.000000000000     0.000000000000     0.367256321978
 |---|---|---|---|
 | Rust | **1.97.1**（仓库根 `rust-toolchain.toml` 固定） | 引擎与 CLI | 必需 |
 | C 工具链 | MSVC Build Tools（Windows）/ gcc（Linux） | 链接 | 必需 |
+| 网络 | 任意 | **首次**取回第三方基组/ECP（§8.4）；之后纯离线 | 首次必需 |
 | Python | 3.10–3.12 | Python API、GUI、门禁里的 Python 侧 | 用 Python 面才必需 |
 | WSL 的 `bash` | 任意 | 三个 bash 门禁脚本（`scripts/verify.ps1` 会调） | 跑门禁才必需 |
 | PySide6 / vtk | 见 §2.3 | GUI 与 3D | 用 GUI 才必需 |
@@ -112,6 +137,9 @@ cargo test --release -- --ignored # 可选：把慢档（频率/优化/Hessian�
 
 调试构建（`cargo build`）慢 10–50 倍，**算真实体系请一律 `--release`**。
 本手册里的耗时数字都是 release。
+
+数据不用手动准备：第一次 `run` 会把这份输入需要的第三方文件取回来（§8.4）。
+想一次备齐全部 7 个：`qwb data install`。
 
 ### 2.3 Python 侧怎么装
 
@@ -322,6 +350,11 @@ qwb data show pbe                 # 打印一个条目的完整 YAML
 qwb data verify                   # 校验整个注册表（G2：sha256 + schema + 语义）
 qwb data verify path\file.yaml    # 校验单个文件
 qwb data sign path\file.yaml      # 按规范化摘要重新签名（改了数据之后）
+qwb data install                  # 取回缺的第三方数据（见 §8.4）
+qwb data install --check          # 只检查：缺/坏 → 退出码 1
+qwb data install --need basis\lanl2dz.yaml ecp\lanl2dz-cu.yaml
+qwb data install --for-input qwb-core\examples\cuh_lanl2dz_pbe.yaml
+qwb data install --all --force    # 全部重下（摘要已正确也重下）
 ```
 
 `qwb data verify` 真实输出（实测）：
@@ -332,8 +365,17 @@ ok   basis       ../qwb-data/basis/sto-3g.yaml (0 error(s), 0 warning(s))
 16 file(s) checked, 16 passed, 0 failed
 ```
 
+没取回第三方数据时，那 7 个条目会被**单独**记为失败（不是"整个注册表坏了"），
+消息里直接给取数命令：
+
+```text
+FAIL basis       qwb-data\basis/sto-3g.yaml (1 error(s), 0 warning(s))
+       [registry.path] cannot read qwb-data\basis/sto-3g.yaml: ...（第三方数据，本地未取回：跑 `qwb data install`）
+16 file(s) checked, 9 passed, 7 failed
+```
+
 **数据根**怎么找：`QWB_DATA_ROOT` 环境变量 > 从当前目录逐级向上找 `qwb-data/`。
-CLI 没有 `--data-root` 参数（§14 #17 的决定）。
+CLI 没有 `--data-root` 参数（§14 #17 的决定）；Python 侧的数据入口有 `--data-root`。
 
 ---
 
@@ -381,7 +423,7 @@ $env:QWB_ENGINE_BIN = '<仓库根>\qwb-core\target\release\qwb.exe'   # 可选�
 .venv\Scripts\python.exe -m qwb_studio.gui --out studio-out --workers 2
 ```
 
-窗口结构（图标栏 + 左侧项目树 + 右侧六个标签页）：
+窗口结构（图标栏 + 左侧项目树 + 右侧七个标签页）：
 
 | 标签 | 用途 |
 |---|---|
@@ -391,11 +433,16 @@ $env:QWB_ENGINE_BIN = '<仓库根>\qwb-core\target\release\qwb.exe'   # 可选�
 | **Result** | 能量、偶极、SCF 状态、`env.json` 摘要 |
 | **Log** | 流式日志（块数上限 5000，100 MB 日志也不会把内存吃满） |
 | **3D** | VTK 离屏渲染：球棍分子、轨道等值面、ESP 电荷着色、振动帧 ± |
+| **Data** | 第三方基组/ECP 的状态表 + 「刷新状态 / 下载缺失 / 全部重下」（菜单「数据」同款） |
 
 要点：
 
 * **Build 页的下拉框来自 `qwb-data/registry.yaml`**：界面里能选的就是数据里有的
   （元素按所选基组过滤）。`b3lyp` 不在注册表里（K1 拒绝 `requires.laplacian`），所以不出现。
+* **Data 页**是手动入口（下载在工作线程里跑，界面不卡）：表格每行是 `sources.json` 的
+  一条清单，「缺失 / 摘要不符」会标黄，下载日志显示在下方文本框。
+  提交作业时不用先来这里 —— worker 是 `qwb run`，它会自动取回缺的文件。
+  离线机器可以在这里一次备齐，或直接拷整个 `qwb-data/`。
 * 作业类型只给 `sp` / `opt`：`freq` 还没接到引擎上，给一个必然失败的选项是坑用户。
 * **取消**：`queued` 立即落 `cancelled`；`running` 先写协作取消标志，超过宽限期再 kill。
 * **崩溃恢复**：重启后从 `<out>/queue.json` 重建 Task Panel；停在 `running` 的任务落
@@ -498,6 +545,67 @@ sha256: <64 位小写十六进制，由工具戳>
 **外部数据**（BSE 导出、Stuttgart/def2-ECP）的许可逐条确认后才允许写 `redistribute_ok: true`；
 `lanl2dz` 的两个 ECP 文件目前是 `noassertion` + 两个 `false`（原始论文没写明确的再分发条款）。
 
+### 8.4 第三方数据不在仓库里（按需取回）
+
+`qwb-data/` 下有 7 个文件**不进仓库**：
+
+| 文件 | 来源 |
+|---|---|
+| `basis/sto-3g.yaml`、`basis/def2-svp.yaml`、`basis/def2-tzvp.yaml`、`basis/6-311g-dp.yaml`、`basis/lanl2dz.yaml` | Basis Set Exchange 导出 |
+| `ecp/lanl2dz-cu.yaml`、`ecp/lanl2dz-zn.yaml` | Basis Set Exchange 导出的 LANL2DZ ECP |
+
+原因是**再分发**：LANL2DZ 的 ECP 原始论文（Hay–Wadt）没有给出明确的再分发条款，
+把文件放进公开仓库就等于再分发（project.md §14 #20）。所以仓库提交的是**配方**
+`qwb-data/sources.json`：
+
+| 字段 | 含义 |
+|---|---|
+| `path` | 相对 `qwb-data/` 的路径（与 `registry.yaml` 条目一致） |
+| `kind` | `basis` / `ecp` |
+| `fetch` | BSE 的 `basis` 名 + 元素（原子序数）；下载走 `api/basis/<basis>/format/json/` |
+| `transcribe` | 转录元数据：`name`/`version`/`notes`/`citations`/`license`/`created`/`angular`/`normalization`/`role`（ECP 用 `element`） |
+| `sha256` | 内容摘要钉 —— 与 `registry.yaml` 里同一条**必须相等** |
+
+三条取回入口（**同一个实现** `qwb-studio/qwb_studio/datafetch.py`）：
+
+```powershell
+qwb data install                                     # Rust CLI（推荐）
+python scripts\fetch_data.py --all                   # 脚本（不需要 PYTHONPATH）
+python -m qwb_studio.datafetch --all                 # 模块入口（需要 PYTHONPATH）
+```
+
+GUI：**Data 页 → 「下载缺失」**（或菜单「数据 → 下载缺失」）。
+
+常用开关：
+
+```powershell
+qwb data install --check                               # 只体检：7/7 就绪 / 缺哪个
+python scripts\fetch_data.py --list                     # 表格：ok / MISSING / STALE
+python scripts\fetch_data.py --for-input <INPUT_YAML>   # 只取这份输入要用的
+python scripts\fetch_data.py --need basis\lanl2dz.yaml  # 只取一条
+python scripts\fetch_data.py --all --force              # 全部重下
+```
+
+**流程与保证**：下载 → 转录 → 用 `qwb data sign` 打 K1 摘要 → 核对清单里的钉 →
+（一致才）原子替换目标文件。所以：
+
+* 摘要对不上就**报错且不落盘**（上游修订号变了、或转录规则漂移了，都得人看一眼）；
+* 取回的文件与"当初提交的文件"内容等价，`registry.yaml` 的钉、结果目录的
+  `data_snapshot.json`、历史验收数字全都仍然有效；
+* 中断不会留下半个文件（先写临时文件，最后一步才是 `move`）。
+
+**自动取回**：`qwb run` / `qwb batch` 开始前会检查一遍，缺就按这份输入需要的取回
+（`--for-input` 的语义），只下缺的那几个；取数失败只 warning，不阻断不需要那份数据的作业。
+关闭自动取回：`$env:QWB_AUTO_FETCH = '0'`（此时缺数据的作业以退出码 3 报错，
+消息里给出取数命令）。
+
+**完全离线**：在有网机器上跑一次 `qwb data install`，把整个 `qwb-data/` 目录拷过去即可
+（`sources.json` 的摘要钉保证两边一致）。
+
+**自研数据不吃这一套**：`functional/`、`grid/`、`solvent/` 是随仓库提交的。它们缺失是
+**硬错误**（数据根被裁剪过），`Registry::open` 不会把它当成"还没下载"而静默跳过 ——
+错误消息也不一样（`（该文件不是第三方数据：数据根被裁剪过，请从仓库恢复）`）。
+
 ---
 
 ## 9. 能算什么、不能算什么（诚实清单）
@@ -559,12 +667,16 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\verify.ps1
 bash scripts/verify.sh
 ```
 
-24 个步骤：3 个 bash 门禁（依赖集中/unsafe 策略/rayon 确定性）+ K2 契约 crate 的
-fmt/clippy/doc/test + `qwb-core` 的 fmt/clippy/test + I-06/I-00/deny + K1 schema 不漂移 +
-G2 数据校验 + D-15 数据许可 + 10.6 账本合法性 + K6 mypy ×2 + pyo3 fmt/clippy/构建安装 +
-Python 侧 154 个测试 + `.qwb` 夹具新鲜度。
+25 个步骤：1 个数据取回步骤（第三方基组/ECP 缺则取回，§8.4）+ 3 个 bash 门禁
+（依赖集中/unsafe 策略/rayon 确定性）+ K2 契约 crate 的 fmt/clippy/doc/test +
+`qwb-core` 的 fmt/clippy/test + I-06/I-00/deny + K1 schema 不漂移 + G2 数据校验 +
+D-15 数据许可 + 10.6 账本合法性 + K6 mypy ×2 + pyo3 fmt/clippy/构建安装 +
+Python 侧 182 个测试 + `.qwb` 夹具新鲜度。
 
-最后一次实测：**24/24 全绿**（`verify-r56.log`，Python 侧 154 passed）。
+> 门禁第一步会 `python scripts/fetch_data.py --check`，缺就 `--all`。所以**新 clone 上的
+> 第一次 `verify` 需要网络**（7 个小文件）；取回之后就是纯本地的。
+
+最后一次实测：**25/25 全绿**（`verify-r58.log`，Python 侧 182 passed）。
 
 ### 10.2 单独跑某一类
 
@@ -575,6 +687,7 @@ Python 侧 154 个测试 + `.qwb` 夹具新鲜度。
 | 单个测试文件 | `cargo test -p qwb-engine --test t5_ecp` |
 | Python 侧 | `cd qwb-studio; ..\.venv\Scripts\python.exe -m pytest -q`（需 `PYTHONPATH`） |
 | 数据校验 | `cargo run -q -p qwb-cli --bin qwb -- data verify` |
+| 第三方数据体检 / 取回 | `python scripts\fetch_data.py --check`（缺则 `--all`） |
 | 账本合法性 | `python scripts\check_status.py` |
 | 数据许可一致性 | `python scripts\gen_data_licenses.py --check` |
 
@@ -606,6 +719,7 @@ qwb-contracts/          契约层（改这里要慎重：K1–K6 冻结）
   engine-api/           K2：JobInput/JobResult/EngineBackend/EngineError
   studio/               K3 task/result schema、K4 定义、K5 说明、K6 .pyi 桩
 qwb-data/               数据仓（K1）：registry.yaml + basis/ecp/functional/grid/solvent
+                        （basis/ecp 里的 7 个第三方文件不入库，配方在 sources.json，见 §8.4）
 qwb-core/               Rust workspace
   crates/qwb-registry   数据加载与校验（K1 的唯一实现）
   crates/qwb-basis      基组 → 内部表示（球谐/直角切换只在这里）
@@ -619,7 +733,8 @@ qwb-core/               Rust workspace
   crates/qwb-io         K3 状态机与布局、K4 `.qwb` 容器
   crates/qwb-cli        K5 命令行
 qwb-studio/             Python 产品层
-  qwb_studio/           pydantic 模型、容器、调度器、结果目录、CLI 薄壳、GUI
+  qwb_studio/           pydantic 模型、容器、调度器、结果目录、CLI 薄壳、GUI、
+                        数据取回（bse_data.py 转录 / datafetch.py 下载与校验）
   rust/qwb-py/          pyo3 扩展 qwb_engine（K6 的实现）
 scripts/                门禁、数据生成/抓取、账本校验
 docs/                   status.yaml（进度账本）、choices.md（决策日志）、
@@ -628,12 +743,27 @@ docs/                   status.yaml（进度账本）、choices.md（决策日�
 
 ### 11.2 加一项数据（以新基组为例）
 
-1. 从 BSE 导出 JSON 放到 `qwb-core/crates/qwb-registry/tests/fixtures/bse/`；
-2. `python scripts/bse_to_qwb_data.py --input <json> --output qwb-data/basis/<name>.yaml --name <name> ...`；
-3. `cargo run -q -p qwb-registry --bin qwb-stamp-data -- qwb-data/basis/<name>.yaml`（打 sha256）；
-4. 在 `qwb-data/registry.yaml` 的 `bases:` 里登记 `name/path/sha256`；
-5. `qwb data verify` + `python scripts/gen_data_licenses.py`；
+**第三方数据（BSE 导出）走 `sources.json` 配方**，文件本身不入库：
+
+1. 在 `qwb-data/sources.json` 的 `entries` 里加一条：`path` / `kind` / `fetch`
+   （BSE 的 basis 名 + 元素）/ `transcribe`（名字/版本/引用/许可…）/ `sha256` 先填 64 个 0；
+2. `python scripts\fetch_data.py --need basis\<name>.yaml` —— 它会下载、转录、打戳，
+   并因为摘要与钉不符而**拒绝落盘**，同时打印真实摘要；
+3. 把打印的摘要抄进 `sources.json` 那条，再 `python scripts\fetch_data.py --need basis\<name>.yaml`
+   （这次应当 `saved`）；
+4. 在 `qwb-data/registry.yaml` 的 `bases:` 里登记 `name/path/sha256`（两处钉必须相等）；
+5. `qwb data verify` + `python scripts\gen_data_licenses.py`；
 6. 加一个 `d0x_*.rs` 测试：与导出逐项 diff（相对差 < 1e-12）+ 基函数数从导出算出来。
+
+**离线手上有导出 JSON 时**（不经过网络）用薄封装脚本，两者共用同一份转录实现：
+
+```powershell
+python scripts\bse_to_qwb_data.py --input <json> --output qwb-data\basis\<name>.yaml --name <name> ...
+qwb data sign qwb-data\basis\<name>.yaml        # 打 sha256（K1 规则只有这一份实现）
+```
+
+**自研数据**（泛函/网格/溶剂）直接提交文件，并在 `registry.yaml` 登记 —— 它们不在
+`sources.json` 里，所以"缺失"就是硬错误，不会被当成还没下载。
 
 ### 11.3 加一个泛函
 
@@ -668,6 +798,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\verify.ps1
 | 现象 | 退出码 | 常见原因 | 处理 |
 |---|---|---|---|
 | `data load failed: unknown basis 'xxx'` | 3 | 基组名不在注册表（大小写/拼写） | `qwb data list` 看真名 |
+| 同上，但消息里有 `hint: 'xxx' 是第三方数据` | 3 | 文件还没取回（且自动取回被关掉/网络不通） | `qwb data install`（§8.4） |
 | `data load failed: basis ... covers [...]` | 3 | 分子里有基组不覆盖的元素 | 换基组（§3.1 的表） |
 | `invalid input: closed-shell RKS needs an even, positive electron count` | 1 | 开了壳层体系（如 O 原子、OH 自由基） | 本构建只有闭壳层；换体系 |
 | `scf not converged in N iterations` | 2 | 近简并/坏初猜 | 加大 `scf_max_iter`；引擎会自动试多初猜与退火，仍失败才报错 |
@@ -738,6 +869,21 @@ A：不能。总能量是模型化学的量，和实验没有可比性；能比�
 **Q：怎么把结果发给别人复现？**
 A：把整个结果目录（或 `.qwb` 容器）发过去。对方跑 `qwb replay <dir>` 即可；
 `env.json` 里记了 rustc 版本、`cargo.lock` 摘要与数据快照摘要，数据被动过会直接报错。
+
+**Q：clone 下来 `qwb-data/basis/` 是空的？**
+A：不是坏了，是**故意的**：那 7 个基组/ECP 文件是 BSE 导出的第三方数据，仓库只提交配方
+（`qwb-data/sources.json`）与 sha256 钉，避免再分发（§8.4）。跑第一个作业会自动取回，
+也可以 `qwb data install` 一次备齐。
+
+**Q：能完全离线用吗？**
+A：能。取回过一次之后所有计算都不需要网络；离线机器也可以在有网机器上跑一次
+`qwb data install`，把整个 `qwb-data/` 拷过去（摘要钉会校验两边一致）。
+`$env:QWB_AUTO_FETCH='0'` 关掉自动取回。
+
+**Q：数据取回失败/摘要不符怎么办？**
+A：摘要不符意味着"上游内容或转录规则变了"，脚本会拒绝落盘并打印两个摘要。
+先看 `qwb-data/CHANGELOG.md` 与 `qwb-data/sources.json` 的 `transcribe` 段是不是有意改过；
+确认要更新就改 `sources.json` 与 `registry.yaml` 两处钉（`qwb data install` 打印的就是新钉）。
 
 **Q：文档在哪？**
 A：[`../project.md`](../project.md)（规范与验收判据）、[`status.yaml`](./status.yaml)（进度账本，

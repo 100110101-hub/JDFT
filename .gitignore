@@ -26,3 +26,20 @@ cccbdb-raw.json
 
 # qwb-studio 的 pyo3 扩展：wheel 由 gate 现场用 maturin 构建，不入库
 /qwb-studio/rust/qwb-py/dist/
+
+# 第三方数据（BSE 导出的基组/ECP）：仓库只提交**配方**（qwb-data/sources.json）与摘要钉
+# （registry.yaml），文件由 `qwb data install` / `python scripts/fetch_data.py --all` 现场取回。
+# 理由：LANL2DZ 的 ECP 原始论文没有明确再分发条款（project.md §14 #20），提交文件=再分发。
+/qwb-data/basis/sto-3g.yaml
+/qwb-data/basis/def2-svp.yaml
+/qwb-data/basis/def2-tzvp.yaml
+/qwb-data/basis/6-311g-dp.yaml
+/qwb-data/basis/lanl2dz.yaml
+/qwb-data/ecp/lanl2dz-cu.yaml
+/qwb-data/ecp/lanl2dz-zn.yaml
+
+# 本机临时目录（取数试验、脚本草稿、备份）
+/.tmp-data-backup/
+/.tmp-data-backup2/
+/.tmp-*
+
