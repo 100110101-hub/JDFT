@@ -89,7 +89,7 @@ python -m venv .venv
 
 ## 许可
 
-代码 `Apache-2.0`。数据许可见 [`DATA_LICENSES.md`](./DATA_LICENSES.md)：
+代码 `Apache-2.0`（见 [`LICENSE`](./LICENSE)）。数据许可见 [`DATA_LICENSES.md`](./DATA_LICENSES.md)：
 自研/自转录数据为 `Apache-2.0`；**外部来源**（BSE 导出的 STO-3G/def2/6-311G/6-311G(d,p)、
 LANL2DZ 的基组与 ECP）逐条登记，其中 LANL2DZ 的 ECP 两项因为原始论文没有明确再分发条款，
 标成 `commercial_ok: false` / `redistribute_ok: false` —— 对外分发前请先确认。
