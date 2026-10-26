@@ -61,6 +61,8 @@ step "data: DATA_LICENSES.md 与数据一致（D-15）"
 python scripts/gen_data_licenses.py --check
 step "data: status.yaml 账本可解析（§10.6）"
 python scripts/check_status.py
+step "data: status-v2.yaml 账本可解析（阶段二 §10.6）"
+python scripts/check_status.py docs/status-v2.yaml
 step "gate: deps centralized" bash scripts/check_deps_centralized.sh
 step "gate: no unsafe outside allowlist" bash scripts/check_unsafe.sh
 step "gate: rayon determinism" bash scripts/check_rayon_determinism.sh

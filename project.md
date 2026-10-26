@@ -13,6 +13,10 @@
 目标：做一个**模仿 Jaguar 的分子 DFT 软件**——产品面（项目/任务/结果/调度/复现 +
 GUI/Python/CLI 同一 Task 模型）对齐 Jaguar，算法面**全部自研**。
 
+> **阶段二已开工**：本文件描述的第一阶段（T1–T8）已于 2026-11-05 收口；下一阶段的规范是
+> [`project-phase2.md`](./project-phase2.md)（v3.0，契约 K7–K10、里程碑 M1–M8、
+> 含 stretch 条款）。本文件的 K1–K6 语义、§14 决策与全部验收**继续有效**，阶段二不得放宽。
+
 ```powershell
 cd D:\python_II\Jaguar
 

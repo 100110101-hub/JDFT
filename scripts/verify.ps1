@@ -137,6 +137,13 @@ Step -Name '10.6: docs/status.yaml ledger validity' -Dir '.' -Body {
     & python scripts/check_status.py
 }
 
+# ---- phase 2 (project-phase2.md): the v2 ledger must stay machine-readable ----
+# Same checker, different file: the phase-2 ledger starts all-pending, so this step is
+# green from day one and catches corruption as WPs get marked done.
+Step -Name '10.6: docs/status-v2.yaml ledger validity' -Dir '.' -Body {
+    & python scripts/check_status.py docs/status-v2.yaml
+}
+
 # ---- Python gates (repo .venv): K6 stubs + P-01 model layer ----
 $py = Join-Path $root '.venv\Scripts\python.exe'
 if (-not (Test-Path $py)) {

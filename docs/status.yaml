@@ -42,10 +42,11 @@ C-06:
   verification: |
     scripts/verify.ps1 与 scripts/verify.sh 覆盖**同一清单**（第三方数据取回 / 3 个 bash
     门禁 / K2 fmt-clippy-doc-test / core fmt-clippy-test + I-06 + I-00 + deny + K1 schema +
-    G2 data / D-15 / 10.6 账本 / K6 mypy ×2 / P-06 pyo3 fmt-clippy-构建安装 / Python 侧 pytest
-    / P-02 夹具新鲜度）；2026-11-05 第 59 轮实测 **25/25 全绿**（在 T1–T8 之上加了
-    D-16 的第三方数据按需取回：`sources.json` 配方 + `qwb data install` + GUI 的 Data 页，
-    仓库不再提交 BSE 导出的 7 个文件；Python 侧 182 例）。
+    G2 data / D-15 / 10.6 账本（含阶段二的 `docs/status-v2.yaml`）/ K6 mypy ×2 /
+    P-06 pyo3 fmt-clippy-构建安装 / Python 侧 pytest / P-02 夹具新鲜度）；
+    2026-11-06 第 60 轮实测 **26/26 全绿**（T1–T8 之上：D-16 的第三方数据按需取回
+    —— `sources.json` 配方 + `qwb data install` + GUI 的 Data 页，仓库不再提交 BSE 导出的
+    7 个文件；第 60 轮新增"阶段二账本可解析"一步；Python 侧 182 例）。
   note: |
     **两处门禁自身漏洞（都修在这里，免得"全绿"被误读）**：
 

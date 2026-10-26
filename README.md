@@ -4,8 +4,12 @@
 
 - **用法请看 [`docs/USAGE.md`](./docs/USAGE.md)** —— 安装、`input.yaml` 逐字段说明、CLI、Python API、
   GUI、结果目录、数据仓、故障排查，都在那一份里。
-- **规范与验收判据看 [`project.md`](./project.md)** —— 契约 K1–K6、WBS、垂直切片 T1–T8、§7.0 参考值政策。
-- **进度与实测数字看 [`docs/status.yaml`](./docs/status.yaml)** —— 每个 WP 的 `state`、
+- **阶段一规范与验收判据看 [`project.md`](./project.md)** —— 契约 K1–K6、WBS、垂直切片 T1–T8、§7.0 参考值政策。
+- **阶段二规划看 [`project-phase2.md`](./project-phase2.md)** —— v3.0：开壳层、meta-GGA/RS 泛函、色散、
+  RI-MP2、TDDFT/CIS、COSMO/SMD（PBF 为 stretch）、TS/IRC/扫描、解析 Hessian、NMR/极化率/VCD、
+  pseudospectral（可选路径）。契约 K7–K10、里程碑 M1–M8、含"允许失败"的 stretch 条款。
+- **进度与实测数字看 [`docs/status.yaml`](./docs/status.yaml)**（阶段一）与
+  [`docs/status-v2.yaml`](./docs/status-v2.yaml)（阶段二）—— 每个 WP 的 `state`、
   artifact、verification（含实测值与来源）。
 - **为什么这么做看 [`docs/choices.md`](./docs/choices.md)** —— 按时间编号的决策与踩坑日志。
 
@@ -52,18 +56,18 @@ python -m venv .venv
 .venv\Scripts\python.exe -m pip install mypy numpy pydantic pytest maturin PySide6 vtk
 ```
 
-当前状态：**25/25 全绿**（第 59 轮，Python 侧 182 个测试）。逐项与最近轮次记在
-[`docs/status.yaml`](./docs/status.yaml) 的 C-06。
+当前状态：**26/26 全绿**（第 60 轮，Python 侧 182 个测试；第 60 轮新增"阶段二账本可解析"一步）。
+逐项与最近轮次记在 [`docs/status.yaml`](./docs/status.yaml) 的 C-06。
 
 ## 目录
 
 | 目录 | 内容 | 契约 |
 |---|---|---|
-| `qwb-contracts/` | K1 schema（`schemars` 从 Rust 类型生成，勿手改）、K2 `qwb-engine-api`、K3 task/result schema、K4 `.qwb` 定义、K5 CLI 约定、K6 Python 桩 | K1–K6 |
+| `qwb-contracts/` | K1 schema（`schemars` 从 Rust 类型生成，勿手改）、K2 `qwb-engine-api`、K3 task/result schema、K4 `.qwb` 定义、K5 CLI 约定、K6 Python 桩（阶段二增补 K7–K10） | K1–K10 |
 | `qwb-data/` | 数据仓：`registry.yaml`、`sources.json`（第三方数据配方）、`functional/ grid/ solvent/`、`examples/`（K1 样例，非交付物）；`basis/ ecp/` 里的第三方文件按需取回 | K1 |
 | `qwb-core/` | Cargo workspace：`qwb-registry` / `qwb-basis` / `qwb-integrals` / `qwb-xc` / `qwb-grid` / `qwb-linalg` / `qwb-scf` / `qwb-props` / `qwb-engine` / `qwb-io` / `qwb-cli` | K2/K4/K5 |
 | `qwb-studio/` | Python 产品层：`qwb_studio`（pydantic 模型 / `.qwb` / 调度器 / `env.json` / 结果目录 / CLI 薄壳 / GUI）+ `rust/qwb-py`（pyo3 `qwb_engine`） | K3/K4/K6 |
-| `docs/` | `USAGE.md`（使用手册）、`status.yaml`（进度账本）、`choices.md`（决策日志）、`HANDOVER.md`、`unblock.md`、`error-budget.md` | — |
+| `docs/` | `USAGE.md`（使用手册）、`status.yaml`（阶段一账本）、`status-v2.yaml`（阶段二账本）、`choices.md`（决策日志）、`HANDOVER.md`、`unblock.md`、`error-budget.md` | — |
 | `scripts/` | `verify.ps1` / `verify.sh`（全部门禁一条命令）+ 三个 G 门禁脚本 + 数据/夹具/外部基准生成脚本 | G6/G7 |
 
 三个"仓"（contracts / data / core）在**同一个 git 工作树**里，靠目录隔离；

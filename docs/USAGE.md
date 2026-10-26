@@ -667,16 +667,17 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\verify.ps1
 bash scripts/verify.sh
 ```
 
-25 个步骤：1 个数据取回步骤（第三方基组/ECP 缺则取回，§8.4）+ 3 个 bash 门禁
+26 个步骤：1 个数据取回步骤（第三方基组/ECP 缺则取回，§8.4）+ 3 个 bash 门禁
 （依赖集中/unsafe 策略/rayon 确定性）+ K2 契约 crate 的 fmt/clippy/doc/test +
 `qwb-core` 的 fmt/clippy/test + I-06/I-00/deny + K1 schema 不漂移 + G2 数据校验 +
-D-15 数据许可 + 10.6 账本合法性 + K6 mypy ×2 + pyo3 fmt/clippy/构建安装 +
+D-15 数据许可 + 10.6 账本合法性（**两份账本**：`docs/status.yaml` 与阶段二的
+`docs/status-v2.yaml`）+ K6 mypy ×2 + pyo3 fmt/clippy/构建安装 +
 Python 侧 182 个测试 + `.qwb` 夹具新鲜度。
 
 > 门禁第一步会 `python scripts/fetch_data.py --check`，缺就 `--all`。所以**新 clone 上的
 > 第一次 `verify` 需要网络**（7 个小文件）；取回之后就是纯本地的。
 
-最后一次实测：**25/25 全绿**（`verify-r59.log`，Python 侧 182 passed）。
+最后一次实测：**26/26 全绿**（`verify-r60.log`，Python 侧 182 passed）。
 
 ### 10.2 单独跑某一类
 

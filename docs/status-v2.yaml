@@ -1,0 +1,281 @@
+# docs/status-v2.yaml —— 阶段二（QuantumWorkbench v3.0）进度账本
+#
+# 规范：[`../project-phase2.md`](../project-phase2.md)（§6 WBS、§7 里程碑、§10.6 记账）。
+# 阶段一的账本 `status.yaml` 只读作基线，**不再追加**（project-phase2.md §13 #35）。
+#
+# 状态取值：done / in_progress / blocked / pending（`scripts/check_status.py` 强制）
+# 记账格式：
+#   KP-01:
+#     state: done
+#     ts: "2026-11-06T12:00:00Z"
+#     artifact: "..."
+#     verification: "命令 + 实测数字"
+#
+# 校验：python scripts/check_status.py docs/status-v2.yaml
+#
+# 约定：`stretch` 项允许以 blocked 收口，但 reason 里必须有实测数字与 gap（§2.5）。
+
+# ───────────────────────── 契约轨（KV，5）─────────────────────────
+
+KV-01:
+  state: pending
+  note: "K7 类型与 schema：ExcitedStates / NmRShieldings / Polarizability / Multipoles"
+KV-02:
+  state: pending
+  note: "K8 溶剂化类型 + Solvent 加性字段 + options.solvent_model"
+KV-03:
+  state: pending
+  note: "K9 开壳层/相关方法类型 + TaskOptions.scf_type/mp2 + JobResult.spin/correlation"
+KV-04:
+  state: pending
+  note: "K10 NumericsReport + numerics.yaml + data verify 支持新类型"
+KV-05:
+  state: pending
+  note: "K5 加性子命令（props/scan/ts/irc）+ K6 .pyi + cli.md/qwb-format.md"
+
+# ───────────────────────── 数据轨（DA，8）─────────────────────────
+
+DA-01:
+  state: pending
+  note: "M06-2X 泛函数据（requires.kinetic_density）"
+DA-02:
+  state: pending
+  note: "补充 meta-GGA（M06-L 或 M11），与 DA-01 共用组件"
+DA-03:
+  state: pending
+  note: "RS-hybrid 数据：ωB97X-D / CAM-B3LYP（omega_bohr_inv + 混合系数）"
+DA-04:
+  state: pending
+  note: "溶剂数据 v2（ε/n²/半径集/SASA 参数，8 溶剂）"
+DA-05:
+  state: pending
+  note: "SMD 的 4 项非极性参数表"
+DA-06:
+  state: pending
+  note: "色散参数：D3(BJ) 元素对 + D4（H–Kr）"
+DA-07:
+  state: pending
+  note: "RI 辅助基（def2-*-RI / JKFIT），经 sources.json 按需取回"
+DA-08:
+  state: pending
+  note: "参考集扩充：激发能 / NMR / ΔG_solv / 势垒 → tests/reference/*.csv"
+
+# ───────────────────── 积分与数值路径轨（IN，5）─────────────────────
+
+IN-01:
+  state: pending
+  note: "3/4 中心 RI 积分（Obara-Saika 密度拟合）"
+IN-02:
+  state: pending
+  note: "erfc 分域积分（短程/长程库仑），供 RS-hybrid"
+IN-03:
+  state: pending
+  stretch: true
+  note: "pseudospectral Coulomb/exchange（K10 门禁；失败不阻塞）"
+IN-04:
+  state: pending
+  note: "RI-J / RI-JK 的 Fock 构建路径（K10）"
+IN-05:
+  state: pending
+  note: "2e/Fock 构建的线程并行（确定性归约）"
+
+# ───────────────────────── 泛函轨（FX，4）─────────────────────────
+
+FX-01:
+  state: pending
+  note: "meta-GGA 基础设施（τ / ∇²ρ / Requires 门禁）"
+FX-02:
+  state: pending
+  note: "M06-2X 实现 + 参考集验收"
+FX-03:
+  state: pending
+  note: "ωB97X-D / CAM-B3LYP（短程交换 + ω 来自数据）"
+FX-04:
+  state: pending
+  note: "D3(BJ) 色散校正 + 解析梯度"
+
+# ───────────────────── SCF / 相关 / 开壳层轨（SC，6）─────────────────────
+
+SC-01:
+  state: pending
+  note: "UHF/ROHF/UKS + ⟨S²⟩ + 自旋污染报告"
+SC-02:
+  state: pending
+  note: "开壳层解析梯度 + opt 接线"
+SC-03:
+  state: pending
+  note: "开壳层 SCF 稳定性（level shift / 破对称初猜）"
+SC-04:
+  state: pending
+  note: "canoincal MP2（相关能）"
+SC-05:
+  state: pending
+  note: "RI-MP2（K10 报告）"
+SC-06:
+  state: pending
+  note: "开壳层 × meta-GGA/D3 的最小可用组合"
+
+# ───────────────────── 响应与性质轨（RS，8）─────────────────────
+
+RS-01:
+  state: pending
+  note: "qwb-response：CPHF/UCPHF 求解器 + 静态极化率"
+RS-02:
+  state: pending
+  note: "TDA/TDDFT 激发能 + 振子强度"
+RS-03:
+  state: pending
+  note: "CIS（HF 参考的 TDA）"
+RS-04:
+  state: pending
+  note: "NMR GIAO 屏蔽（+ length-gauge 一致性）"
+RS-05:
+  state: pending
+  note: "解析 Hessian（CPHF 二阶导数）"
+RS-06:
+  state: pending
+  stretch: true
+  note: "Raman 活性（极化率导数 → 强度）"
+RS-07:
+  state: pending
+  stretch: true
+  note: "VCD（磁偶极 + 极化率导数）"
+RS-08:
+  state: pending
+  note: "多极展开（traceless 四极 / 八极）"
+
+# ───────────────────────── 溶剂化轨（SV，5）─────────────────────────
+
+SV-01:
+  state: pending
+  note: "空腔（tesserae）+ COSMO 表面电荷迭代"
+SV-02:
+  state: pending
+  note: "COSMO 解析梯度 + opt 接线"
+SV-03:
+  state: pending
+  note: "SMD（COSMO + 4 项非极性 + 参数化半径）"
+SV-04:
+  state: pending
+  stretch: true
+  note: "PBF（Poisson–Boltzmann，边界元/有限元）"
+SV-05:
+  state: pending
+  note: "溶液相频率/热化学（气相 → 溶液相修正）"
+
+# ───────────────────────── 反应路径轨（RP，4）─────────────────────────
+
+RP-01:
+  state: pending
+  note: "过渡态搜索（Hessian 引导的局部搜索）"
+RP-02:
+  state: pending
+  note: "IRC（质量加权，双向）"
+RP-03:
+  state: pending
+  note: "扫描 / PES（刚性 + 弛豫）"
+RP-04:
+  state: pending
+  note: "反应路径的梯度正确性套件（TS/IRC/扫描全程）"
+
+# ───────────────────────── 产品面轨（PR，8）─────────────────────────
+
+PR-01:
+  state: pending
+  note: "CLI：props / ts / irc / scan"
+PR-02:
+  state: pending
+  note: "Python API 暴露新选项与新结果块"
+PR-03:
+  state: pending
+  note: ".qwb / K3 结果目录向后兼容新块"
+PR-04:
+  state: pending
+  note: "UV/Vis 谱（振子强度 + 展宽 + spectrum.csv）"
+PR-05:
+  state: pending
+  note: "GUI：ESP/溶剂化表面着色"
+PR-06:
+  state: pending
+  note: "GUI：PES 扫描可视化"
+PR-07:
+  state: pending
+  note: "结果对比表（多任务 + CSV 导出）"
+PR-08:
+  state: pending
+  note: "文档更新：USAGE 新章节 + 诚实清单与账本一致"
+
+# ───────────────────────── 验证轨（VF，6）─────────────────────────
+
+VF-01:
+  state: pending
+  note: "激发态基准集"
+VF-02:
+  state: pending
+  note: "溶剂化基准集（ΔG_solv）"
+VF-03:
+  state: pending
+  note: "势垒高度基准集"
+VF-04:
+  state: pending
+  note: "NMR 基准集"
+VF-05:
+  state: pending
+  note: "error-budget.md v2（每条近似的实测量级）"
+VF-06:
+  state: pending
+  note: "K10 等价性套件（scripts/check_numerics_equivalence.py）"
+
+# ───────────────────── stretch 备选池（ST，5）─────────────────────
+
+ST-01:
+  state: pending
+  stretch: true
+  note: "完整 TDDFT（含 B 矩阵耦合项）"
+ST-02:
+  state: pending
+  stretch: true
+  note: "动态极化率 / 一阶超极化率 β"
+ST-03:
+  state: pending
+  stretch: true
+  note: "LMP2（局域 MP2）"
+ST-04:
+  state: pending
+  stretch: true
+  note: "pKa 工作流"
+ST-05:
+  state: pending
+  stretch: true
+  note: "EPR / 超精细耦合"
+
+# ───────────────────────── 里程碑（M1–M8 + M-PS）─────────────────────────
+
+M1:
+  state: pending
+  note: "开壳层（O2/OH）；⟨S²⟩ 与自旋污染"
+M2:
+  state: pending
+  note: "meta-GGA（M06-2X）+ 色散（D3）"
+M3:
+  state: pending
+  note: "RI-MP2 相关能"
+M4:
+  state: pending
+  note: "激发态 CIS / TDA"
+M5:
+  state: pending
+  note: "隐式溶剂 COSMO → SMD"
+M6:
+  state: pending
+  note: "过渡态 + IRC + 扫描"
+M7:
+  state: pending
+  note: "谱学套件（解析 Hessian / NMR / 极化率 / 多极）"
+M8:
+  state: pending
+  note: "产品面收口（CLI/Python/GUI + 向后兼容）"
+M-PS:
+  state: pending
+  stretch: true
+  note: "pseudospectral 路径（可选里程碑，不阻塞 M1–M8）"
