@@ -18,18 +18,27 @@
 #![deny(clippy::missing_errors_doc)]
 #![deny(clippy::missing_panics_doc)]
 
+pub mod correlation;
 pub mod engine;
 pub mod error;
 pub mod input;
 pub mod molecule;
+pub mod properties;
 pub mod registry;
 pub mod reporter;
 pub mod result;
+pub mod solvation;
 
+pub use correlation::{CorrelationResult, Mp2Kind, Mp2Options, ScfType, SpinResult};
 pub use engine::{Engine, EngineBackend, SUPPORTED_FEATURES};
 pub use error::EngineError;
-pub use input::{GridLevel, JobInput, JobType, TaskOptions};
+pub use input::{ExcitedStatesOptions, GridLevel, JobInput, JobType, TaskOptions};
 pub use molecule::{Atom, Molecule};
+pub use properties::{
+    ExcitedStateMethod, ExcitedStates, Multipoles, NmrReference, NmrShieldings, NucleusShielding,
+    Polarizability, SumRules, Transition, TransitionContribution,
+};
 pub use registry::Registry;
 pub use reporter::Reporter;
 pub use result::{DataSnapshot, EnvInfo, JobResult};
+pub use solvation::{SolvationResult, SolventModel};

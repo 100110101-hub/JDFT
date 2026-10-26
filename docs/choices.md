@@ -1506,3 +1506,41 @@ CIS/TDA 的 f-sum rule、NMR 的长度规范一致性、解析 Hessian 与数值
 **记账**：阶段二用**独立的 `docs/status-v2.yaml`**（阶段一的 `status.yaml` 只读作基线），
 `scripts/check_status.py` 直接能用（它就是"任意路径的账本校验器"），并且已加进门禁
 （`verify-r60`，26/26）。这样阶段二的第一天就有可执行的记账，而不是等第一个 WP 做完再补。
+
+## 四十六、阶段二契约轨道：三个"计划里没写对"的地方（2026-11-06）
+
+KV-01..KV-03（K7/K8/K9 的契约 + K1 的溶剂字段）落地时，规范里有两处与实际约定冲突、
+一处没考虑到后果。记下来，因为下次还会遇到同类问题。
+
+**① 计划说"K7 由 schemars 生成 schema"，但这违反 C-03 的约定。**
+`engine-api` 是**传递类型 crate**，C-03 明确要求它保持**零 schema 依赖**（K2 不生成
+JSON Schema，K1 才生成）。所以 K7–K9 的结果块只能走 C-03 建好的那条路：
+`qwb-contracts/studio/result.schema.yaml` 手写文档 + `qwb-io/tests/k3_schema_docs.rs`
+把"文档说的字段集"和"实际序列化出来的键集"逐字段对齐。
+教训：**"契约先行"不等于"每份契约都用同一套工具"**；先看清该轨道已有的约定，再决定产物形态。
+（已回填 `project-phase2.md` §4.1/§6.1。）
+
+**② 计划没意识到 `TaskOptions` 是 `non_exhaustive`，下游写不了 struct literal。**
+新选项得配 builder（`with_scf_type` / `with_mp2` / `with_excited_states` /
+`with_solvent_model`），否则**集成测试根本挂不上选项** —— 这不是风格问题，而是
+"契约能表达"和"调用方能构造"之间的缺口。`JobResult` 一直是 builder 风格，这里只是把
+同一条规矩补到 `TaskOptions` 上。
+
+**③ 最要紧的一件：字段能解析 ≠ 选项被尊重。**
+契约一旦能让用户写出 `scf_type: uks`，用户就会去写。如果引擎静默忽略它，用户会拿到一个
+**看起来成功的闭壳层 RKS 结果**，然后以为是 UKS 的结果 —— 这比报错危险得多
+（`project-phase2.md` §10.3 明令禁止的"静默降级"）。
+所以这一轮特意加了 `qwb-engine` 的 `reject_unimplemented_options`：开壳层 `scf_type`、
+`mp2`、`excited_states`、非真空 `solvent_model` 一律 `Unsupported`（退出码 4），
+**消息里带负责它的 WP 编号**（SC-01 / SC-04 / RS-02 / SV-01），让"还没做"和"不支持"分得开。
+判据刻意比"字段非空就拒"更细：与阶段一行为等价的写法（`rks`/`rhf`/`vacuum`）**放过**，
+否则旧输入会被无故拒绝 —— 加性契约的意义就是旧输入一个字节都不用改。
+
+**顺带一个设计上的取舍**：`Solvent` 没有加 `model` 字段。K1 已经有 `cavity_model`，
+再加一个就是两个真值源；阶段二只补它真正缺的四样（光学介电常数、半径集的声明、
+表面张力、离子强度）。K2 侧的 `SolventModel` 是**输入词汇**（engine-api 不能依赖 K1 crate），
+由引擎映射过去 —— 与 `GridLevel` 在两侧各有一份是同一个既定模式。
+
+**一个小坑**：`SolvationResult::new` 一开始有 8 个位置参数，`clippy::too_many_arguments`
+直接红。这不是"加个 allow"的事：表面积/体积/tesserae 本来就是同一件事（空腔几何），
+抽成 `CavityGeometry` 之后参数降到 6 个，校验也集中到一处。**编译器的唠叨有时是设计信号**。

@@ -162,6 +162,157 @@ class EnvInfo(BaseModel):
             raise ValueError("env.json is incomplete: " + "; ".join(issues))
 
 
+# ---------------------------------------------------------------------------
+# 阶段二（K7/K8/K9）的结果块
+# ---------------------------------------------------------------------------
+#
+# 这些模型与 `qwb-contracts/engine-api` 的 Rust 类型逐字段对应（K3 的一致性由
+# `qwb-core/crates/qwb-io/tests/k3_schema_docs.rs` 与 `tests/test_models.py` 两边钉住）。
+# 全部可选：阶段一写出的 result.json 没有这些键，`open_result_dir` 照常工作（G5 向后兼容）。
+
+
+class SpinResult(BaseModel):
+    """自旋信息（K9）。污染量必须存在——开壳层"收敛了就不提"是不可接受的。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    n_alpha: int = Field(ge=0)
+    n_beta: int = Field(ge=0)
+    multiplicity: int = Field(ge=1)
+    s_squared: float
+    spin_contamination: float
+    broken_symmetry: bool = False
+
+
+class CorrelationResult(BaseModel):
+    """相关能（K9；只做 canonical MP2 与 RI-MP2）。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    method: str = Field(pattern=r"^(mp2|ri-mp2)$")
+    e2_hartree: float
+    e_total_hartree: float
+    aux_basis_name: str | None = None
+    ri_error_hartree: float | None = None
+
+
+class SolvationResult(BaseModel):
+    """溶剂化（K8）。能量分解要能逐项对账：total = 静电 + 非极性三项。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    model: str = Field(pattern=r"^(vacuum|cosmo|smd|pbf)$")
+    solvent_name: str
+    total_hartree: float
+    electrostatic_hartree: float
+    cavitation_hartree: float | None = None
+    dispersion_hartree: float | None = None
+    repulsion_hartree: float | None = None
+    surface_area_angstrom2: float = Field(gt=0)
+    surface_volume_angstrom3: float = Field(gt=0)
+    n_tesserae: int = Field(ge=1)
+    iterations: int = Field(ge=0)
+    converged: bool = False
+
+
+class TransitionContribution(BaseModel):
+    """一个跃迁的主要轨道贡献。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    from_: int = Field(alias="from", ge=0)
+    to: int = Field(ge=0)
+    weight: float
+
+
+class Transition(BaseModel):
+    """一个电子跃迁（K7）。"""
+
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+
+    index: int = Field(ge=1)
+    energy_hartree: float
+    wavelength_nm: float
+    oscillator_strength: float
+    rotatory_strength: float | None = None
+    dominant: list[TransitionContribution] = Field(default_factory=list)
+
+
+class SumRules(BaseModel):
+    """f-sum（Thomas–Reiche–Kuhn）自检。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    trk_oscillator: float
+    n_electrons: float
+
+
+class ExcitedStates(BaseModel):
+    """激发态（K7）。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    method: str = Field(pattern=r"^(cis|tda|tddft)$")
+    n_states: int = Field(ge=1)
+    transitions: list[Transition] = Field(default_factory=list)
+    sum_rules: SumRules
+
+
+class NucleusShielding(BaseModel):
+    """一个核的屏蔽张量（ppm）。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    element: str
+    index: int = Field(ge=0)
+    isotropic_ppm: float
+    anisotropy_ppm: float | None = None
+    tensor_ppm: list[list[float]]
+
+
+class NmrReference(BaseModel):
+    """化学位移参考物（如 TMS）。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    compound: str
+    shift_ppm: float
+
+
+class NmrShieldings(BaseModel):
+    """NMR 屏蔽（K7；GIAO）。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    method: str
+    gauge_origin_bohr: list[float]
+    nuclei: list[NucleusShielding] = Field(default_factory=list)
+    reference: NmrReference | None = None
+    length_gauge_spread_ppm: float | None = None
+
+
+class Polarizability(BaseModel):
+    """极化率（K7；原子单位）。两个转动不变量必须存在（phase-2 §4.2）。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    static_au: list[list[float]]
+    frequencies_hartree: list[float] = Field(default_factory=list)
+    dynamic_au: list[list[list[float]]] = Field(default_factory=list)
+    isotropic_au: float
+    anisotropy_au: float
+
+
+class Multipoles(BaseModel):
+    """多极展开（K7）。多极矩对原点敏感，所以原点必须记下来。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    quadrupole_traceless_debye_angstrom: list[list[float]] | None = None
+    octupole_traceless_debye_angstrom2: list[list[list[float]]] | None = None
+    origin_angstrom: list[float]
+
+
 class Result(BaseModel):
     """结果（`result.json` + `env.json` 的合并视图，对应 `result.schema.yaml` 的 `JobResult`）。"""
 
@@ -177,6 +328,15 @@ class Result(BaseModel):
     dipole_debye: list[float] | None = None
     mo_energies_hartree: list[float] | None = None
     mo_coeffs: list[list[float]] | None = None
+    # ── 阶段二（K7/K8/K9）的可选结果块：缺省为 None，与 Rust 侧纯加性一致 ──
+    dispersion_energy_hartree: float | None = None
+    spin: SpinResult | None = None
+    correlation: CorrelationResult | None = None
+    solvation: SolvationResult | None = None
+    excited_states: ExcitedStates | None = None
+    nmr_shieldings: NmrShieldings | None = None
+    polarizability: Polarizability | None = None
+    multipoles: Multipoles | None = None
 
 
 class Project(BaseModel):

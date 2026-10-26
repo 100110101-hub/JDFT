@@ -265,6 +265,36 @@ options:
 | `cuh_lanl2dz_pbe.yaml` | CuH / LANL2DZ+ECP / PBE | sp |
 | `zno_lanl2dz_pbe.yaml` | ZnO / LANL2DZ+ECP / PBE | sp（SCF 需要退火退路） |
 
+### 3.4 阶段二预留的字段（**契约已就位，引擎会显式拒绝**）
+
+阶段二的契约（`project-phase2.md` §4）已经把下面这些字段加进了 `input.yaml` 的合法集合，
+但对应的能力还没实现（里程碑 M1–M7）。写进输入**不会**被静默忽略 —— 引擎会给
+**退出码 4**（`Unsupported`）并在消息里指出负责它的 WP：
+
+```yaml
+options:
+  scf_type: uks            # rhf|rohf|uhf|rks|uks。开壳层未实现 → exit 4（M1 / SC-01）
+  mp2:                     # 相关方法未实现 → exit 4（M3 / SC-04..05）
+    kind: ri-mp2           # mp2|ri-mp2；RI 要 aux_basis_name
+    aux_basis_name: def2-svp-ri
+  excited_states:          # 激发态未实现 → exit 4（M4 / RS-02..03）
+    n_states: 5
+    method: tda            # cis|tda|tddft
+  solvent_model: cosmo     # vacuum|cosmo|smd|pbf；非真空未实现 → exit 4（M5 / SV-01..03）
+```
+
+两条现状规则（都由测试钉住）：
+
+* **与阶段一行为等价的写法会被放过**：`scf_type: rks`、`scf_type: rhf`、
+  `solvent_model: vacuum` —— 否则旧输入会被无故拒绝；
+* **自相矛盾的组合在解析阶段就报错（退出码 1）**：`method_name: hf` 配 `scf_type: uks`、
+  单重态配 `scf_type: uks`、`solvent: vacuum` 配 `solvent_model: cosmo`、
+  开壳层参考配 `mp2`。这些是输入错误，不是"还没实现"。
+
+相应地，结果目录里的新块（`spin`/`correlation`/`solvation`/`excited_states`/
+`nmr_shieldings`/`polarizability`/`multipoles`/`dispersion_energy_hartree`）现在**不会出现**；
+出现了也说明是别人（或未来版本）写的，旧版本读完会原样保留（pydantic 模型已能承载）。
+
 ---
 
 ## 4. 命令行 `qwb`
@@ -650,6 +680,9 @@ python scripts\fetch_data.py --all --force              # 全部重下
 * **并行**：积分层单线程；并行只出现在 Hessian 的位移与 `qwb batch` 的进程级并发。
   `--threads` 目前只记账。
 * **meta-GGA、ROHF/UKS、TDDFT、NBO、TS/IRC/scan**：不在第一阶段范围。
+* **阶段二的方法**（开壳层、MP2/RI-MP2、激发态、COSMO/SMD/PBF、TS/IRC/扫描、NMR、
+  极化率、解析 Hessian）：**契约已就位、引擎未实现**，见 §3.4 —— 现在写进输入会得到
+  退出码 4，而不是一个看起来成功的结果。进度看 [`status-v2.yaml`](./status-v2.yaml)。
 * **`.qwb` 容器**：K4 读写与双向互操作已通过测试，但 CLI 还没有"打包"子命令
   （Python 侧 `QwbContainer` 可以）。
 

@@ -585,6 +585,10 @@ impl RksBackend {
 
 impl EngineBackend for RksBackend {
     fn run(&self, input: &JobInput, reporter: &dyn Reporter) -> Result<JobResult, EngineError> {
+        // 阶段二（project-phase2.md §4.1）：契约 crate 已经能**表达**这些选项，
+        // 但引擎还没实现。这里必须显式拒绝 —— 静默忽略会让用户拿一个"看起来成功"
+        // 的闭壳层结果去当他想要的 UKS/MP2/溶剂化结果（那正是 §10.3 禁止的事）。
+        reject_unimplemented_options(input)?;
         if input.solvent != "vacuum" {
             return Err(EngineError::Unsupported(format!(
                 "solvent `{}` is not implemented (first phase: vacuum only, 8.5)",
@@ -605,4 +609,44 @@ impl EngineBackend for RksBackend {
     fn request_cancel(&self) {
         // 单点能/优化都是同步执行：取消由 `Reporter::is_cancelled` 在步与步之间观察到。
     }
+}
+
+/// 阶段二选项的"契约已就位、引擎未实现"守卫。
+///
+/// 判据不是"字段非空就拒"：`solvent_model: vacuum` 这种与阶段一行为等价的写法要放过，
+/// 否则旧输入会被无故拒绝。每条错误都指向负责它的 WP，便于把"还没做"和"不支持"分开。
+fn reject_unimplemented_options(input: &JobInput) -> Result<(), EngineError> {
+    let options = &input.options;
+    if let Some(scf_type) = options.scf_type {
+        // 闭壳层 KS/RHF 与阶段一的默认路径等价，放过；开壳层/ROHF 还没接线。
+        let supported = matches!(
+            scf_type,
+            qwb_engine_api::ScfType::Rks | qwb_engine_api::ScfType::Rhf
+        );
+        if !supported {
+            return Err(EngineError::Unsupported(format!(
+                "options.scf_type = `{}` is not wired yet (open-shell SCF is phase-2 M1 / SC-01)",
+                scf_type.as_str()
+            )));
+        }
+    }
+    if options.mp2.is_some() {
+        return Err(EngineError::Unsupported(
+            "options.mp2 is not wired yet (MP2/RI-MP2 is phase-2 M3 / SC-04..05)".into(),
+        ));
+    }
+    if options.excited_states.is_some() {
+        return Err(EngineError::Unsupported(
+            "options.excited_states is not wired yet (CIS/TDA is phase-2 M4 / RS-02..03)".into(),
+        ));
+    }
+    if let Some(model) = options.solvent_model
+        && model != qwb_engine_api::SolventModel::Vacuum
+    {
+        return Err(EngineError::Unsupported(format!(
+            "options.solvent_model = `{}` is not wired yet (implicit solvation is phase-2 M5 / SV-01..03)",
+            model.as_str()
+        )));
+    }
+    Ok(())
 }

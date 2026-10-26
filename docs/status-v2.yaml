@@ -18,14 +18,23 @@
 # ───────────────────────── 契约轨（KV，5）─────────────────────────
 
 KV-01:
-  state: pending
-  note: "K7 类型与 schema：ExcitedStates / NmRShieldings / Polarizability / Multipoles"
+  state: done
+  ts: "2026-11-06T09:30:00Z"
+  artifact: "qwb-contracts/engine-api/src/properties.rs（K7 类型）+ result.rs 的 8 个可选块 + qwb-contracts/studio/result.schema.yaml 的 $defs + qwb-studio/qwb_studio/models.py 的 pydantic 模型 + qwb-io/tests/k3_schema_docs.rs 的逐字段一致性断言 + 既有 result.rs 往返/兼容单测"
+  verification: "① `cargo test -p qwb-engine-api` **45 例全绿**（含 `phase2_blocks_are_absent_by_default`：8 个新块缺省不出现在 JSON 里；`phase2_blocks_roundtrip_and_old_json_still_parses`：新块往返 + 阶段一旧 result.json 仍解析）。② `cargo test -p qwb-io --test k3_schema_docs` 4 例绿：`result.schema.yaml` 的 JobResult 属性集 == 挂满所有块的 `JobResult` 序列化键集（手写 schema + 一致性测试 = C-03 约定；`engine-api` 保持零 schema 依赖）。③ `pytest tests/test_models.py` 22 例绿：`set(Result.model_fields) == JOB_PROPS`（pydantic ↔ schema 一致），pydantic 侧 8 个块全部 `| None = None`。④ 三个物理不变量在 K7 类型里都有落点与单测：`SumRules::deficit`（f-sum）、`NmrShieldings::length_gauge_spread_ppm`、`Polarizability::{isotropic_au,anisotropy_au}`（转动协变，测试用对角线张量验证不变量）。"
+  note: "**原计划写错了一处并已按实际约定修正**：phase-2 §6.1 原来写 K7 由 `schemars` 生成 schema，但 C-03 明确要求 `engine-api` 零 schema 依赖（K2 是传递类型，不生成 JSON Schema）。实际做法是手写 `result.schema.yaml` + `k3_schema_docs.rs` 逐字段一致，已回填 §4.1/§6.1 并记进 docs/choices.md。其次：`TaskOptions` 是 `non_exhaustive`，下游不能写 struct literal，所以新选项必须配 builder（`with_scf_type` 等），否则集成测试根本挂不上选项 —— 这属于 K2 的既有约定（JobResult 也是 builder 风格）。"
 KV-02:
-  state: pending
-  note: "K8 溶剂化类型 + Solvent 加性字段 + options.solvent_model"
+  state: done
+  ts: "2026-11-06T09:40:00Z"
+  artifact: "qwb-registry/src/solvent.rs：`RadiiSet {bondi,uff,smd}` + `Solvent` 的 4 个可选字段（refractive_index / radii_set / surface_tension_cal_per_mol_angstrom2 / ionic_strength_molar）+ 自洽校验；qwb-contracts/engine-api/src/solvation.rs（K8 `SolventModel` / `SolvationResult`）；`TaskOptions.solvent_model`；`input.schema`（regenerated solvent.schema.{json,yaml}）"
+  verification: "① `cargo test -p qwb-registry --lib` **48 例绿**，新增 3 例：阶段一溶剂文件（无新字段）仍 `check()` 全空；`refractive_index` 的 `n² ≤ ε_static` 约束（n=1.33/ε=78.36 通过、n=9 报错）；`cavity_model = smd` 必须同时给 `refractive_index` 与 `radii_set = smd`（缺则两条 issue）。② `cargo run -p qwb-gen-schemas -- ../qwb-contracts/schema` 已重新生成、`--check` 绿（门禁步骤会再验一次）。③ `SolvationResult::validate` 单测：vacuum 不许出块、SMD 缺非极性项报错、面积/体积非正报错、非有限值报错；`decomposition_gap_hartree` 用四项分解手算核对。④ K8 的「模型显式选择」在 K2 侧由 `JobInput::validate` 强制（`solvent: vacuum` 配 `cosmo` → 退出码 1）。"
+  note: "**没有给 `Solvent` 加 `model` 字段**：K1 已有 `cavity_model`，阶段二只补它缺的四样（光学介电常数、半径集的声明、表面张力、离子强度）。再叠一个 `model` 会有两个真值源。K2 侧的 `SolventModel` 是**输入词汇**（engine-api 不能依赖 K1 crate），由引擎映射到数据的 `cavity_model` —— 与 `GridLevel` 在两侧各有一份是同一个既定模式。"
 KV-03:
-  state: pending
-  note: "K9 开壳层/相关方法类型 + TaskOptions.scf_type/mp2 + JobResult.spin/correlation"
+  state: done
+  ts: "2026-11-06T09:50:00Z"
+  artifact: "qwb-contracts/engine-api/src/correlation.rs（ScfType / Mp2Kind / Mp2Options / SpinResult / CorrelationResult）+ input.rs 的 4 个可选选项与 builder + `JobInput::validate` 的跨字段校验 + engine.rs 的 SUPPORTED_FEATURES 扩词 + qwb-core/crates/qwb-engine/src/lib.rs 的 `reject_unimplemented_options` 守卫 + qwb-engine/tests/kv_phase2_options.rs"
+  verification: "① `cargo test -p qwb-engine-api` 里的 6 个新单测覆盖选项：旧 JSON 无新键仍解析（4 个新字段 = None）、新选项缺省不序列化、`scf_type` ↔ 方法族、开壳层 ↔ 多重度、MP2 只许闭壳层、`solvent_model` ↔ 溶剂名、`n_states ≥ 1`。② `cargo test -p qwb-engine --test kv_phase2_options` **7 例绿**：`scf_type: uks` / `mp2` / `excited_states` / `solvent_model: cosmo` 各自以 `Unsupported` 拒绝且消息带 WP 编号（SC-01 / SC-04 / RS-02 / SV-01）；`rks`/`rhf`/`vacuum` **不**被拒且 H2/STO-3G 真算出收敛能量；拒绝发生在毫秒级（`rejection_happens_before_any_numerics` < 50 ms）。③ `cargo test -p qwb-registry -p qwb-io -p qwb-cli -p qwb-engine` 退出码 0；`pytest -q` **182 passed**。④ 门禁 `scripts/verify.ps1` 第 61 轮 **26/26 全绿**（含阶段一全部回归）。"
+  note: "**这一步的重点不是类型，而是「不许静默忽略」**：契约能让用户写出 `scf_type: uks`，但引擎只会算闭壳层。如果不显式拒绝，用户会拿到一个看起来成功的 RKS 结果却以为是 UKS —— 那正是 project-phase2.md §10.3 禁止的静默降级。守卫的判据写得比「字段非空就拒」更细：与阶段一行为等价的写法（`rks`/`rhf`/`vacuum`）放过，否则旧输入会被无故拒绝。`JobType` 仍只有 sp/opt/freq（ts/irc/scan 留给 KV-05 与 RP 轨）。"
 KV-04:
   state: pending
   note: "K10 NumericsReport + numerics.yaml + data verify 支持新类型"

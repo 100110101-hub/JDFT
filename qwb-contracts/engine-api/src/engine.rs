@@ -14,13 +14,14 @@ use crate::registry::Registry;
 use crate::reporter::Reporter;
 use crate::result::JobResult;
 
-/// 第一阶段契约声明支持的 feature 词汇表（`project.md` §2.1 范围，§2.2 非目标之外）。
+/// 契约声明支持的 feature 词汇表（阶段一的 `project.md` §2.2 范围 + 阶段二新增的方法类）。
 ///
-/// `Registry` 声明了不在此表中的 feature（如 `functional:meta-gga`、`tddft`、
-/// `solvent:smd`）时，[`Engine::new`] 返回 [`EngineError::Unsupported`]。
+/// `Registry` 声明了不在此表中的 feature（如 `functional:meta-gga`、`jobtype:ts`）时，
+/// [`Engine::new`] 返回 [`EngineError::Unsupported`]。
 ///
 /// 注意：**声明支持 ≠ 本构建实现了**。后端是否真的能算，由 [`EngineBackend::run`]
-/// 再判一次（返回 `Unsupported` 或 `Data`）。
+/// 再判一次（返回 `Unsupported` 或 `Data`）。阶段二的做法是先把**词汇表**扩出来
+/// （契约先行，`project-phase2.md` §4.1），能力本身按里程碑逐个落地。
 pub const SUPPORTED_FEATURES: &[&str] = &[
     "jobtype:sp",
     "jobtype:opt",
@@ -36,6 +37,18 @@ pub const SUPPORTED_FEATURES: &[&str] = &[
     "solvent:vacuum",
     "solvent:implicit",
     "ecp",
+    // ── 阶段二（project-phase2.md §4.1）新增的词汇；能力由对应里程碑落地。──
+    "method:mp2",
+    "method:tddft",
+    "solvent:cosmo",
+    "solvent:smd",
+    "solvent:pbf",
+    "numerics:ri",
+    "numerics:pseudospectral",
+    "property:excited-states",
+    "property:nmr",
+    "property:polarizability",
+    "property:multipoles",
 ];
 
 /// 引擎后端：真正的数值实现。

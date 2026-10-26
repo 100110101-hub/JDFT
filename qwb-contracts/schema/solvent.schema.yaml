@@ -51,6 +51,18 @@ $defs:
     - commercial_ok
     - redistribute_ok
     type: object
+  RadiiSet:
+    description: 原子半径所依据的半径集（phase-2 §8.2；**不能混用**不同半径集）。
+    oneOf:
+    - const: bondi
+      description: Bondi van der Waals 半径。
+      type: string
+    - const: uff
+      description: UFF 力场半径。
+      type: string
+    - const: smd
+      description: SMD 的参数化半径。
+      type: string
 $schema: https://json-schema.org/draft/2020-12/schema
 additionalProperties: false
 description: 溶剂（`qwb-data/solvent/*.yaml` 的形态）。
@@ -76,6 +88,12 @@ properties:
     description: 相对介电常数 `epsilon`。
     format: double
     type: number
+  ionic_strength_molar:
+    description: 离子强度，单位 mol/L（PBF 用）；`None` = 纯溶剂。
+    format: double
+    type:
+    - number
+    - 'null'
   license:
     $ref: '#/$defs/License'
     description: 许可声明。
@@ -87,6 +105,17 @@ properties:
     type:
     - string
     - 'null'
+  radii_set:
+    anyOf:
+    - $ref: '#/$defs/RadiiSet'
+    - type: 'null'
+    description: '`atomic_radii` 用的是哪一套半径（Bondi / UFF / SMD）。混用会静默错数，所以必须声明。'
+  refractive_index:
+    description: 光学介电常数（折射率 `n`；SMD 的非极性项用 `n²`）。
+    format: double
+    type:
+    - number
+    - 'null'
   scale:
     description: 半径缩放因子。
     format: double
@@ -95,6 +124,12 @@ properties:
     description: 内容摘要（工具生成，见 [`crate::sha256`]）。
     type:
     - string
+    - 'null'
+  surface_tension_cal_per_mol_angstrom2:
+    description: 表面张力，单位 cal/(mol·Å²)；SMD 的空化项用。
+    format: double
+    type:
+    - number
     - 'null'
   temperature_K:
     description: 温度，单位 K（K1 字段名 `temperature_K`）。

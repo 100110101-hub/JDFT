@@ -223,6 +223,11 @@ Bessel/erfc/球谐求值都在现有 `qwb-grid`/`qwb-integrals` 里，不引入 
 | **K2** `SUPPORTED_FEATURES` | 新增词：`jobtype:ts`、`jobtype:irc`、`jobtype:scan`、`method:mp2`、`method:tddft`、`solvent:cosmo`、`solvent:smd`、`numerics:pseudospectral`、`numerics:ri` | 旧 feature 词不变；`features()` 只增 |
 | **K2** `JobResult` | 新增**可选块**：`excited_states`、`nmr_shieldings`、`polarizability`、`multipoles`、`solvation`、`correlation`、`numerics_report`、`dispersion_energy_hartree`、`spin` | 旧结果目录仍通过 `open_result_dir` 自检（`serde(default)`） |
 | **K3** | 新增 `artifacts/` 里的**可选**文件（`spectrum.csv`、`pes.json`、`irc.json`、`ts_search.json`）；状态机**仍 6 条转移** | 旧结果目录不受影响 |
+
+> **K2/K3 的结果块不走 `schemars`**（阶段二实施时的澄清）：`engine-api` 保持**零 schema 依赖**
+> 是 C-03 的既定约定，所以 K7–K9 的类型在 `qwb-contracts/studio/result.schema.yaml` 里是
+> **手写文档**，由 `qwb-io/tests/k3_schema_docs.rs` 逐字段钉住；`schemars` 只用于 K1 的数据类型。
+> 阶段二最初写的"K7 由 schemars 生成"对 K2 不成立 —— 按实际约定执行，已记入 `docs/choices.md`。
 | **K5** | 新增子命令 `qwb props`、`qwb scan`、`qwb ts`、`qwb irc`（全部加性）；退出码表**不变** | 旧脚本继续工作 |
 | **K6** | `.pyi` 增加新类/新方法/新字段（全部可选参数） | `mypy --strict` 保绿 |
 
@@ -395,9 +400,9 @@ NumericsReport {
 
 | ID | 依赖 | 产物 | 验收 |
 |---|---|---|---|
-| KV-01 | 基线 | K7 类型与 schema：`ExcitedStates`/`NmRShieldings`/`Polarizability`/`Multipoles`（Rust + schemars 生成 + `qwb-contracts/schema/`） | `qwb-gen-schemas --check` 不漂移；`cargo test -p qwb-registry` 里 schema 与类型逐字段一致；新增字段全部 `Option` 且旧样例文件仍解析（回归测试） |
-| KV-02 | KV-01 | K8 溶剂化类型 + `Solvent` 加性字段 + `JobInput.options.solvent_model` | 旧 `solvent/*.yaml`（含缺 `model` 的）仍 `qwb data verify` 通过；新字段缺省 = `vacuum` |
-| KV-03 | KV-01 | K9 开壳层/相关方法类型 + `TaskOptions.scf_type`/`mp2` + `JobResult.spin`/`correlation` | 旧 `input.yaml` 全部仍可解析（用 `qwb-core/examples/*.yaml` 做回归）；`SUPPORTED_FEATURES` 只增不删 |
+| KV-01 | 基线 | K7 结果块：`ExcitedStates`/`NmrShieldings`/`Polarizability`/`Multipoles`（`engine-api` 的 Rust 类型 + `studio/result.schema.yaml` 的 `$defs` + `qwb_studio.models` 的 pydantic 模型） | `qwb-io/tests/k3_schema_docs.rs` 的 `result.schema.yaml` ↔ `JobResult` **逐字段一致**（手写 schema + 一致性测试 = C-03 的约定；`engine-api` 保持零 schema 依赖）；`test_models.py` 的 pydantic ↔ schema 一致；新增块全部可选，旧 `result.json` 仍解析（回归测试） |
+| KV-02 | KV-01 | K8 溶剂化类型 + `Solvent` 加性字段（`refractive_index`/`radii_set`/`surface_tension`/`ionic_strength`）+ `JobInput.options.solvent_model` | `qwb-gen-schemas --check` 不漂移（K1 schema 重新生成）；旧 `solvent/*.yaml` 仍 `qwb data verify` 通过；SMD 缺 n 或半径集时 verify 明确报错；`n² ≤ ε` 的自洽检查有单测 |
+| KV-03 | KV-01 | K9 开壳层/相关方法类型 + `TaskOptions.scf_type`/`mp2`/`excited_states` + `JobResult.spin`/`correlation` + 跨字段校验 | 旧 `input.yaml` 全部仍可解析（`phase1_options_json_still_parses_without_the_new_keys`）；`SUPPORTED_FEATURES` 只增不删；**引擎对未实现的选项显式拒绝**（`Unsupported`，退出码 4，消息带 WP 编号），与阶段一等价的写法（`rks`/`rhf`/`vacuum`）放过 |
 | KV-04 | KV-01 | K10 `NumericsReport` + `numerics.yaml` 数据（`equiv_tol_hartree`、level 表）+ `data verify` 支持新类型 | schema 校验通过；`equiv_tol` 缺省值有单测；`qwb data list` 能看到新类型 |
 | KV-05 | KV-02..04 | K5 加性子命令（`props`/`scan`/`ts`/`irc`）+ K6 `.pyi` 更新 + `cli.md`/`qwb-format.md` 同步 | 全部子命令 `--help` 退出 0；`mypy --strict` 桩 + typed consumer 0 issue；K5 退出码表未变（回归测试比对） |
 

@@ -163,7 +163,51 @@ fn result_schema_matches_job_result() {
         .with_orbitals(
             nalgebra::DVector::from_vec(vec![-0.5]),
             nalgebra::DMatrix::from_row_slice(1, 1, &[1.0]),
-        );
+        )
+        // 阶段二的可选块（K7/K8/K9）全部挂上：这条断言同时覆盖新旧字段，
+        // 任何一个"文档里有、Rust 里没有"（或反过来）都会红。
+        .with_dispersion_energy(-0.001)
+        .with_spin(qwb_engine_api::SpinResult::new(5, 5, 3, 2.0))
+        .with_correlation(qwb_engine_api::CorrelationResult::new(
+            qwb_engine_api::Mp2Kind::Mp2,
+            -0.3,
+            -76.3,
+        ))
+        .with_solvation(
+            qwb_engine_api::SolvationResult::new(
+                qwb_engine_api::SolventModel::Cosmo,
+                "water",
+                -76.4,
+                -0.02,
+                qwb_engine_api::solvation::CavityGeometry::new(42.0, 18.0, 1024),
+                7,
+            )
+            .with_converged(true),
+        )
+        .with_excited_states(qwb_engine_api::ExcitedStates::new(
+            qwb_engine_api::ExcitedStateMethod::Tda,
+            1,
+            vec![qwb_engine_api::Transition::new(1, 0.3, 412.0, 0.05)],
+            qwb_engine_api::SumRules::new(7.4, 10.0),
+        ))
+        .with_nmr_shieldings(qwb_engine_api::NmrShieldings::new(
+            [0.0, 0.0, 0.0],
+            vec![qwb_engine_api::NucleusShielding::new(
+                "H",
+                0,
+                31.0,
+                [[31.0, 0.0, 0.0], [0.0, 30.0, 0.0], [0.0, 0.0, 32.0]],
+            )],
+        ))
+        .with_polarizability(
+            qwb_engine_api::Polarizability::from_static_tensor([
+                [10.0, 0.0, 0.0],
+                [0.0, 10.0, 0.0],
+                [0.0, 0.0, 20.0],
+            ])
+            .expect("tensor"),
+        )
+        .with_multipoles(qwb_engine_api::Multipoles::new([0.0, 0.0, 0.0]));
     let actual = json_keys(&serde_json::to_value(&result).expect("serialize"));
 
     assert_eq!(

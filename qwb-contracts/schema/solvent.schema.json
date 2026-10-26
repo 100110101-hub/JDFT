@@ -32,6 +32,14 @@
       "type": "number",
       "format": "double"
     },
+    "ionic_strength_molar": {
+      "description": "离子强度，单位 mol/L（PBF 用）；`None` = 纯溶剂。",
+      "type": [
+        "number",
+        "null"
+      ],
+      "format": "double"
+    },
     "license": {
       "description": "许可声明。",
       "$ref": "#/$defs/License"
@@ -47,6 +55,25 @@
         "null"
       ]
     },
+    "radii_set": {
+      "description": "`atomic_radii` 用的是哪一套半径（Bondi / UFF / SMD）。混用会静默错数，所以必须声明。",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/RadiiSet"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "refractive_index": {
+      "description": "光学介电常数（折射率 `n`；SMD 的非极性项用 `n²`）。",
+      "type": [
+        "number",
+        "null"
+      ],
+      "format": "double"
+    },
     "scale": {
       "description": "半径缩放因子。",
       "type": "number",
@@ -58,6 +85,14 @@
         "string",
         "null"
       ]
+    },
+    "surface_tension_cal_per_mol_angstrom2": {
+      "description": "表面张力，单位 cal/(mol·Å²)；SMD 的空化项用。",
+      "type": [
+        "number",
+        "null"
+      ],
+      "format": "double"
     },
     "temperature_K": {
       "description": "温度，单位 K（K1 字段名 `temperature_K`）。",
@@ -153,6 +188,26 @@
         "spdx",
         "commercial_ok",
         "redistribute_ok"
+      ]
+    },
+    "RadiiSet": {
+      "description": "原子半径所依据的半径集（phase-2 §8.2；**不能混用**不同半径集）。",
+      "oneOf": [
+        {
+          "description": "Bondi van der Waals 半径。",
+          "type": "string",
+          "const": "bondi"
+        },
+        {
+          "description": "UFF 力场半径。",
+          "type": "string",
+          "const": "uff"
+        },
+        {
+          "description": "SMD 的参数化半径。",
+          "type": "string",
+          "const": "smd"
+        }
       ]
     }
   }

@@ -54,6 +54,242 @@ $defs:
         description: 引擎日志。引擎不得写 stdout（K2）。
       env:
         $ref: "#/$defs/EnvInfo"
+      # ── 阶段二（K7/K8/K9）的可选结果块：缺省不出现，旧结果目录照常解析。──
+      dispersion_energy_hartree:
+        type: [number, "null"]
+        description: 色散校正能量（D3(BJ)/D4），Hartree（phase-2 FX-04）。
+      spin:
+        anyOf:
+          - $ref: "#/$defs/SpinResult"
+          - type: "null"
+        description: 自旋信息（⟨S²⟩ 与污染；开壳层必报，phase-2 §4.4）。
+      correlation:
+        anyOf:
+          - $ref: "#/$defs/CorrelationResult"
+          - type: "null"
+        description: 相关能（MP2 / RI-MP2，phase-2 SC-04/SC-05）。
+      solvation:
+        anyOf:
+          - $ref: "#/$defs/SolvationResult"
+          - type: "null"
+        description: 溶剂化（COSMO / SMD / PBF，phase-2 SV-01..04）。
+      excited_states:
+        anyOf:
+          - $ref: "#/$defs/ExcitedStates"
+          - type: "null"
+        description: 激发态（CIS / TDA / TDDFT，phase-2 RS-02/RS-03）。
+      nmr_shieldings:
+        anyOf:
+          - $ref: "#/$defs/NmrShieldings"
+          - type: "null"
+        description: NMR 屏蔽（GIAO，phase-2 RS-04）。
+      polarizability:
+        anyOf:
+          - $ref: "#/$defs/Polarizability"
+          - type: "null"
+        description: 极化率（CPHF，phase-2 RS-01）。
+      multipoles:
+        anyOf:
+          - $ref: "#/$defs/Multipoles"
+          - type: "null"
+        description: 多极展开（四极/八极，phase-2 RS-08）。
+  SpinResult:
+    type: object
+    additionalProperties: false
+    required: [n_alpha, n_beta, multiplicity, s_squared, spin_contamination, broken_symmetry]
+    description: 自旋结果（K9）。污染量必须报出来（phase-2 §4.4 门禁）。
+    properties:
+      n_alpha: {type: integer, minimum: 0}
+      n_beta: {type: integer, minimum: 0}
+      multiplicity: {type: integer, minimum: 1}
+      s_squared:
+        type: number
+        description: "⟨S²⟩ 的期望值。"
+      spin_contamination:
+        type: number
+        description: "⟨S²⟩ − S(S+1)；纯自旋态 ≈ 0。"
+      broken_symmetry:
+        type: boolean
+        description: 是否检测到破对称解。
+  CorrelationResult:
+    type: object
+    additionalProperties: false
+    required: [method, e2_hartree, e_total_hartree]
+    description: 相关能（K9；只做 canonical MP2 与 RI-MP2，phase-2 §13 #26）。
+    properties:
+      method:
+        type: string
+        enum: [mp2, ri-mp2]
+      e2_hartree:
+        type: number
+        description: 二阶相关能（负值），Hartree。
+      e_total_hartree:
+        type: number
+        description: 含相关的总能量，Hartree。
+      aux_basis_name:
+        type: [string, "null"]
+        description: RI 用的辅助基（canonical 为 null）。
+      ri_error_hartree:
+        type: [number, "null"]
+        description: RI 拟合误差，Hartree（K10 要求它落盘）。
+  SolvationResult:
+    type: object
+    additionalProperties: false
+    required:
+      [
+        model,
+        solvent_name,
+        total_hartree,
+        electrostatic_hartree,
+        surface_area_angstrom2,
+        surface_volume_angstrom3,
+        n_tesserae,
+        iterations,
+        converged,
+      ]
+    description: 溶剂化结果（K8）。能量分解必须能逐项对账。
+    properties:
+      model:
+        type: string
+        enum: [vacuum, cosmo, smd, pbf]
+      solvent_name: {type: string}
+      total_hartree: {type: number}
+      electrostatic_hartree:
+        type: number
+        description: 静电贡献（负值 = 稳定化），Hartree。
+      cavitation_hartree: {type: [number, "null"]}
+      dispersion_hartree: {type: [number, "null"]}
+      repulsion_hartree: {type: [number, "null"]}
+      surface_area_angstrom2: {type: number, exclusiveMinimum: 0}
+      surface_volume_angstrom3: {type: number, exclusiveMinimum: 0}
+      n_tesserae: {type: integer, minimum: 1}
+      iterations: {type: integer, minimum: 0}
+      converged:
+        type: boolean
+        description: 独立判定（不允许"迭代用完就算收敛"，风险 S-06）。
+  ExcitedStates:
+    type: object
+    additionalProperties: false
+    required: [method, n_states, transitions, sum_rules]
+    description: 激发态（K7）。
+    properties:
+      method:
+        type: string
+        enum: [cis, tda, tddft]
+      n_states: {type: integer, minimum: 1}
+      transitions:
+        type: array
+        items:
+          $ref: "#/$defs/Transition"
+      sum_rules:
+        $ref: "#/$defs/SumRules"
+  Transition:
+    type: object
+    additionalProperties: false
+    required: [index, energy_hartree, wavelength_nm, oscillator_strength]
+    properties:
+      index: {type: integer, minimum: 1}
+      energy_hartree: {type: number}
+      wavelength_nm: {type: number}
+      oscillator_strength: {type: number}
+      rotatory_strength: {type: [number, "null"]}
+      dominant:
+        type: array
+        items:
+          type: object
+          additionalProperties: false
+          required: [from, to, weight]
+          properties:
+            from: {type: integer, minimum: 0}
+            to: {type: integer, minimum: 0}
+            weight: {type: number}
+  SumRules:
+    type: object
+    additionalProperties: false
+    required: [trk_oscillator, n_electrons]
+    description: f-sum（Thomas–Reiche–Kuhn）自检。
+    properties:
+      trk_oscillator: {type: number}
+      n_electrons: {type: number}
+  NmrShieldings:
+    type: object
+    additionalProperties: false
+    required: [method, gauge_origin_bohr, nuclei]
+    description: NMR 屏蔽（K7；phase-2 只支持 GIAO）。
+    properties:
+      method: {type: string}
+      gauge_origin_bohr:
+        type: array
+        items: {type: number}
+        minItems: 3
+        maxItems: 3
+      nuclei:
+        type: array
+        items:
+          type: object
+          additionalProperties: false
+          required: [element, index, isotropic_ppm, tensor_ppm]
+          properties:
+            element: {type: string}
+            index: {type: integer, minimum: 0}
+            isotropic_ppm: {type: number}
+            anisotropy_ppm: {type: [number, "null"]}
+            tensor_ppm:
+              type: array
+              items:
+                type: array
+                items: {type: number}
+      reference:
+        type: object
+        additionalProperties: false
+        required: [compound, shift_ppm]
+        properties:
+          compound: {type: string}
+          shift_ppm: {type: number}
+      length_gauge_spread_ppm:
+        type: [number, "null"]
+        description: 换规范原点重算的最大变化；phase-2 §4.2 门禁 < 1 ppm。
+  Polarizability:
+    type: object
+    additionalProperties: false
+    required: [static_au, isotropic_au, anisotropy_au]
+    description: 极化率（K7；原子单位）。两个转动不变量必须报出来（phase-2 §4.2）。
+    properties:
+      static_au:
+        type: array
+        items:
+          type: array
+          items: {type: number}
+      frequencies_hartree:
+        type: array
+        items: {type: number}
+      dynamic_au:
+        type: array
+        items:
+          type: array
+          items:
+            type: array
+            items: {type: number}
+      isotropic_au: {type: number}
+      anisotropy_au: {type: number}
+  Multipoles:
+    type: object
+    additionalProperties: false
+    required: [origin_angstrom]
+    description: 多极展开（K7）。多极矩对原点是敏感的，所以原点必须记下来。
+    properties:
+      quadrupole_traceless_debye_angstrom:
+        type: [array, "null"]
+        items:
+          type: array
+          items: {type: number}
+      octupole_traceless_debye_angstrom2:
+        type: [array, "null"]
+      origin_angstrom:
+        type: array
+        items: {type: number}
+        minItems: 3
+        maxItems: 3
   DataSnapshot:
     type: object
     description: "相对路径 -> sha256（64 位小写十六进制）。用的摘要与数据文件内 `sha256`、registry 条目三者一致。"

@@ -24,6 +24,19 @@ pub enum CavityModel {
     Smd,
 }
 
+/// 原子半径所依据的半径集（phase-2 §8.2；**不能混用**不同半径集）。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "lowercase")]
+#[non_exhaustive]
+pub enum RadiiSet {
+    /// Bondi van der Waals 半径。
+    Bondi,
+    /// UFF 力场半径。
+    Uff,
+    /// SMD 的参数化半径。
+    Smd,
+}
+
 /// 溶剂（`qwb-data/solvent/*.yaml` 的形态）。
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
@@ -56,6 +69,19 @@ pub struct Solvent {
     pub cavity_model: CavityModel,
     /// 半径缩放因子。
     pub scale: f64,
+    // ── 阶段二（phase-2 §8.2 / K8）的**可选数据**：旧溶剂文件不受影响。──
+    /// 光学介电常数（折射率 `n`；SMD 的非极性项用 `n²`）。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub refractive_index: Option<f64>,
+    /// `atomic_radii` 用的是哪一套半径（Bondi / UFF / SMD）。混用会静默错数，所以必须声明。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub radii_set: Option<RadiiSet>,
+    /// 表面张力，单位 cal/(mol·Å²)；SMD 的空化项用。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub surface_tension_cal_per_mol_angstrom2: Option<f64>,
+    /// 离子强度，单位 mol/L（PBF 用）；`None` = 纯溶剂。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ionic_strength_molar: Option<f64>,
 }
 
 impl_data_common!(Solvent);
@@ -104,6 +130,41 @@ impl Solvent {
                     .into(),
             );
         }
+
+        // ── 阶段二新增字段的自洽性（缺省时全部跳过）──
+        if let Some(n) = self.refractive_index {
+            if !n.is_finite() || n <= 0.0 {
+                issues.push("refractive_index must be positive and finite".into());
+            } else if n * n > self.epsilon + 1e-9 {
+                // 物理上 ε_optical = n² ≤ ε_static（phase-2 §8.2）。
+                issues.push(format!(
+                    "refractive_index² ({:.4}) exceeds epsilon ({:.4}); n² must not exceed ε_static",
+                    n * n,
+                    self.epsilon
+                ));
+            }
+        }
+        if let Some(tension) = self.surface_tension_cal_per_mol_angstrom2
+            && (!tension.is_finite() || tension < 0.0)
+        {
+            issues.push(
+                "surface_tension_cal_per_mol_angstrom2 must be non-negative and finite".into(),
+            );
+        }
+        if let Some(ionic) = self.ionic_strength_molar
+            && (!ionic.is_finite() || ionic < 0.0)
+        {
+            issues.push("ionic_strength_molar must be non-negative and finite".into());
+        }
+        if matches!(self.cavity_model, CavityModel::Smd) {
+            // SMD 的非极性项需要 n² 与它自己的半径集；缺了就别假装能算（phase-2 §8.2）。
+            if self.refractive_index.is_none() {
+                issues.push("cavity_model = smd requires refractive_index (§8.2)".into());
+            }
+            if !matches!(self.radii_set, Some(RadiiSet::Smd)) {
+                issues.push("cavity_model = smd requires radii_set = smd (§8.2)".into());
+            }
+        }
         issues
     }
 
@@ -118,7 +179,7 @@ impl Solvent {
 mod tests {
     use std::collections::BTreeMap;
 
-    use super::{CavityModel, Solvent};
+    use super::{CavityModel, RadiiSet, Solvent};
     use crate::common::{Citation, License};
 
     pub(crate) fn water() -> Solvent {
@@ -141,6 +202,10 @@ mod tests {
             atomic_radii: radii,
             cavity_model: CavityModel::Pcm,
             scale: 1.2,
+            refractive_index: None,
+            radii_set: None,
+            surface_tension_cal_per_mol_angstrom2: None,
+            ionic_strength_molar: None,
         }
     }
 
@@ -177,5 +242,68 @@ mod tests {
                 .iter()
                 .any(|m| m.contains("atomic_radii must not be empty"))
         );
+    }
+
+    // ───────── 阶段二新增字段（phase-2 §8.2）：纯加性 + 自洽性 ─────────
+
+    #[test]
+    fn phase1_solvent_files_still_load_without_the_new_fields() {
+        // 阶段一的溶剂文件没有 refractive_index/radii_set/...：必须照常通过。
+        let w = water();
+        assert!(w.refractive_index.is_none());
+        assert!(w.radii_set.is_none());
+        assert!(w.check().is_empty(), "{:?}", w.check());
+    }
+
+    #[test]
+    fn refractive_index_must_not_exceed_static_dielectric() {
+        let mut w = water();
+        w.refractive_index = Some(1.33);
+        assert!((1.33f64 * 1.33 - 1.7689).abs() < 1e-12);
+        assert!(w.check().is_empty(), "n² = 1.77 < ε = 78.36 合法");
+
+        let mut w = water();
+        w.refractive_index = Some(9.0); // n² = 81 > 78.36
+        assert!(
+            w.check().iter().any(|m| m.contains("must not exceed")),
+            "{:?}",
+            w.check()
+        );
+
+        let mut w = water();
+        w.refractive_index = Some(0.0);
+        assert!(w.check().iter().any(|m| m.contains("refractive_index")));
+    }
+
+    #[test]
+    fn smd_requires_its_own_radii_and_refractive_index() {
+        let mut w = water();
+        w.cavity_model = CavityModel::Smd;
+        let issues = w.check();
+        assert!(
+            issues
+                .iter()
+                .any(|m| m.contains("requires refractive_index")),
+            "{issues:?}"
+        );
+        assert!(
+            issues
+                .iter()
+                .any(|m| m.contains("requires radii_set = smd")),
+            "{issues:?}"
+        );
+
+        let mut w = water();
+        w.cavity_model = CavityModel::Smd;
+        w.refractive_index = Some(1.33);
+        w.radii_set = Some(RadiiSet::Smd);
+        w.surface_tension_cal_per_mol_angstrom2 = Some(50.0);
+        w.ionic_strength_molar = Some(0.0);
+        assert!(w.check().is_empty(), "{:?}", w.check());
+
+        let mut w = water();
+        w.radii_set = Some(RadiiSet::Bondi);
+        w.ionic_strength_molar = Some(-1.0);
+        assert!(w.check().iter().any(|m| m.contains("ionic_strength")));
     }
 }

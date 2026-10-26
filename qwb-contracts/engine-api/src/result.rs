@@ -9,7 +9,10 @@ use std::collections::BTreeMap;
 use nalgebra::{DMatrix, DVector};
 use serde::{Deserialize, Serialize};
 
+use crate::correlation::{CorrelationResult, SpinResult};
 use crate::error::EngineError;
+use crate::properties::{ExcitedStates, Multipoles, NmrShieldings, Polarizability};
+use crate::solvation::SolvationResult;
 
 /// 矩阵/向量与 JSON 数组之间的显式转换（K4）。
 mod json_array {
@@ -310,6 +313,31 @@ pub struct JobResult {
     pub log: String,
     /// 复现环境。
     pub env: EnvInfo,
+    // ── 阶段二（K7/K8/K9）的**可选结果块**：缺省不出现，旧结果目录照常解析。──
+    /// 色散校正能量（D3(BJ)/D4），单位 Hartree（phase-2 `FX-04`）。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dispersion_energy_hartree: Option<f64>,
+    /// 自旋信息（`⟨S²⟩` 与污染；开壳层必报，phase-2 §4.4）。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub spin: Option<SpinResult>,
+    /// 相关能（MP2 / RI-MP2，phase-2 `SC-04`/`SC-05`）。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub correlation: Option<CorrelationResult>,
+    /// 溶剂化（COSMO / SMD / PBF，phase-2 `SV-01..04`）。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub solvation: Option<SolvationResult>,
+    /// 激发态（CIS / TDA / TDDFT，phase-2 `RS-02`/`RS-03`）。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub excited_states: Option<ExcitedStates>,
+    /// NMR 屏蔽（GIAO，phase-2 `RS-04`）。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub nmr_shieldings: Option<NmrShieldings>,
+    /// 极化率（CPHF，phase-2 `RS-01`）。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub polarizability: Option<Polarizability>,
+    /// 多极展开（四极/八极，phase-2 `RS-08`）。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub multipoles: Option<Multipoles>,
 }
 
 impl JobResult {
@@ -332,6 +360,14 @@ impl JobResult {
             data_snapshot,
             log: String::new(),
             env,
+            dispersion_energy_hartree: None,
+            spin: None,
+            correlation: None,
+            solvation: None,
+            excited_states: None,
+            nmr_shieldings: None,
+            polarizability: None,
+            multipoles: None,
         }
     }
 
@@ -368,6 +404,62 @@ impl JobResult {
     #[must_use]
     pub fn with_log(mut self, log: impl Into<String>) -> Self {
         self.log = log.into();
+        self
+    }
+
+    /// 挂上色散校正能量（phase-2 `FX-04`）。
+    #[must_use]
+    pub fn with_dispersion_energy(mut self, dispersion_energy_hartree: f64) -> Self {
+        self.dispersion_energy_hartree = Some(dispersion_energy_hartree);
+        self
+    }
+
+    /// 挂上自旋信息（phase-2 `SC-01`）。
+    #[must_use]
+    pub fn with_spin(mut self, spin: SpinResult) -> Self {
+        self.spin = Some(spin);
+        self
+    }
+
+    /// 挂上相关能（phase-2 `SC-04`/`SC-05`）。
+    #[must_use]
+    pub fn with_correlation(mut self, correlation: CorrelationResult) -> Self {
+        self.correlation = Some(correlation);
+        self
+    }
+
+    /// 挂上溶剂化（phase-2 `SV-01..04`）。
+    #[must_use]
+    pub fn with_solvation(mut self, solvation: SolvationResult) -> Self {
+        self.solvation = Some(solvation);
+        self
+    }
+
+    /// 挂上激发态（phase-2 `RS-02`/`RS-03`）。
+    #[must_use]
+    pub fn with_excited_states(mut self, excited_states: ExcitedStates) -> Self {
+        self.excited_states = Some(excited_states);
+        self
+    }
+
+    /// 挂上 NMR 屏蔽（phase-2 `RS-04`）。
+    #[must_use]
+    pub fn with_nmr_shieldings(mut self, nmr_shieldings: NmrShieldings) -> Self {
+        self.nmr_shieldings = Some(nmr_shieldings);
+        self
+    }
+
+    /// 挂上极化率（phase-2 `RS-01`）。
+    #[must_use]
+    pub fn with_polarizability(mut self, polarizability: Polarizability) -> Self {
+        self.polarizability = Some(polarizability);
+        self
+    }
+
+    /// 挂上多极展开（phase-2 `RS-08`）。
+    #[must_use]
+    pub fn with_multipoles(mut self, multipoles: Multipoles) -> Self {
+        self.multipoles = Some(multipoles);
         self
     }
 }
@@ -476,5 +568,86 @@ mod tests {
         assert_eq!(a.len(), 2);
         assert_eq!(a.get("a.yaml"), Some("2"));
         assert!(a.validate().is_err());
+    }
+
+    // ───────── 阶段二的结果块：可选、可往返、旧结果仍可读 ─────────
+
+    #[test]
+    fn phase2_blocks_are_absent_by_default() {
+        let result = JobResult::new(1.5, true, snapshot(), env());
+        let json = serde_json::to_string(&result).expect("serialize");
+        for key in [
+            "dispersion_energy_hartree",
+            "spin",
+            "correlation",
+            "solvation",
+            "excited_states",
+            "nmr_shieldings",
+            "polarizability",
+            "multipoles",
+        ] {
+            assert!(
+                !json.contains(key),
+                "阶段二的结果块缺省不该出现（K7/K8/K9 是纯加性）：{key} in {json}"
+            );
+        }
+    }
+
+    #[test]
+    fn phase2_blocks_roundtrip_and_old_json_still_parses() {
+        use crate::correlation::{CorrelationResult, Mp2Kind, SpinResult};
+        use crate::properties::{ExcitedStates, Multipoles, Polarizability, SumRules};
+        use crate::solvation::{SolvationResult, SolventModel};
+
+        let result = JobResult::new(1.5, true, snapshot(), env())
+            .with_dispersion_energy(-0.0042)
+            .with_spin(SpinResult::new(5, 5, 3, 2.0))
+            .with_correlation(
+                CorrelationResult::new(Mp2Kind::RiMp2, -0.31, -76.33)
+                    .with_aux_basis("def2-svp-ri")
+                    .with_ri_error(-1.0e-5),
+            )
+            .with_solvation(
+                SolvationResult::new(
+                    SolventModel::Cosmo,
+                    "water",
+                    -76.4,
+                    -0.02,
+                    crate::solvation::CavityGeometry::new(42.0, 18.0, 1024),
+                    7,
+                )
+                .with_converged(true),
+            )
+            .with_excited_states(ExcitedStates::new(
+                crate::properties::ExcitedStateMethod::Tda,
+                1,
+                vec![crate::properties::Transition::new(1, 0.3, 412.0, 0.05)],
+                SumRules::new(7.4, 10.0),
+            ))
+            .with_polarizability(
+                Polarizability::from_static_tensor([
+                    [10.0, 0.0, 0.0],
+                    [0.0, 10.0, 0.0],
+                    [0.0, 0.0, 20.0],
+                ])
+                .expect("tensor"),
+            )
+            .with_multipoles(Multipoles::new([0.0, 0.0, 0.0]));
+
+        let json = serde_json::to_string(&result).expect("serialize");
+        let back: JobResult = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(back, result);
+        assert_eq!(
+            back.dispersion_energy_hartree
+                .map(|e| (e + 0.0042).abs() < 1e-15),
+            Some(true)
+        );
+
+        // 阶段一写出的 result.json（没有这些键）必须仍能解析：G5/向后兼容。
+        let old = serde_json::to_string(&JobResult::new(1.5, true, snapshot(), env()))
+            .expect("old result");
+        let parsed: JobResult = serde_json::from_str(&old).expect("旧结果必须仍可读");
+        assert!(parsed.spin.is_none());
+        assert!(parsed.excited_states.is_none());
     }
 }
