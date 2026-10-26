@@ -52,7 +52,7 @@ python -m venv .venv
 .venv\Scripts\python.exe -m pip install mypy numpy pydantic pytest maturin PySide6 vtk
 ```
 
-当前状态：**25/25 全绿**（第 58 轮，Python 侧 182 个测试）。逐项与最近轮次记在
+当前状态：**25/25 全绿**（第 59 轮，Python 侧 182 个测试）。逐项与最近轮次记在
 [`docs/status.yaml`](./docs/status.yaml) 的 C-06。
 
 ## 目录

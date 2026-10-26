@@ -351,7 +351,7 @@ qwb data verify                   # 校验整个注册表（G2：sha256 + schema
 qwb data verify path\file.yaml    # 校验单个文件
 qwb data sign path\file.yaml      # 按规范化摘要重新签名（改了数据之后）
 qwb data install                  # 取回缺的第三方数据（见 §8.4）
-qwb data install --check          # 只检查：缺/坏 → 退出码 1
+qwb data install --check          # 只检查：缺/坏 → 退出码 3（K5 的数据失败码）
 qwb data install --need basis\lanl2dz.yaml ecp\lanl2dz-cu.yaml
 qwb data install --for-input qwb-core\examples\cuh_lanl2dz_pbe.yaml
 qwb data install --all --force    # 全部重下（摘要已正确也重下）
@@ -676,7 +676,7 @@ Python 侧 182 个测试 + `.qwb` 夹具新鲜度。
 > 门禁第一步会 `python scripts/fetch_data.py --check`，缺就 `--all`。所以**新 clone 上的
 > 第一次 `verify` 需要网络**（7 个小文件）；取回之后就是纯本地的。
 
-最后一次实测：**25/25 全绿**（`verify-r58.log`，Python 侧 182 passed）。
+最后一次实测：**25/25 全绿**（`verify-r59.log`，Python 侧 182 passed）。
 
 ### 10.2 单独跑某一类
 

@@ -344,7 +344,24 @@ def ensure_for_input(
 # ---------------------------------------------------------------------------
 
 
+def _force_utf8_streams() -> None:
+    """把 stdout/stderr 切到 UTF-8。
+
+    这里的中文提示（"缺失/过期"、"已取回"）在 Windows 上默认按控制台代码页（如 cp936）
+    编码，遇到非该代码页的字符会变成乱码或直接 `UnicodeEncodeError`。下载脚本是给人的
+    工具，输出不该因为控制台设置而不可读。
+    """
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is not None:
+            try:
+                reconfigure(encoding="utf-8", errors="replace")
+            except (OSError, ValueError):  # pragma: no cover - 管道关闭等
+                pass
+
+
 def main(argv: list[str] | None = None) -> int:
+    _force_utf8_streams()
     parser = argparse.ArgumentParser(
         prog="qwb-datafetch",
         description="按 qwb-data/sources.json 从 BSE 取回第三方数据（仓库不存这些文件）",
@@ -366,13 +383,21 @@ def main(argv: list[str] | None = None) -> int:
         if args.list or args.check:
             statuses = check_entries(root, only=args.need)
             width = max(len(status.path) for status in statuses)
+            lines = []
             for status in statuses:
                 mark = {"ok": "ok     ", "missing": "MISSING", "stale": "STALE  "}[status.state]
-                print(f"{mark} {status.path:<{width}}  {status.expected[:16]}…")
+                lines.append(f"{mark} {status.path:<{width}}  {status.expected[:16]}…")
             bad = [status for status in statuses if not status.ok]
-            print(f"\n{len(statuses) - len(bad)}/{len(statuses)} 条就绪")
+            lines.append("")
+            lines.append(f"{len(statuses) - len(bad)}/{len(statuses)} 条就绪")
+            # 一次打印 + flush：否则提示行（stderr，无缓冲）会插到表格中间。
+            print("\n".join(lines), flush=True)
             if args.check and bad:
-                print("缺/坏的文件请跑：python -m qwb_studio.datafetch --all", file=sys.stderr)
+                print(
+                    "缺/坏的文件请跑：python -m qwb_studio.datafetch --all",
+                    file=sys.stderr,
+                    flush=True,
+                )
                 return 1
             return 0
         if args.for_input:

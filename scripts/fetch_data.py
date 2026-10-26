@@ -30,4 +30,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "qwb-studio"))
 from qwb_studio.datafetch import main  # noqa: E402 - 需要先改 sys.path
 
 if __name__ == "__main__":
+    # 中文日志在 Windows 控制台（cp936）下会乱码，先切 UTF-8（`main` 里也会切一次，
+    # 这里是给"import 之前就打印"的情形兜底）。
+    for _stream in (sys.stdout, sys.stderr):
+        _reconfigure = getattr(_stream, "reconfigure", None)
+        if _reconfigure is not None:
+            try:
+                _reconfigure(encoding="utf-8", errors="replace")
+            except (OSError, ValueError):
+                pass
     raise SystemExit(main(sys.argv[1:]))

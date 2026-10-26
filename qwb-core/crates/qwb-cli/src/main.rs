@@ -1153,7 +1153,15 @@ fn cmd_data_install(args: &InstallArgs) -> CliResult<()> {
         // 没给具体范围就当成"补齐全部"：这是 `install` 的默认意图。
         extra.push("--all".to_string());
     }
-    run_fetcher(&root, &extra).map_err(CliError::data)
+    run_fetcher(&root, &extra).map_err(|message| {
+        // `--check` 的非零是"数据没就绪"，不是"命令用错了"：消息里说清楚，
+        // 退出码仍走 K5 的数据失败（3）。
+        if args.check {
+            CliError::data(format!("第三方数据未就绪：\n{message}"))
+        } else {
+            CliError::data(message)
+        }
+    })
 }
 
 /// 一次 `qwb_studio.datafetch` 调用所需的解释器与 `PYTHONPATH` 根。
@@ -1190,7 +1198,15 @@ fn fetcher_candidates(data_root: &Path) -> Vec<Fetcher> {
             }
         }
     }
-    for name in ["python3", "python"] {
+    // Windows 上先试 `python`：`python3` 多半只是 Microsoft Store 的应用执行别名，
+    // 跑起来会先往 stderr 糊一句 "Python was not found; run without arguments to install…"
+    // 再失败。兜底逻辑能继续，但日志里多一行噪音。
+    let names: [&str; 2] = if cfg!(windows) {
+        ["python", "python3"]
+    } else {
+        ["python3", "python"]
+    };
+    for name in names {
         out.push(Fetcher {
             program: PathBuf::from(name),
             repo: repo.clone(),
@@ -1199,9 +1215,18 @@ fn fetcher_candidates(data_root: &Path) -> Vec<Fetcher> {
     out
 }
 
+/// Windows 的 `python3` 常常只是 Microsoft Store 的**应用执行别名**：进程能起来，
+/// 但立刻以 9009 退出并打印"Python was not found…"。那不是"取数失败"，而是"这里没有
+/// 解释器"，所以遇到它要继续试下一个候选。
+const WINDOWS_STORE_ALIAS_CODE: i32 = 9009;
+
 /// 调 `python -m qwb_studio.datafetch`；失败时返回可直接抄的命令行。
+///
+/// 语义：**第一个真正跑起来的解释器的退出码就是结果**。非零立刻返回（数据缺失、
+/// 摘要不符、网络不通都是"取数失败"，再换解释器也不会变），只有"根本没起来"
+/// （`NotFound`）与 Windows 的 9009 别名才继续试下一个候选。
 fn run_fetcher(root: &Path, extra: &[String]) -> Result<(), String> {
-    let mut failure = String::new();
+    let mut not_started = String::new();
     for fetcher in fetcher_candidates(root) {
         let mut command = std::process::Command::new(&fetcher.program);
         command
@@ -1234,24 +1259,32 @@ fn run_fetcher(root: &Path, extra: &[String]) -> Result<(), String> {
         }
         match command.status() {
             Ok(status) if status.success() => return Ok(()),
-            Ok(status) => {
-                failure = format!(
-                    "`{} -m qwb_studio.datafetch` 以退出码 {} 结束",
-                    fetcher.program.display(),
-                    status.code().unwrap_or(-1)
+            Ok(status) if status.code() == Some(WINDOWS_STORE_ALIAS_CODE) => {
+                not_started = format!(
+                    "`{}` 是 Windows 的应用执行别名（退出码 {WINDOWS_STORE_ALIAS_CODE}），不是真的解释器",
+                    fetcher.program.display()
                 );
+            }
+            Ok(status) => {
+                return Err(format!(
+                    "取数失败：`{} -m qwb_studio.datafetch` 退出码 {}（原因见上面的输出）\n  \
+                     手动取回：python -m qwb_studio.datafetch --data-root {} --all",
+                    fetcher.program.display(),
+                    status.code().unwrap_or(-1),
+                    root.display()
+                ));
             }
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => continue,
             Err(err) => {
-                failure = format!("`{}`: {err}", fetcher.program.display());
+                not_started = format!("`{}`: {err}", fetcher.program.display());
             }
         }
     }
-    if failure.is_empty() {
-        failure = "找不到 Python 解释器（可用 QWB_PYTHON 指定）".to_string();
+    if not_started.is_empty() {
+        not_started = "找不到 Python 解释器（可用 QWB_PYTHON 指定）".to_string();
     }
     Err(format!(
-        "{failure}\n  手动取回：python -m qwb_studio.datafetch --data-root {} --all",
+        "{not_started}\n  手动取回：python -m qwb_studio.datafetch --data-root {} --all",
         root.display()
     ))
 }
