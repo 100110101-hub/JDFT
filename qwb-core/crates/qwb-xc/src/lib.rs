@@ -153,6 +153,9 @@ pub enum XcError {
     /// 输入切片长度不一致。
     #[error("density batch shape mismatch: {0}")]
     Shape(String),
+    /// 该泛函项没有自旋分辨的实现（缺少铁磁/α_c 参数集）。
+    #[error("spin-resolved evaluation is not available: {0}")]
+    SpinUnsupported(String),
 }
 
 /// 一个交换相关项。
@@ -295,6 +298,13 @@ impl FunctionalTerm for LdaSlaterX {
 pub struct LdaSvwn5 {
     /// 顺磁参数 `(A, x0, b, c)`。
     pub para: (f64, f64, f64, f64),
+    /// 铁磁参数 `(A, x0, b, c)`；`None` = 只支持自旋非极化（闭壳层）。
+    ///
+    /// VWN5 的自旋插值 `ε_c = ε_c^P + (ε_c^F − ε_c^P) f(ζ)` 需要这一组参数，
+    /// 数据里早就有（`vwn5_f_*`），只是闭壳层路径没读它。
+    pub ferro: Option<(f64, f64, f64, f64)>,
+    /// 自旋插值的 `α_c` 参数集 `(A, x0, b, c)`（`vwn5_a_*`）；VWN5 用它算 `f(ζ)` 的分母。
+    pub alpha: Option<(f64, f64, f64, f64)>,
 }
 
 /// VWN 的 `G(x)`（`ε_c = G(x)`，`x = √r_s`）。
@@ -320,10 +330,32 @@ pub(crate) fn vwn_g_prime(x: f64, a: f64, x0: f64, b: f64, c: f64) -> f64 {
 }
 
 impl LdaSvwn5 {
-    /// 由顺磁参数构造。
+    /// 由顺磁参数构造（自旋插值不可用，只支持闭壳层）。
     #[must_use]
     pub fn new(para: (f64, f64, f64, f64)) -> Self {
-        Self { para }
+        Self {
+            para,
+            ferro: None,
+            alpha: None,
+        }
+    }
+
+    /// 补上铁磁与 α_c 参数集（打开自旋插值）。
+    #[must_use]
+    pub fn with_spin_parameters(
+        mut self,
+        ferro: (f64, f64, f64, f64),
+        alpha: (f64, f64, f64, f64),
+    ) -> Self {
+        self.ferro = Some(ferro);
+        self.alpha = Some(alpha);
+        self
+    }
+
+    /// 是否支持自旋极化（UKS）。
+    #[must_use]
+    pub fn supports_spin(&self) -> bool {
+        self.ferro.is_some() && self.alpha.is_some()
     }
 }
 
@@ -381,6 +413,157 @@ impl FunctionalTerm for LdaSvwn5 {
         }
         for slot in d_sigma.iter_mut() {
             *slot = 0.0;
+        }
+    }
+}
+
+// ─────────────────── 自旋分辨 LSDA（UKS 的 XC 侧，SC-01b）───────────────────
+
+/// 自旋分辨的密度批次（每个点一对 `ρ_α`、`ρ_β`）。
+///
+/// 闭壳层路径用 [`DensityBatch`]（自旋求和）；UKS 需要每个自旋通道各自的密度，
+/// 所以单独一个类型。两者都在"每个点一个标量"的层面工作，消费方逐点累加权重。
+#[derive(Debug, Clone, Copy, PartialEq)]
+#[non_exhaustive]
+pub struct SpinDensityBatch<'a> {
+    /// `ρ_α`（e/Bohr³）。
+    pub rho_alpha: &'a [f64],
+    /// `ρ_β`（e/Bohr³）。
+    pub rho_beta: &'a [f64],
+}
+
+impl<'a> SpinDensityBatch<'a> {
+    /// 由两套密度构造。
+    ///
+    /// # Panics
+    ///
+    /// 两个切片长度不同（调用方应先保证网格一致）。
+    #[must_use]
+    pub fn new(rho_alpha: &'a [f64], rho_beta: &'a [f64]) -> Self {
+        assert_eq!(
+            rho_alpha.len(),
+            rho_beta.len(),
+            "spin densities must have the same length"
+        );
+        Self {
+            rho_alpha,
+            rho_beta,
+        }
+    }
+
+    /// 点数。
+    #[must_use]
+    pub fn len(&self) -> usize {
+        self.rho_alpha.len()
+    }
+
+    /// 是否为空。
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.rho_alpha.is_empty()
+    }
+
+    /// 自旋极化率 `ζ = (ρ_α − ρ_β)/ρ`（`ρ ≈ 0` 时返回 0）。
+    #[must_use]
+    pub fn zeta(&self, index: usize) -> f64 {
+        let alpha = self.rho_alpha[index].max(0.0);
+        let beta = self.rho_beta[index].max(0.0);
+        let total = alpha + beta;
+        if total <= LOW_DENSITY_FLOOR {
+            0.0
+        } else {
+            ((alpha - beta) / total).clamp(-1.0, 1.0)
+        }
+    }
+}
+
+impl LdaSvwn5 {
+    /// `f(ζ) = [(1+ζ)^{4/3} + (1−ζ)^{4/3} − 2] / (2^{4/3} − 2)`（VWN5 的自旋插值因子）。
+    #[must_use]
+    pub fn interpolation_factor(&self, zeta: f64) -> f64 {
+        let zeta = zeta.clamp(-1.0, 1.0);
+        let numerator = (1.0 + zeta).powf(4.0 / 3.0) + (1.0 - zeta).powf(4.0 / 3.0) - 2.0;
+        numerator / (2.0_f64.powf(4.0 / 3.0) - 2.0)
+    }
+
+    /// `f'(ζ)`。
+    #[must_use]
+    pub fn interpolation_factor_derivative(&self, zeta: f64) -> f64 {
+        let zeta = zeta.clamp(-1.0 + 1e-12, 1.0 - 1e-12);
+        let numerator = (1.0 + zeta).cbrt() - (1.0 - zeta).cbrt();
+        (4.0 / 3.0) * numerator / (2.0_f64.powf(4.0 / 3.0) - 2.0)
+    }
+
+    /// 自旋分辨的每电子相关能密度 `ε_c(ρ_α, ρ_β)`（写进 `out`）。
+    ///
+    /// # Errors
+    ///
+    /// 没有铁磁/α_c 参数集，或输出长度与输入不一致。
+    pub fn energy_density_spin(
+        &self,
+        batch: &SpinDensityBatch<'_>,
+        out: &mut [f64],
+    ) -> Result<(), XcError> {
+        self.require_spin()?;
+        if out.len() != batch.len() {
+            return Err(XcError::Shape(format!(
+                "LdaSvwn5::energy_density_spin: output {} vs input {}",
+                out.len(),
+                batch.len()
+            )));
+        }
+        for (index, slot) in out.iter_mut().enumerate() {
+            *slot = self
+                .spin_energy_at(batch.rho_alpha[index], batch.rho_beta[index])
+                .0;
+        }
+        Ok(())
+    }
+
+    /// 有一个点上的 `(ε_c, dε_c/dρ_α, dε_c/dρ_β)`。
+    ///
+    /// `ε_c = ε_c^P(r_s) + [ε_c^F(r_s) − ε_c^P(r_s)] · f(ζ)`；消费方用
+    /// `v_σ = ε_c + ρ · dε_c/dρ_σ`（`ρ = ρ_α + ρ_β`）。
+    #[must_use]
+    pub fn spin_energy_at(&self, rho_alpha: f64, rho_beta: f64) -> (f64, f64, f64) {
+        let (a_p, x0_p, b_p, c_p) = self.para;
+        let (a_f, x0_f, b_f, c_f) = self.ferro.unwrap_or(self.para);
+        let alpha = rho_alpha.max(0.0);
+        let beta = rho_beta.max(0.0);
+        let total = (alpha + beta).max(1.0e-300);
+        if total <= LOW_DENSITY_FLOOR {
+            return (0.0, 0.0, 0.0);
+        }
+        let zeta = ((alpha - beta) / total).clamp(-1.0, 1.0);
+        let rs = (3.0 / (4.0 * std::f64::consts::PI * total)).cbrt();
+        let x = rs.sqrt();
+        let eps_p = vwn_g(x, a_p, x0_p, b_p, c_p);
+        let eps_f = vwn_g(x, a_f, x0_f, b_f, c_f);
+        let factor = self.interpolation_factor(zeta);
+        let eps = eps_p + (eps_f - eps_p) * factor;
+
+        let gp = vwn_g_prime(x, a_p, x0_p, b_p, c_p);
+        let gf = vwn_g_prime(x, a_f, x0_f, b_f, c_f);
+        let d_eps_drs = (gp + (gf - gp) * factor) / (2.0 * x);
+        let drs_dtotal = -rs / (3.0 * total);
+        let df_dzeta = self.interpolation_factor_derivative(zeta);
+        // ∂ζ/∂ρ_σ：α 为 (1−ζ)/ρ，β 为 −(1+ζ)/ρ。
+        let dzeta_dalpha = (1.0 - zeta) / total;
+        let dzeta_dbeta = -(1.0 + zeta) / total;
+
+        let d_alpha = d_eps_drs * drs_dtotal + (eps_f - eps_p) * df_dzeta * dzeta_dalpha;
+        let d_beta = d_eps_drs * drs_dtotal + (eps_f - eps_p) * df_dzeta * dzeta_dbeta;
+        let finite = |value: f64| if value.is_finite() { value } else { 0.0 };
+        (finite(eps), finite(d_alpha), finite(d_beta))
+    }
+
+    fn require_spin(&self) -> Result<(), XcError> {
+        if self.supports_spin() {
+            Ok(())
+        } else {
+            Err(XcError::SpinUnsupported(
+                "LdaSvwn5 was built without the ferromagnetic/alpha parameter sets".into(),
+            ))
         }
     }
 }
@@ -501,12 +684,32 @@ pub fn build_term(
             parameters,
             "slater_alpha",
         )?))),
-        "LdaSvwn5" => Ok(Box::new(LdaSvwn5::new((
-            parameter(id, parameters, "vwn5_p_A")?,
-            parameter(id, parameters, "vwn5_p_x0")?,
-            parameter(id, parameters, "vwn5_p_b")?,
-            parameter(id, parameters, "vwn5_p_c")?,
-        )))),
+        "LdaSvwn5" => {
+            let mut term = LdaSvwn5::new((
+                parameter(id, parameters, "vwn5_p_A")?,
+                parameter(id, parameters, "vwn5_p_x0")?,
+                parameter(id, parameters, "vwn5_p_b")?,
+                parameter(id, parameters, "vwn5_p_c")?,
+            ));
+            // 三组参数齐全才打开自旋插值（旧的只含顺磁参数的数据仍然可用）。
+            if parameters.contains_key("vwn5_f_A") && parameters.contains_key("vwn5_a_A") {
+                term = term.with_spin_parameters(
+                    (
+                        parameter(id, parameters, "vwn5_f_A")?,
+                        parameter(id, parameters, "vwn5_f_x0")?,
+                        parameter(id, parameters, "vwn5_f_b")?,
+                        parameter(id, parameters, "vwn5_f_c")?,
+                    ),
+                    (
+                        parameter(id, parameters, "vwn5_a_A")?,
+                        parameter(id, parameters, "vwn5_a_x0")?,
+                        parameter(id, parameters, "vwn5_a_b")?,
+                        parameter(id, parameters, "vwn5_a_c")?,
+                    ),
+                );
+            }
+            Ok(Box::new(term))
+        }
         others => crate::gga::build_pbe_term(others, parameters),
     }
 }

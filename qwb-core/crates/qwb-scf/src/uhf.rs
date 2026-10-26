@@ -146,7 +146,10 @@ pub struct UhfResult {
 /// # Errors
 ///
 /// 电子数非正、多重度与电子数奇偶性矛盾、或 `n_β < 0` 时返回 [`EngineError::InvalidInput`]。
-fn split_spins(electrons: i64, multiplicity: u32) -> Result<(usize, usize), EngineError> {
+pub(crate) fn split_spins(
+    electrons: i64,
+    multiplicity: u32,
+) -> Result<(usize, usize), EngineError> {
     if electrons <= 0 {
         return Err(EngineError::InvalidInput(
             "open-shell SCF needs a positive electron count".into(),
@@ -216,7 +219,7 @@ fn trace_of(matrix: &Matrix) -> Result<f64, EngineError> {
 }
 
 /// 求自旋通道的 Fock 与能量。
-fn fock_and_energy(
+pub(crate) fn fock_and_energy(
     hcore: &Matrix,
     tensor: &TwoElectronIntegrals,
     density_alpha: &Matrix,
@@ -272,7 +275,7 @@ fn apply_level_shift(fock: &mut Matrix, density: &Matrix, overlap: &Matrix, shif
 }
 
 /// `½ Tr[P F]`。
-fn trace_product(density: &Matrix, fock: &Matrix) -> Result<f64, EngineError> {
+pub(crate) fn trace_product(density: &Matrix, fock: &Matrix) -> Result<f64, EngineError> {
     let mut trace = 0.0;
     for i in 0..density.nrows() {
         for k in 0..density.ncols() {
@@ -297,7 +300,7 @@ fn add(left: &Matrix, right: &Matrix) -> Result<Matrix, EngineError> {
     Ok(out)
 }
 
-fn max_abs_difference(left: &Matrix, right: &Matrix) -> f64 {
+pub(crate) fn max_abs_difference(left: &Matrix, right: &Matrix) -> f64 {
     let mut worst = 0.0_f64;
     for i in 0..left.nrows() {
         for j in 0..left.ncols() {
@@ -575,7 +578,7 @@ pub fn uhf_scf(
 }
 
 /// `P ← (1 − d) P_old + d P_new`。
-fn mix(old: &Matrix, new: &Matrix, damping: f64) -> Matrix {
+pub(crate) fn mix(old: &Matrix, new: &Matrix, damping: f64) -> Matrix {
     if damping <= 0.0 {
         return new.clone();
     }

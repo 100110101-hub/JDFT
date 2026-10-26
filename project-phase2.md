@@ -391,14 +391,14 @@ NumericsReport {
 | DA（数据） | 8 | 全部 pending |
 | IN（积分/数值路径） | 5 | 全部 pending |
 | FX（泛函） | 4 | 全部 pending |
-| SC（SCF/相关/开壳层） | 7 | SC-01 done，其余 pending |
+| SC（SCF/相关/开壳层） | 8 | SC-01 done；SC-01b in_progress；SC-01c blocked；其余 pending |
 | RS（响应与性质） | 8 | 全部 pending |
 | SV（溶剂化） | 5 | 全部 pending |
 | RP（反应路径） | 4 | 全部 pending |
 | PR（产品面） | 8 | 全部 pending |
 | VF（验证） | 6 | 全部 pending |
 | ST（stretch 备选池） | 5 | 全部 pending（允许 `blocked`） |
-| **合计** | **65** | — |
+| **合计** | **66** | — |
 
 ### 6.1 契约轨（KV）
 
@@ -447,7 +447,8 @@ NumericsReport {
 | ID | 依赖 | 产物 | 验收 |
 |---|---|---|---|
 | SC-01 | KV-03 | **UHF**（开壳层 HF）：双套密度、`F_σ = H + J(P) − K(P_σ)`、`⟨S²⟩` 与 `spin_contamination`、**自旋平均的原子密度初猜**（SAD）；引擎接线 `scf_type: uhf` + `method_name: hf` + `sp`，结果带 K9 的 `spin` 块 | ① 闭壳层退化：H2/STO-3G 的 UHF == RHF（< 1e-9 Ha）、`⟨S²⟩ < 1e-10`、α/β 密度逐元素相同；② O2 三重态（STO-3G）能量与 `uhf_open_shell.csv` 的 PySCF 值差 < 1e-6，`n_α=9`/`n_β=7`；③ 自旋污染**必须报出来**：O2 `⟨S²⟩ = 2.0034`、OH `0.7533`（与 PySCF 差 < 1e-6），且断言 `⟨S²⟩ > 2.0`（UHF 的本性）；④ OH 双峰同值；⑤ `Tr[P_σ S] = n_σ`；⑥ 两次运行逐位相同；⑦ 引擎侧 `spin` 块落盘、`uhf`+DFT 与 `uhf`+`opt` 显式拒绝 |
-| SC-01b | SC-01 | **ROHF**（纯自旋）与 **UKS**（自旋分辨 XC：交换 `½[E_x(2ρ_α)+E_x(2ρ_β)]`，相关项 VWN5/PBE-C/LYP 的自旋插值） | O2/STO-3G 的 **ROHF** `⟨S²⟩ = 2.0`（< 1e-6）且能量与 PySCF 的 ROHF 差 < 1e-6；UKS 的 O2/OH 与 PySCF 同值 < 1e-6；闭壳层体系在 `uks` 下与 `rks` 能量差 < 1e-8（退化一致性）；自旋插值逐项对照（交换的 ½ 规则、相关的插值公式） |
+| SC-01b | SC-01 | **UKS**（自旋分辨 XC）：`SpinDensityBatch`、交换的 `½[E_x(2ρ_α)+E_x(2ρ_β)]`、VWN5 的自旋插值与 GM/PBE-C/B88/LYP 的自旋形式、UKS 的 SCF 循环（每通道一套 Fock） | XC 侧：`ε_c(ρ/2,ρ/2)` 退回闭壳层（< 1e-12）、`∂ε/∂ρ_σ` 与中心差分 < 1e-9、ζ=1 等于铁磁参数集、缺参数时 `SpinUnsupported`。SCF 侧：O2/OH 的 UKS 与 PySCF 同值 < 1e-6、闭壳层体系 `uks` ≡ `rks` < 1e-8 |
+| SC-01c | SC-01 | **ROHF**（纯自旋，`⟨S²⟩ = S(S+1)` 精确）—— **blocked**：Guest–Saunders 等效 Fock 的第一版实现收敛到错误的驻点（O2 高 2.05 Ha、OH 高 1.12 Ha；闭壳层情形 O2→H2 精确 ≡ RHF，说明闭壳层机制没问题、错在 C-O/O-V 混合块） | 解锁条件：正确的有效 Fock 推导，或改用"轨道旋转直接优化"（用真实能量梯度做线搜索）；验收仍是 O2 `⟨S²⟩ = 2.0` 且能量与 PySCF 的 ROHF 差 < 1e-6 |
 | SC-02 | SC-01 | 开壳层解析梯度（UHF/UKS）与优化接线 | 与数值梯度 < 1e-6 Ha/Bohr（OH、O2）；`opt` 在开壳层跑通（符号与自旋不变） |
 | SC-03 | SC-01 | 开壳层的 SCF 稳定性（level shift、DIIS 变体、破对称初猜） | 5 个开壳层体系全部收敛到 1e-8（列出墙钟）；不收敛时返回 `ScfNotConverged` |
 | SC-04 | KV-03, IN-01 | canonical MP2（半正则化，RHF/RKS 参考）+ 相关能 | H2O/cc-pVDZ 的 MP2 相关能与文献差 < 0.1 mHa；基组单调性（DZ→TZ）方向正确；`correlation` 块进 `result.json` |
@@ -554,15 +555,23 @@ qwb run examples/o2_uhf_sto3g.yaml          # O2 三重态（UHF）
 - OH 双峰（STO-3G）同值；
 - `scripts/verify.ps1` 全绿；旧 T1–T8 无回归。
 
-### M1b · 开壳层第二步：ROHF（纯自旋）与 UKS
+### M1b · 开壳层第二步：UKS（自由基也能用 DFT 算了）
 
 **前置 WP**：M1 + SC-01b
 
 **断言**：
 
-- O2/STO-3G 的 **ROHF** `⟨S²⟩ = 2.0`（< 1e-6，纯自旋态）且能量与 PySCF 的 ROHF 同值；
-- O2/OH 的 **UKS** 能量与 PySCF 同值（< 1e-6），闭壳层体系 `uks` ≡ `rks`（< 1e-8）；
-- 两个里程碑都要求同一个 `spin` 块（UHF/ROHF/UKS 用同一个 K9 结构）。
+- O2/OH 的 **UKS**（SVWN5、PBE）与 PySCF 同值（< 1e-6），`spin` 块落盘；
+- 闭壳层体系 `uks` ≡ `rks`（< 1e-8）—— 退化一致性；
+- 交换项的自旋标度与相关项的自旋插值各有独立断言（见 SC-01b 的 XC 侧判据）。
+
+### M1c · 开壳层第三步：ROHF（纯自旋）—— **blocked**
+
+**前置 WP**：M1 + SC-01c
+
+ROHF 的验收是"O2 的 `⟨S²⟩ = 2.0` 精确、能量与 PySCF 的 ROHF 同值"，目前**未达成**：
+第一版 Guest–Saunders 等效 Fock 在开壳层情形收敛到错误的驻点（差 2.05 Ha / 1.12 Ha）。
+阻塞记录见 `docs/status-v2.yaml` 的 SC-01c 与 `docs/choices.md` 四十九。
 
 ### M2 · meta-GGA 与色散
 
@@ -864,7 +873,7 @@ equiv_tol_hartree:            # K10 门禁的容差（按路径分）
 （阶段一基线：门禁 26/26 绿，T1–T8 done）
  1. KV-01..KV-05                              ← 契约先立
  2. DA-01, DA-06, FX-01, FX-04                ← meta-GGA 基础设施 + 色散（最快见效）
- 3. SC-01 → M1（UHF）；SC-01b → M1b（ROHF+UKS）  ← 开壳层（解锁一大批体系）
+ 3. SC-01 → M1（UHF）；SC-01b → M1b（UKS）；SC-01c（ROHF）blocked 待重做 ← 开壳层
  4. FX-02 → M2（meta-GGA+D3）
  5. DA-07, IN-01, SC-04, SC-05 → M3            ← RI-MP2
  6. RS-01（CPHF）→ RS-02, RS-03 → M4            ← 激发态

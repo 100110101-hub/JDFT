@@ -122,8 +122,21 @@ SC-01:
 
 
 SC-01b:
-  state: pending
-  note: "ROHF（纯自旋，⟨S²⟩=S(S+1) 精确）+ UKS（自旋分辨 XC：交换 ½[E_x(2ρ_α)+E_x(2ρ_β)] + VWN5/PBE-C/LYP 的自旋插值）"
+  state: in_progress
+  ts: "2026-11-06T18:30:00Z"
+  artifact: "（已完成的部分）qwb-xc/src/lib.rs 的 `SpinDensityBatch` + `LdaSvwn5` 的自旋插值（`interpolation_factor`/`energy_density_spin`/`spin_energy_at`）+ 工厂读 `vwn5_f_*`/`vwn5_a_*` 参数集 + qwb-xc/tests/sc01b_spin_lda.rs"
+  verification: "XC 侧 **6 例绿**：① ζ=0 退回闭壳层值（6 个密度点，差 < 1e-12）；② `∂ε/∂ρ_α`、`∂ε/∂ρ_β` 与中心差分 < 1e-9（6 组 (ρ_α,ρ_β)，含 ζ=0.9/0.98 的近铁磁点）；③ ζ=1 时等于铁磁参数集的闭壳层值（< 1e-10）；④ 相关能随极化单调增大（0.5/0.5 < 0.75/0.25 < 1.0/0.0）；⑤ 缺铁磁参数时 `energy_density_spin` 返回 `SpinUnsupported`（不猜）；⑥ ζ 的钳制与空区域 ζ=0。"
+  note: "**剩下的部分**：① 交换项的自旋标度 `½[E_x(2ρ_α)+E_x(2ρ_β)]`（Slater/B88/PBE-X）；② GGA 自旋：PBE-C 的 ζ 插值、B88/LYP 的自旋形式；③ UKS 的 SCF 循环（每通道一套 Fock、双通道 DIIS、`⟨S²⟩`）；④ 引擎接线 `scf_type: uks`；⑤ 与 PySCF 的 O2/OH 同值验收（M1b）。数据侧不需要改动：`svwn5.yaml` 里 `vwn5_f_*`/`vwn5_a_*` 本来就有（之前闭壳层路径没读）。"
+
+SC-01c:
+  state: blocked
+  ts: "2026-11-06T18:00:00Z"
+  artifact: "（未落地，代码已移除以免误用）qwb-scf/src/rohf.rs 的第一版实现：Guest–Saunders 等效 Fock（投影构造）+ 自然轨道初猜"
+  verification: "**实测差距**（不是没试）：闭壳层情形（H2/STO-3G）ROHF ≡ RHF 精确通过（差 < 1e-9、`n_open = 0`），说明闭壳层那段机制没问题；开壳层情形两种缩放都失败：取梯度一致的 2:1:1 缩放（闭⊕虚 = 2F_C、闭-开 = F_β、开-虚 = F_α）时**收敛**但落到错的驻点（O2 E = −147.2212 vs PySCF ROHF −147.6322，差 **0.411 Ha**；OH −73.239 vs −74.3616，差 **1.12 Ha**）；取统一尺度 1:1:1 时 400 步不收敛。"
+  gap: "差 0.41 Ha（O2）/ 1.12 Ha（OH）；纯自旋的 `⟨S²⟩ = S(S+1)` 因此也拿不到（第一版只能报 UHF 的 2.0034）"
+  note: "**卡在哪**：等效 Fock 的 C-O / O-V 混合块不满足驻点条件。已确认的两个具体原因：① 缩放不能按梯度的 4:2:2 直接套 —— `F_eff` 的本征值同时决定占据顺序，把闭⊕虚块乘 2 会让闭/开壳层轨道能级不可比，aufbau 会把闭壳层轨道误判成开壳层（这是 0.41 Ha 那个解的直接来源）；② 统一尺度又让迭代矩阵条件数变坏（400 步不收敛）。**下一步两条路**：A. 按 Guest–Saunders 原文（或 Faegri–Manne 的耦合系数表）重新推导 C-O/O-V 块，并加「轨道身份跟踪」（不靠本征值排序定占据）；B. 换成「轨道旋转直接优化」：用真实能量梯度（我推导的那三个块公式是对的，可用有限差分验证）做线搜索 —— 这条路不依赖等效 Fock 的正确形式，但要多写一个优化器。当前按 §2.5 记 blocked，不阻塞 M1b（UKS）与 M2。"
+
+
 
 SC-02:
   state: pending
@@ -288,6 +301,11 @@ M1:
 M1b:
   state: pending
   note: "开壳层第二步：ROHF（O2 的 ⟨S²⟩=2.0 精确）与 UKS（O2/OH 与 PySCF 同值）"
+
+M1c:
+  state: blocked
+  ts: "2026-11-06T18:00:00Z"
+  note: "ROHF（纯自旋）未达成：等效 Fock 落到错驻点（O2 差 0.41 Ha）。阻塞详情在 SC-01c。不阻塞 M1b/M2。"
 
 M2:
   state: pending
