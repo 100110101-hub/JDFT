@@ -53,11 +53,17 @@ KV-05:
 # ───────────────────────── 数据轨（DA，8）─────────────────────────
 
 DA-01:
-  state: pending
-  note: "M06-2X 泛函数据（requires.kinetic_density）"
+  state: done
+  ts: "2026-11-07T06:10:00Z"
+  artifact: "qwb-data/functional/m06-2x.yaml：M06-2X 的交换 a1..a12 与相关 γ/α/c_ss/c_ab/d_ss/d_ab 共 38 个参数 + `requires.kinetic_density: true` + 组件 MggaXM062x/MggaCM062x/HfExchange(0.54) + 两条 DOI；registry.yaml 登记并 bump 到 0.7.0"
+  verification: "① `qwb data verify` **19 file(s) checked, 19 passed, 0 failed**（新增 m06-l / m06-2x 两个文件；DATA_LICENSES 17 → 19）。② 参数逐项与 libxc 的 `par_m06_2x`（mgga_x_m06l.c）与 `m062x_values`（mgga_c_m06l.c）对照一致；两条归一化自检进测试：`a1 + 0.54 = 1`、`a1 + d1 = 1`（M06-L）。③ 逐点：`cargo test -p qwb-xc --test fx02_m06_exchange` 里 M06-2X 交换与相关的能量密度和三个偏导与 libxc 差 < 1e-9。④ 端到端：`cargo test -p qwb-scf --test fx02_m06_water` 里 H2O/STO-3G 的 M06-2X = −75.31297 Ha vs PySCF −75.3129666765（差 < 0.5 mHa）；def2-SVP/grid-coarse 实测 −76.3231912 vs PySCF −76.3231686（差 **2.3e-5**）。"
+  note: "**参数数量超出 §6.3 里「20 以内」的估计**：M06-2X 本体就是 38 个（12 个交换级数 + 26 个相关系数）。这不是缺陷，是原文的参数规模；这里把 38 个全部写进数据文件、全部带 `parameter_sources`，并用「与 libxc 逐点对照 < 1e-9」代替「逐项 diff」作为可执行判据（数值是否抄对，逐点对照比人工 diff 更硬）。"
 DA-02:
-  state: pending
-  note: "补充 meta-GGA（M06-L 或 M11），与 DA-01 共用组件"
+  state: done
+  ts: "2026-11-07T06:10:00Z"
+  artifact: "qwb-data/functional/m06-l.yaml：M06-L 的交换 a1..a12 + d1..d6 + α 与相关 26 个参数（共 45 个）+ `requires.kinetic_density: true` + registry 0.7.0"
+  verification: "① 与 DA-01 同一套校验：`qwb data verify` 19/19；参数与 libxc `par_m06l`/`m06l_values` 一致。② **与 M06-2X 共用同一个数学形式**（`M06Exchange` 的 `has_vs98` 分支 + 同一个 `M06Correlation`），没有复制公式：M06-L 的交换在均匀电子气处逐位退回 Slater（< 1e-10）。③ 逐点 < 1e-9（同上测试文件）。④ 端到端 H2O/STO-3G = −75.30551 Ha vs PySCF −75.3055076948；def2-SVP/grid-coarse −76.3499177 vs −76.3499458（差 **2.8e-5**）。"
+  note: "DA-02 的判据要求「与 DA-01 共用同一 MetaGga 组件（不复制数学形式）」——落地方式是 `M06ExchangeParameters.has_vs98` 与共用的 `M06Correlation`：M06-L 打开 VS98/gtv4 项、M06-2X 关掉，其余（pbe_f·动能级数、Stoll 分解、b97/gtv4、Fermi 因子）只有一份实现。"
 DA-03:
   state: pending
   note: "RS-hybrid 数据：ωB97X-D / CAM-B3LYP（omega_bohr_inv + 混合系数）"
@@ -105,11 +111,11 @@ FX-01:
   verification: "① `cargo test -p qwb-xc --test fx01_tau_channel` **7 例绿**：ρ/σ/τ 三个方向的中心差分 < 1e-9（4 组 (ρ,σ,τ)，含 ρ=0.02 的近核区）；σ 不影响 ∂ε/∂τ；缺 τ 时必须失败（不是按 0 算）；LDA/GGA 项的 τ 导数**逐位为 0**（PBE 没有被新通道改动）；τ 长度不一致被抓；`meta_gga()` 的四个 flag 正确。② `cargo test -p qwb-scf --test fx01_tau_pipeline` **3 例绿**：线性 τ 项的**闭式核对** —— `E_xc = c·Tr[P·K]` 与 `V_xc = c·K` 在 grid-veryfine 上差 < 1e-9（实测 0.576451642291 vs 0.576451639489；同一核对在 grid-normal 上是 2.8e-9，正好是求积误差量级）；非线性 τ 项跑通一次真 SCF；`uks + τ` 显式 `Unsupported`。③ `cargo test -p qwb-engine --test fx01_tau_engine` **4 例绿**：声明一致时放过（GGA / meta-GGA / 纯 HF）、数据声明 τ 而无项读它 → `Unsupported`、组件读 τ 而数据未声明 → `Unsupported`、仓库现有 `pbe`/`svwn5` 照旧跑通。④ `cargo test -p qwb-registry` **55 例绿**（新增 2 例：旧数据无 `kinetic_density` 键仍解析为 false 且 `check_structure` 空、只声明 τ 不算「requires 为空」）。⑤ `qwb-gen-schemas -- ../qwb-contracts/schema --check` → `all K1 schemas match the Rust types`。⑥ `cargo clippy --workspace --all-targets -- -D warnings` 干净。⑦ 门禁 `scripts/verify.ps1` 第 68 轮 **26/26 全绿**（阶段一 26 项无回归，Python 侧 182 例）。"
   note: "**三个约定问题**（都记在 docs/choices.md 五十三）：`energy_density` 是**每电子** ε（τ 线性项必须写 `cτ/ρ`，写成 `cτ` 能量差 9 倍）；τ 通道的矩阵元要乘 ρ（`½ρ dτ`，与 σ 通道的 `2ρ dσ` 同源）；`qwb-integrals` 的 `kinetic` 是 **½∫∇φ∇φ**（闭壳层 `E_kin = Tr[P·K]` 的约定），所以闭式是 `∫τ = Tr[PK]` 而不是 ½Tr[PK]。锚点：网格上 `∫φ₀² = 1.0000` 而 `∫|∇φ₀|² = 1.52006`、`K₀₀ = 0.76003`（正好一半）。**范围与交接**：本轮只立管线与门禁，**没有**注册任何 meta-GGA 泛函（`method_name: m06-2x` 仍会因缺数据失败）；`∇²ρ` 通道本来就有（LYP），但 meta-GGA 的 `requires.laplacian` 第一阶段守卫未动；自旋分辨的 `τ_α/τ_β` 未做，`uks + τ` 显式拒绝 —— 这三条分别是 DA-01/DA-02、FX-02 与后续的活。引擎那道门禁是**双向**的：数据声明 τ 但没有项读它、或反过来，都拒（声明与实现脱节的静默降级比公式错更难发现）。"
 FX-02:
-  state: pending
-  ts: "2026-11-07T04:30:00Z"
-  artifact: "（已完成的一半）`qwb-xc/src/meta_gga.rs`：M06 家族**交换**项（M06-L 带 VS98/gtv4、M06-2X 不带），三通道对偶数 (ρ,σ,τ)；工厂臂 `MggaXM06L`/`MggaXM062x`；`scripts/pyscf_m06_exchange_reference.py` 与 `tests/reference/meta_gga_exchange.csv`（20 行 libxc 逐点）"
-  verification: "`cargo test -p qwb-xc --test fx02_m06_exchange` **4 例绿**：M06-L 与 M06-2X 的交换在 10 个非极化点上，能量密度与 ∂e/∂ρ、∂e/∂σ、∂e/∂τ 全部与 libxc 差 **< 1e-9**；均匀电子气（σ=0、τ=τ_unif）处 M06-L 逐位退回 Slater（< 1e-10）；`a[0]+d[0]=1`（M06-L）与 `a[0]+0.54=1`（M06-2X）两条归一化自检。"
-  note: "**关键发现**：libxc 的 M06 代码用**每自旋**缩减变量，对非极化体系是 `x² = 2^{2/3}σ/ρ^{8/3}`、`t = 2^{2/3}τ/ρ^{5/3}`，而且动能级数的分母是 **`K′ = 2^{2/3}K`**（libxc C 里 `t45 = 0.3·6^{2/3}π^{4/3}`）。第一版把 `t` 换成每自旋量却仍用总密度的 `K`，均匀气处 `w(t) ≠ 0`、M06-L 增强因子偏 4% —— 这正是上一轮对不上的原因。另一处：libxc 报的是每体积 e 的偏导，我们是每电子 ε 的偏导，测试里要用 `ε+ρ∂ε/∂ρ`、`ρ∂ε/∂σ`、`ρ∂ε/∂τ` 换算（换算前 σ/τ 通道差恰好 ρ 倍）。**还没做**：M06 家族**相关**项（Stoll 分解 + b97/gtv4/Fermi；参数已从 libxc 取齐）、`m06-l.yaml`/`m06-2x.yaml` 数据文件、引擎 `method_name` 映射与端到端验收（H2O/def2-SVP 对 PySCF < 0.5 mHa）。所以本 WP **仍是 pending**。"
+  state: done
+  ts: "2026-11-07T06:10:00Z"
+  artifact: "qwb-xc/src/meta_gga.rs：M06 家族交换（M06-L 带 VS98、M06-2X 不带）+ 相关（Stoll 分解 + b97_g/gtv4/Fermi_D/Fermi_D_corrected + modified PW92 复用于 `Pw92Set`），三通道对偶数 (ρ,σ,τ)；工厂臂 `MggaXM06L`/`MggaXM062x`/`MggaCM06L`/`MggaCM062x`；`scripts/pyscf_m06_exchange_reference.py` + `tests/reference/meta_gga_exchange.csv`（40 行 libxc 逐点，交换+相关）；`qwb-scf/tests/fx02_m06_water.rs` + `examples/h2o_m062x_def2svp.yaml`"
+  verification: "① **逐点**（`cargo test -p qwb-xc --test fx02_m06_exchange`，6 例绿）：M06-L 与 M06-2X 的**交换与相关**在 10 个非极化点上，每体积能量密度与 ∂e/∂ρ、∂e/∂σ、∂e/∂τ 与 libxc 差全部 **< 1e-9**；均匀电子气处 M06-L 逐位退回 Slater（< 1e-10）；`a1+0.54=1`、`a1+d1=1` 两条自检；两族都只声明 `meta_gga()`（不要 ∇²ρ）。② **端到端**（`cargo test -p qwb-scf --test fx02_m06_water`）：H2O/STO-3G 的 M06-2X 与 M06-L 都在 0.5 mHa 判据内（−75.31297 / −75.30551 vs PySCF −75.3129666765 / −75.3055076948）。③ def2-SVP/grid-coarse 实测：M06-2X −76.3231912（PySCF −76.3231686，差 **2.3e-5 Ha**）、M06-L −76.3499177（差 **2.8e-5 Ha**），远小于 0.5 mHa。"
+  note: "**两处踩坑（已记进 choices 五十四）**：① libxc 的 M06 代码用**每自旋**缩减变量，对非极化体系是 `x² = 2^{2/3}σ/ρ^{8/3}`、`t = 2^{2/3}τ/ρ^{5/3}`，而且动能级数的分母是 **`K′ = 2^{2/3}K`** —— 把 t 换成每自旋量却仍用总密度的 K，均匀气处 `w(t) ≠ 0`、增强因子偏 4%，M06-L 就不再退回 Slater（上一轮对不上的根因）。② libxc 的 `vrho/vsigma/vtau` 是**每体积** e 的偏导，我们的 `potential_derivatives_full` 给**每电子** ε 的偏导，比较时要换成 `ε+ρ∂ε/∂ρ`、`ρ∂ε/∂σ`、`ρ∂ε/∂τ`（换算前 σ/τ 通道恰好差 ρ 倍，这个「恰好差常数倍」就是线索）。"
 FX-03:
   state: pending
   note: "ωB97X-D / CAM-B3LYP（短程交换 + ω 来自数据）"

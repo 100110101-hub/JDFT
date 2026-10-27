@@ -1255,6 +1255,41 @@ pub fn build_term(
                 crate::meta_gga::M06ExchangeParameters::new(series, vs98, alpha, has_vs98),
             )))
         }
+        "MggaCM06L" | "MggaCM062x" => {
+            let mut c_same = [0.0_f64; 5];
+            let mut c_opposite = [0.0_f64; 5];
+            let mut d_same = [0.0_f64; 6];
+            let mut d_opposite = [0.0_f64; 6];
+            for (index, slot) in c_same.iter_mut().enumerate() {
+                *slot = parameter(id, parameters, &format!("m06c_css{}", index + 1))?;
+            }
+            for (index, slot) in c_opposite.iter_mut().enumerate() {
+                *slot = parameter(id, parameters, &format!("m06c_cab{}", index + 1))?;
+            }
+            for (index, slot) in d_same.iter_mut().enumerate() {
+                *slot = parameter(id, parameters, &format!("m06c_dss{}", index + 1))?;
+            }
+            for (index, slot) in d_opposite.iter_mut().enumerate() {
+                *slot = parameter(id, parameters, &format!("m06c_dab{}", index + 1))?;
+            }
+            Ok(Box::new(crate::meta_gga::M06Correlation::new(
+                if id == "MggaCM06L" {
+                    "MggaCM06L"
+                } else {
+                    "MggaCM062x"
+                },
+                crate::meta_gga::M06CorrelationParameters::new(
+                    parameter(id, parameters, "m06c_gamma_ss")?,
+                    parameter(id, parameters, "m06c_gamma_ab")?,
+                    parameter(id, parameters, "m06c_alpha_ss")?,
+                    parameter(id, parameters, "m06c_alpha_ab")?,
+                    c_same,
+                    c_opposite,
+                    d_same,
+                    d_opposite,
+                ),
+            )))
+        }
         others => crate::gga::build_pbe_term(others, parameters),
     }
 }

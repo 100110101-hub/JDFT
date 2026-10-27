@@ -1,4 +1,4 @@
-"""用 PySCF/libxc 生成**非极化** M06 交换的逐点参考（FX-02）。
+"""用 PySCF/libxc 生成**非极化** M06 交换与相关的逐点参考（FX-02）。
 
 输出：qwb-core/crates/qwb-xc/tests/reference/meta_gga_exchange.csv
 约定：`exc_hartree` 是**每体积**能量密度 `e = ρ·ε`；`v_* = ∂e/∂*`；
@@ -30,7 +30,12 @@ POINTS = [
     (3.0, 0.5, 0.5),
     (0.1, 0.5, 0.1),
 ]
-FUNCTIONALS = ["mgga_x_m06_l", "hyb_mgga_x_m06_2x"]
+FUNCTIONALS = [
+    "mgga_x_m06_l",
+    "hyb_mgga_x_m06_2x",
+    "mgga_c_m06_l",
+    "mgga_c_m06_2x",
+]
 
 
 def main():

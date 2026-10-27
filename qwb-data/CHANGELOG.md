@@ -3,6 +3,19 @@
 数据仓独立 semver（§8.6）。**任何数据改动都必须 bump version 并在此登记**，
 否则 CI 拒绝（§8.6「变更必须 bump version」）。
 
+## 0.7.0 — 2026-11-07
+
+### 新增：`functional/m06-l.yaml` 与 `functional/m06-2x.yaml`（DA-01 / DA-02 / FX-02）
+- M06-L（45 个参数）与 M06-2X（38 个参数）：交换的动能级数 `a1..a12`（M06-L 另有
+  VS98 的 `d1..d6` 与 `alpha`）与相关的 `gamma_ss/gamma_ab/alpha_ss/alpha_ab` +
+  `c_ss/c_ab/d_ss/d_ab`。数值逐项对照 libxc 的 `par_m06l`/`par_m06_2x` 与
+  `m06l_values`/`m062x_values`。
+- 两个文件都声明 `requires.kinetic_density: true`（FX-01 的 K1 加性字段），
+  所以引擎会真的算 τ；数据与实现的一致性由 `check_meta_gga_declaration` 双向核对。
+- M06-2X 用 `HfExchange` 分量表达 54% 精确交换（`MggaXM062x` 的 `a1 = 0.46` 已折进
+  半局域部分，两者互补：`0.46 + 0.54 = 1`）。
+- `registry.yaml` 0.6.0 → 0.7.0；`DATA_LICENSES.md` 重新生成（17 → 19 个文件）。
+
 ## 0.6.0 — 2026-11-06
 
 ### 新增：PBE 的 PW92 三组参数 + 把 `pbe_mu` 改成精确值（阶段二 SC-01b）

@@ -10,8 +10,94 @@
 
 use qwb_xc::{
     DensityBatch, FunctionalTerm, Requirements,
-    meta_gga::{M06Exchange, M06ExchangeParameters},
+    meta_gga::{M06Correlation, M06CorrelationParameters, M06Exchange, M06ExchangeParameters},
 };
+
+/// M06-L 相关参数（libxc `m06l_values`）。
+fn m06l_correlation() -> M06Correlation {
+    M06Correlation::new(
+        "MggaCM06L",
+        M06CorrelationParameters::new(
+            0.06,
+            0.0031,
+            0.005_150_88,
+            0.003_049_66,
+            [
+                5.349_466e-01,
+                5.396_620e-01,
+                -3.161_217e01,
+                5.149_592e01,
+                -2.919_613e01,
+            ],
+            [
+                6.042_374e-01,
+                1.776_783e02,
+                -2.513_252e02,
+                7.635_173e01,
+                -1.255_699e01,
+            ],
+            [
+                4.650_534e-01,
+                1.617_589e-01,
+                1.833_657e-01,
+                4.692_100e-04,
+                -4.990_573e-03,
+                0.0,
+            ],
+            [
+                3.957_626e-01,
+                -5.614_546e-01,
+                1.403_963e-02,
+                9.831_442e-04,
+                -3.577_176e-03,
+                0.0,
+            ],
+        ),
+    )
+}
+
+/// M06-2X 相关参数（libxc `m062x_values`）。
+fn m062x_correlation() -> M06Correlation {
+    M06Correlation::new(
+        "MggaCM062x",
+        M06CorrelationParameters::new(
+            0.06,
+            0.0031,
+            0.005_150_88,
+            0.003_049_66,
+            [
+                3.097_855e-01,
+                -5.528_642e00,
+                1.347_420e01,
+                -3.213_623e01,
+                2.846_742e01,
+            ],
+            [
+                8.833_596e-01,
+                3.357_972e01,
+                -7.043_548e01,
+                4.978_271e01,
+                -1.852_891e01,
+            ],
+            [
+                6.902_145e-01,
+                9.847_204e-02,
+                2.214_797e-01,
+                -1.968_264e-03,
+                -6.775_479e-03,
+                0.0,
+            ],
+            [
+                1.166_404e-01,
+                -9.120_847e-02,
+                -6.726_189e-02,
+                6.720_580e-05,
+                8.448_011e-04,
+                0.0,
+            ],
+        ),
+    )
+}
 
 const M06L_SERIES: [f64; 12] = [
     0.398_775_6,
@@ -127,6 +213,16 @@ fn check(component: &str, term: &dyn FunctionalTerm, tolerance: f64) {
     }
     assert!(checked >= 8, "{component}: 只有 {checked} 行");
     println!("{component}: {checked} 行一致，最大偏差 {worst:.3e}");
+}
+
+#[test]
+fn m06_l_correlation_matches_libxc() {
+    check("mgga_c_m06_l", &m06l_correlation(), 1.0e-9);
+}
+
+#[test]
+fn m06_2x_correlation_matches_libxc() {
+    check("mgga_c_m06_2x", &m062x_correlation(), 1.0e-9);
 }
 
 #[test]

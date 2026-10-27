@@ -1,0 +1,71 @@
+sha256: e277f61ab597f848051a3b8bab1418b91a9a9fce1e5d7c1392e5b9f544491a52
+name: m06-2x
+version: 1.0.0
+notes: 'M06-2X（Zhao & Truhlar 2008）：全局 hybrid meta-GGA，54% 精确交换 + 46% 的 M05 型半局域交换（0.46 已折进系数 a1，所以 MggaXM062x 的权重是 1.0，精确交换由 HfExchange 分量给）。交换无 VS98 项；相关与 M06-L 同一表达式、不同参数。逐点对照见 qwb-xc/tests/fx02_m06_exchange.rs。'
+citation:
+- title: 'The M06 suite of density functionals for main group thermochemistry, thermochemical kinetics, noncovalent interactions, excited states, and transition elements: two new functionals and systematic testing of four M06-class functionals and 12 other functionals (Zhao & Truhlar, Theor. Chem. Acc. 120, 215)'
+  doi: 10.1007/s00214-007-0310-x
+- title: 'Density functionals with broad applicability in chemistry (Zhao & Truhlar, Acc. Chem. Res. 41, 157)'
+  doi: 10.1021/ar700111a
+license:
+  spdx: Apache-2.0
+  commercial_ok: true
+  redistribute_ok: true
+created: 2026-11-07T05:00:00Z
+components:
+- id: MggaXM062x
+  weight: 1.0
+- id: MggaCM062x
+  weight: 1.0
+- id: HfExchange
+  weight: 0.54
+requires:
+  rho: true
+  sigma: true
+  laplacian: false
+  kinetic_density: true
+parameters:
+  m06a1: 0.46
+  m06a2: -0.2206052
+  m06a3: -0.09431788
+  m06a4: 2.164494
+  m06a5: -2.556466
+  m06a6: -14.22133
+  m06a7: 15.55044
+  m06a8: 35.98078
+  m06a9: -27.22754
+  m06a10: -39.24093
+  m06a11: 15.22808
+  m06a12: 15.22227
+  m06c_gamma_ss: 0.06
+  m06c_gamma_ab: 0.0031
+  m06c_alpha_ss: 0.00515088
+  m06c_alpha_ab: 0.00304966
+  m06c_css1: 0.3097855
+  m06c_css2: -5.528642
+  m06c_css3: 13.47420
+  m06c_css4: -32.13623
+  m06c_css5: 28.46742
+  m06c_cab1: 0.8833596
+  m06c_cab2: 33.57972
+  m06c_cab3: -70.43548
+  m06c_cab4: 49.78271
+  m06c_cab5: -18.52891
+  m06c_dss1: 0.6902145
+  m06c_dss2: 0.09847204
+  m06c_dss3: 0.2214797
+  m06c_dss4: -0.001968264
+  m06c_dss5: -0.006775479
+  m06c_dss6: 0.0
+  m06c_dab1: 0.1166404
+  m06c_dab2: -0.09120847
+  m06c_dab3: -0.06726189
+  m06c_dab4: 0.00006720580
+  m06c_dab5: 0.0008448011
+  m06c_dab6: 0.0
+parameter_sources:
+  m06a1: 'Zhao & Truhlar, TCA 120, 215 (2008) 的交换系数 a1..a12（= libxc par_m06_2x；a1 = 0.46 与 54% 精确交换互补）'
+  m06c_gamma_ss: '同上，相关系数 γ/α/c_ss/c_ab/d_ss/d_ab（= libxc m062x_values）'
+stability:
+  density_floor: 1.0e-12
+  sigma_ceiling: 100000000.0

@@ -1,0 +1,78 @@
+sha256: 6894c5ebbee3b9608cba388ecc7f7bad0e91ac5881a53e89f6ee03f44487009d
+name: m06-l
+version: 1.0.0
+notes: 'M06-L（Zhao & Truhlar 2006）：纯 meta-GGA（无精确交换），变量是 (ρ, σ, τ)。交换是 PBE 型增强因子乘一个 12 项动能级数，再加一个 VS98 的 gtv4 项；相关是 M05 + VSXC 两块，各自把 LSDA 相关按 Stoll 分解成同自旋/反自旋。参数逐项来自原文 Table，数值与 libxc 的 mgga_x_m06l/mgga_c_m06l 一致（逐点对照见 qwb-xc/tests/fx02_m06_exchange.rs）。'
+citation:
+- title: 'The M06 suite of density functionals for main group thermochemistry, thermochemical kinetics, noncovalent interactions, excited states, and transition elements: two new functionals and systematic testing of four M06-class functionals and 12 other functionals (Zhao & Truhlar, Theor. Chem. Acc. 120, 215)'
+  doi: 10.1007/s00214-007-0310-x
+- title: 'A new local density functional for main-group thermochemistry, transition metal bonding, thermochemical kinetics, and noncovalent interactions (Zhao & Truhlar, J. Chem. Phys. 125, 194101)'
+  doi: 10.1063/1.2370993
+license:
+  spdx: Apache-2.0
+  commercial_ok: true
+  redistribute_ok: true
+created: 2026-11-07T05:00:00Z
+components:
+- id: MggaXM06L
+  weight: 1.0
+- id: MggaCM06L
+  weight: 1.0
+requires:
+  rho: true
+  sigma: true
+  laplacian: false
+  kinetic_density: true
+parameters:
+  m06a1: 0.3987756
+  m06a2: 0.2548219
+  m06a3: 0.3923994
+  m06a4: -2.103655
+  m06a5: -6.302147
+  m06a6: 10.97615
+  m06a7: 30.97273
+  m06a8: -23.18489
+  m06a9: -56.73480
+  m06a10: 21.60364
+  m06a11: 34.21814
+  m06a12: -9.049762
+  m06d1: 0.6012244
+  m06d2: 0.004748822
+  m06d3: -0.008635108
+  m06d4: -0.000009308062
+  m06d5: 0.00004482811
+  m06d6: 0.0
+  m06alpha: 0.00186726
+  m06c_gamma_ss: 0.06
+  m06c_gamma_ab: 0.0031
+  m06c_alpha_ss: 0.00515088
+  m06c_alpha_ab: 0.00304966
+  m06c_css1: 0.5349466
+  m06c_css2: 0.5396620
+  m06c_css3: -31.61217
+  m06c_css4: 51.49592
+  m06c_css5: -29.19613
+  m06c_cab1: 0.6042374
+  m06c_cab2: 177.6783
+  m06c_cab3: -251.3252
+  m06c_cab4: 76.35173
+  m06c_cab5: -12.55699
+  m06c_dss1: 0.4650534
+  m06c_dss2: 0.1617589
+  m06c_dss3: 0.1833657
+  m06c_dss4: 0.0004692100
+  m06c_dss5: -0.004990573
+  m06c_dss6: 0.0
+  m06c_dab1: 0.3957626
+  m06c_dab2: -0.5614546
+  m06c_dab3: 0.01403963
+  m06c_dab4: 0.0009831442
+  m06c_dab5: -0.003577176
+  m06c_dab6: 0.0
+parameter_sources:
+  m06a1: 'Zhao & Truhlar, JCP 125, 194101 (2006) 的交换系数 a1..a12（= libxc par_m06l）'
+  m06d1: '同上，VS98/gtv4 系数 d1..d6'
+  m06alpha: '同上，gtv4 的 α'
+  m06c_gamma_ss: 'Zhao & Truhlar, JCP 125, 194101 (2006) 的相关系数 γ_σσ/γ_αβ/α_σσ/α_αβ 与 c_ss/c_ab/d_ss/d_ab（= libxc m06l_values）'
+stability:
+  density_floor: 1.0e-12
+  sigma_ceiling: 100000000.0

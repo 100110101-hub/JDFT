@@ -3,7 +3,7 @@
 # （否则 grid 的 normal 等级会有两个定义、get_grid_by_level 歧义）。
 schema_version: 1.0.0
 name: qwb-data
-version: 0.6.0
+version: 0.7.0
 created: 2026-10-22T22:53:00Z
 features:
   - "jobtype:sp"
@@ -55,6 +55,12 @@ functionals:
   - name: b88
     path: functional/b88.yaml
     sha256: efa0fa7b9f8aa98d5b4ca8fb0573a7d8d1384f6efc0a7c96b90ec7c3aa47ae76
+  - name: m06-l
+    path: functional/m06-l.yaml
+    sha256: 6894c5ebbee3b9608cba388ecc7f7bad0e91ac5881a53e89f6ee03f44487009d
+  - name: m06-2x
+    path: functional/m06-2x.yaml
+    sha256: e277f61ab597f848051a3b8bab1418b91a9a9fce1e5d7c1392e5b9f544491a52
 grids:
   - name: grid-coarse
     path: grid/grid-coarse.yaml

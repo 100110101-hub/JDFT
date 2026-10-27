@@ -1,0 +1,33 @@
+# M2：H2O / def2-SVP / **M06-2X**（全局 hybrid meta-GGA，54% 精确交换）。
+#
+# 判据（project-phase2.md §7 M2 / §6.3 FX-02）：
+#   E 与 PySCF（libxc）同值，差 < 0.5 mHa；
+#   交换/相关的逐点导数与 libxc 差 < 1e-9（qwb-xc/tests/fx02_m06_exchange.rs）。
+#
+# 需要 `requires.kinetic_density: true`（FX-01 的 τ 管线）与网格；
+# grid_level 用 fine（判据在 fine 上标定）。
+molecule:
+  atoms:
+    - symbol: O
+      position_angstrom: [0.0, 0.0, 0.117790]
+    - symbol: H
+      position_angstrom: [0.0, 0.755450, -0.471160]
+    - symbol: H
+      position_angstrom: [0.0, -0.755450, -0.471160]
+  charge: 0
+  multiplicity: 1
+basis_name: def2-svp
+method_name: m06-2x
+grid_level: fine
+solvent: vacuum
+jobtype: sp
+options:
+  scf_max_iter: 300
+  scf_energy_threshold_hartree: 1.0e-8
+  scf_density_threshold: 1.0e-6
+  diis_history: 8
+  threads: 0
+  max_opt_steps: 100
+  opt_gradient_threshold_hartree_per_bohr: 4.5e-4
+  freq_step_angstrom: 0.01
+  ecp_name: null

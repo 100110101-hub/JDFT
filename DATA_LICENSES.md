@@ -3,7 +3,7 @@
 本文件由 `scripts/gen_data_licenses.py` 生成。重跑必须得到**逐字节相同**的结果
 （排序固定 + 不含时间戳），所以它可以直接进 CI 比对。
 
-共 17 个生产数据文件。`qwb-data/examples/` 下的 SPECIMEN 不计入
+共 19 个生产数据文件。`qwb-data/examples/` 下的 SPECIMEN 不计入
 （它们是形状示例，不在 manifest 里）。
 
 其中 `qwb-data/basis/` 与 `qwb-data/ecp/` 的部分文件是从 Basis Set Exchange 导出的
@@ -22,6 +22,8 @@
 | `qwb-data/ecp/lanl2dz-cu.yaml` | 1.0.0 | NOASSERTION | false | false | `a44df71fd56eea38` |
 | `qwb-data/ecp/lanl2dz-zn.yaml` | 1.0.0 | NOASSERTION | false | false | `55b3391680aaad1d` |
 | `qwb-data/functional/b88.yaml` | 1.0.0 | Apache-2.0 | true | true | `efa0fa7b9f8aa98d` |
+| `qwb-data/functional/m06-2x.yaml` | 1.0.0 | Apache-2.0 | true | true | `e277f61ab597f848` |
+| `qwb-data/functional/m06-l.yaml` | 1.0.0 | Apache-2.0 | true | true | `6894c5ebbee3b960` |
 | `qwb-data/functional/pbe.yaml` | 1.0.0 | Apache-2.0 | true | true | `b8b322f96b0e22fe` |
 | `qwb-data/functional/pbe0.yaml` | 1.0.0 | Apache-2.0 | true | true | `e741078195d85f78` |
 | `qwb-data/functional/svwn5.yaml` | 1.0.0 | Apache-2.0 | true | true | `e62bd0014d27c73d` |
@@ -30,7 +32,7 @@
 | `qwb-data/grid/grid-normal.yaml` | 1.0.0 | Apache-2.0 | true | true | `a792b362b1fdb278` |
 | `qwb-data/grid/grid-veryfine.yaml` | 1.0.0 | Apache-2.0 | true | true | `5c630f5a1ec0688d` |
 | `qwb-data/numerics/numerics.yaml` | 1.0.0 | Apache-2.0 | true | true | `fea96fd0bd356da0` |
-| `qwb-data/registry.yaml` | 0.6.0 | ? | ? | ? | `—（manifest，条目各自带` |
+| `qwb-data/registry.yaml` | 0.7.0 | ? | ? | ? | `—（manifest，条目各自带` |
 
 ## 引用
 
@@ -66,6 +68,16 @@
 
 - Density-functional exchange-energy approximation with correct asymptotic behavior (Becke, Phys. Rev. A 38, 3098)
 - Electron correlations by the Slater X-alpha method (Dirac-Slater LDA exchange, alpha = 2/3) —— 供 ε_x^LDA
+
+### `qwb-data/functional/m06-2x.yaml`（m06-2x 1.0.0）
+
+- The M06 suite of density functionals for main group thermochemistry, thermochemical kinetics, noncovalent interactions, excited states, and transition elements: two new functionals and systematic testing of four M06-class functionals and 12 other functionals (Zhao & Truhlar, Theor. Chem. Acc. 120, 215)
+- Density functionals with broad applicability in chemistry (Zhao & Truhlar, Acc. Chem. Res. 41, 157)
+
+### `qwb-data/functional/m06-l.yaml`（m06-l 1.0.0）
+
+- The M06 suite of density functionals for main group thermochemistry, thermochemical kinetics, noncovalent interactions, excited states, and transition elements: two new functionals and systematic testing of four M06-class functionals and 12 other functionals (Zhao & Truhlar, Theor. Chem. Acc. 120, 215)
+- A new local density functional for main-group thermochemistry, transition metal bonding, thermochemical kinetics, and noncovalent interactions (Zhao & Truhlar, J. Chem. Phys. 125, 194101)
 
 ### `qwb-data/functional/pbe.yaml`（pbe 1.0.0）
 
@@ -108,7 +120,7 @@
 - A multicenter numerical integration scheme for polyatomic molecules (Becke partitioning)
 - New Methods For Electronic Structure Calculations on Large Molecules (pseudospectral approach)
 
-### `qwb-data/registry.yaml`（qwb-data 0.6.0）
+### `qwb-data/registry.yaml`（qwb-data 0.7.0）
 
 
 ## 门禁状态

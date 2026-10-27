@@ -784,7 +784,8 @@ python scripts\fetch_data.py --all --force              # 全部重下
 | `pbe` | GGA | 能算（闭壳层与 UKS） |
 | `b88` | GGA 交换（单独的 B88） | 能算，一般作为组件 |
 | `pbe0` | hybrid（α_hf = 0.25） | 能算 |
-| meta-GGA（M06-L / M06-2X 家族） | τ 依赖的泛函 | **基础设施就位（FX-01），但泛函未注册**：`requires.kinetic_density` 与网格上的 τ 管线已通（闭式核对 < 1e-9），仓库里还没有这类数据文件，所以 `method_name: m06-2x` 会报「泛函不存在」。落数据是 DA-01/DA-02，落实现是 FX-02 |
+| `m06-l` / `m06-2x` | meta-GGA（τ 依赖；M06-2X 是 54% 精确交换的 hybrid） | **能算**（FX-01 的 τ 管线 + FX-02 的交换/相关；逐点对 libxc < 1e-9，H2O 端到端差 < 3e-5 Ha）。`m06-l` 纯 meta-GGA，`m06-2x` 带 0.54 的 `HfExchange` |
+| （已过时的说明）meta-GGA 基础设施 | τ 依赖的泛函 | **基础设施就位（FX-01），但泛函未注册**：`requires.kinetic_density` 与网格上的 τ 管线已通（闭式核对 < 1e-9），仓库里还没有这类数据文件，所以 `method_name: m06-2x` 会报「泛函不存在」。落数据是 DA-01/DA-02，落实现是 FX-02 |
 | `b3lyp` | hybrid（α_hf = 0.20） | **数据层不注册**：K1 的 phase-1 语义门禁拒绝 `requires.laplacian = true`（冻结契约）。只能在测试里程序化构造 |
 
 ### 9.2 作业类型
