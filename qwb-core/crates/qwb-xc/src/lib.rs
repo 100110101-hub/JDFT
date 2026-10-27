@@ -26,6 +26,7 @@ use thiserror::Error;
 
 pub mod gga;
 pub mod gga_spin;
+pub mod meta_gga;
 
 /// `(3/π)^{1/3}` —— 用表达式算，不手抄字面量（上一版手抄错成 0.90036，
 /// 被 `slater_exchange_matches_the_analytic_formula` 立刻抓到）。
@@ -1234,6 +1235,25 @@ pub fn build_term(
                 );
             }
             Ok(Box::new(term))
+        }
+        "MggaXM06L" | "MggaXM062x" => {
+            let has_vs98 = id == "MggaXM06L";
+            let mut series = [0.0_f64; 12];
+            for (index, slot) in series.iter_mut().enumerate() {
+                *slot = parameter(id, parameters, &format!("m06a{}", index + 1))?;
+            }
+            let mut vs98 = [0.0_f64; 6];
+            let mut alpha = 0.0;
+            if has_vs98 {
+                for (index, slot) in vs98.iter_mut().enumerate() {
+                    *slot = parameter(id, parameters, &format!("m06d{}", index + 1))?;
+                }
+                alpha = parameter(id, parameters, "m06alpha")?;
+            }
+            Ok(Box::new(crate::meta_gga::M06Exchange::new(
+                if has_vs98 { "MggaXM06L" } else { "MggaXM062x" },
+                crate::meta_gga::M06ExchangeParameters::new(series, vs98, alpha, has_vs98),
+            )))
         }
         others => crate::gga::build_pbe_term(others, parameters),
     }

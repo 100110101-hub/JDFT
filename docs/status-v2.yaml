@@ -106,7 +106,10 @@ FX-01:
   note: "**三个约定问题**（都记在 docs/choices.md 五十三）：`energy_density` 是**每电子** ε（τ 线性项必须写 `cτ/ρ`，写成 `cτ` 能量差 9 倍）；τ 通道的矩阵元要乘 ρ（`½ρ dτ`，与 σ 通道的 `2ρ dσ` 同源）；`qwb-integrals` 的 `kinetic` 是 **½∫∇φ∇φ**（闭壳层 `E_kin = Tr[P·K]` 的约定），所以闭式是 `∫τ = Tr[PK]` 而不是 ½Tr[PK]。锚点：网格上 `∫φ₀² = 1.0000` 而 `∫|∇φ₀|² = 1.52006`、`K₀₀ = 0.76003`（正好一半）。**范围与交接**：本轮只立管线与门禁，**没有**注册任何 meta-GGA 泛函（`method_name: m06-2x` 仍会因缺数据失败）；`∇²ρ` 通道本来就有（LYP），但 meta-GGA 的 `requires.laplacian` 第一阶段守卫未动；自旋分辨的 `τ_α/τ_β` 未做，`uks + τ` 显式拒绝 —— 这三条分别是 DA-01/DA-02、FX-02 与后续的活。引擎那道门禁是**双向**的：数据声明 τ 但没有项读它、或反过来，都拒（声明与实现脱节的静默降级比公式错更难发现）。"
 FX-02:
   state: pending
-  note: "M06-2X 实现 + 参考集验收"
+  ts: "2026-11-07T04:30:00Z"
+  artifact: "（已完成的一半）`qwb-xc/src/meta_gga.rs`：M06 家族**交换**项（M06-L 带 VS98/gtv4、M06-2X 不带），三通道对偶数 (ρ,σ,τ)；工厂臂 `MggaXM06L`/`MggaXM062x`；`scripts/pyscf_m06_exchange_reference.py` 与 `tests/reference/meta_gga_exchange.csv`（20 行 libxc 逐点）"
+  verification: "`cargo test -p qwb-xc --test fx02_m06_exchange` **4 例绿**：M06-L 与 M06-2X 的交换在 10 个非极化点上，能量密度与 ∂e/∂ρ、∂e/∂σ、∂e/∂τ 全部与 libxc 差 **< 1e-9**；均匀电子气（σ=0、τ=τ_unif）处 M06-L 逐位退回 Slater（< 1e-10）；`a[0]+d[0]=1`（M06-L）与 `a[0]+0.54=1`（M06-2X）两条归一化自检。"
+  note: "**关键发现**：libxc 的 M06 代码用**每自旋**缩减变量，对非极化体系是 `x² = 2^{2/3}σ/ρ^{8/3}`、`t = 2^{2/3}τ/ρ^{5/3}`，而且动能级数的分母是 **`K′ = 2^{2/3}K`**（libxc C 里 `t45 = 0.3·6^{2/3}π^{4/3}`）。第一版把 `t` 换成每自旋量却仍用总密度的 `K`，均匀气处 `w(t) ≠ 0`、M06-L 增强因子偏 4% —— 这正是上一轮对不上的原因。另一处：libxc 报的是每体积 e 的偏导，我们是每电子 ε 的偏导，测试里要用 `ε+ρ∂ε/∂ρ`、`ρ∂ε/∂σ`、`ρ∂ε/∂τ` 换算（换算前 σ/τ 通道差恰好 ρ 倍）。**还没做**：M06 家族**相关**项（Stoll 分解 + b97/gtv4/Fermi；参数已从 libxc 取齐）、`m06-l.yaml`/`m06-2x.yaml` 数据文件、引擎 `method_name` 映射与端到端验收（H2O/def2-SVP 对 PySCF < 0.5 mHa）。所以本 WP **仍是 pending**。"
 FX-03:
   state: pending
   note: "ωB97X-D / CAM-B3LYP（短程交换 + ω 来自数据）"
