@@ -127,7 +127,8 @@ FX-04:
   state: blocked
   ts: "2026-11-07T08:40:00Z"
   artifact: "（未落地）D3(BJ) 作为可加项 + 解析梯度 + dispersion_energy_hartree 落盘"
-  verification: "**依赖 DA-06**：C6 表与阻尼参数已定位/可解析，但 r4r2 缺（见 DA-06 的 note）。本轮没有写任何 D3 代码 —— 参数不全时写出来只能是「看起来能跑、数值不对」的实现，违反 §10.3 的禁静默降级。"
+  verification: "**依赖 DA-06**：C6 表与阻尼参数已定位/可解析，但 r4r2 缺（见 DA-06 的 note），且 CN 约定未钉死。**第 15 轮的四项实测**：（a）**配对索引已判定**：C6 表用**列主序下三角**（Fortran `i + (j-1)j/2`），不是行主序上三角 —— 用「远距离异核二聚体」区分：Ne-Ar 与 Ar-Kr 的 oracle 纯 C6 能量与我方**逐位相同**（−4.730810547e-9 / −2.237377930e-8），上三角约定则差 27 倍；C-O/N-O/O-S 只差第 4 位（因为 C/N/O 的 CN≈0 处权重略偏离 1）。（b）**权重公式已确认**：s-dftd3 的 `weight_references` 用的是**高斯/log-sum-exp**权重 `gw_k = exp(−wf·(ref_cn_k − CN)²)`（`wf_default = 4.0`，model.f90 第 79 行），不是拉格朗日插值；但两种权重对水二聚体的纯 C6 只差 1e-4 量级（权重很尖），所以它不是主要误差源。（c）**残余误差定位到 CN**：水二聚体（Bohr 坐标，O–O = 5.7）的纯 C6，oracle −2.561170642422 Ha，我方最好的组合（kcn=16、半径按 Bohr）−2.947877671614（差 −0.387 Ha，15%）；换 Å→Bohr 或 kcn∈{16/3, 4} 更糟。（d）**r4r2 仍缺**：闭环反解只有 He/Ne/Ar/Kr（<1e-18）与 H（3.5e-9）通过，其余元素因 CN 未定而不成立。⇒ 剩下的未知量就是 CN 的具体实现（kcn 常量与 `get_covalent_rad` 的单位/取值），不是表、不是单位、不是索引。"
+  note: "**§2.5 的处理决定（第 15 轮）**：不再无限期在 D3 上消耗轮次。本轮把 M2 的判据**拆分固定**：meta-GGA 的一半（DA-01/DA-02/FX-01/FX-02）已 done 且有实测（逐点 <1e-9、H2O 端到端 <3e-5 Ha），色散的一半（DA-06/FX-04）记 blocked —— `docs/status-v2.yaml` 里 M2 保持 pending 并注明「meta-GGA 过 / 色散未过」。D3 若要继续，最小路径是：拿到 `mctc-lib` 的 CN 实现（`get_covalent_rad` 的确切表与 kcn）或直接从 D3 原文附录转录 r4r2+rcov，然后按已就位的自校验脚本判据（纯 C6 在水/苯二聚体上 <1e-9、E 闭环 <1e-9）验收。**没有写任何 D3 代码，也没有用近似表充数。**"
   note: "判据（D3 梯度 vs 有限差分 < 1e-6 Ha/Bohr；10 个二聚体与官方实现差 < 1e-3 kcal/mol）尚未开始测量，因为参数不全。黑盒尺子已就位：WSL 里 pip install dftd3（1.6.0），DispersionModel(...).get_dispersion(RationalDampingParam(method=...), grad=True) 同时给能量与梯度（实测：B3LYP-D3(BJ) 的水分子 E = −5.6816898568e-4 Ha，梯度 3×3）。"
 
 
@@ -332,7 +333,10 @@ M1c:
 
 M2:
   state: pending
-  note: "meta-GGA（M06-2X）+ 色散（D3）"
+  ts: "2026-11-07T12:00:00Z"
+  artifact: "meta-GGA 一半：examples/h2o_m062x_def2svp.yaml + qwb-data/functional/m06-l.yaml、m06-2x.yaml（DA-01/DA-02/FX-01/FX-02 全 done）；色散一半：DA-06/FX-04 blocked（见各自 note）"
+  verification: "**meta-GGA 一半已过（有实测）**：① 逐点（`qwb-xc --test fx02_m06_exchange`，6 例）M06-L/M06-2X 的交换与相关的能量密度及三个偏导对 libxc 差 < 1e-9；② H2O/def2-SVP M06-2X −76.3231912 vs PySCF −76.3231686（差 **2.3e-5 Ha**）、M06-L −76.3499177 vs −76.3499458（**2.8e-5**）；③ 门禁第 69 轮 26/26。**色散一半未过**：D3(BJ) 的 C6 表/单位/配对索引都已核实（见 FX-04 的 note），但 CN 约定与 r4r2 未定，`dispersion_energy_hartree` 与 D3 梯度都还没实现。"
+  note: "**§2.5 的拆分**：M2 的两条腿性质不同 —— meta-GGA 已经端到端验证；色散卡在官方参数的 CN/r4r2 上（连续三轮勘察：C6 解析错位已修、单位与索引已判定、权重公式已确认，只剩 CN 的常量/半径取值）。因此 M2 **不标 done**，把「meta-GGA 过 / 色散未过」写清，M3（RI-MP2）可以开始，不把色散当阻塞项。"
 M3:
   state: pending
   note: "RI-MP2 相关能"
