@@ -425,8 +425,17 @@ pub fn uks_scf(
     let e_nuc = nuclear_repulsion(&charges, molecule)?;
 
     // AO 三元组整次 SCF 只算一次。
+    // 自旋分辨的 meta-GGA（τ_α/τ_β）还没做：这里显式拒绝，而不是把 τ=0 喂给泛函。
+    if terms.iter().any(|term| term.requires().kinetic_density) {
+        return Err(EngineError::Unsupported(
+            "spin-resolved meta-GGA (τ_α/τ_β) is not implemented yet; `scf_type = uks` \
+             supports LDA and GGA without τ (SC-01b). Closed-shell meta-GGA works through \
+             `scf_type = rks` (FX-01)."
+                .to_string(),
+        ));
+    }
     let needs_sigma = terms.iter().any(|term| term.requires().sigma);
-    let cache = GridAoCached::build(basis, grid, needs_sigma, false)?;
+    let cache = GridAoCached::build(basis, grid, needs_sigma, false, false)?;
 
     let guess_hcore = if (options.initial_guess_scale - 1.0).abs() < f64::EPSILON {
         hcore.clone()

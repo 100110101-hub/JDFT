@@ -44,8 +44,10 @@ pub struct Requirements {
     pub rho: bool,
     /// 需要 `σ = |∇ρ|²`。
     pub sigma: bool,
-    /// 需要 `∇²ρ`（meta-GGA，第一阶段不支持）。
+    /// 需要 `∇²ρ`（LYP 一类用；meta-GGA 也常一起给）。
     pub laplacian: bool,
+    /// 需要动能密度 `τ = ½ Σ_μν P_μν ∇φ_μ·∇φ_ν`（meta-GGA 用，FX-01）。
+    pub kinetic_density: bool,
 }
 
 impl Requirements {
@@ -56,6 +58,7 @@ impl Requirements {
             rho: true,
             sigma: false,
             laplacian: false,
+            kinetic_density: false,
         }
     }
 
@@ -66,6 +69,7 @@ impl Requirements {
             rho: true,
             sigma: true,
             laplacian: false,
+            kinetic_density: false,
         }
     }
 
@@ -76,6 +80,33 @@ impl Requirements {
             rho: true,
             sigma: true,
             laplacian: true,
+            kinetic_density: false,
+        }
+    }
+
+    /// meta-GGA（只依赖 τ，不依赖 `∇²ρ`）：ρ、σ、τ。
+    ///
+    /// 为什么默认不要 `∇²ρ`：M06-L/M06-2X 这些主流 meta-GGA 的变量是
+    /// `(ρ, σ, τ)`，`∇²ρ` 只在 LYP 那样的项里出现。要两样都要，用
+    /// [`Self::meta_gga_laplacian`]。
+    #[must_use]
+    pub fn meta_gga() -> Self {
+        Self {
+            rho: true,
+            sigma: true,
+            laplacian: false,
+            kinetic_density: true,
+        }
+    }
+
+    /// `(ρ, σ, ∇²ρ, τ)` 全要的项。
+    #[must_use]
+    pub fn meta_gga_laplacian() -> Self {
+        Self {
+            rho: true,
+            sigma: true,
+            laplacian: true,
+            kinetic_density: true,
         }
     }
 }
@@ -90,36 +121,72 @@ pub struct DensityBatch<'a> {
     pub sigma: &'a [f64],
     /// `∇²ρ`；只有声明 `requires.laplacian` 的项需要（LYP 一类）。
     pub laplacian: &'a [f64],
+    /// 动能密度 `τ = ½ Σ_μν P_μν ∇φ_μ·∇φ_ν`（`E_h`/Bohr³）；
+    /// 只有声明 `requires.kinetic_density` 的项需要（meta-GGA，FX-01）。
+    pub tau: &'a [f64],
 }
 
 impl<'a> DensityBatch<'a> {
-    /// 用 ρ 构造（LDA 用；`sigma` 与 `laplacian` 为空）。
+    /// 用 ρ 构造（LDA 用；其余通道为空）。
     #[must_use]
     pub fn from_rho(rho: &'a [f64]) -> Self {
         Self {
             rho,
             sigma: &[],
             laplacian: &[],
+            tau: &[],
         }
     }
 
-    /// 用 ρ 与 σ 构造（GGA 用；不看 `laplacian`）。
+    /// 用 ρ 与 σ 构造（GGA 用；不看 `laplacian`/`tau`）。
     #[must_use]
     pub fn new(rho: &'a [f64], sigma: &'a [f64]) -> Self {
         Self {
             rho,
             sigma,
             laplacian: &[],
+            tau: &[],
         }
     }
 
-    /// 用 ρ、σ、∇²ρ 构造（meta-GGA / LYP 用）。
+    /// 用 ρ、σ、∇²ρ 构造（LYP 用；不看 `tau`）。
     #[must_use]
     pub fn with_laplacian(rho: &'a [f64], sigma: &'a [f64], laplacian: &'a [f64]) -> Self {
         Self {
             rho,
             sigma,
             laplacian,
+            tau: &[],
+        }
+    }
+
+    /// 用 ρ、σ、τ 构造（meta-GGA 用；`laplacian` 为空）。
+    ///
+    /// 只要 `kinetic_density` 的项（M06-L/M06-2X 这一族）用这个；
+    /// 同时要 `∇²ρ` 的项用 [`Self::with_all`]。
+    #[must_use]
+    pub fn with_tau(rho: &'a [f64], sigma: &'a [f64], tau: &'a [f64]) -> Self {
+        Self {
+            rho,
+            sigma,
+            laplacian: &[],
+            tau,
+        }
+    }
+
+    /// 四个通道都给（元 meta-GGA / LYP + τ）。
+    #[must_use]
+    pub fn with_all(
+        rho: &'a [f64],
+        sigma: &'a [f64],
+        laplacian: &'a [f64],
+        tau: &'a [f64],
+    ) -> Self {
+        Self {
+            rho,
+            sigma,
+            laplacian,
+            tau,
         }
     }
 
@@ -133,6 +200,18 @@ impl<'a> DensityBatch<'a> {
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.rho.is_empty()
+    }
+
+    /// `τ`（空切片时视为 0），单位 `E_h/Bohr³`。
+    #[must_use]
+    pub fn tau_at(&self, index: usize) -> f64 {
+        self.tau.get(index).copied().unwrap_or(0.0)
+    }
+
+    /// 是否带 τ 通道。
+    #[must_use]
+    pub fn has_tau(&self) -> bool {
+        !self.tau.is_empty()
     }
 }
 
@@ -202,6 +281,26 @@ pub trait FunctionalTerm: Send + Sync {
         d_laplacian.fill(0.0);
     }
 
+    /// 四通道版本：再加 `dε/dτ`（FX-01）。
+    ///
+    /// 默认实现把 `d_tau` 全部置零并转发给
+    /// [`Self::potential_derivatives_laplacian`]，所以只有真正依赖 τ 的项
+    /// （meta-GGA）才需要覆盖它 —— 和 `∇²ρ` 通道的做法一致。
+    ///
+    /// **组装方式不同**：`∂τ/∂P_μν = ½∇φ_μ·∇φ_ν` 是**直接**的，不需要分部积分，
+    /// 所以矩阵元里是 `½(dε/dτ)·∇φ_μ·∇φ_ν`（见 `qwb-scf::rks::evaluate_xc_cached`）。
+    fn potential_derivatives_full(
+        &self,
+        batch: &DensityBatch<'_>,
+        d_rho: &mut [f64],
+        d_sigma: &mut [f64],
+        d_laplacian: &mut [f64],
+        d_tau: &mut [f64],
+    ) {
+        self.potential_derivatives_laplacian(batch, d_rho, d_sigma, d_laplacian);
+        d_tau.fill(0.0);
+    }
+
     /// 这一项能否在自旋极化（UKS）路径下求值。
     ///
     /// 默认 `false`：自旋版本必须显式实现 [`Self::energy_density_spin`] 与
@@ -245,13 +344,19 @@ pub(crate) fn check_shape(
             batch.len()
         )));
     }
-    if !batch.sigma.is_empty() && batch.sigma.len() != batch.len() {
-        return Err(XcError::Shape(format!(
-            "{}: sigma {} vs rho {}",
-            what,
-            batch.sigma.len(),
-            batch.rho.len()
-        )));
+    for (label, channel) in [
+        ("sigma", batch.sigma),
+        ("laplacian", batch.laplacian),
+        ("tau", batch.tau),
+    ] {
+        if !channel.is_empty() && channel.len() != batch.len() {
+            return Err(XcError::Shape(format!(
+                "{}: {label} {} vs rho {}",
+                what,
+                channel.len(),
+                batch.rho.len()
+            )));
+        }
     }
     Ok(())
 }
@@ -982,6 +1087,31 @@ impl FunctionalTerm for ScaledTerm {
         }
     }
 
+    fn potential_derivatives_full(
+        &self,
+        batch: &DensityBatch<'_>,
+        d_rho: &mut [f64],
+        d_sigma: &mut [f64],
+        d_laplacian: &mut [f64],
+        d_tau: &mut [f64],
+    ) {
+        // 四个通道同一权重（FX-01 的 τ 通道同理：能量与势不能各用各的系数）。
+        self.inner
+            .potential_derivatives_full(batch, d_rho, d_sigma, d_laplacian, d_tau);
+        for slot in d_rho.iter_mut() {
+            *slot *= self.weight;
+        }
+        for slot in d_sigma.iter_mut() {
+            *slot *= self.weight;
+        }
+        for slot in d_laplacian.iter_mut() {
+            *slot *= self.weight;
+        }
+        for slot in d_tau.iter_mut() {
+            *slot *= self.weight;
+        }
+    }
+
     fn id(&self) -> &'static str {
         self.inner.id()
     }
@@ -1047,6 +1177,16 @@ impl FunctionalTerm for ScaledTerm {
         }
         Ok(())
     }
+}
+
+/// 这批泛函项里有没有任何一项需要 τ（FX-01 的门禁用）。
+///
+/// 为什么要一个独立函数：**数据声明 `requires.kinetic_density: true`
+/// 与"实现里真的有项在读 τ"是两件事**。两者不一致时必须报错 ——
+/// 数据说要 τ 但没有任何项读它，用户会拿到一个 GGA 水平的答案却以为算了 meta-GGA。
+#[must_use]
+pub fn terms_require_tau(terms: &[Box<dyn FunctionalTerm>]) -> bool {
+    terms.iter().any(|term| term.requires().kinetic_density)
 }
 
 /// 按权重包装（权重为 1 时原样返回，不引入额外一层虚调用）。

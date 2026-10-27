@@ -784,6 +784,7 @@ python scripts\fetch_data.py --all --force              # 全部重下
 | `pbe` | GGA | 能算（闭壳层与 UKS） |
 | `b88` | GGA 交换（单独的 B88） | 能算，一般作为组件 |
 | `pbe0` | hybrid（α_hf = 0.25） | 能算 |
+| meta-GGA（M06-L / M06-2X 家族） | τ 依赖的泛函 | **基础设施就位（FX-01），但泛函未注册**：`requires.kinetic_density` 与网格上的 τ 管线已通（闭式核对 < 1e-9），仓库里还没有这类数据文件，所以 `method_name: m06-2x` 会报「泛函不存在」。落数据是 DA-01/DA-02，落实现是 FX-02 |
 | `b3lyp` | hybrid（α_hf = 0.20） | **数据层不注册**：K1 的 phase-1 语义门禁拒绝 `requires.laplacian = true`（冻结契约）。只能在测试里程序化构造 |
 
 ### 9.2 作业类型
@@ -814,7 +815,7 @@ python scripts\fetch_data.py --all --force              # 全部重下
 * **ECP 的导数**：带 ECP 的几何优化/频率不支持。
 * **并行**：积分层单线程；并行只出现在 Hessian 的位移与 `qwb batch` 的进程级并发。
   `--threads` 目前只记账。
-* **meta-GGA、ROHF/UKS、TDDFT、NBO、TS/IRC/scan**：不在第一阶段范围。
+* **meta-GGA 泛函、ROHF、TDDFT、NBO、TS/IRC/scan**：都还不给用。其中 meta-GGA 的**基础设施**已经就位（FX-01：数据能声明 `requires.kinetic_density`、网格上算 τ、矩阵元按 ½ρ(dε/dτ)∇φ∇φ 组装、闭式核对 < 1e-9），缺的是泛函数据与实现（DA-01/DA-02 + FX-02）与自旋分辨的 τ_α/τ_β；UKS 本身已经能用（§3.6）。
 * **阶段二的方法**（开壳层、MP2/RI-MP2、激发态、COSMO/SMD/PBF、TS/IRC/扫描、NMR、
   极化率、解析 Hessian）：**契约已就位、引擎未实现**，见 §3.4 —— 现在写进输入会得到
   退出码 4，而不是一个看起来成功的结果。进度看 [`status-v2.yaml`](./status-v2.yaml)。

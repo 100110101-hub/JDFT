@@ -509,7 +509,10 @@ pub struct GridAoCached {
 }
 
 impl GridAoCached {
-    /// 按需求（是否需要 σ / ∇²ρ）预取网格上的 AO 数据。
+    /// 按需求（σ / ∇²ρ / τ）预取网格上的 AO 数据。
+    ///
+    /// τ 与 σ 都只要一阶导数，所以 `needs_tau` 与 `needs_sigma` 共用同一份
+    /// `∇φ` 缓存（FX-01）。
     ///
     /// # Errors
     /// AO 求值失败（例如基函数角动量超出现有实现）。
@@ -518,12 +521,13 @@ impl GridAoCached {
         grid: &Grid,
         needs_sigma: bool,
         needs_laplacian: bool,
+        needs_tau: bool,
     ) -> Result<Self, EngineError> {
         let mut values = Vec::with_capacity(grid.len());
         let mut gradients = Vec::with_capacity(grid.len());
         let mut laplacians = Vec::with_capacity(grid.len());
         for GridPoint { position_bohr, .. } in &grid.points {
-            let (value, gradient) = if needs_sigma || needs_laplacian {
+            let (value, gradient) = if needs_sigma || needs_laplacian || needs_tau {
                 ao_value_and_gradient(basis, *position_bohr)?
             } else {
                 (ao_value(basis, *position_bohr)?, Vec::new())
@@ -574,7 +578,8 @@ pub fn evaluate_xc(
 ) -> Result<(f64, Matrix), EngineError> {
     let needs_sigma = terms.iter().any(|term| term.requires().sigma);
     let needs_laplacian = terms.iter().any(|term| term.requires().laplacian);
-    let cache = GridAoCached::build(basis, grid, needs_sigma, needs_laplacian)?;
+    let needs_tau = terms.iter().any(|term| term.requires().kinetic_density);
+    let cache = GridAoCached::build(basis, grid, needs_sigma, needs_laplacian, needs_tau)?;
     evaluate_xc_cached(basis, grid, &cache, density, terms)
 }
 
@@ -593,10 +598,12 @@ pub fn evaluate_xc_cached(
     // Requirements 是 non_exhaustive，只能逐字段问，不能构造字面量
     let needs_sigma = terms.iter().any(|term| term.requires().sigma);
     let needs_laplacian = terms.iter().any(|term| term.requires().laplacian);
+    let needs_tau = terms.iter().any(|term| term.requires().kinetic_density);
 
     let mut rho_values = Vec::with_capacity(grid.len());
     let mut sigma_values = Vec::with_capacity(grid.len());
     let mut laplacian_values = Vec::with_capacity(grid.len());
+    let mut tau_values = Vec::with_capacity(grid.len());
     let mut ao_values: Vec<Vec<f64>> = Vec::with_capacity(grid.len());
     let mut ao_gradients: Vec<Vec<[f64; 3]>> = Vec::with_capacity(grid.len());
     let mut ao_laplacians: Vec<Vec<f64>> = Vec::with_capacity(grid.len());
@@ -694,41 +701,72 @@ pub fn evaluate_xc_cached(
                 + gradient_here[1] * gradient_here[1]
                 + gradient_here[2] * gradient_here[2],
         );
+        // τ = ½ Σ_μν P_μν ∇φ_μ·∇φ_ν（闭壳层：P 是自旋求和密度，τ 也是求和的）
+        let tau_here = if needs_tau {
+            let mut total = 0.0;
+            for i in 0..n {
+                for j in 0..n {
+                    let p = density[(i, j)];
+                    if p == 0.0 {
+                        continue;
+                    }
+                    let dot = gradients[i][0] * gradients[j][0]
+                        + gradients[i][1] * gradients[j][1]
+                        + gradients[i][2] * gradients[j][2];
+                    total += p * dot;
+                }
+            }
+            total *= 0.5;
+            if !total.is_finite() {
+                return Err(EngineError::Internal(format!(
+                    "kinetic energy density is not finite ({total}) at a grid point"
+                )));
+            }
+            total
+        } else {
+            0.0
+        };
+        tau_values.push(tau_here);
         grad_rho.push(gradient_here);
         ao_values.push(values);
         ao_gradients.push(gradients);
         ao_laplacians.push(ao_laplacian_here);
     }
 
-    let batch = if needs_laplacian {
-        DensityBatch::with_laplacian(&rho_values, &sigma_values, &laplacian_values)
-    } else if needs_sigma {
-        DensityBatch::new(&rho_values, &sigma_values)
-    } else {
-        DensityBatch::from_rho(&rho_values)
+    let batch = match (needs_laplacian, needs_sigma, needs_tau) {
+        (true, _, _) => {
+            DensityBatch::with_all(&rho_values, &sigma_values, &laplacian_values, &tau_values)
+        }
+        (false, _, true) => DensityBatch::with_tau(&rho_values, &sigma_values, &tau_values),
+        (false, true, false) => DensityBatch::new(&rho_values, &sigma_values),
+        (false, false, false) => DensityBatch::from_rho(&rho_values),
     };
     let mut epsilon = vec![0.0; grid.len()];
     let mut d_epsilon = vec![0.0; grid.len()];
     let mut d_sigma = vec![0.0; grid.len()];
     let mut d_laplacian = vec![0.0; grid.len()];
+    let mut d_tau = vec![0.0; grid.len()];
 
     for term in terms {
         let mut local_epsilon = vec![0.0; grid.len()];
         let mut local_d_rho = vec![0.0; grid.len()];
         let mut local_d_sigma = vec![0.0; grid.len()];
         let mut local_d_laplacian = vec![0.0; grid.len()];
+        let mut local_d_tau = vec![0.0; grid.len()];
         term.energy_density(&batch, &mut local_epsilon);
-        term.potential_derivatives_laplacian(
+        term.potential_derivatives_full(
             &batch,
             &mut local_d_rho,
             &mut local_d_sigma,
             &mut local_d_laplacian,
+            &mut local_d_tau,
         );
         for index in 0..grid.len() {
             epsilon[index] += local_epsilon[index];
             d_epsilon[index] += local_d_rho[index];
             d_sigma[index] += local_d_sigma[index];
             d_laplacian[index] += local_d_laplacian[index];
+            d_tau[index] += local_d_tau[index];
         }
     }
 
@@ -759,10 +797,21 @@ pub fn evaluate_xc_cached(
         } else {
             0.0
         };
+        // τ 通道：能量密度按**每电子** ε 约定（E = ∫ρ ε dV），所以
+        //   ∂E/∂P_μν ⊃ ∫ ρ·(∂ε/∂τ)·(½∇φ_μ·∇φ_ν) dV
+        // —— 系数是 **½ρ·dτ**，漏掉 ρ 会让 τ 项的矩阵元整体偏小（FX-01 踩过：
+        // 线性 τ 项的能量对不上 (c/2)Tr[PT]，差 9 倍）。
+        // 与 σ/∇²ρ 通道不同，∂τ/∂P_μν 是**直接**的，不需要分部积分。
+        let tau_coefficient = if needs_tau && rho > 0.0 {
+            0.5 * rho * d_tau[index]
+        } else {
+            0.0
+        };
         // 临时诊断：哪个系数先坏
         if !(potential.is_finite()
             && sigma_coefficient.is_finite()
-            && laplacian_coefficient.is_finite())
+            && laplacian_coefficient.is_finite()
+            && tau_coefficient.is_finite())
         {
             return Err(EngineError::Internal(format!(
                 "coefficient not finite at grid point {index}: potential {potential:.3e}, \
@@ -799,6 +848,15 @@ pub fn evaluate_xc_cached(
                         .sum::<f64>();
                     element += laplacian_coefficient
                         * (laplacians[i] * values[j] + 2.0 * dot + values[i] * laplacians[j]);
+                }
+                if tau_coefficient != 0.0 {
+                    // 与上面 σ 通道共用同一个 ∇φ_μ·∇φ_ν
+                    let dot = gradients[i]
+                        .iter()
+                        .zip(gradients[j].iter())
+                        .map(|(left, right)| left * right)
+                        .sum::<f64>();
+                    element += tau_coefficient * dot;
                 }
                 v_xc[(i, j)] += weight * element;
             }
@@ -960,11 +1018,13 @@ pub fn rks_scf(
     } else {
         let needs_sigma = terms.iter().any(|term| term.requires().sigma);
         let needs_laplacian = terms.iter().any(|term| term.requires().laplacian);
+        let needs_tau = terms.iter().any(|term| term.requires().kinetic_density);
         Some(GridAoCached::build(
             basis,
             grid,
             needs_sigma,
             needs_laplacian,
+            needs_tau,
         )?)
     };
 

@@ -2,6 +2,29 @@
 
 语义化版本。**任何破坏性变更必须在此登记并经人类评审**（§4 契约前置要求）。
 
+## 2.1.0 — FX-01：K1 的 `requires.kinetic_density`（2026-11-06）
+
+**加性变更**（旧数据、旧代码继续工作）：
+
+### K1 · `FunctionalRequires` 新增 `kinetic_density`（带 `#[serde(default)]`）
+
+- meta-GGA（M06-L/M06-2X 这一族）的变量是 `(ρ, σ, τ)`，`τ` 是动能密度
+  `τ = ½ Σ_μν P_μν ∇φ_μ·∇φ_ν`。数据必须能**声明**它需要 τ，否则"数据需求"与
+  "实现读没读 τ"无法核对（那个核对就是 FX-01 的引擎门禁）。
+- 缺省 `false`：阶段一所有功能数据文件（`pbe.yaml` / `svwn5.yaml` / `b88.yaml` /
+  `pbe0.yaml`）一个字节都不用改，解析结果与原语义完全一致（有回归测试
+  `kinetic_density_defaults_to_false_for_old_data`）。
+- `check_structure` 的「requires 至少一项」把 `kinetic_density` 也算进去了；
+  `requires.laplacian` 的第一阶段守卫**未变**（LYP 仍然只能在测试里程序化构造）。
+- `functional.schema.{json,yaml}` 已重新生成（`qwb-gen-schemas --check` 绿）。
+
+### 没有改的
+
+- K2 的 `JobResult` / `TaskOptions`：FX-01 不新增结果块，也不新增输入选项。
+- `qwb-xc` 的 trait 签名是 **Rust API**、不在 K1/K2 里（K1 只覆盖数据形态），
+  所以 `DensityBatch` 增加 `tau` 字段不算契约变更；但它的语义
+  （`energy_density` 给的是**每电子** ε）在 `docs/USAGE.md` 与 `docs/choices.md` 五十三里写清楚了。
+
 ## 2.0.0 — 阶段二契约轨道 KV-01..KV-03（2026-11-06，`project-phase2.md` §4）
 
 **全部是加性变更**：旧 `input.yaml` / 旧 `result.json` / 旧 Python 代码继续工作（有回归测试）。

@@ -30,8 +30,14 @@ pub struct FunctionalRequires {
     pub rho: bool,
     /// 需要密度梯度不变量 `sigma = |∇rho|²`。
     pub sigma: bool,
-    /// 需要 `∇²rho`（meta-GGA 专属；§2.2 非目标）。
+    /// 需要 `∇²rho`（LYP 一类；meta-GGA 也常一起给）。
     pub laplacian: bool,
+    /// 需要动能密度 `τ = ½ Σ_μν P_μν ∇φ_μ·∇φ_ν`（meta-GGA，FX-01）。
+    ///
+    /// `#[serde(default)]`：阶段一的数据文件没有这个键，缺省 `false` 才能原样解析
+    /// —— 这是**加性**契约扩展的唯一可行写法（旧数据不改、新数据显式声明）。
+    #[serde(default)]
+    pub kinetic_density: bool,
 }
 
 /// 数值稳定性的截断规则（§8.3 第三道门禁）。
@@ -109,8 +115,14 @@ impl Functional {
             }
         }
 
-        if !(self.requires.rho || self.requires.sigma || self.requires.laplacian) {
-            issues.push("requires must set at least one of rho/sigma/laplacian".into());
+        if !(self.requires.rho
+            || self.requires.sigma
+            || self.requires.laplacian
+            || self.requires.kinetic_density)
+        {
+            issues.push(
+                "requires must set at least one of rho/sigma/laplacian/kinetic_density".into(),
+            );
         }
         if self.requires.laplacian {
             issues.push(
@@ -183,6 +195,7 @@ mod tests {
                 rho: true,
                 sigma: true,
                 laplacian: false,
+                kinetic_density: false,
             },
             parameters,
             parameter_sources: BTreeMap::new(),
@@ -198,6 +211,67 @@ mod tests {
         let f = pbe();
         assert!(f.check().is_empty(), "{:?}", f.check());
         assert_eq!(f.parameters.get("kappa"), Some(&0.804));
+    }
+
+    /// FX-01：`requires.kinetic_density` 是**加性**扩展 —— 阶段一的数据文件里没有
+    /// 这个键，必须原样解析成 `false`，否则升级 = 所有旧数据失效。
+    #[test]
+    fn kinetic_density_defaults_to_false_for_old_data() {
+        let old_yaml = r#"
+name: pbe
+version: 1.0.0
+citation:
+  - title: PBE
+    doi: 10.1103/PhysRevLett.77.3865
+license: {spdx: Apache-2.0, commercial_ok: true, redistribute_ok: true}
+created: 2025-01-10T08:00:00Z
+components:
+  - {id: GgaPbeX, weight: 1.0}
+requires: {rho: true, sigma: true, laplacian: false}
+parameters: {kappa: 0.804}
+stability: {density_floor: 1.0e-12, sigma_ceiling: 1.0e8}
+"#;
+        let parsed: Functional = serde_yaml::from_str(old_yaml).expect("旧数据必须仍可解析");
+        assert!(!parsed.requires.kinetic_density);
+        assert!(
+            parsed.check_structure().is_empty(),
+            "{:?}",
+            parsed.check_structure()
+        );
+
+        // 显式声明 τ：不再需要 σ（meta-GGA 至少要有 rho + τ）
+        let meta_yaml = old_yaml.replace(
+            "requires: {rho: true, sigma: true, laplacian: false}",
+            "requires: {rho: true, sigma: true, laplacian: false, kinetic_density: true}",
+        );
+        let meta: Functional = serde_yaml::from_str(&meta_yaml).expect("meta-GGA 数据");
+        assert!(meta.requires.kinetic_density);
+        assert!(
+            meta.check_structure().is_empty(),
+            "声明 τ 不该被结构性检查抱怨：{:?}",
+            meta.check_structure()
+        );
+    }
+
+    /// 只有 τ（没有 rho）也算"声明了需求"，不能报「requires must set ...」。
+    #[test]
+    fn tau_only_requirement_is_not_empty() {
+        let mut f = pbe();
+        f.requires = FunctionalRequires {
+            rho: true,
+            sigma: false,
+            laplacian: false,
+            kinetic_density: true,
+        };
+        assert!(f.check_structure().is_empty(), "{:?}", f.check_structure());
+        f.requires.rho = false;
+        assert!(
+            f.check_structure()
+                .iter()
+                .all(|issue| !issue.contains("at least one")),
+            "τ 也算需求：{:?}",
+            f.check_structure()
+        );
     }
 
     #[test]
@@ -222,6 +296,7 @@ mod tests {
             rho: false,
             sigma: false,
             laplacian: false,
+            kinetic_density: false,
         };
         assert!(f.check().iter().any(|m| m.contains("at least one")));
 

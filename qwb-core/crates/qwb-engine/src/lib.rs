@@ -175,6 +175,38 @@ pub fn terms_and_hf_exchange(
     Ok((terms, hf_exchange))
 }
 
+/// FX-01 的一致性守卫：**数据声明的 `requires.kinetic_density` 必须与实现一致**。
+///
+/// 两个方向都要拒：
+/// * 数据说需要 τ、但没有任何组件真的读 τ → 用户会拿到一个 GGA 水平的答案，
+///   却以为算了 meta-GGA（§10.3 禁止的静默降级）；
+/// * 组件读 τ、数据却没声明 → 数据对自己的需求说谎，`qwb data verify` 的语义就废了。
+///
+/// # Errors
+///
+/// 不一致时返回 [`EngineError::Unsupported`]，消息里点明是哪一侧。
+pub fn check_meta_gga_declaration(
+    functional_name: &str,
+    data_requires_tau: bool,
+    terms: &[Box<dyn qwb_xc::FunctionalTerm>],
+) -> Result<(), EngineError> {
+    let implementation_reads_tau = qwb_xc::terms_require_tau(terms);
+    if data_requires_tau && !implementation_reads_tau {
+        return Err(EngineError::Unsupported(format!(
+            "functional `{functional_name}` declares requires.kinetic_density = true, but none \
+             of its components reads the kinetic energy density τ; refusing to compute a \
+             GGA-level answer silently (FX-01/DA-01)"
+        )));
+    }
+    if implementation_reads_tau && !data_requires_tau {
+        return Err(EngineError::Unsupported(format!(
+            "functional `{functional_name}` has a component that reads τ, but its data does \
+             not declare requires.kinetic_density = true; fix the data (FX-01/DA-01)"
+        )));
+    }
+    Ok(())
+}
+
 fn density_to_api(matrix: &qwb_linalg::Matrix) -> nalgebra::DMatrix<f64> {
     let rows = matrix.nrows();
     let columns = matrix.ncols();
@@ -270,6 +302,12 @@ impl RksBackend {
                     .to_string(),
             ));
         }
+        let data_requires_tau = self
+            .registry
+            .get_functional(&spec.functional_name)?
+            .requires
+            .kinetic_density;
+        check_meta_gga_declaration(&spec.functional_name, data_requires_tau, &spec.terms)?;
 
         reporter.progress("load", 0.0);
         reporter.log(&format!(
@@ -518,6 +556,15 @@ impl RksBackend {
         reporter.progress("load", 0.0);
         let basis_k1 = self.registry.get_basis(&input.basis_name)?;
         let spec = self.spec(input)?;
+        // FX-01：数据声明的 τ 需求必须与实现一致（meta-GGA 的前置门禁）。
+        if !spec.functional_name.is_empty() {
+            let data_requires_tau = self
+                .registry
+                .get_functional(&spec.functional_name)?
+                .requires
+                .kinetic_density;
+            check_meta_gga_declaration(&spec.functional_name, data_requires_tau, &spec.terms)?;
+        }
         reporter.log(&format!(
             "basis = {} ({} elements), method = {}, grid = {}, jobtype = {}, {} atoms",
             basis_k1.name,

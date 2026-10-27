@@ -40,8 +40,16 @@ $defs:
     additionalProperties: false
     description: 该泛函需要哪些密度量（决定网格与数据结构，不允许运行时猜）。
     properties:
+      kinetic_density:
+        default: false
+        description: |-
+          需要动能密度 `τ = ½ Σ_μν P_μν ∇φ_μ·∇φ_ν`（meta-GGA，FX-01）。
+
+          `#[serde(default)]`：阶段一的数据文件没有这个键，缺省 `false` 才能原样解析
+          —— 这是**加性**契约扩展的唯一可行写法（旧数据不改、新数据显式声明）。
+        type: boolean
       laplacian:
-        description: 需要 `∇²rho`（meta-GGA 专属；§2.2 非目标）。
+        description: 需要 `∇²rho`（LYP 一类；meta-GGA 也常一起给）。
         type: boolean
       rho:
         description: 需要密度 `rho`。

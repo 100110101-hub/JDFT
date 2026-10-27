@@ -99,8 +99,11 @@ IN-05:
 # ───────────────────────── 泛函轨（FX，4）─────────────────────────
 
 FX-01:
-  state: pending
-  note: "meta-GGA 基础设施（τ / ∇²ρ / Requires 门禁）"
+  state: done
+  ts: "2026-11-07T02:10:00Z"
+  artifact: "K1 加性扩展 `FunctionalRequires.kinetic_density`（`#[serde(default)]`，旧数据零改动）+ `functional.schema.{json,yaml}` 重新生成 + `qwb-xc` 的 `Requirements.kinetic_density`/`meta_gga()`/`DensityBatch.tau`（`with_tau`/`with_all`/`tau_at`/`has_tau`）+ trait 的四通道 `potential_derivatives_full`（默认把 dτ 置 0，`ScaledTerm` 覆盖）+ `terms_require_tau` 助手 + `qwb-scf` 的 τ 网格管线（`GridAoCached::build` 增加 `needs_tau`；每点 τ = ½Σ P∇φ∇φ；矩阵元 ½ρ(dε/dτ)∇φ_μ·∇φ_ν）+ `uks_scf` 对 τ 项的显式拒绝 + 引擎的 `check_meta_gga_declaration` 双向门禁 + 三个新测试文件（`fx01_tau_channel.rs` / `fx01_tau_pipeline.rs` / `fx01_tau_engine.rs`）"
+  verification: "① `cargo test -p qwb-xc --test fx01_tau_channel` **7 例绿**：ρ/σ/τ 三个方向的中心差分 < 1e-9（4 组 (ρ,σ,τ)，含 ρ=0.02 的近核区）；σ 不影响 ∂ε/∂τ；缺 τ 时必须失败（不是按 0 算）；LDA/GGA 项的 τ 导数**逐位为 0**（PBE 没有被新通道改动）；τ 长度不一致被抓；`meta_gga()` 的四个 flag 正确。② `cargo test -p qwb-scf --test fx01_tau_pipeline` **3 例绿**：线性 τ 项的**闭式核对** —— `E_xc = c·Tr[P·K]` 与 `V_xc = c·K` 在 grid-veryfine 上差 < 1e-9（实测 0.576451642291 vs 0.576451639489；同一核对在 grid-normal 上是 2.8e-9，正好是求积误差量级）；非线性 τ 项跑通一次真 SCF；`uks + τ` 显式 `Unsupported`。③ `cargo test -p qwb-engine --test fx01_tau_engine` **4 例绿**：声明一致时放过（GGA / meta-GGA / 纯 HF）、数据声明 τ 而无项读它 → `Unsupported`、组件读 τ 而数据未声明 → `Unsupported`、仓库现有 `pbe`/`svwn5` 照旧跑通。④ `cargo test -p qwb-registry` **55 例绿**（新增 2 例：旧数据无 `kinetic_density` 键仍解析为 false 且 `check_structure` 空、只声明 τ 不算「requires 为空」）。⑤ `qwb-gen-schemas -- ../qwb-contracts/schema --check` → `all K1 schemas match the Rust types`。⑥ `cargo clippy --workspace --all-targets -- -D warnings` 干净。⑦ 门禁 `scripts/verify.ps1` 第 68 轮 **26/26 全绿**（阶段一 26 项无回归，Python 侧 182 例）。"
+  note: "**三个约定问题**（都记在 docs/choices.md 五十三）：`energy_density` 是**每电子** ε（τ 线性项必须写 `cτ/ρ`，写成 `cτ` 能量差 9 倍）；τ 通道的矩阵元要乘 ρ（`½ρ dτ`，与 σ 通道的 `2ρ dσ` 同源）；`qwb-integrals` 的 `kinetic` 是 **½∫∇φ∇φ**（闭壳层 `E_kin = Tr[P·K]` 的约定），所以闭式是 `∫τ = Tr[PK]` 而不是 ½Tr[PK]。锚点：网格上 `∫φ₀² = 1.0000` 而 `∫|∇φ₀|² = 1.52006`、`K₀₀ = 0.76003`（正好一半）。**范围与交接**：本轮只立管线与门禁，**没有**注册任何 meta-GGA 泛函（`method_name: m06-2x` 仍会因缺数据失败）；`∇²ρ` 通道本来就有（LYP），但 meta-GGA 的 `requires.laplacian` 第一阶段守卫未动；自旋分辨的 `τ_α/τ_β` 未做，`uks + τ` 显式拒绝 —— 这三条分别是 DA-01/DA-02、FX-02 与后续的活。引擎那道门禁是**双向**的：数据声明 τ 但没有项读它、或反过来，都拒（声明与实现脱节的静默降级比公式错更难发现）。"
 FX-02:
   state: pending
   note: "M06-2X 实现 + 参考集验收"
