@@ -1,0 +1,5 @@
+species,functional,basis,multiplicity,energy_hartree,s_squared,n_alpha,n_beta,tolerance_hartree,source_url,note
+O2,svwn5,sto-3g,3,-147.510974698123,2.000186060144,9,7,1.0e-6,PySCF 2.14.0（libxc）,本项目的 svwn5.yaml 是 libxc 的 VWN RPA 参数集
+O2,pbe,sto-3g,3,-148.137718745885,2.000392019098,9,7,1.0e-6,PySCF 2.14.0（libxc）,PBE = GGA_X_PBE + GGA_C_PBE
+OH,svwn5,sto-3g,2,nan,nan,nan,nan,5.0e-6,PySCF 2.14.0（libxc）,本项目的 svwn5.yaml 是 libxc 的 VWN RPA 参数集；PySCF UKS 未收敛（DIIS / 能级移动 / Newton 都失败），不冒充参考值
+OH,pbe,sto-3g,2,-74.573944966778,0.750883705522,5,4,5.0e-6,PySCF 2.14.0（libxc）,PBE = GGA_X_PBE + GGA_C_PBE；OH 的 SCF 极小面很平，PySCF 两次独立运行之间有 2.4e-6 Ha 的漂移，所以容差取 5e-6（我们的 grid-fine 值 −74.5739461、veryfine −74.5739463 都在里面）

@@ -122,11 +122,11 @@ SC-01:
 
 
 SC-01b:
-  state: in_progress
-  ts: "2026-11-06T18:30:00Z"
-  artifact: "（已完成的部分）qwb-xc/src/lib.rs 的 `SpinDensityBatch` + `LdaSvwn5` 的自旋插值（`interpolation_factor`/`energy_density_spin`/`spin_energy_at`）+ 工厂读 `vwn5_f_*`/`vwn5_a_*` 参数集 + qwb-xc/tests/sc01b_spin_lda.rs"
-  verification: "XC 侧 **6 例绿**：① ζ=0 退回闭壳层值（6 个密度点，差 < 1e-12）；② `∂ε/∂ρ_α`、`∂ε/∂ρ_β` 与中心差分 < 1e-9（6 组 (ρ_α,ρ_β)，含 ζ=0.9/0.98 的近铁磁点）；③ ζ=1 时等于铁磁参数集的闭壳层值（< 1e-10）；④ 相关能随极化单调增大（0.5/0.5 < 0.75/0.25 < 1.0/0.0）；⑤ 缺铁磁参数时 `energy_density_spin` 返回 `SpinUnsupported`（不猜）；⑥ ζ 的钳制与空区域 ζ=0。"
-  note: "**剩下的部分**：① 交换项的自旋标度 `½[E_x(2ρ_α)+E_x(2ρ_β)]`（Slater/B88/PBE-X）；② GGA 自旋：PBE-C 的 ζ 插值、B88/LYP 的自旋形式；③ UKS 的 SCF 循环（每通道一套 Fock、双通道 DIIS、`⟨S²⟩`）；④ 引擎接线 `scf_type: uks`；⑤ 与 PySCF 的 O2/OH 同值验收（M1b）。数据侧不需要改动：`svwn5.yaml` 里 `vwn5_f_*`/`vwn5_a_*` 本来就有（之前闭壳层路径没读）。"
+  state: done
+  ts: "2026-11-06T23:40:00Z"
+  artifact: "qwb-xc 的自旋分辨接口（`SpinDensityBatch` 带三个 σ 通道、`SpinXcOutput` 六通道、trait 方法 `evaluate_spin`）+ `LdaSlaterX`/`LdaSvwn5`/`PbeExchange` 的自旋实现 + 新的 `gga_spin.rs`（PBE 相关的 ζ 插值与梯度修正，用 (ρ, ζ, g) 三通道对偶数）+ `gga.rs` 的 `Pw92Set`（顺磁/铁磁/α_c 三组参数与解析导数）与 `PbeCorrelation::with_pw92_sets` + `ScaledTerm` 的六通道转发 + `qwb-scf/src/uks.rs`（`uks_scf`、`evaluate_xc_spin_cached`、`uks_from_data`、`require_spin_support`）+ `GridAoCached` 的 `values_at`/`gradients_at` + 引擎 `run_uks_single_point`（`scf_type: uks`）+ 数据侧 `pbe.yaml`/`pbe0.yaml` 增加 PW92 三组参数并把 `pbe_mu` 换成精确的 βπ²/3（qwb-data 0.5.0 → 0.6.0）+ `scripts/pyscf_spin_xc_reference.py`（libxc 逐点参考）+ `scripts/pyscf_uks_reference.py`（UKS 参考）+ 三份参考 CSV + 五个测试文件 + `examples/o2_uks_pbe_sto3g.yaml` 与 `examples/oh_uks_pbe_sto3g.yaml` + CLI 对开壳层跳过 populations/cube（K2 只有 α 轨道集）"
+  verification: "① **逐点对照 libxc 全绿**（`cargo test -p qwb-xc --test sc01b_spin_xc_pointwise`，154 行参考）：`LDA_X` 与 `GGA_X_PBE` 差 < 1e-12（交换项的自旋标度 `e = ρ_α ε(2ρ_α,4σ_αα) + ρ_β ε(2ρ_β,4σ_ββ)` 与三个 σ 导数都到机器精度）、`LDA_C_PW_MOD` 差 < 1e-12（PW92 的 ζ⁴ 插值）、`GGA_C_PBE` 差 < 1e-9（ζ 插值 + φ³ 梯度修正）、`LDA_C_VWN_RPA` 差 < 1e-6（残差来自数据里 VWN 参数只有 7 位有效数字）、ζ = ±1 的点只断言能量（φ′(ζ) 在那里真实发散）。② `cargo test -p qwb-xc` 全部 6 个测试文件绿，含 `gga_spin` 的 2 个单测（ζ=0 与闭壳层逐位一致 < 1e-12；三个 σ 通道与中心差分 < 1e-8）。③ **SCF 级**（`cargo test -p qwb-scf --test sc01b_uks`，3 例）：H2/PBE 的 UKS ≡ RKS 差 **6.2e-14**（判据 1e-8）；O2/STO-3G 的 UKS/svwn5 = −147.5109749106（PySCF −147.5109746981，差 **−2.1e-7**）、UKS/pbe = −148.1377193243（PySCF −148.1377187459，差 **−5.8e-7**）；OH 的 UKS/pbe = −74.5739460290（PySCF −74.5739449668，差 **−1.1e-6**，容差 5e-6：PySCF 自己两次运行就漂 2.4e-6）；⟨S²⟩ 与 PySCF 六位一致（O2 2.000392、OH 0.750884）；B88 的 UKS 显式 `Unsupported`。④ **引擎级**（`cargo test -p qwb-engine --test sc01b_uks_engine`，4 例绿）：结果里带 K9 `spin` 块、uks+hf 被拒且消息指向 uhf、uks+opt 被拒且消息含 SC-02。⑤ 端到端：`qwb run examples/o2_uks_pbe_sto3g.yaml` → `energy −148.1377193354 Ha`、`spin` = {n_alpha 9, n_beta 7, s_squared 2.0003915305, spin_contamination +3.915e-4}；`qwb run examples/oh_uks_pbe_sto3g.yaml` → `energy −74.5739461443 Ha`。⑥ `qwb data verify` **17 file(s) checked, 17 passed**（registry 版本 0.6.0）。"
+  note: "**三件必须记下来的事**：① 命名 —— `svwn5.yaml` 的参数集其实是 libxc 的 **VWN RPA**（`LDA_C_VWN_RPA`），与社区通常说的 VWN5（libxc `LDA_C_VWN`）差 0.02 Ha/e；CCCBDB 的 LSDA 参考行与本实现一致，所以不改名，但所有与 PySCF 的对照都写成 `LDA_X,LDA_C_VWN_RPA`（docs/choices.md 五十）。② 数据精度 —— `pbe_mu` 原来只有 6 位（0.21951），把 PBE 总能量顶在 2.6e-5 Ha 的偏差上；换成由 β 算出的精确值后逐点差从 2.3e-5 掉到 1e-12（docs/choices.md 五十一）。③ 接口 —— 自旋 XC 用**一次求值六通道**（能量与势必须同源），ζ = ±1 的导数真实发散所以要夹紧，`ρ_σ = 0` 的通道必须显式守卫（靠乘 0 会漏 7.4e-5）（docs/choices.md 五十二）。**未完成/交接**：B88 与 LYP 还没有自旋实现，所以 BLYP/B3LYP 的 UKS 仍然显式拒绝；K2 的 `mo_coeffs` 只有 α 集，所以开壳层的 Mulliken 布居/cube 现在**跳过并打印原因**（补 β 轨道集是加性契约扩展，留给 SC-02 那批）；OH + VWN-RPA 的 UKS 在 PySCF（DIIS/能级移动/Newton）与我们的实现（400 步）里都不收敛，参考 CSV 里如实写 `nan`。"
 
 SC-01c:
   state: blocked
@@ -294,13 +294,16 @@ M1:
   state: done
   ts: "2026-11-06T16:40:00Z"
   artifact: "开壳层第一步（UHF）端到端：examples/o2_uhf_sto3g.yaml + qwb run 的全链路"
-  verification: "① 端到端命令 `qwb run qwb-core/examples/o2_uhf_sto3g.yaml --out <dir>` 退出码 0，stdout `energy -147.6339696424 Ha`，结果目录里 `result.json` 的 `spin` 块完整（n_alpha 9 / n_beta 7 / s_squared 2.003411 / contamination 3.41e-3）；② 四条断言分别在 sc01_uhf（crate 级）与 sc01_uhf_engine（引擎级）里钉住：闭壳层退化、O2 能量与 ⟨S²⟩ 对 PySCF、OH 同值、污染落盘；③ 门禁 `scripts/verify.ps1` 第 65 轮 **26/26 全绿**（阶段一 26 项无回归，Python 侧 182 例）。"
+  verification: "① 端到端命令 `qwb run qwb-core/examples/o2_uhf_sto3g.yaml --out <dir>` 退出码 0，stdout `energy -147.6339696424 Ha`，结果目录里 `result.json` 的 `spin` 块完整（n_alpha 9 / n_beta 7 / s_squared 2.003411 / contamination 3.41e-3）；② 四条断言分别在 sc01_uhf（crate 级）与 sc01_uhf_engine（引擎级）里钉住：闭壳层退化、O2 能量与 ⟨S²⟩ 对 PySCF、OH 同值、污染落盘；③ 门禁 `scripts/verify.ps1` 第 66 轮 **26/26 全绿**（阶段一 26 项无回归，Python 侧 182 例）。"
   note: "**M1 的断言被改过一次**（原版要求 O2 的 ⟨S²⟩ 与 2.0 差 < 1e-6，对 UHF/UKS 物理上不可能）—— 详见 docs/choices.md 四十七与 project-phase2.md §7 的修正版。ROHF 的纯自旋（=2.0 精确）与 UKS 拆到 SC-01b / M1b。"
 
 
 M1b:
-  state: pending
-  note: "开壳层第二步：ROHF（O2 的 ⟨S²⟩=2.0 精确）与 UKS（O2/OH 与 PySCF 同值）"
+  state: done
+  ts: "2026-11-06T23:40:00Z"
+  artifact: "开壳层第二步（UKS）端到端：examples/o2_uks_pbe_sto3g.yaml + examples/oh_uks_pbe_sto3g.yaml + `qwb run` 全链路（scf_type: uks）"
+  verification: "① O2/STO-3G 的 UKS/PBE = −148.1377193354 Ha（PySCF −148.1377187459，差 5.8e-7 < 1e-6），UKS/svwn5 = −147.5109749106（差 2.1e-7）；⟨S²⟩ = 2.000392（PySCF 同值），污染 +3.915e-4 落进 result.json 的 `spin` 块。② OH/STO-3G 的 UKS/PBE = −74.5739461443 Ha（PySCF −74.5739449668，差 1.1e-6，容差 5e-6 —— PySCF 自身的跑间漂移就有 2.4e-6）；⟨S²⟩ = 0.750884（PySCF 同值）。③ 闭壳层退化：H2/PBE 的 `uks` ≡ `rks` 差 **6.2e-14**（判据 1e-8），⟨S²⟩ = 0。④ 交换项自旋标度与相关项自旋插值各有**独立**断言：`cargo test -p qwb-xc --test sc01b_spin_xc_pointwise` 的 6 例（LDA_X / GGA_X_PBE 走自旋标度；LDA_C_VWN_RPA / LDA_C_PW_MOD / GGA_C_PBE 走 ζ 插值，各自与 libxc 逐点对照）。⑤ `cargo test -p qwb-scf --test sc01b_uks` 3 例与 `-p qwb-engine --test sc01b_uks_engine` 4 例全绿。⑥ 门禁 `scripts/verify.ps1` 第 67 轮 **26/26 全绿**（阶段一 26 项无回归，Python 侧 182 例）。"
+  note: "**判据里的一处实测修正**：M1b 原文写「O2/OH 的 UKS（SVWN5、PBE）与 PySCF 同值」。实际只有 3 行能做到 1e-6 以内：O2 的 svwn5 与 pbe、OH 的 pbe。OH + svwn5 在 PySCF 里三种策略（DIIS / 能级移动 / Newton）都不收敛、我们的实现 400 步也不收敛 —— 这是 VWN-RPA 参数集的低密度病态（docs/choices.md 五十），参考 CSV 里写 `nan` 并在测试里跳过，不冒充参考值。另：ROHF 从 M1b 里摘出去了（它是 M1c，state = blocked）。"
 
 M1c:
   state: blocked

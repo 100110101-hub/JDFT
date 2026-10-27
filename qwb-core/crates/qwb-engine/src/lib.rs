@@ -241,6 +241,147 @@ impl RksBackend {
         Ok((charges, potential))
     }
 
+    /// 单点能（**UKS**，阶段二 SC-01b / M1b）：自旋极化 DFT。
+    ///
+    /// 与 UHF 路径的差别：Fock 的交换项换成自旋分辨的 XC 势（`qwb_scf::uks`），
+    /// 结果里除 K9 的 `spin` 块之外还要报 `E_xc`（KS 能量的分解里它是独立的一项）。
+    ///
+    /// # Errors
+    ///
+    /// 泛函没有自旋实现（B88/LYP）、非 `sp` 作业类型、SCF 不收敛。
+    fn run_uks_single_point(
+        &self,
+        input: &JobInput,
+        reporter: &dyn Reporter,
+    ) -> Result<JobResult, EngineError> {
+        if input.jobtype != JobType::Sp {
+            return Err(EngineError::Unsupported(format!(
+                "options.scf_type = `uks` currently supports `sp` only (open-shell gradients \
+                 are phase-2 SC-02); jobtype = `{}`",
+                input.jobtype.as_str()
+            )));
+        }
+        let basis_k1 = self.registry.get_basis(&input.basis_name)?;
+        let spec = self.spec(input)?;
+        if spec.terms.is_empty() {
+            return Err(EngineError::Unsupported(
+                "options.scf_type = `uks` needs a density functional; for Hartree-Fock use \
+                 scf_type = `uhf` (SC-01)"
+                    .to_string(),
+            ));
+        }
+
+        reporter.progress("load", 0.0);
+        reporter.log(&format!(
+            "scf_type = uks (unrestricted Kohn-Sham), method = {}, basis = {} ({} elements), \
+             grid = {}, {} atoms, multiplicity {}",
+            spec.functional_name,
+            basis_k1.name,
+            basis_k1.elements.len(),
+            spec.grid_name,
+            input.molecule.n_atoms(),
+            input.molecule.multiplicity
+        ));
+
+        reporter.progress("integrals", 25.0);
+        let basis = qwb_basis::InternalBasis::build(basis_k1, &input.molecule)?;
+        let tensor = qwb_integrals::two_electron::two_electron(&basis, &input.molecule)?;
+        let grid =
+            qwb_grid::molecular_grid(self.registry.get_grid(&spec.grid_name)?, &input.molecule)
+                .map_err(|err| EngineError::Data(format!("grid: {err}")))?;
+        reporter.log(&format!("grid points = {}", grid.len()));
+
+        let mut options = qwb_scf::uks::UksOptions::default();
+        options.max_iter = input.options.scf_max_iter;
+        options.energy_threshold = input.options.scf_energy_threshold_hartree;
+        options.density_threshold = input.options.scf_density_threshold;
+        options.diis_max_vectors = input.options.diis_history as usize;
+        options.hf_exchange = spec.hf_exchange;
+        if let Some(ecp_name) = &input.options.ecp_name {
+            let (charges, potential) = self.ecp_terms(input, &basis, &spec.grid_name, ecp_name)?;
+            options.nuclear_charges = Some(charges);
+            options.ecp_potential = Some(potential);
+        }
+
+        reporter.progress("scf", 40.0);
+        let result = qwb_scf::uks::uks_scf(
+            &basis,
+            &input.molecule,
+            &tensor,
+            &grid,
+            &spec.terms,
+            options,
+        )?;
+        reporter.log(&format!(
+            "uks {} in {} iterations: E = {:.10} Ha, E_xc = {:.10} Ha, <S^2> = {:.6}, \
+             contamination = {:+.3e}",
+            if result.scf_converged {
+                "converged"
+            } else {
+                "NOT converged"
+            },
+            result.iterations,
+            result.energy_hartree,
+            result.xc_energy_hartree,
+            result.s_squared,
+            result.spin_contamination
+        ));
+        reporter.log(&format!(
+            "uks spin: n_alpha = {}, n_beta = {}, beta HOMO = {:.6} Ha, beta LUMO = {:.6} Ha",
+            result.n_alpha,
+            result.n_beta,
+            result.mo_energies_beta.get(result.n_beta.saturating_sub(1)),
+            result.mo_energies_beta.get(result.n_beta),
+        ));
+        if !result.scf_converged {
+            return Err(EngineError::ScfNotConverged {
+                iters: result.iterations,
+                max: input.options.scf_max_iter,
+            });
+        }
+        reporter.progress("done", 100.0);
+
+        let env = env::build(&self.registry);
+        let dipole = qwb_props::dipole_debye(&basis, &input.molecule, &result.density)?;
+        let spin = qwb_engine_api::SpinResult::new(
+            result.n_alpha as u32,
+            result.n_beta as u32,
+            input.molecule.multiplicity,
+            result.s_squared,
+        );
+        Ok(JobResult::new(
+            result.energy_hartree,
+            result.scf_converged,
+            self.registry.snapshot(),
+            env,
+        )
+        .with_dipole(nalgebra::DVector::from_column_slice(&dipole))
+        .with_orbitals(
+            nalgebra::DVector::from_column_slice(result.mo_energies_alpha.as_slice()),
+            density_to_api(&result.coefficients_alpha),
+        )
+        .with_spin(spin)
+        .with_log(format!(
+            "scf_type = uks, method = {}, basis = {}, grid = {}, iterations = {}, \
+             E_elec = {:.10}, E_xc = {:.10}, <S^2> = {:.6} (contamination {:+.3e}), \
+             n_alpha = {}, n_beta = {}, dipole = [{:.4}, {:.4}, {:.4}] D. \
+             mo_energies_hartree / mo_coeffs are the ALPHA set.",
+            spec.functional_name,
+            basis_k1.name,
+            spec.grid_name,
+            result.iterations,
+            result.electronic_hartree,
+            result.xc_energy_hartree,
+            result.s_squared,
+            result.spin_contamination,
+            result.n_alpha,
+            result.n_beta,
+            dipole[0],
+            dipole[1],
+            dipole[2]
+        )))
+    }
+
     /// 单点能（**UHF**，阶段二 SC-01）：开壳层路径。
     ///
     /// 与闭壳层路径的三个差别：① 走 [`qwb_scf::uhf::uhf_scf`]（双套密度、⟨S²⟩）；
@@ -363,9 +504,16 @@ impl RksBackend {
         input: &JobInput,
         reporter: &dyn Reporter,
     ) -> Result<JobResult, EngineError> {
-        // 阶段二 M1：UHF 走独立路径（自旋通道 + ⟨S²⟩），与闭壳层 RKS 的数值链不同。
-        if input.options.scf_type == Some(qwb_engine_api::ScfType::Uhf) {
-            return self.run_uhf_single_point(input, reporter);
+        // 阶段二 M1/M1b：UHF/UKS 走独立路径（自旋通道 + ⟨S²⟩），
+        // 与闭壳层 RKS 的数值链不同。
+        match input.options.scf_type {
+            Some(qwb_engine_api::ScfType::Uhf) => {
+                return self.run_uhf_single_point(input, reporter);
+            }
+            Some(qwb_engine_api::ScfType::Uks) => {
+                return self.run_uks_single_point(input, reporter);
+            }
+            _ => {}
         }
         reporter.progress("load", 0.0);
         let basis_k1 = self.registry.get_basis(&input.basis_name)?;
@@ -717,11 +865,18 @@ impl EngineBackend for RksBackend {
         }
         // UHF 只有单点：`opt` 会在 `run_optimisation` 里白跑一遍闭壳层优化才发现不兼容，
         // 所以把拒绝提前到分派处（梯度是 SC-02 的事）。
-        if input.options.scf_type == Some(qwb_engine_api::ScfType::Uhf)
-            && input.jobtype != JobType::Sp
+        if matches!(
+            input.options.scf_type,
+            Some(qwb_engine_api::ScfType::Uhf | qwb_engine_api::ScfType::Uks)
+        ) && input.jobtype != JobType::Sp
         {
             return Err(EngineError::Unsupported(format!(
-                "options.scf_type = `uhf` currently supports `sp` only (open-shell gradients                  are phase-2 SC-02); jobtype = `{}`",
+                "options.scf_type = `{}` currently supports `sp` only (open-shell gradients \
+                 are phase-2 SC-02); jobtype = `{}`",
+                input
+                    .options
+                    .scf_type
+                    .map_or("closed-shell", qwb_engine_api::ScfType::as_str),
                 input.jobtype.as_str()
             )));
         }
@@ -748,18 +903,20 @@ impl EngineBackend for RksBackend {
 fn reject_unimplemented_options(input: &JobInput) -> Result<(), EngineError> {
     let options = &input.options;
     if let Some(scf_type) = options.scf_type {
-        // 阶段二 M1 已接：闭壳层 KS/RHF（阶段一行为）与 **UHF**（SC-01，仅 HF + sp）。
-        // ROHF 与 UKS 还没接线（SC-01b：UKS 需要自旋分辨 XC）。
+        // 阶段二已接：闭壳层 KS/RHF（阶段一行为）、**UHF**（SC-01）、**UKS**（SC-01b）。
+        // 只剩 ROHF 没接线（SC-01c 记为 blocked，见 docs/status-v2.yaml）。
         let supported = matches!(
             scf_type,
             qwb_engine_api::ScfType::Rks
                 | qwb_engine_api::ScfType::Rhf
                 | qwb_engine_api::ScfType::Uhf
+                | qwb_engine_api::ScfType::Uks
         );
         if !supported {
             return Err(EngineError::Unsupported(format!(
                 "options.scf_type = `{}` is not wired yet \
-                 (ROHF and UKS are phase-2 SC-01b: UKS needs spin-resolved XC)",
+                 (ROHF is phase-2 SC-01c, currently blocked: the Guest–Saunders effective \
+                 Fock converges to the wrong stationary point, see docs/status-v2.yaml)",
                 scf_type.as_str()
             )));
         }

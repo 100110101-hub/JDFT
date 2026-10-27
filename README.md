@@ -56,7 +56,7 @@ python -m venv .venv
 .venv\Scripts\python.exe -m pip install mypy numpy pydantic pytest maturin PySide6 vtk
 ```
 
-当前状态：**26/26 全绿**（第 60 轮，Python 侧 182 个测试；第 60 轮新增"阶段二账本可解析"一步）。
+当前状态：**26/26 全绿**（第 67 轮，Python 侧 182 个测试；第 67 轮把 UKS（M1b）接进门禁）。
 逐项与最近轮次记在 [`docs/status.yaml`](./docs/status.yaml) 的 C-06。
 
 ## 目录
@@ -83,6 +83,8 @@ python -m venv .venv
 | 苯的 B3LYP/PBE（36 个基函数） | 距 CCCBDB grid-coarse −0.01/−0.04 mHa，grid-normal −1.16/−1.33 mHa（判据 2 mHa） |
 | 几何优化（BFGS + 解析梯度） | PBE0/def2-SVP 的 H2O O–H 0.9623 Å（实验 0.9572）；PBE/def2-TZVP 4 步到 2.67e-4 Ha/Bohr |
 | 频率（数值 Hessian + 标度因子 + 热化学 + IR） | PBE/6-311G(d,p)×0.991 最差 21.5 cm⁻¹（判据 30）；PBE0 60.5 cm⁻¹ 作为不通过对照组记录 |
+| 开壳层 UHF（`scf_type: uhf`） | O2 三重态/STO-3G 与 PySCF 差 3.4e-8、⟨S²⟩ 2.003411（污染如实报出）；OH 差 3e-8 |
+| 开壳层 UKS（`scf_type: uks`，`svwn5`/`pbe`） | O2 的 UKS/PBE 与 PySCF 差 5.8e-7、UKS/svwn5 差 2.1e-7、OH/PBE 差 1.1e-6（容差 5e-6，网格）；闭壳层 `uks` ≡ `rks` 差 6.2e-14 |
 | ECP（LANL2DZ，Cu/Zn） | 矩阵元与解析解 3e-14；CuH/ZnO 单点跑通（ZnO 需 SCF 退火） |
 | 基组 | STO-3G / def2-SVP / def2-TZVP / 6-311G(d,p) / LANL2DZ（+LANL2DZ 价基）；数据逐项对 BSE 导出 diff < 1e-12；文件按需从 BSE 取回并核对 sha256 钉 |
 | 工作流 | K3 状态机 + 结果目录、`qwb batch` 持久化队列与 `kill -9` 恢复、`qwb replay` 复现（delta 0.000e0） |
@@ -95,7 +97,9 @@ python -m venv .venv
 
 - `JobType::Freq` 未接到 `EngineBackend`（会以退出码 4 拒绝）；频率代码由测试直接调用。
 - 带 ECP 的 `opt`/`freq`（ECP 对核坐标的导数还没实现）。
-- 隐式溶剂（只有 `vacuum`）、meta-GGA、ROHF/UKS、TDDFT、NBO、TS/IRC/scan。
+- 隐式溶剂（只有 `vacuum`）、meta-GGA、ROHF（SC-01c：blocked）、TDDFT、NBO、TS/IRC/scan。
+- 开壳层的 `opt`/`freq`（SC-02）、开壳层的 Mulliken 布居/cube（K2 只有 α 轨道集）。
+- UKS 的 B88/LYP 自旋实现（所以 BLYP/B3LYP 的开壳层会被显式拒绝）。
 - 积分层并行（`--threads` 只记账）；ECP 的解析权重导数（Hessian 因此比理想情况慢）。
 
 完整的"能算什么/不能算什么"、判据数字与出处见 [`docs/USAGE.md`](./docs/USAGE.md) §9

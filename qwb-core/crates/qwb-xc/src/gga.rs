@@ -195,6 +195,94 @@ impl std::ops::Div for D {
     }
 }
 
+/// PW92 的一组参数 `(A, α, β₁..β₄)`（Perdew & Wang, PRB 45, 13244）。
+///
+/// 同一套函数形状 `ε(rs) = −2A(1+α rs) ln[1 + 1/(2A β(rs))]`，
+/// `β(rs) = β₁√rs + β₂ rs + β₃ rs^{3/2} + β₄ rs²`，三组参数分别给出
+/// 顺磁（ζ=0）、铁磁（ζ=1）与自旋刚度 `α_c`（PW92 的 ζ⁴ 插值要用它）。
+///
+/// **为什么单独一个类型**：闭壳层 PBE 相关只需要顺磁那一组（过去是三个 const
+/// 写死在 [`PbeCorrelation::lda_correlation`] 里）；自旋情形要三组一起用，
+/// 写成类型才能保证"三组用的是同一个公式"这件事只有一处实现。
+#[derive(Debug, Clone, Copy, PartialEq)]
+#[non_exhaustive]
+pub struct Pw92Set {
+    /// `A`（Hartree）。
+    pub a: f64,
+    /// `α`。
+    pub alpha: f64,
+    /// `β₁..β₄`。
+    pub betas: [f64; 4],
+}
+
+impl Pw92Set {
+    /// 顺磁（ζ = 0）参数集。
+    pub const PARA: Self = Self {
+        a: 0.031_090_7,
+        alpha: 0.213_70,
+        betas: [7.5957, 3.5876, 1.638_2, 0.492_94],
+    };
+
+    /// 铁磁（ζ = 1）参数集。
+    pub const FERRO: Self = Self {
+        a: 0.015_545_35,
+        alpha: 0.205_48,
+        betas: [14.1189, 6.1977, 3.366_2, 0.625_17],
+    };
+
+    /// `α_c`（自旋刚度）参数集。
+    pub const ALPHA: Self = Self {
+        a: 0.016_886_9,
+        alpha: 0.111_25,
+        betas: [10.357, 3.6231, 0.880_26, 0.496_71],
+    };
+
+    /// 由数据参数（`{prefix}_A`/`{prefix}_alpha`/`{prefix}_b1..b4`）读一组。
+    ///
+    /// # Errors
+    ///
+    /// 缺参数。
+    pub fn from_parameters(
+        component: &str,
+        parameters: &BTreeMap<String, f64>,
+        prefix: &str,
+    ) -> Result<Self, XcError> {
+        let mut betas = [0.0_f64; 4];
+        for (index, slot) in betas.iter_mut().enumerate() {
+            *slot = parameter(component, parameters, &format!("{prefix}_b{}", index + 1))?;
+        }
+        Ok(Self {
+            a: parameter(component, parameters, &format!("{prefix}_A"))?,
+            alpha: parameter(component, parameters, &format!("{prefix}_alpha"))?,
+            betas,
+        })
+    }
+
+    /// `(ε(rs), dε/drs)`。
+    #[must_use]
+    pub fn energy_and_derivative(&self, rs: f64) -> (f64, f64) {
+        let (a, alpha, betas) = (self.a, self.alpha, self.betas);
+        let root = rs.sqrt();
+        let b = betas[0] * root + betas[1] * rs + betas[2] * rs * root + betas[3] * rs * rs;
+        let q1 = 2.0 * a * b;
+        let log = (1.0 + 1.0 / q1).ln();
+        let value = -2.0 * a * (1.0 + alpha * rs) * log;
+        // dε/dr_s = −2Aα·ln(1+1/q1) + (2A(1+α r_s))·q1′/(q1²+q1)
+        let db = betas[0] / (2.0 * root) + betas[1] + 1.5 * betas[2] * root + 2.0 * betas[3] * rs;
+        let q1_prime = 2.0 * a * db;
+        let derivative =
+            -2.0 * a * alpha * log + 2.0 * a * (1.0 + alpha * rs) * q1_prime / (q1 * q1 + q1);
+        (value, derivative)
+    }
+
+    /// `(α_c(rs), dα_c/drs)`：PW92 的 α 参数集用同一个形状，但取**正**。
+    #[must_use]
+    pub fn stiffness_and_derivative(&self, rs: f64) -> (f64, f64) {
+        let (value, derivative) = self.energy_and_derivative(rs);
+        (-value, -derivative)
+    }
+}
+
 /// 每电子 LDA 交换能 `ε_x^LDA = −(3/4)(3/π)^{1/3}ρ^{1/3}`（对偶数版）。
 fn exchange_lda(rho: D) -> D {
     D::constant(-0.75 * three_over_pi_cbrt()) * rho.cbrt()
@@ -467,19 +555,41 @@ impl FunctionalTerm for LypCorrelation {
 #[derive(Debug, Clone, Copy)]
 #[non_exhaustive]
 pub struct PbeCorrelation {
-    /// VWN5 顺磁参数（与 `LdaSvwn5` 同一套，保证 `σ→0` 时与 LDA 相关一致）。
+    /// VWN5 顺磁参数（数据里的 `vwn5_p_*`；闭壳层路径不直接用，留作交叉核对）。
     pub para: (f64, f64, f64, f64),
     /// `β = 0.06672455060314922`。
     pub beta: f64,
     /// `γ = (1 − ln2)/π²`。
     pub gamma: f64,
+    /// PW92 顺磁参数集（闭壳层 `ε_c^LDA` 就是这一组）。
+    pub pw92_para: Pw92Set,
+    /// PW92 铁磁参数集（ζ = 1）。
+    pub pw92_ferro: Pw92Set,
+    /// PW92 `α_c` 参数集（ζ⁴ 插值里的自旋刚度）。
+    pub pw92_alpha: Pw92Set,
 }
 
 impl PbeCorrelation {
-    /// 由数据参数构造。
+    /// 由数据参数构造（PW92 三组参数取 PW92 原文的默认值）。
     #[must_use]
     pub fn new(para: (f64, f64, f64, f64), beta: f64, gamma: f64) -> Self {
-        Self { para, beta, gamma }
+        Self {
+            para,
+            beta,
+            gamma,
+            pw92_para: Pw92Set::PARA,
+            pw92_ferro: Pw92Set::FERRO,
+            pw92_alpha: Pw92Set::ALPHA,
+        }
+    }
+
+    /// 换上数据文件给的 PW92 三组参数。
+    #[must_use]
+    pub fn with_pw92_sets(mut self, para: Pw92Set, ferro: Pw92Set, alpha: Pw92Set) -> Self {
+        self.pw92_para = para;
+        self.pw92_ferro = ferro;
+        self.pw92_alpha = alpha;
+        self
     }
 
     /// LDA 相关能（值 + 对 ρ 的解析导数）；`σ` 方向为 0。
@@ -489,23 +599,10 @@ impl PbeCorrelation {
     /// 两者在 r_s ≈ 1 处差约 0.02 Ha/e，水（10 电子）上就是约 0.18 Ha 的总能量差 ——
     /// 这正是 PBE 一开始比 CCCBDB 低 176 mHa 的原因（LSDA 仍用 VWN5，所以 LSDA 一直是对的）。
     fn lda_correlation(&self, rho: f64) -> D {
-        const A: f64 = 0.031_090_7;
-        const ALPHA: f64 = 0.213_70;
-        const BETA: [f64; 4] = [7.5957, 3.5876, 1.638_2, 0.492_94];
         let rs = (3.0 / (4.0 * std::f64::consts::PI * rho)).cbrt();
-        let root = rs.sqrt();
-        let b = BETA[0] * root + BETA[1] * rs + BETA[2] * rs * root + BETA[3] * rs * rs;
-        let q1 = 2.0 * A * b;
-        let log = (1.0 + 1.0 / q1).ln();
-        let value = -2.0 * A * (1.0 + ALPHA * rs) * log;
-        // dε/dr_s = −2Aα·ln(1+1/q1) + (2A(1+α r_s))·q1′/(q1²+q1)
-        let db = BETA[0] / (2.0 * root) + BETA[1] + 1.5 * BETA[2] * root + 2.0 * BETA[3] * rs;
-        let q1_prime = 2.0 * A * db;
-        let d_rs =
-            -2.0 * A * ALPHA * log + 2.0 * A * (1.0 + ALPHA * rs) * q1_prime / (q1 * q1 + q1);
+        let (value, d_rs) = self.pw92_para.energy_and_derivative(rs);
         // r_s = (3/(4πρ))^{1/3} ⇒ dr_s/dρ = −r_s/(3ρ)
-        let d_rho = d_rs * (-rs / (3.0 * rho));
-        D::with_partials(value, d_rho, 0.0)
+        D::with_partials(value, d_rs * (-rs / (3.0 * rho)), 0.0)
     }
 
     /// 在 `(ρ, σ)` 上求「值 + 两个偏导」。
@@ -535,6 +632,19 @@ impl PbeCorrelation {
 }
 
 impl FunctionalTerm for PbeExchange {
+    fn spin_supported(&self) -> bool {
+        true
+    }
+
+    fn evaluate_spin(
+        &self,
+        batch: &crate::SpinDensityBatch<'_>,
+        out: &mut crate::SpinXcOutput<'_>,
+    ) -> Result<(), XcError> {
+        // 交换的自旋标度是精确的：E_x = ½[E_x(2ρ_α) + E_x(2ρ_β)]。
+        crate::exchange_spin_scaling(self, batch, out)
+    }
+
     fn id(&self) -> &'static str {
         "GgaPbeX"
     }
@@ -573,6 +683,18 @@ impl FunctionalTerm for PbeExchange {
 }
 
 impl FunctionalTerm for PbeCorrelation {
+    fn spin_supported(&self) -> bool {
+        true
+    }
+
+    fn evaluate_spin(
+        &self,
+        batch: &crate::SpinDensityBatch<'_>,
+        out: &mut crate::SpinXcOutput<'_>,
+    ) -> Result<(), XcError> {
+        crate::gga_spin::evaluate_pbe_correlation(self, batch, out)
+    }
+
     fn id(&self) -> &'static str {
         "GgaPbeC"
     }
@@ -633,16 +755,24 @@ pub fn build_pbe_term(
         "GgaB88X" => Ok(Box::new(B88Exchange::new(parameter(
             id, parameters, "b88_beta",
         )?))),
-        "GgaPbeC" => Ok(Box::new(PbeCorrelation::new(
-            (
-                parameter(id, parameters, "vwn5_p_A")?,
-                parameter(id, parameters, "vwn5_p_x0")?,
-                parameter(id, parameters, "vwn5_p_b")?,
-                parameter(id, parameters, "vwn5_p_c")?,
-            ),
-            parameter(id, parameters, "pbe_beta")?,
-            parameter(id, parameters, "pbe_gamma")?,
-        ))),
+        "GgaPbeC" => {
+            let term = PbeCorrelation::new(
+                (
+                    parameter(id, parameters, "vwn5_p_A")?,
+                    parameter(id, parameters, "vwn5_p_x0")?,
+                    parameter(id, parameters, "vwn5_p_b")?,
+                    parameter(id, parameters, "vwn5_p_c")?,
+                ),
+                parameter(id, parameters, "pbe_beta")?,
+                parameter(id, parameters, "pbe_gamma")?,
+            )
+            .with_pw92_sets(
+                Pw92Set::from_parameters(id, parameters, "pw92_p")?,
+                Pw92Set::from_parameters(id, parameters, "pw92_f")?,
+                Pw92Set::from_parameters(id, parameters, "pw92_a")?,
+            );
+            Ok(Box::new(term))
+        }
         other => Err(XcError::UnknownTerm(other.to_string())),
     }
 }

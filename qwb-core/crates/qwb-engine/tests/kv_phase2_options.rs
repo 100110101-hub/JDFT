@@ -78,17 +78,13 @@ fn error_context(input: &JobInput) -> String {
 
 #[test]
 fn open_shell_scf_type_is_rejected_with_its_wp() {
-    // `uks` 与 `rohf` 仍未实现（SC-01b：UKS 要自旋分辨 XC）。UHF 已在 SC-01 实装，
-    // 所以这里只测尚未实现的两个变体（ukf 的验收在 `sc01_uhf_engine.rs`）。
-    for scf_type in [ScfType::Uks, ScfType::Rohf] {
-        let options = TaskOptions::default().with_scf_type(scf_type);
-        let message = unsupported(&input("svwn5", 3, options));
-        assert!(message.contains("SC-01b"), "{message}");
-        assert!(
-            message.contains("ROHF") || message.contains("UKS"),
-            "{message}"
-        );
-    }
+    // UHF（SC-01）与 UKS（SC-01b）都已实装，只剩 ROHF（SC-01c，blocked）会被拒。
+    // UHF 的验收在 `sc01_uhf_engine.rs`，UKS 的在 `sc01b_uks_engine.rs`。
+    let options = TaskOptions::default().with_scf_type(ScfType::Rohf);
+    let message = unsupported(&input("svwn5", 3, options));
+    assert!(message.contains("SC-01c"), "{message}");
+    assert!(message.contains("ROHF"), "{message}");
+    assert!(message.contains("blocked"), "{message}");
 }
 
 #[test]

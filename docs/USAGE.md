@@ -255,7 +255,7 @@ options:
 
 ### 3.3 从哪抄模板
 
-`qwb-core/examples/` 下的七个文件覆盖了常见组合：
+`qwb-core/examples/` 下的九个文件覆盖了常见组合：
 
 | 文件 | 体系 | 作业 |
 |---|---|---|
@@ -266,6 +266,8 @@ options:
 | `cuh_lanl2dz_pbe.yaml` | CuH / LANL2DZ+ECP / PBE | sp |
 | `zno_lanl2dz_pbe.yaml` | ZnO / LANL2DZ+ECP / PBE | sp（SCF 需要退火退路） |
 | `o2_uhf_sto3g.yaml` | O2 三重态 / STO-3G / UHF | sp（开壳层，`scf_type: uhf`） |
+| `o2_uks_pbe_sto3g.yaml` | O2 三重态 / STO-3G / UKS-PBE | sp（开壳层，`scf_type: uks`，grid-fine） |
+| `oh_uks_pbe_sto3g.yaml` | OH 双峰态 / STO-3G / UKS-PBE | sp（开壳层，`scf_type: uks`，grid-fine） |
 
 ### 3.5 开壳层：`scf_type: uhf`（M1，已实装）
 
@@ -307,6 +309,57 @@ energy  -147.6339696424 Ha
    初猜（SAD），落在变分极小；`H_core` 初猜会落到较高的那个（PySCF 用
    `init_guess='hcore'` 也是同一个数）。
 3. `mo_energies_hartree` / `mo_coeffs` 是 **α** 的那一套；β 的 HOMO/LUMO 写进 `log.txt`。
+4. 开壳层结果**不写** `artifacts/populations.json` 与 `homo.cube`/`lumo.cube`，并在
+   stdout 说明原因：K2 的 `mo_coeffs` 只有 α 集，拿它当"双占据"会算出一个错的
+   Mulliken 电荷 —— 宁可不写，也不静默写错。
+
+### 3.6 开壳层：`scf_type: uks`（M1b，已实装）
+
+自由基的**密度泛函**要非限制性 KS：`method_name: pbe`（或 `svwn5`）+ `scf_type: uks`
++ `jobtype: sp`。与 UHF 的写法只差两处：`method_name` 换成泛函、`grid_level` 必须
+是真实等级（UKS 要在网格上求 XC）。
+
+```yaml
+molecule:
+  atoms: [{symbol: O, position_angstrom: [0, 0, 0]}, {symbol: O, position_angstrom: [0, 0, 1.208]}]
+  charge: 0
+  multiplicity: 3
+basis_name: sto-3g
+method_name: pbe              # 目前 UKS 支持 svwn5 / pbe（B88/LYP 还没有自旋实现）
+grid_level: fine              # UKS 要网格；判据按 fine 标定
+jobtype: sp
+options:
+  scf_type: uks
+```
+
+实测：
+
+```text
+qwb run examples/o2_uks_pbe_sto3g.yaml   →  energy  -148.1377193354 Ha   （PySCF -148.1377187459）
+qwb run examples/oh_uks_pbe_sto3g.yaml   →  energy  -74.5739461443 Ha    （PySCF -74.5739449668）
+```
+
+`result.json` 同样带 `spin` 块，但数值与 UHF 不同 —— **UKS 的自旋污染比 UHF 小两个
+数量级**：
+
+```json
+"spin": {"n_alpha": 9, "n_beta": 7, "multiplicity": 3,
+         "s_squared": 2.0003915, "spin_contamination": 3.915e-4, "broken_symmetry": false}
+```
+
+五条要知道的事实：
+
+1. **`svwn5` 其实是 VWN 的 RPA 参数集**（libxc 的 `LDA_C_VWN_RPA`）。要拿本项目的
+   `svwn5` 和 PySCF 对比，PySCF 那边要写 `mf.xc = 'LDA_X,LDA_C_VWN_RPA'`；
+   写 `'SVWN'` 会差 0.02 Ha/电子（`docs/choices.md` 五十）。
+2. **OH + `svwn5` 不收敛**：PySCF 三种策略（DIIS / 能级移动 / Newton）与我们的实现
+   （400 步）都不收敛，这是 RPA 参数集的低密度病态，不是 bug。参考 CSV 里那一行
+   如实写 `nan`。
+3. **哪些泛函能跑 UKS**：`svwn5`（LDA）与 `pbe`（GGA）。`b88` / `blyp` / `b3lyp`
+   会被**显式拒绝**（退出码 4）并说明缺的是自旋实现 —— 不允许静默用闭壳层公式。
+4. **闭壳层体系 `uks` ≡ `rks`**（H2/PBE 实测差 6.2e-14），所以你可以拿 `uks`
+   跑闭壳层体系而不用担心"换了个答案"。
+5. `opt` 还不支持开壳层（SC-02），`scf_type: uks` + `jobtype: opt` 会被拒。
 
 ### 3.4 阶段二预留的字段（**契约已就位，引擎会显式拒绝**）
 
@@ -316,7 +369,8 @@ energy  -147.6339696424 Ha
 
 ```yaml
 options:
-  # scf_type: rhf|rks 与阶段一行为等价；uhf 已实装（见 §3.5）；rohf/uks 未实现 → exit 4（SC-01b）
+  # scf_type: rhf|rks 与阶段一行为等价；uhf 已实装（§3.5）；uks 已实装（§3.6）；
+  # rohf 未实现 → exit 4（SC-01c，blocked）
   mp2:                     # 相关方法未实现 → exit 4（M3 / SC-04..05）
     kind: ri-mp2           # mp2|ri-mp2；RI 要 aux_basis_name
     aux_basis_name: def2-svp-ri
@@ -334,9 +388,12 @@ options:
   单重态配 `scf_type: uks`、`solvent: vacuum` 配 `solvent_model: cosmo`、
   开壳层参考配 `mp2`。这些是输入错误，不是"还没实现"。
 
-相应地，结果目录里的新块（`spin`/`correlation`/`solvation`/`excited_states`/
-`nmr_shieldings`/`polarizability`/`multipoles`/`dispersion_energy_hartree`）现在**不会出现**；
-出现了也说明是别人（或未来版本）写的，旧版本读完会原样保留（pydantic 模型已能承载）。
+相应地，结果目录里的新块分两类：
+
+* **已经会出现**：`spin`（`scf_type: uhf` 或 `uks` 时落盘）。
+* **还不会出现**：`correlation`/`solvation`/`excited_states`/`nmr_shieldings`/
+  `polarizability`/`multipoles`/`dispersion_energy_hartree`/`numerics_report` ——
+  出现了也说明是别人（或未来版本）写的，旧版本读完会原样保留（pydantic 模型已能承载）。
 
 ---
 
@@ -722,8 +779,9 @@ python scripts\fetch_data.py --all --force              # 全部重下
 |---|---|---|
 | `hf` | 闭壳层 RHF | 能算（引擎内部翻译成"空 terms + α_hf = 1"） |
 | `hf` + `scf_type: uhf` | 非限制性 UHF（开壳层） | 能算（M1：O2/OH 与 PySCF 同值，`spin` 块落盘） |
-| `svwn5` | LDA（VWN5） | 能算 |
-| `pbe` | GGA | 能算 |
+| `pbe`/`svwn5` + `scf_type: uks` | 非限制性 KS（开壳层 DFT） | 能算（M1b：O2/OH 与 PySCF 差 < 1e-6，`spin` 块落盘；B88/LYP 无自旋实现 → exit 4） |
+| `svwn5` | LDA（参数集是 VWN **RPA**，libxc 的 `LDA_C_VWN_RPA`） | 能算（闭壳层与 UKS） |
+| `pbe` | GGA | 能算（闭壳层与 UKS） |
 | `b88` | GGA 交换（单独的 B88） | 能算，一般作为组件 |
 | `pbe0` | hybrid（α_hf = 0.25） | 能算 |
 | `b3lyp` | hybrid（α_hf = 0.20） | **数据层不注册**：K1 的 phase-1 语义门禁拒绝 `requires.laplacian = true`（冻结契约）。只能在测试里程序化构造 |

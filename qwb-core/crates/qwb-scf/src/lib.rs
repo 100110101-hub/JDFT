@@ -29,6 +29,7 @@ pub mod guess;
 pub mod pulay;
 pub mod rks;
 pub mod uhf;
+pub mod uks;
 
 use qwb_integrals::two_electron::TwoElectronIntegrals;
 use qwb_linalg::{LinalgError, Matrix};

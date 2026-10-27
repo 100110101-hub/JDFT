@@ -10,8 +10,8 @@
 #
 #       E(PySCF) = -76.271970822413 Ha     (nao = 24, converged)
 #
-#   本项目的 grid-normal 值 -76.2719421662 与它差 **2.87e-5 Ha**，
-#   grid-coarse 值 -76.2720362190 差 6.54e-5 Ha —— 都远小于 1 mHa 的判据。
+#   本项目的 grid-normal 值 -76.2720511253 与它差 **1.49e-5 Ha**（1.9354 D），
+#   grid-coarse 值 -76.2720362190 差 1.49e-5 Ha —— 都远小于 1 mHa 的判据。
 #   PySCF 的复现方式：`python3 scripts/pyscf_reference.py --grid-level 3`
 #   （本机在 WSL 的 Ubuntu 22.04 里 `python3 -m pip install --user pyscf` 装的 wheel；
 #   Windows 侧 Python 3.12 没有 pyscf wheel，那条路一直走不通）。
@@ -19,10 +19,13 @@
 #   注意这是 §14 #12 允许的**黑盒对照**：只产数字，不拷代码/数据；我们的实现与 PySCF
 #   没有任何依赖关系，def2-SVP 的指数/系数仍然来自 BSE 导出（D-04 逐项 diff）。
 #
-# 附带实测（同一几何）：coarse 与 normal 差 9.41e-5 Ha；1 线程与 4 线程逐位相同；
-# |μ| = 1.9544 D（实验 1.85 D）；Tr(P·S) = 10.000000。
+# 附带实测（同一几何，2026-11-06 `pbe_mu` 精确化之后重测）：normal = -76.2720511253 Ha、
+# 偶极 |μ| = 1.9354 D（实验 1.85 D）、Tr(P·S) = 10.000000；1 线程与 4 线程逐位相同。
 #
 # 2026-11-02 修正：PBE 相关项的 LDA 基从 VWN5 换成 PW92 modified（见 docs/choices.md 三十一节）。
+# 2026-11-06 修正：`pbe_mu` 从 6 位的 0.21951 换成精确的 beta*pi^2/3（choices.md 五十一），
+#   grid-normal 从 -76.2719421662 移到 -76.2720511253（与 PySCF 的差 2.87e-5 → 1.49e-5），
+#   偶极 1.9354 D。
 # 旧钉是 -76.4496675241 / -76.4495733131（VWN5 基，低约 0.178 Ha），已作废；
 # 新钉在同一几何/网格上重测。换基后 STO-3G 上与本项目登记的 CCCBDB 值差 4e-6 Ha。
 #

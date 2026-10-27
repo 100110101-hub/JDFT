@@ -22,15 +22,15 @@
 | `qwb-data/ecp/lanl2dz-cu.yaml` | 1.0.0 | NOASSERTION | false | false | `a44df71fd56eea38` |
 | `qwb-data/ecp/lanl2dz-zn.yaml` | 1.0.0 | NOASSERTION | false | false | `55b3391680aaad1d` |
 | `qwb-data/functional/b88.yaml` | 1.0.0 | Apache-2.0 | true | true | `efa0fa7b9f8aa98d` |
-| `qwb-data/functional/pbe.yaml` | 1.0.0 | Apache-2.0 | true | true | `6f9c7a390d0d813e` |
-| `qwb-data/functional/pbe0.yaml` | 1.0.0 | Apache-2.0 | true | true | `0af62e0946c2f563` |
+| `qwb-data/functional/pbe.yaml` | 1.0.0 | Apache-2.0 | true | true | `b8b322f96b0e22fe` |
+| `qwb-data/functional/pbe0.yaml` | 1.0.0 | Apache-2.0 | true | true | `e741078195d85f78` |
 | `qwb-data/functional/svwn5.yaml` | 1.0.0 | Apache-2.0 | true | true | `e62bd0014d27c73d` |
 | `qwb-data/grid/grid-coarse.yaml` | 1.0.0 | Apache-2.0 | true | true | `48eaeaa2d73acd45` |
 | `qwb-data/grid/grid-fine.yaml` | 1.0.0 | Apache-2.0 | true | true | `25080b62b80416b1` |
 | `qwb-data/grid/grid-normal.yaml` | 1.0.0 | Apache-2.0 | true | true | `a792b362b1fdb278` |
 | `qwb-data/grid/grid-veryfine.yaml` | 1.0.0 | Apache-2.0 | true | true | `5c630f5a1ec0688d` |
 | `qwb-data/numerics/numerics.yaml` | 1.0.0 | Apache-2.0 | true | true | `fea96fd0bd356da0` |
-| `qwb-data/registry.yaml` | 0.5.0 | ? | ? | ? | `—（manifest，条目各自带` |
+| `qwb-data/registry.yaml` | 0.6.0 | ? | ? | ? | `—（manifest，条目各自带` |
 
 ## 引用
 
@@ -108,7 +108,7 @@
 - A multicenter numerical integration scheme for polyatomic molecules (Becke partitioning)
 - New Methods For Electronic Structure Calculations on Large Molecules (pseudospectral approach)
 
-### `qwb-data/registry.yaml`（qwb-data 0.5.0）
+### `qwb-data/registry.yaml`（qwb-data 0.6.0）
 
 
 ## 门禁状态

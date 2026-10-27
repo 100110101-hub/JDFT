@@ -1,17 +1,39 @@
-sha256: 6f9c7a390d0d813e8b2c5490918f2e851c23bda718c44d96b5286df0ce836b86
+sha256: b8b322f96b0e22fe795477e09b7955b58b6a32b38b19f813c7bd55383c5c272b
 requires:
   rho: true
   sigma: true
   laplacian: false
 parameters:
   pbe_kappa: 0.804
-  pbe_mu: 0.21951
+  pbe_mu: 0.21951497276451704
   pbe_beta: 0.06672455060314922
   pbe_gamma: 0.0310906908696549
   vwn5_p_A: 0.0310907
   vwn5_p_x0: -0.409286
   vwn5_p_b: 13.072
   vwn5_p_c: 42.7198
+  pw92_p_A: 0.0310907
+  pw92_p_alpha: 0.2137
+  pw92_p_b1: 7.5957
+  pw92_p_b2: 3.5876
+  pw92_p_b3: 1.6382
+  pw92_p_b4: 0.49294
+  pw92_f_A: 0.01554535
+  pw92_f_alpha: 0.20548
+  pw92_f_b1: 14.1189
+  pw92_f_b2: 6.1977
+  pw92_f_b3: 3.3662
+  pw92_f_b4: 0.62517
+  pw92_a_A: 0.0168869
+  pw92_a_alpha: 0.11125
+  pw92_a_b1: 10.357
+  pw92_a_b2: 3.6231
+  pw92_a_b3: 0.88026
+  pw92_a_b4: 0.49671
+parameter_sources:
+  pw92_p_A: 'PW92 (PRB 45, 13244) 顺磁参数集：A=0.0310907, alpha=0.21370, b=(7.5957, 3.5876, 1.6382, 0.49294)'
+  pw92_f_A: 'PW92 铁磁参数集（zeta=1）：A=0.01554535, alpha=0.20548, b=(14.1189, 6.1977, 3.3662, 0.62517)'
+  pw92_a_A: 'PW92 自旋刚度 alpha_c 参数集：A=0.0168869, alpha=0.11125, b=(10.357, 3.6231, 0.88026, 0.49671)'
 stability:
   density_floor: 1e-12
   sigma_ceiling: 100000000.0

@@ -25,6 +25,7 @@ use std::collections::BTreeMap;
 use thiserror::Error;
 
 pub mod gga;
+pub mod gga_spin;
 
 /// `(3/π)^{1/3}` —— 用表达式算，不手抄字面量（上一版手抄错成 0.90036，
 /// 被 `slater_exchange_matches_the_analytic_formula` 立刻抓到）。
@@ -200,6 +201,35 @@ pub trait FunctionalTerm: Send + Sync {
         self.potential_derivatives(batch, d_rho, d_sigma);
         d_laplacian.fill(0.0);
     }
+
+    /// 这一项能否在自旋极化（UKS）路径下求值。
+    ///
+    /// 默认 `false`：自旋版本必须显式实现 [`Self::energy_density_spin`] 与
+    /// [`Self::potential_spin`]，否则 SCF 会拿到一个静默的假势。具体类型上的
+    /// `LdaSvwn5::supports_spin` 是"数据里齐不齐参数"，这里是"这个组件有没有自旋实现"，
+    /// 两者都要为真才能跑 UKS。
+    fn spin_supported(&self) -> bool {
+        false
+    }
+    /// 一次求出自旋分辨 XC 的全部六个量（能量密度、两个势、三个 σ 导数）。
+    ///
+    /// **写入语义**：被调方把 `out` 的六个切片全部覆盖（不累加），长度必须等于
+    /// `batch.len()`；LDA 项要把三个 σ 导数填 0（而不是留着上一次的值）。
+    ///
+    /// 为什么合成一个方法而不是给六个独立的：能量与势**必须来自同一次求值**，
+    /// 分开传切片是"能量用一个公式、势用另一个公式"这类错误最容易藏身的地方。
+    ///
+    /// 默认实现报错而不是返回零 —— 零势会让 SCF 安静地收敛到错的密度上。
+    fn evaluate_spin(
+        &self,
+        _batch: &SpinDensityBatch<'_>,
+        _out: &mut SpinXcOutput<'_>,
+    ) -> Result<(), XcError> {
+        Err(XcError::SpinUnsupported(format!(
+            "{} has no spin-resolved evaluation (UKS needs a spin implementation)",
+            self.id()
+        )))
+    }
 }
 
 pub(crate) fn check_shape(
@@ -288,11 +318,29 @@ impl FunctionalTerm for LdaSlaterX {
             *slot = 0.0;
         }
     }
+
+    fn spin_supported(&self) -> bool {
+        true
+    }
+
+    fn evaluate_spin(
+        &self,
+        batch: &SpinDensityBatch<'_>,
+        out: &mut SpinXcOutput<'_>,
+    ) -> Result<(), XcError> {
+        // 交换的自旋标度是精确的：E_x = ½[E_x(2ρ_α) + E_x(2ρ_β)]。
+        exchange_spin_scaling(self, batch, out)
+    }
 }
 
 // ───────────────────────── VWN5 相关 ─────────────────────────
 
-/// VWN5（Vosko–Wilk–Nusair parameterization V）相关能，顺磁通道。
+/// VWN（Vosko–Wilk–Nusair）相关能，顺磁通道。
+///
+/// **命名注意**：`svwn5.yaml` 里的参数集其实是 libxc 的 **VWN RPA**
+/// （`LDA_C_VWN_RPA`），不是社区通常叫的 VWN5（libxc `LDA_C_VWN`）：两者在
+/// rs ≈ 0.7 处差 0.02 Ha/e，逐点对照见 `tests/sc01b_spin_xc_pointwise.rs`，
+/// 来龙去脉见 `docs/choices.md` 五十。
 #[derive(Debug, Clone, Copy)]
 #[non_exhaustive]
 pub struct LdaSvwn5 {
@@ -415,14 +463,48 @@ impl FunctionalTerm for LdaSvwn5 {
             *slot = 0.0;
         }
     }
+
+    fn spin_supported(&self) -> bool {
+        // 数据里三组参数齐全才算支持（`vwn5_f_*` / `vwn5_a_*`）。
+        self.supports_spin()
+    }
+
+    fn evaluate_spin(
+        &self,
+        batch: &SpinDensityBatch<'_>,
+        out: &mut SpinXcOutput<'_>,
+    ) -> Result<(), XcError> {
+        check_spin_output(batch.len(), out, "LdaSvwn5::evaluate_spin")?;
+        self.require_spin()?;
+        for index in 0..batch.len() {
+            let alpha = batch.rho_alpha[index].max(0.0);
+            let beta = batch.rho_beta[index].max(0.0);
+            let (eps, d_alpha, d_beta) = self.spin_energy_at(alpha, beta);
+            let total = alpha + beta;
+            // 每体积相关能密度与 ∂e_c/∂ρ_σ（VWN 是纯 LDA，σ 通道恒为 0）。
+            out.energy[index] = total * eps;
+            out.v_alpha[index] = eps + total * d_alpha;
+            out.v_beta[index] = eps + total * d_beta;
+        }
+        out.d_sigma_alpha.fill(0.0);
+        out.d_sigma_beta.fill(0.0);
+        out.d_sigma_alpha_beta.fill(0.0);
+        Ok(())
+    }
 }
 
-// ─────────────────── 自旋分辨 LSDA（UKS 的 XC 侧，SC-01b）───────────────────
+// ─────────────────── 自旋分辨 XC（UKS 的 XC 侧，SC-01b）───────────────────
 
-/// 自旋分辨的密度批次（每个点一对 `ρ_α`、`ρ_β`）。
+/// 自旋分辨的密度批次（每个点一对 `ρ_α`、`ρ_β` 与三个 σ）。
 ///
-/// 闭壳层路径用 [`DensityBatch`]（自旋求和）；UKS 需要每个自旋通道各自的密度，
-/// 所以单独一个类型。两者都在"每个点一个标量"的层面工作，消费方逐点累加权重。
+/// 闭壳层路径用 [`DensityBatch`]（自旋求和）；UKS 需要每个自旋通道各自的密度与梯度，
+/// 所以单独一个类型。LDA 项不看 σ，可以给空切片。
+///
+/// ```text
+/// σ_αα = |∇ρ_α|²、σ_ββ = |∇ρ_β|²、σ_αβ = ∇ρ_α·∇ρ_β
+/// ```
+///
+/// 三个 σ 不是独立的：`σ_αβ² ≤ σ_αα σ_ββ`（Cauchy–Schwarz），消费方构造时应当保证。
 #[derive(Debug, Clone, Copy, PartialEq)]
 #[non_exhaustive]
 pub struct SpinDensityBatch<'a> {
@@ -430,10 +512,16 @@ pub struct SpinDensityBatch<'a> {
     pub rho_alpha: &'a [f64],
     /// `ρ_β`（e/Bohr³）。
     pub rho_beta: &'a [f64],
+    /// `σ_αα = |∇ρ_α|²`；LDA 项给空切片。
+    pub sigma_alpha: &'a [f64],
+    /// `σ_ββ = |∇ρ_β|²`；LDA 项给空切片。
+    pub sigma_beta: &'a [f64],
+    /// `σ_αβ = ∇ρ_α·∇ρ_β`；LDA 项给空切片。
+    pub sigma_alpha_beta: &'a [f64],
 }
 
 impl<'a> SpinDensityBatch<'a> {
-    /// 由两套密度构造。
+    /// 只要密度（LDA 用；三个 σ 为空）。
     ///
     /// # Panics
     ///
@@ -448,6 +536,40 @@ impl<'a> SpinDensityBatch<'a> {
         Self {
             rho_alpha,
             rho_beta,
+            sigma_alpha: &[],
+            sigma_beta: &[],
+            sigma_alpha_beta: &[],
+        }
+    }
+
+    /// 密度 + 三个 σ（GGA 用）。
+    ///
+    /// # Panics
+    ///
+    /// 五个切片长度不一致。
+    #[must_use]
+    pub fn with_sigma(
+        rho_alpha: &'a [f64],
+        rho_beta: &'a [f64],
+        sigma_alpha: &'a [f64],
+        sigma_beta: &'a [f64],
+        sigma_alpha_beta: &'a [f64],
+    ) -> Self {
+        let points = rho_alpha.len();
+        assert_eq!(rho_beta.len(), points, "spin densities must match");
+        assert_eq!(sigma_alpha.len(), points, "sigma_alpha must match");
+        assert_eq!(sigma_beta.len(), points, "sigma_beta must match");
+        assert_eq!(
+            sigma_alpha_beta.len(),
+            points,
+            "sigma_alpha_beta must match"
+        );
+        Self {
+            rho_alpha,
+            rho_beta,
+            sigma_alpha,
+            sigma_beta,
+            sigma_alpha_beta,
         }
     }
 
@@ -463,6 +585,30 @@ impl<'a> SpinDensityBatch<'a> {
         self.rho_alpha.is_empty()
     }
 
+    /// 是否带 σ 通道。
+    #[must_use]
+    pub fn has_sigma(&self) -> bool {
+        !self.sigma_alpha.is_empty()
+    }
+
+    /// `σ_αα`（空切片时视为 0）。
+    #[must_use]
+    pub fn sigma_alpha_at(&self, index: usize) -> f64 {
+        self.sigma_alpha.get(index).copied().unwrap_or(0.0)
+    }
+
+    /// `σ_ββ`（空切片时视为 0）。
+    #[must_use]
+    pub fn sigma_beta_at(&self, index: usize) -> f64 {
+        self.sigma_beta.get(index).copied().unwrap_or(0.0)
+    }
+
+    /// `σ_αβ`（空切片时视为 0）。
+    #[must_use]
+    pub fn sigma_alpha_beta_at(&self, index: usize) -> f64 {
+        self.sigma_alpha_beta.get(index).copied().unwrap_or(0.0)
+    }
+
     /// 自旋极化率 `ζ = (ρ_α − ρ_β)/ρ`（`ρ ≈ 0` 时返回 0）。
     #[must_use]
     pub fn zeta(&self, index: usize) -> f64 {
@@ -475,10 +621,180 @@ impl<'a> SpinDensityBatch<'a> {
             ((alpha - beta) / total).clamp(-1.0, 1.0)
         }
     }
+
+    /// `|∇ρ|² = σ_αα + σ_ββ + 2σ_αβ`（总密度的梯度平方）。
+    #[must_use]
+    pub fn total_sigma(&self, index: usize) -> f64 {
+        self.sigma_alpha_at(index)
+            + self.sigma_beta_at(index)
+            + 2.0 * self.sigma_alpha_beta_at(index)
+    }
+}
+
+/// 自旋分辨 XC 的六个输出缓冲（全部**写入**，长度都必须等于点数）。
+#[derive(Debug)]
+#[non_exhaustive]
+pub struct SpinXcOutput<'a> {
+    /// 每体积能量密度 `e`（`E = ∫ e dV`）。
+    pub energy: &'a mut [f64],
+    /// `v_α = ∂e/∂ρ_α`。
+    pub v_alpha: &'a mut [f64],
+    /// `v_β = ∂e/∂ρ_β`。
+    pub v_beta: &'a mut [f64],
+    /// `∂e/∂σ_αα`。
+    pub d_sigma_alpha: &'a mut [f64],
+    /// `∂e/∂σ_ββ`。
+    pub d_sigma_beta: &'a mut [f64],
+    /// `∂e/∂σ_αβ`。
+    pub d_sigma_alpha_beta: &'a mut [f64],
+}
+
+impl<'a> SpinXcOutput<'a> {
+    /// 由六个可变切片构造。
+    #[must_use]
+    pub fn new(
+        energy: &'a mut [f64],
+        v_alpha: &'a mut [f64],
+        v_beta: &'a mut [f64],
+        d_sigma_alpha: &'a mut [f64],
+        d_sigma_beta: &'a mut [f64],
+        d_sigma_alpha_beta: &'a mut [f64],
+    ) -> Self {
+        Self {
+            energy,
+            v_alpha,
+            v_beta,
+            d_sigma_alpha,
+            d_sigma_beta,
+            d_sigma_alpha_beta,
+        }
+    }
+
+    /// 六个切片的长度是否都等于 `points`。
+    fn matching(points: usize) -> impl Fn(&Self) -> bool {
+        move |out: &Self| {
+            out.energy.len() == points
+                && out.v_alpha.len() == points
+                && out.v_beta.len() == points
+                && out.d_sigma_alpha.len() == points
+                && out.d_sigma_beta.len() == points
+                && out.d_sigma_alpha_beta.len() == points
+        }
+    }
+
+    /// 全部清零。
+    fn clear(&mut self) {
+        self.energy.fill(0.0);
+        self.v_alpha.fill(0.0);
+        self.v_beta.fill(0.0);
+        self.d_sigma_alpha.fill(0.0);
+        self.d_sigma_beta.fill(0.0);
+        self.d_sigma_alpha_beta.fill(0.0);
+    }
+}
+
+/// 六个切片长度一致性的统一检查。
+pub(crate) fn check_spin_output(
+    points: usize,
+    out: &SpinXcOutput<'_>,
+    what: &str,
+) -> Result<(), XcError> {
+    if SpinXcOutput::matching(points)(out) {
+        Ok(())
+    } else {
+        Err(XcError::Shape(format!(
+            "{what}: outputs ({}, {}, {}, {}, {}, {}) vs input {points}",
+            out.energy.len(),
+            out.v_alpha.len(),
+            out.v_beta.len(),
+            out.d_sigma_alpha.len(),
+            out.d_sigma_beta.len(),
+            out.d_sigma_alpha_beta.len()
+        )))
+    }
+}
+
+/// 交换项的自旋标度：`e_x = ρ_α·ε(2ρ_α, 4σ_αα) + ρ_β·ε(2ρ_β, 4σ_ββ)`。
+///
+/// `E_x = ½[E_x(2ρ_α) + E_x(2ρ_β)]` 对交换泛函是**精确**的（Slater、B88、PBE-X 都适用），
+/// 只要把每个通道看成"密度翻倍的全极化子系统"，闭壳层实现就能原样复用。
+///
+/// **相关项不能用它**（要靠 ζ 插值，见 [`LdaSvwn5::spin_energy_at`] 与
+/// `gga::PbeCorrelation` 的自旋实现），因此这不是 trait 默认实现，而是必须显式调用的
+/// 辅助函数 —— 选错了在能量上几乎看不出来。
+///
+/// 六个输出全部按"写入"语义覆盖。
+pub(crate) fn exchange_spin_scaling(
+    term: &dyn FunctionalTerm,
+    batch: &SpinDensityBatch<'_>,
+    out: &mut SpinXcOutput<'_>,
+) -> Result<(), XcError> {
+    let points = batch.len();
+    check_spin_output(points, out, "exchange_spin_scaling")?;
+    out.clear();
+
+    let needs_sigma = term.requires().sigma;
+    let mut doubled = vec![0.0_f64; points];
+    let mut quadrupled = vec![0.0_f64; points];
+    let mut eps = vec![0.0_f64; points];
+    let mut d_eps = vec![0.0_f64; points];
+    let mut d_sigma = vec![0.0_f64; points];
+    for channel in 0..2 {
+        let (source, sigma_source) = if channel == 0 {
+            (batch.rho_alpha, batch.sigma_alpha)
+        } else {
+            (batch.rho_beta, batch.sigma_beta)
+        };
+        for index in 0..points {
+            doubled[index] = 2.0 * source[index].max(0.0);
+            quadrupled[index] = 4.0 * sigma_source.get(index).copied().unwrap_or(0.0).max(0.0);
+        }
+        let closed = if needs_sigma {
+            DensityBatch::new(&doubled, &quadrupled)
+        } else {
+            DensityBatch::from_rho(&doubled)
+        };
+        term.energy_density(&closed, &mut eps);
+        term.potential_derivatives(&closed, &mut d_eps, &mut d_sigma);
+        for index in 0..points {
+            let rho = source[index].max(0.0);
+            // 该通道没有电子：能量、势、σ 导数都必须**严格为 0**。
+            // 不能靠"乘 0"来凑：闭壳层实现对 ρ 有下限（`LOW_DENSITY_FLOOR`），
+            // ε(下限) ≈ −7e-5，而 v_σ = ε + 2ρ_σ ε_ρ 在 ρ_σ = 0 时会退化成 ε ≠ 0
+            // —— 实测就是这里漏了守卫，GGA_X_PBE 的 v_β 在 ρ_β = 0 处偏了 7.4e-5。
+            if rho <= 0.0 {
+                continue;
+            }
+            // 每体积能量密度：ρ_σ · ε(2ρ_σ, 4σ_σσ)。
+            out.energy[index] += rho * eps[index];
+            // v_σ = ε(2ρ_σ) + 2ρ_σ·ε_ρ(2ρ_σ)，即闭壳层 v(2ρ_σ)。
+            let potential = eps[index] + 2.0 * rho * d_eps[index];
+            if channel == 0 {
+                out.v_alpha[index] += potential;
+            } else {
+                out.v_beta[index] += potential;
+            }
+            if needs_sigma {
+                // ∂e/∂σ_σσ = ρ_σ · ε_σ(2ρ_σ, 4σ_σσ) · 4；σ_αβ 不进交换项。
+                let derivative = 4.0 * rho * d_sigma[index];
+                if channel == 0 {
+                    out.d_sigma_alpha[index] += derivative;
+                } else {
+                    out.d_sigma_beta[index] += derivative;
+                }
+            }
+        }
+    }
+    Ok(())
 }
 
 impl LdaSvwn5 {
-    /// `f(ζ) = [(1+ζ)^{4/3} + (1−ζ)^{4/3} − 2] / (2^{4/3} − 2)`（VWN5 的自旋插值因子）。
+    /// `f(ζ) = [(1+ζ)^{4/3} + (1−ζ)^{4/3} − 2] / (2^{4/3} − 2)`（VWN 的自旋插值因子）。
+    ///
+    /// 注意：**VWN 用的是两端插值** `ε = ε^P + (ε^F − ε^P)·f`，
+    /// 与 PW92 的 `ε^P(1 − f ζ⁴) + ε^F f ζ⁴ + (α_c/f'')(1 − ζ⁴)f` 不是一个式子。
+    /// 本项目 `svwn5.yaml` 的参数集是 libxc 的 `lda_c_vwn_rpa`（VWN RPA），
+    /// 逐点对照见 `tests/sc01b_spin_xc_pointwise.rs`（差 < 1e-15）。
     #[must_use]
     pub fn interpolation_factor(&self, zeta: f64) -> f64 {
         let zeta = zeta.clamp(-1.0, 1.0);
@@ -489,35 +805,10 @@ impl LdaSvwn5 {
     /// `f'(ζ)`。
     #[must_use]
     pub fn interpolation_factor_derivative(&self, zeta: f64) -> f64 {
-        let zeta = zeta.clamp(-1.0 + 1e-12, 1.0 - 1e-12);
+        // 导数在 ζ = ±1 有限：f′(1) = (4/3)·2^{1/3}/(2^{4/3} − 2)。
+        let zeta = zeta.clamp(-1.0, 1.0);
         let numerator = (1.0 + zeta).cbrt() - (1.0 - zeta).cbrt();
         (4.0 / 3.0) * numerator / (2.0_f64.powf(4.0 / 3.0) - 2.0)
-    }
-
-    /// 自旋分辨的每电子相关能密度 `ε_c(ρ_α, ρ_β)`（写进 `out`）。
-    ///
-    /// # Errors
-    ///
-    /// 没有铁磁/α_c 参数集，或输出长度与输入不一致。
-    pub fn energy_density_spin(
-        &self,
-        batch: &SpinDensityBatch<'_>,
-        out: &mut [f64],
-    ) -> Result<(), XcError> {
-        self.require_spin()?;
-        if out.len() != batch.len() {
-            return Err(XcError::Shape(format!(
-                "LdaSvwn5::energy_density_spin: output {} vs input {}",
-                out.len(),
-                batch.len()
-            )));
-        }
-        for (index, slot) in out.iter_mut().enumerate() {
-            *slot = self
-                .spin_energy_at(batch.rho_alpha[index], batch.rho_beta[index])
-                .0;
-        }
-        Ok(())
     }
 
     /// 有一个点上的 `(ε_c, dε_c/dρ_α, dε_c/dρ_β)`。
@@ -534,6 +825,9 @@ impl LdaSvwn5 {
         if total <= LOW_DENSITY_FLOOR {
             return (0.0, 0.0, 0.0);
         }
+        // VWN 的两端插值在 ζ = ±1 处**光滑**（(1∓ζ)^{4/3} 的一阶导为 0），
+        // 所以这里只做区间夹紧、不做 ζ 的数值夹紧 —— 夹紧会让 f′(ζ) 错 2.6e-4，
+        // v_β 在 ζ = 1 的点上偏 1e-5（曾经真的这样错过）。
         let zeta = ((alpha - beta) / total).clamp(-1.0, 1.0);
         let rs = (3.0 / (4.0 * std::f64::consts::PI * total)).cbrt();
         let x = rs.sqrt();
@@ -555,6 +849,65 @@ impl LdaSvwn5 {
         let d_beta = d_eps_drs * drs_dtotal + (eps_f - eps_p) * df_dzeta * dzeta_dbeta;
         let finite = |value: f64| if value.is_finite() { value } else { 0.0 };
         (finite(eps), finite(d_alpha), finite(d_beta))
+    }
+
+    /// 自旋分辨的**每体积**相关能密度 `e_c = (ρ_α+ρ_β)·ε_c(ρ_α, ρ_β)`。
+    ///
+    /// # Errors
+    ///
+    /// 缺铁磁/α_c 参数，或输出长度与输入不一致。
+    pub fn energy_density_spin(
+        &self,
+        batch: &SpinDensityBatch<'_>,
+        out: &mut [f64],
+    ) -> Result<(), XcError> {
+        self.require_spin()?;
+        if out.len() != batch.len() {
+            return Err(XcError::Shape(format!(
+                "LdaSvwn5::energy_density_spin: output {} vs input {}",
+                out.len(),
+                batch.len()
+            )));
+        }
+        for (index, slot) in out.iter_mut().enumerate() {
+            let alpha = batch.rho_alpha[index].max(0.0);
+            let beta = batch.rho_beta[index].max(0.0);
+            *slot = (alpha + beta) * self.spin_energy_at(alpha, beta).0;
+        }
+        Ok(())
+    }
+
+    /// 自旋分辨的相关势 `v_σ = ∂e_c/∂ρ_σ = ε_c + (ρ_α+ρ_β)·∂ε_c/∂ρ_σ`。
+    ///
+    /// # Errors
+    ///
+    /// 缺铁磁/α_c 参数，或输出长度与输入不一致。
+    pub fn potential_spin(
+        &self,
+        batch: &SpinDensityBatch<'_>,
+        v_alpha: &mut [f64],
+        v_beta: &mut [f64],
+    ) -> Result<(), XcError> {
+        self.require_spin()?;
+        if v_alpha.len() != batch.len() || v_beta.len() != batch.len() {
+            return Err(XcError::Shape(format!(
+                "LdaSvwn5::potential_spin: outputs {} and {} vs input {}",
+                v_alpha.len(),
+                v_beta.len(),
+                batch.len()
+            )));
+        }
+        for (index, (slot_alpha, slot_beta)) in
+            v_alpha.iter_mut().zip(v_beta.iter_mut()).enumerate()
+        {
+            let alpha = batch.rho_alpha[index].max(0.0);
+            let beta = batch.rho_beta[index].max(0.0);
+            let (eps, d_alpha, d_beta) = self.spin_energy_at(alpha, beta);
+            let total = alpha + beta;
+            *slot_alpha = eps + total * d_alpha;
+            *slot_beta = eps + total * d_beta;
+        }
+        Ok(())
     }
 
     fn require_spin(&self) -> Result<(), XcError> {
@@ -661,6 +1014,38 @@ impl FunctionalTerm for ScaledTerm {
         for slot in d_sigma.iter_mut() {
             *slot *= self.weight;
         }
+    }
+
+    fn spin_supported(&self) -> bool {
+        self.inner.spin_supported()
+    }
+
+    fn evaluate_spin(
+        &self,
+        batch: &SpinDensityBatch<'_>,
+        out: &mut SpinXcOutput<'_>,
+    ) -> Result<(), XcError> {
+        // 能量、势、三个 σ 导数必须用**同一个**权重缩放（与闭壳层路径一致）。
+        self.inner.evaluate_spin(batch, out)?;
+        for slot in out.energy.iter_mut() {
+            *slot *= self.weight;
+        }
+        for slot in out.v_alpha.iter_mut() {
+            *slot *= self.weight;
+        }
+        for slot in out.v_beta.iter_mut() {
+            *slot *= self.weight;
+        }
+        for slot in out.d_sigma_alpha.iter_mut() {
+            *slot *= self.weight;
+        }
+        for slot in out.d_sigma_beta.iter_mut() {
+            *slot *= self.weight;
+        }
+        for slot in out.d_sigma_alpha_beta.iter_mut() {
+            *slot *= self.weight;
+        }
+        Ok(())
     }
 }
 

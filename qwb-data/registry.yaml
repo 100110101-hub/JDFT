@@ -3,7 +3,7 @@
 # （否则 grid 的 normal 等级会有两个定义、get_grid_by_level 歧义）。
 schema_version: 1.0.0
 name: qwb-data
-version: 0.5.0
+version: 0.6.0
 created: 2026-10-22T22:53:00Z
 features:
   - "jobtype:sp"
@@ -45,13 +45,13 @@ ecps:
 functionals:
   - name: pbe
     path: functional/pbe.yaml
-    sha256: 6f9c7a390d0d813e8b2c5490918f2e851c23bda718c44d96b5286df0ce836b86
+    sha256: b8b322f96b0e22fe795477e09b7955b58b6a32b38b19f813c7bd55383c5c272b
   - name: svwn5
     path: functional/svwn5.yaml
     sha256: e62bd0014d27c73d38e1475a261c47cb273eafa320f337217179b42910b4ebd8
   - name: pbe0
     path: functional/pbe0.yaml
-    sha256: 0af62e0946c2f563df1eac01ee475902e81d53d2176a1a76f3334c28a570559b
+    sha256: e741078195d85f7848d034487a6359c3e94164c2d11fe7efed2b082d18455f5a
   - name: b88
     path: functional/b88.yaml
     sha256: efa0fa7b9f8aa98d5b4ca8fb0573a7d8d1384f6efc0a7c96b90ec7c3aa47ae76

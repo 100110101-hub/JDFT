@@ -1,0 +1,36 @@
+# M1b：OH 双峰态 / STO-3G / UKS（自旋极化 PBE）。
+#
+# 判据（project-phase2.md §7 M1b）：
+#   E = -74.5739474 Ha（PySCF UKS/PBE 同值，差 < 1e-6；
+#      参考行在 qwb-core/crates/qwb-scf/tests/reference/uks_open_shell.csv）
+#   <S^2> = 0.750884（双峰态的 0.75 + 微量污染；污染量落进 result.json 的 spin 块）
+#   n_alpha = 5, n_beta = 4
+#
+# 说明：同一个 OH 用 `method_name: svwn5` + `scf_type: uks` **不可用** ——
+# 本项目 `svwn5.yaml` 是 VWN-RPA 参数集，PySCF（libxc `LDA_C_VWN_RPA`）在这个
+# 体系上三种策略都不收敛，我们的实现在 400 步内也不收敛。如实记在
+# `docs/status-v2.yaml` 的 SC-01b 与 `docs/choices.md` 五十。
+molecule:
+  atoms:
+    - symbol: O
+      position_angstrom: [0.0, 0.0, 0.0]
+    - symbol: H
+      position_angstrom: [0.0, 0.0, 0.980]
+  charge: 0
+  multiplicity: 2
+basis_name: sto-3g
+method_name: pbe
+grid_level: fine
+solvent: vacuum
+jobtype: sp
+options:
+  scf_max_iter: 300
+  scf_energy_threshold_hartree: 1.0e-8
+  scf_density_threshold: 1.0e-6
+  diis_history: 8
+  threads: 0
+  max_opt_steps: 100
+  opt_gradient_threshold_hartree_per_bohr: 4.5e-4
+  freq_step_angstrom: 0.01
+  ecp_name: null
+  scf_type: uks

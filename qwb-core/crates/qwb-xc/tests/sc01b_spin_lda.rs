@@ -1,4 +1,8 @@
-//! SC-01b（UKS 的 XC 侧）：**自旋分辨 LSDA**（VWN5 的自旋插值）。
+//! SC-01b（UKS 的 XC 侧）：**自旋分辨 LSDA**（VWN 的两端插值）。
+//!
+//! 注意参数集的名字：`svwn5.yaml` 用的是 libxc 的 VWN **RPA** 参数集，
+//! 逐点对照在 `sc01b_spin_xc_pointwise.rs`（`LDA_C_VWN_RPA`），来龙去脉见
+//! `docs/choices.md` 五十。
 //!
 //! 判据（phase-2 §4.4 / §9.2 G9）：
 //!

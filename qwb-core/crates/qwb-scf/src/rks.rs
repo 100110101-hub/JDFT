@@ -543,6 +543,26 @@ impl GridAoCached {
             laplacians,
         })
     }
+
+    /// 第 `index` 个网格点上的 AO 值 `φ_μ`。
+    ///
+    /// # Panics
+    ///
+    /// `index` 越界。
+    #[must_use]
+    pub fn values_at(&self, index: usize) -> &[f64] {
+        &self.values[index]
+    }
+
+    /// 第 `index` 个网格点上的 AO 梯度 `∇φ_μ`（未预取时为空切片）。
+    ///
+    /// # Panics
+    ///
+    /// `index` 越界。
+    #[must_use]
+    pub fn gradients_at(&self, index: usize) -> &[[f64; 3]] {
+        &self.gradients[index]
+    }
 }
 
 /// AO 求值遇到 l>=2，或密度出现非有限值。

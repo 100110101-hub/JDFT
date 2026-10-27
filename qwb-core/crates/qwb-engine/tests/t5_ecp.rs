@@ -131,9 +131,12 @@ fn cuh_lanl2dz_single_point_converges() {
     );
     assert!(result.scf_converged);
     // 回归钉（internal-independent-path）：见文件头。
+    // 2026-11-06 重钉：把 `pbe_mu` 从 6 位的 0.21951 换成精确的 βπ²/3
+    // （docs/choices.md 五十一），PBE 总能量整体移动 −1.6e-5 Ha，旧钉
+    // -213.9067554378 作废。
     assert!(
-        (result.energy_hartree - (-213.906_755_437_8)).abs() < 1.0e-6,
-        "CuH/LANL2DZ/PBE 能量 {:.10} 与钉住值 -213.9067554378 不一致",
+        (result.energy_hartree - (-213.906_771_935_1)).abs() < 1.0e-6,
+        "CuH/LANL2DZ/PBE 能量 {:.10} 与钉住值 -213.9067719351 不一致",
         result.energy_hartree
     );
 

@@ -532,10 +532,21 @@ fn write_visual_artifacts(
         })
         .sum::<i32>()
         - input.molecule.charge;
-    if electrons <= 0 || electrons % 2 != 0 {
+    if electrons <= 0 {
         return Err(CliError::input(format!(
-            "cannot write orbitals for {electrons} electrons (closed-shell only)"
+            "cannot write orbitals for {electrons} electrons"
         )));
+    }
+    // 开壳层（多重度 > 1 或电子数奇数）在这里**显式跳过**可视化产物：
+    // K2 的 `mo_coeffs` 只有 α 那一套，把它当双占据用会算出一个错的 Mulliken 电荷
+    // —— 宁可不写，也不能静默写错（§10.3）。要给出开壳层布居，得先给 K2 加 β 轨道集
+    // （加性扩展，记在 docs/status-v2.yaml 的 SC-02 后续里）。
+    if input.molecule.multiplicity > 1 || electrons % 2 != 0 {
+        println!(
+            "artifacts: 开壳层（multiplicity {}，{} 电子）暂不写 populations/cube ——              K2 的 mo_coeffs 只有 α 轨道集，用它算布居会错（见 SC-01b 的 note）",
+            input.molecule.multiplicity, electrons
+        );
+        return Ok(());
     }
     let n_occ = (electrons / 2) as usize;
     let n = basis.n_functions();
