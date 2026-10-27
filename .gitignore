@@ -43,3 +43,4 @@ cccbdb-raw.json
 /.tmp-data-backup2/
 /.tmp-*
 
+.d3-upstream/

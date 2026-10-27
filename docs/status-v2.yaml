@@ -74,8 +74,12 @@ DA-05:
   state: pending
   note: "SMD 的 4 项非极性参数表"
 DA-06:
-  state: pending
-  note: "色散参数：D3(BJ) 元素对 + D4（H–Kr）"
+  state: blocked
+  ts: "2026-11-07T08:40:00Z"
+  artifact: "（勘察 + 生成器骨架，未产出数据文件）scripts/gen_d3_params.py：从 s-dftd3 的官方源码解析 C6 参考表（reference_c6 展平）、reference_cn、number_of_references 与每个泛函的 BJ 阻尼参数（d3_param(a1=…, s8=…, a2=…) + DOI），并把上游文件的 sha256 写进数据文件"
+  verification: "**已完成的部分（可复现）**：① 上游源码定位到 5 个文件、其中 4 个已取到：src/dftd3/reference.f90（3 065 113 B，C6 参考表 + reference_cn + number_of_references）、src/dftd3/param.f90（48 765 B，BJ 阻尼参数逐条带 DOI：pbe a1=0.4289 s8=0.7875 a2=4.4407；b3lyp a1=0.3981 s8=1.9889 a2=4.4211）。C6/CN 的解析已验证：reference_cn 721 = 7×103、reference_c6 截到 262 444 = 7·7·5356；阻尼参数的自动提取器还有一个 Fortran case-块匹配 bug（alias 列表的 case 行也会命中），数值本身已人工核对，修它属于下一轮的小活、src/dftd3/data/vdwrad.f90（75 265 B，D3 的 vdW 半径）、mctc-lib/src/mctc/data/covrad.f90（3 850 B，CN 用的共价半径）。② C6 表规模与布局确认：max_ref = 7，展平长度应为 7·7·(103·104/2) = **262 444** 个实数。"
+  note: "**卡点（实测，不是没做）**：D3(BJ) 还差 **r4r2（√(r4/r2)，每元素一个值；C8 = 3·C6·√(r4r2_i·r4r2_j) 要用它）**。dftd3_data_r4r2 是**生成出来的模块**，不在 s-dftd3 仓库里：src/dftd3/data/r4r2.f90 与 src/dftd3/data_r4r2.f90 都 404（已实测）。没有它就算不出官方 D3(BJ)（s8 项不能省），达不到 §6.3 FX-04 的「与官方实现差 < 1e-3 kcal/mol」判据；**不拿近似表充数**（把 r4r2 当常数或从别的变体借值都是伪造参数）。两条可行下一步：① 从 D3 原文（Grimme 2011, JCC 32, 1456）Table 1 逐项转录 36 个 r4r2（可引用）；② 用已装好的 dftd3（WSL，pip install dftd3 1.6.0，可当黑盒尺子）在 36 个同核原子上反解 r4r2，判据是「反解值代回后 C6/C8 与 oracle 差 < 1e-10」。②更可靠，并能顺带验证 C6 表解析。"
+
 DA-07:
   state: pending
   note: "RI 辅助基（def2-*-RI / JKFIT），经 sources.json 按需取回"
@@ -120,8 +124,12 @@ FX-03:
   state: pending
   note: "ωB97X-D / CAM-B3LYP（短程交换 + ω 来自数据）"
 FX-04:
-  state: pending
-  note: "D3(BJ) 色散校正 + 解析梯度"
+  state: blocked
+  ts: "2026-11-07T08:40:00Z"
+  artifact: "（未落地）D3(BJ) 作为可加项 + 解析梯度 + dispersion_energy_hartree 落盘"
+  verification: "**依赖 DA-06**：C6 表与阻尼参数已定位/可解析，但 r4r2 缺（见 DA-06 的 note）。本轮没有写任何 D3 代码 —— 参数不全时写出来只能是「看起来能跑、数值不对」的实现，违反 §10.3 的禁静默降级。"
+  note: "判据（D3 梯度 vs 有限差分 < 1e-6 Ha/Bohr；10 个二聚体与官方实现差 < 1e-3 kcal/mol）尚未开始测量，因为参数不全。黑盒尺子已就位：WSL 里 pip install dftd3（1.6.0），DispersionModel(...).get_dispersion(RationalDampingParam(method=...), grad=True) 同时给能量与梯度（实测：B3LYP-D3(BJ) 的水分子 E = −5.6816898568e-4 Ha，梯度 3×3）。"
+
 
 # ───────────────────── SCF / 相关 / 开壳层轨（SC，6）─────────────────────
 
