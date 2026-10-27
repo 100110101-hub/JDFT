@@ -88,10 +88,13 @@ def parse_reference(text: str):
     cn_body = cn_body.split("]", 1)[0]
     cn_values = floats(cn_body)
     # reference_c6：一串 `c6ab_view(a:b) = [ ... ]`，按出现顺序拼起来
+    # 只取真正的赋值块 `c6ab_view(a : b) = [ ... ]`（声明行 `c6ab_view(...) => c6ab`
+    # 也会被 `split` 抓到，导致数值整体错位一格 —— 已踩过）
     c6_values = []
-    for piece in clean.split("c6ab_view(")[1:]:
-        body = piece.split("]", 1)[0]
-        c6_values.extend(floats(body))
+    for match in re.finditer(
+        r"c6ab_view\(\s*\d+\s*:\s*\d+\s*\)\s*=\s*\[(.*?)\]", clean, re.S
+    ):
+        c6_values.extend(floats(match.group(1)))
     return count, cn_values, c6_values
 
 
