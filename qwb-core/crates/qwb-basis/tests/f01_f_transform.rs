@@ -61,11 +61,29 @@ fn f_transform_is_orthonormal_in_the_overlap_metric() {
 
 #[test]
 fn f_is_orthogonal_to_the_radial_p_direction() {
-    // x(x²+y²+z²) = x³ + xy² + xz²
+    // **`r²·x` 在「归一化直角基」下的系数不是 1。**
+    //
+    // 变换的基底是按分量归一化的直角高斯 `φ_i = N_i x^a y^b z^c e^{−αr²}`，
+    // 其中 `N_i ∝ 1/√∏_axis (2l_axis−1)!!`。所以单项式
+    // `x^a y^b z^c ∝ √∏(2l−1)!! · φ_i`，而
+    // `r²x = x³ + xy² + xz²` 对应 `√15·e_{x³} + √3·e_{xy²} + √3·e_{xz²}`。
+    //
+    // 这条测试原来用 `1,1,1` 当系数，于是它和同样写错系数的实现"互相印证"，
+    // 一起漏掉了「f 混进 r²·p 成分」这个错（详见 `docs/choices.md` 五十五）。
     let mut radial_p = [0.0_f64; 10];
     for (index, powers) in cartesian_components(3).iter().enumerate() {
+        let odd = |l: u32| -> f64 {
+            // (2l−1)!!：0→1, 1→1, 2→3, 3→15
+            let mut value = 1.0;
+            let mut current = 2 * l;
+            while current > 1 {
+                value *= f64::from(current) - 1.0;
+                current -= 2;
+            }
+            value
+        };
         if *powers == (3, 0, 0) || *powers == (1, 2, 0) || *powers == (1, 0, 2) {
-            radial_p[index] = 1.0;
+            radial_p[index] = (odd(powers.0) * odd(powers.1) * odd(powers.2)).sqrt();
         }
     }
     let columns = columns_of_f();
@@ -75,6 +93,94 @@ fn f_is_orthogonal_to_the_radial_p_direction() {
     }
     println!("七个 f 与 r²·x 的最大投影 {worst:.2e}");
     assert!(worst < 1.0e-12, "f 与 r²·p 不正交：{worst:.2e}");
+}
+
+/// f 子空间必须**就是** l=3，而不只是「正交归一 + 与某三个向量正交」。
+///
+/// 上一版的 `Tᵀ S T = I` 与「与 r²p 正交」两条都过，但 `r²p` 向量写的是未归一化
+/// 多项式的系数，于是它和同样写错的实现互相印证，一起漏掉了「f 混进 r²·p 成分」。
+/// 这里换一条对「投影到哪个子空间」极敏感的判据：
+///
+/// ```text
+/// T Tᵀ  =  Tₐ Tₐᵀ        （Tₐ 是独立 Gram–Schmidt 构造的 l=3 正交归一基）
+/// ```
+///
+/// 两种基底之间只差一个 7×7 正交阵，所以 `T Tᵀ` 必须逐元素相等。
+#[test]
+fn f_subspace_is_the_l3_space() {
+    let components = cartesian_components(3);
+    let odd = |l: u32| -> f64 {
+        let mut value = 1.0;
+        let mut current = 2 * l;
+        while current > 1 {
+            value *= f64::from(current) - 1.0;
+            current -= 2;
+        }
+        value
+    };
+    // 三个 r²p 向量在归一化直角基下的系数
+    let mut r = [[0.0_f64; 10]; 3];
+    for (index, powers) in components.iter().enumerate() {
+        let scale = (odd(powers.0) * odd(powers.1) * odd(powers.2)).sqrt();
+        let is_x = *powers == (3, 0, 0) || *powers == (1, 2, 0) || *powers == (1, 0, 2);
+        let is_y = *powers == (2, 1, 0) || *powers == (0, 3, 0) || *powers == (0, 1, 2);
+        let is_z = *powers == (2, 0, 1) || *powers == (0, 2, 1) || *powers == (0, 0, 3);
+        if is_x {
+            r[0][index] = scale;
+        }
+        if is_y {
+            r[1][index] = scale;
+        }
+        if is_z {
+            r[2][index] = scale;
+        }
+    }
+    // 先把 r²p 归一（否则投影会多减）
+    for vector in &mut r {
+        let norm = overlap(vector, vector).sqrt();
+        assert!(norm > 1.0e-8, "r²p 向量退化");
+        for value in vector.iter_mut() {
+            *value /= norm;
+        }
+    }
+    // 独立构造：十个单位向量逐个 Gram–Schmidt（先打掉 r²p，再打掉已选列）
+    let mut analytic: Vec<[f64; 10]> = Vec::new();
+    for unit in 0..10 {
+        let mut current = [0.0_f64; 10];
+        current[unit] = 1.0;
+        for basis in r.iter().chain(analytic.iter()) {
+            let projection = overlap(&current, basis);
+            for k in 0..10 {
+                current[k] -= projection * basis[k];
+            }
+        }
+        let norm = overlap(&current, &current).sqrt();
+        if norm > 1.0e-8 {
+            for value in current.iter_mut() {
+                *value /= norm;
+            }
+            analytic.push(current);
+        }
+        if analytic.len() == 7 {
+            break;
+        }
+    }
+    assert_eq!(analytic.len(), 7, "l=3 补空间应为 7 维");
+
+    let columns = columns_of_f();
+    let mut worst = 0.0_f64;
+    for i in 0..10 {
+        for j in 0..10 {
+            let from_t: f64 = (0..7).map(|c| columns[c][i] * columns[c][j]).sum();
+            let from_analytic: f64 = (0..7).map(|c| analytic[c][i] * analytic[c][j]).sum();
+            worst = worst.max((from_t - from_analytic).abs());
+        }
+    }
+    println!("T Tᵀ 与独立构造的 T Tᵀ 最大差 {worst:.2e}");
+    assert!(
+        worst < 1.0e-10,
+        "f 张成的子空间不是 l=3：T Tᵀ 差 {worst:.2e}"
+    );
 }
 
 #[test]

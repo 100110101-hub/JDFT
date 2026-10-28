@@ -143,24 +143,31 @@ pub fn d_overlap_metric() -> Transform {
         data,
     }
 }
+/// 双阶乘 `n!!`（`n <= 0` 时按定义取 1，即 `(0)!! = (−1)!! = 1`）。
+fn double_factorial(n: i64) -> f64 {
+    if n <= 0 {
+        return 1.0;
+    }
+    let mut product = 1.0;
+    let mut current = n;
+    while current > 1 {
+        product *= current as f64;
+        current -= 2;
+    }
+    product
+}
+
+/// `(2l−1)!!`：归一化直角高斯的逐分量常数（`l = 0,1,2,3 → 1,1,3,15`）。
+fn odd_double_factorial(l: u32) -> f64 {
+    double_factorial(2 * i64::from(l) - 1)
+}
+
 /// `l = 3` 的 10 个直角分量在**重叠度规**下的自重叠比 `Π_axis (a+a'-1)!!/sqrt((2a-1)!!(2a'-1)!!)`。
 ///
 /// 只有同一轴上两个幂次的奇偶性一致时才非零；否则该轴积分为 0。
 fn f_overlap_metric_value(left: (u32, u32, u32), right: (u32, u32, u32)) -> f64 {
     let left = [left.0, left.1, left.2];
     let right = [right.0, right.1, right.2];
-    fn double_factorial(n: i64) -> f64 {
-        if n <= 0 {
-            return 1.0;
-        }
-        let mut product = 1.0;
-        let mut current = n;
-        while current > 1 {
-            product *= current as f64;
-            current -= 2;
-        }
-        product
-    }
     let mut product = 1.0;
     for axis in 0..3 {
         let a = i64::from(left[axis]);
@@ -193,6 +200,31 @@ fn f_transform() -> Transform {
     use crate::cartesian_components;
     let components = cartesian_components(3);
     debug_assert_eq!(components.len(), 10);
+
+    // **多项式系数 → 归一化直角基下的系数。**
+    //
+    // 下面 `candidates` / `radial` 里写的是多项式 `Σ c_i x^a y^b z^c` 的系数，
+    // 而这里的基函数是**按分量归一化**的直角高斯
+    // `φ_i = N_i x^a y^b z^c e^{−αr²}`，`N_i = C·(4α)^{L/2}/√∏_axis (2l_axis−1)!!`
+    // （`C` 与 `L` 对同一壳层的所有分量相同，可整体约掉）。所以单项式
+    // `x^a y^b z^c = φ_i / N_i ∝ √∏_axis (2l_axis−1)!! · φ_i`：
+    // 多项式系数必须**逐分量乘上 `√∏(2l−1)!!`**。
+    //
+    // 上一版漏了这一步，导致「去掉 r²·p 成分」的投影打掉的是另一个三维子空间，
+    // 得到的七个函数虽然仍满足 `Tᵀ S T = I₇`（Gram–Schmidt 保证），却混进了
+    // `r²·p` 成分。后果是 f 壳层只被虚轨道用到，所以总能量只偏 2.7e-6 Ha，
+    // 但 H₂O/def2-TZVP 的 HF 与 PySCF 差 2.7e-6、轨道能偏 1e-4 —— 见
+    // `docs/choices.md` 五十五与 `f_subspace_is_the_l3_space` 测试。
+    let component_scale: [f64; 10] = {
+        let mut out = [0.0_f64; 10];
+        for (index, powers) in components.iter().enumerate() {
+            out[index] = (odd_double_factorial(powers.0)
+                * odd_double_factorial(powers.1)
+                * odd_double_factorial(powers.2))
+            .sqrt();
+        }
+        out
+    };
 
     // 立方谐波（未归一化，允许任意整体缩放）
     let candidates: [[f64; 10]; 7] = [
@@ -246,6 +278,19 @@ fn f_transform() -> Transform {
             v
         },
     ];
+    // 把多项式系数换成归一化直角基下的系数（见上面 `component_scale` 的说明）。
+    let mut candidates = candidates;
+    for vector in &mut candidates {
+        for (index, value) in vector.iter_mut().enumerate() {
+            *value *= component_scale[index];
+        }
+    }
+    let mut radial = radial;
+    for vector in &mut radial {
+        for (index, value) in vector.iter_mut().enumerate() {
+            *value *= component_scale[index];
+        }
+    }
     // 在 S 下的内积
     let inner = |a: &[f64; 10], b: &[f64; 10]| -> f64 {
         let mut total = 0.0;

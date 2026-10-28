@@ -361,6 +361,62 @@ qwb run examples/oh_uks_pbe_sto3g.yaml   →  energy  -74.5739461443 Ha    （Py
    跑闭壳层体系而不用担心"换了个答案"。
 5. `opt` 还不支持开壳层（SC-02），`scf_type: uks` + `jobtype: opt` 会被拒。
 
+### 3.7 MP2（M3 / SC-04，**已实装**）
+
+闭壳层参考（缺省 `rks`/`rhf`）之上算 **canonical MP2** 的相关能：在 `options.mp2` 里
+写 `kind: mp2` 即可。
+
+```yaml
+molecule:
+  atoms:
+    - symbol: O
+      position_angstrom: [0.0, 0.0, 0.11779]
+    - symbol: H
+      position_angstrom: [0.0, 0.75545, -0.47116]
+    - symbol: H
+      position_angstrom: [0.0, -0.75545, -0.47116]
+  charge: 0
+  multiplicity: 1
+basis_name: def2-svp
+method_name: hf          # MP2 的参考态就是这一遍 SCF（也可以是 pbe / b3lyp 等）
+grid_level: normal
+solvent: vacuum
+jobtype: sp
+options:
+  scf_energy_threshold_hartree: 1.0e-10
+  scf_density_threshold: 1.0e-9
+  mp2:
+    kind: mp2
+```
+
+```console
+$ qwb run examples/h2o_mp2_def2svp.yaml
+$ python -c "import json;print(json.load(open('results/h2o_mp2_def2svp/result.json'))['correlation'])"
+{'method': 'mp2', 'e2_hartree': -0.203643462358, 'e_total_hartree': -76.164613453426}
+```
+
+三条约定：
+
+* **相关能与 SCF 用同一个基组、同一份 2e 张量**，没有"MP2/cc-pVTZ 但 SCF 用 def2-SVP"
+  这种混搭；`correlation.e_total_hartree = energy_hartree + e2_hartree`（`energy_hartree`
+  仍是 SCF 能量，不会被覆盖）。
+* **无冻结核**（所有占据轨道都进相关计算）。冻结核与 RI 都在 SC-05。
+* `kind: ri-mp2` 仍会以退出码 4 拒绝（SC-05：需要 `aux_basis_name`、三中心积分与
+  `ri_error_hartree`）。`mp2` 配 `jobtype: opt` 也拒绝 —— MP2 梯度没实现。
+
+实测（`scripts/pyscf_mp2_reference.py` 的 PySCF 2.14.0 参考，同几何、同基组、无冻结核）：
+
+| 体系/基组 | 本引擎 E_corr | PySCF E_corr | 差 |
+|---|---|---|---|
+| H2O/STO-3G | −0.0356083055 | −0.0356083061 | 6e-10 |
+| H2O/def2-SVP | −0.2036434624 | −0.2036434634 | 1e-9 |
+| H2O/def2-TZVP | −0.2726346686 | −0.2726346708 | 2e-9 |
+| H2/STO-3G | −0.0131380733 | −0.0131380736 | 3e-10 |
+| H2/def2-SVP | −0.0262678128 | −0.0262678129 | 1e-10 |
+| H2/def2-TZVP | −0.0277524219 | −0.0277524220 | 1e-10 |
+
+另有基组单调性断言（DZ → TZ 时 `|E_corr|` 必须变大）：`cargo test -p qwb-scf --test sc04_mp2`。
+
 ### 3.4 阶段二预留的字段（**契约已就位，引擎会显式拒绝**）
 
 阶段二的契约（`project-phase2.md` §4）已经把下面这些字段加进了 `input.yaml` 的合法集合，
@@ -371,9 +427,9 @@ qwb run examples/oh_uks_pbe_sto3g.yaml   →  energy  -74.5739461443 Ha    （Py
 options:
   # scf_type: rhf|rks 与阶段一行为等价；uhf 已实装（§3.5）；uks 已实装（§3.6）；
   # rohf 未实现 → exit 4（SC-01c，blocked）
-  mp2:                     # 相关方法未实现 → exit 4（M3 / SC-04..05）
-    kind: ri-mp2           # mp2|ri-mp2；RI 要 aux_basis_name
-    aux_basis_name: def2-svp-ri
+  mp2:                     # canonical MP2 已实装（§3.7 / SC-04）
+    kind: mp2              # mp2 已实装；ri-mp2 未实装 → exit 4（SC-05）
+    aux_basis_name: null   # 只有 ri-mp2 需要
   excited_states:          # 激发态未实现 → exit 4（M4 / RS-02..03）
     n_states: 5
     method: tda            # cis|tda|tddft
@@ -390,8 +446,9 @@ options:
 
 相应地，结果目录里的新块分两类：
 
-* **已经会出现**：`spin`（`scf_type: uhf` 或 `uks` 时落盘）。
-* **还不会出现**：`correlation`/`solvation`/`excited_states`/`nmr_shieldings`/
+* **已经会出现**：`spin`（`scf_type: uhf` 或 `uks` 时落盘）、`correlation`
+  （`options.mp2.kind: mp2` 时落盘，见 §3.7）。
+* **还不会出现**：`solvation`/`excited_states`/`nmr_shieldings`/
   `polarizability`/`multipoles`/`dispersion_energy_hartree`/`numerics_report` ——
   出现了也说明是别人（或未来版本）写的，旧版本读完会原样保留（pydantic 模型已能承载）。
 
@@ -658,12 +715,22 @@ basis       def2-svp      basis/def2-svp.yaml      H C N O
 basis       def2-tzvp     basis/def2-tzvp.yaml     H C N O F
 basis       6-311g(d,p)   basis/6-311g-dp.yaml     H C N O
 basis       lanl2dz      basis/lanl2dz.yaml       H O Cu Zn
+basis       def2-svp-ri  basis/def2-svp-ri.yaml   H C N O    （RI 辅助基，role: ri-j）
+basis       def2-tzvp-ri basis/def2-tzvp-ri.yaml  H C N O F  （含 g，l=4：暂不可用作辅助基）
+basis       def2-universal-jkfit  def2-universal-jkfit.yaml  H C N O F（含 g，同上）
 ecp         lanl2dz-cu    ecp/lanl2dz-cu.yaml     Cu 10 芯 / z_eff 19
 ecp         lanl2dz-zn    ecp/lanl2dz-zn.yaml     Zn 18 芯 / z_eff 12
-functional  pbe svwn5 pbe0 b88
+functional  pbe svwn5 pbe0 b88 m06-l m06-2x
 grid        grid-coarse / grid-normal / grid-fine / grid-veryfine
 numerics    numerics（K10 精度等级 1..5 + 等价容差）
 ```
+
+三个 RI 辅助基（DA-07）是从 BSE 取的 `def2-SVP-RI` / `def2-TZVP-RI` /
+`def2-universal-JKFIT`，`role` 分别是 `ri-j` / `ri-j` / `ri-jk`。它们**不是轨道基组**：
+`basis_name` 写它们会得到"元素不覆盖"以外的怪结果，别这么用。当前只有
+`def2-svp-ri` 能被真正用作辅助基 —— 另外两个含 g 函数（l = 4），而我们的球谐变换
+只到 l = 3，所以它们能通过 `data verify`、但建辅助基时会以 `Unsupported` 明确报错
+（不是静默跳过）。
 
 ### 8.1.1 `numerics` 域（阶段二 K10）
 
@@ -788,6 +855,10 @@ python scripts\fetch_data.py --all --force              # 全部重下
 | （已过时的说明）meta-GGA 基础设施 | τ 依赖的泛函 | **基础设施就位（FX-01），但泛函未注册**：`requires.kinetic_density` 与网格上的 τ 管线已通（闭式核对 < 1e-9），仓库里还没有这类数据文件，所以 `method_name: m06-2x` 会报「泛函不存在」。落数据是 DA-01/DA-02，落实现是 FX-02 |
 | `b3lyp` | hybrid（α_hf = 0.20） | **数据层不注册**：K1 的 phase-1 语义门禁拒绝 `requires.laplacian = true`（冻结契约）。只能在测试里程序化构造 |
 
+另外，**参考态之上可以叠相关能**：`options.mp2.kind: mp2` 会跑 canonical MP2
+（闭壳层参考、无冻结核、`sp` only），相关能进 `result.json` 的 `correlation` 块，
+与 PySCF 差 1e-9 量级 —— 详见 §3.7。`ri-mp2` 仍未实装（SC-05）。
+
 ### 9.2 作业类型
 
 | `jobtype` | 状态 |
@@ -816,10 +887,12 @@ python scripts\fetch_data.py --all --force              # 全部重下
 * **ECP 的导数**：带 ECP 的几何优化/频率不支持。
 * **并行**：积分层单线程；并行只出现在 Hessian 的位移与 `qwb batch` 的进程级并发。
   `--threads` 目前只记账。
-* **meta-GGA 泛函、ROHF、TDDFT、NBO、TS/IRC/scan**：都还不给用。其中 meta-GGA 的**基础设施**已经就位（FX-01：数据能声明 `requires.kinetic_density`、网格上算 τ、矩阵元按 ½ρ(dε/dτ)∇φ∇φ 组装、闭式核对 < 1e-9），缺的是泛函数据与实现（DA-01/DA-02 + FX-02）与自旋分辨的 τ_α/τ_β；UKS 本身已经能用（§3.6）。
-* **阶段二的方法**（开壳层、MP2/RI-MP2、激发态、COSMO/SMD/PBF、TS/IRC/扫描、NMR、
+* **meta-GGA 泛函、ROHF、TDDFT、NBO、TS/IRC/scan**：都还不给用。其中 meta-GGA 的**基础设施**已经就位（FX-01：数据能声明 `requires.kinetic_density`、网格上算 τ、矩阵元按 ½ρ(dε/dτ)∇φ∇φ 组装、闭式核对 < 1e-9），缺的是自旋分辨的 τ_α/τ_β；UKS 本身已经能用（§3.6）。
+* **RI-MP2 / 冻结核 / MP2 梯度**：SC-05。现在只有 canonical、全占据、`sp`。
+* **阶段二的方法**（开壳层、RI-MP2、激发态、COSMO/SMD/PBF、TS/IRC/扫描、NMR、
   极化率、解析 Hessian）：**契约已就位、引擎未实现**，见 §3.4 —— 现在写进输入会得到
   退出码 4，而不是一个看起来成功的结果。进度看 [`status-v2.yaml`](./status-v2.yaml)。
+  已经落地的部分：UHF（§3.5）、UKS（§3.6）、canonical MP2（§3.7）、meta-GGA（§9.1）。
 * **`.qwb` 容器**：K4 读写与双向互操作已通过测试，但 CLI 还没有"打包"子命令
   （Python 侧 `QwbContainer` 可以）。
 
@@ -869,6 +942,18 @@ Python 侧 182 个测试 + `.qwb` 夹具新鲜度。
 * **PySCF**（只在 WSL 里装，仅当黑盒对照）：
   `python3 scripts/pyscf_reference.py --grid-level 3` → H2O/def2-SVP/PBE 的独立值
   −76.271970822413 Ha（本项目差 2.87e-5 Ha）。
+  各能力的外部参照生成器（都只产数字，产物是 `tests/reference/*.csv`）：
+
+  | 脚本 | 产物 | 用在哪 |
+  |---|---|---|
+  | `pyscf_reference.py` | H2O/PBE 的总能量 | T2 |
+  | `pyscf_open_shell_reference.py` | 开壳层 UHF 能量/⟨S²⟩ | SC-01 / M1 |
+  | `pyscf_uks_reference.py` | 开壳层 UKS | SC-01b / M1b |
+  | `pyscf_spin_xc_reference.py` | 自旋分辨 XC 的逐点值 | SC-01b |
+  | `pyscf_m06_exchange_reference.py` | M06 家族逐点值（libxc） | DA-01/FX-02 |
+  | `pyscf_mp2_reference.py` | MP2 相关能（6 个体系/基组） | SC-04 |
+  | `pyscf_ri_invariants.py` | `(P|Q)` 特征值 + 3 中心奇异值 | IN-01/DA-07 |
+  | `pyscf_rij_reference.py` | RI-J 的 `E_J` / `E_J^RI` | IN-01 |
 * 边界（§14 #12）：这些只**产数字**，代码与数据一个字节都不进本仓库；
   本项目的实现不依赖它们，基组数据仍来自 BSE 导出（逐项 diff < 1e-12）。
 

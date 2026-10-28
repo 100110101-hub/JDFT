@@ -3,6 +3,23 @@
 数据仓独立 semver（§8.6）。**任何数据改动都必须 bump version 并在此登记**，
 否则 CI 拒绝（§8.6「变更必须 bump version」）。
 
+## 0.8.0 — 2026-10-27
+
+### 新增：三个 RI 辅助基（DA-07 / IN-01 / SC-05）
+- `basis/def2-svp-ri.yaml`（H C N O，54 个壳层，max l = 3）、
+  `basis/def2-tzvp-ri.yaml`（H C N O F，95 个壳层，max l = 4）、
+  `basis/def2-universal-jkfit.yaml`（H C N O F，106 个壳层，max l = 4）。
+  三者分别对应 BSE 的 `def2-svp-rifit` / `def2-tzvp-rifit` / `def2-universal-jkfit`
+  （revision 'Data from Turbomole 7.3'），`role` 是 `ri-j` / `ri-j` / `ri-jk`
+  —— **不是轨道基组**，不能写进 `basis_name`。
+- `normalization: none`（与其余 def2 数据一致：Turbomole 的收缩系数不重新归一化，
+  由 loader 在加载时归一化一次）。
+- **能力边界（如实记账）**：`def2-tzvp-ri` 与 `def2-universal-jkfit` 含 g 函数（l = 4），
+  而球谐变换目前只到 l = 3，所以它们能通过 `data verify`、但被用作辅助基时会以
+  `Unsupported` 明确报错。SC-05 只用 `def2-svp-ri`。
+- `registry.yaml` 0.7.0 → 0.8.0；`DATA_LICENSES.md` 重新生成（19 → 22 个文件）；
+  `sources.json` 增加三条 `bse` 条目（含 sha256 钉）。
+
 ## 0.7.0 — 2026-11-07
 
 ### 新增：`functional/m06-l.yaml` 与 `functional/m06-2x.yaml`（DA-01 / DA-02 / FX-02）

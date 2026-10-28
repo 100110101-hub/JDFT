@@ -3,7 +3,7 @@
 本文件由 `scripts/gen_data_licenses.py` 生成。重跑必须得到**逐字节相同**的结果
 （排序固定 + 不含时间戳），所以它可以直接进 CI 比对。
 
-共 19 个生产数据文件。`qwb-data/examples/` 下的 SPECIMEN 不计入
+共 22 个生产数据文件。`qwb-data/examples/` 下的 SPECIMEN 不计入
 （它们是形状示例，不在 manifest 里）。
 
 其中 `qwb-data/basis/` 与 `qwb-data/ecp/` 的部分文件是从 Basis Set Exchange 导出的
@@ -15,8 +15,11 @@
 | 数据 | 版本 | 许可 | 商用 | 可再分发 | sha256（前 16 位） |
 | --- | --- | --- | --- | --- | --- |
 | `qwb-data/basis/6-311g-dp.yaml` | 1.0.0 | Apache-2.0 | true | true | `cfda92e209fe8705` |
+| `qwb-data/basis/def2-svp-ri.yaml` | 1.0.0 | Apache-2.0 | true | true | `dd7c72e050bc4240` |
 | `qwb-data/basis/def2-svp.yaml` | 1.0.0 | Apache-2.0 | true | true | `177675559ef883e0` |
+| `qwb-data/basis/def2-tzvp-ri.yaml` | 1.0.0 | Apache-2.0 | true | true | `ba72aea87b0198f3` |
 | `qwb-data/basis/def2-tzvp.yaml` | 1.0.0 | Apache-2.0 | true | true | `263b684f8c936200` |
+| `qwb-data/basis/def2-universal-jkfit.yaml` | 1.0.0 | Apache-2.0 | true | true | `5ae0422479300349` |
 | `qwb-data/basis/lanl2dz.yaml` | 1.0.1 | NOASSERTION | false | false | `bc14a7e191563cb1` |
 | `qwb-data/basis/sto-3g.yaml` | 1.0.0 | Apache-2.0 | true | true | `fce3af14b8b3ea12` |
 | `qwb-data/ecp/lanl2dz-cu.yaml` | 1.0.0 | NOASSERTION | false | false | `a44df71fd56eea38` |
@@ -32,7 +35,7 @@
 | `qwb-data/grid/grid-normal.yaml` | 1.0.0 | Apache-2.0 | true | true | `a792b362b1fdb278` |
 | `qwb-data/grid/grid-veryfine.yaml` | 1.0.0 | Apache-2.0 | true | true | `5c630f5a1ec0688d` |
 | `qwb-data/numerics/numerics.yaml` | 1.0.0 | Apache-2.0 | true | true | `fea96fd0bd356da0` |
-| `qwb-data/registry.yaml` | 0.7.0 | ? | ? | ? | `—（manifest，条目各自带` |
+| `qwb-data/registry.yaml` | 0.8.0 | ? | ? | ? | `—（manifest，条目各自带` |
 
 ## 引用
 
@@ -40,13 +43,25 @@
 
 - Self-consistent molecular orbital methods. XX. A basis set for correlated wave functions (Krishnan, Binkley, Seeger, Pople, JCP 72, 650, 1980)
 
+### `qwb-data/basis/def2-svp-ri.yaml`（def2-svp-ri 1.0.0）
+
+- Balanced basis sets of split valence, triple zeta valence and quadruple zeta valence quality for H-Rn (Weigend & Ahlrichs, PCCP 7, 3297, 2005)
+
 ### `qwb-data/basis/def2-svp.yaml`（def2-svp 1.0.0）
+
+- Balanced basis sets of split valence, triple zeta valence and quadruple zeta valence quality for H-Rn (Weigend & Ahlrichs, PCCP 7, 3297, 2005)
+
+### `qwb-data/basis/def2-tzvp-ri.yaml`（def2-tzvp-ri 1.0.0）
 
 - Balanced basis sets of split valence, triple zeta valence and quadruple zeta valence quality for H-Rn (Weigend & Ahlrichs, PCCP 7, 3297, 2005)
 
 ### `qwb-data/basis/def2-tzvp.yaml`（def2-tzvp 1.0.0）
 
 - Balanced basis sets of split valence, triple zeta valence and quadruple zeta valence quality for H-Rn (Weigend & Ahlrichs, PCCP 7, 3297, 2005)
+
+### `qwb-data/basis/def2-universal-jkfit.yaml`（def2-universal-jkfit 1.0.0）
+
+- Universal basis sets of Gaussian-type functions for the fitting of the Coulomb and exchange contributions (Weigend, PCCP 8, 1057, 2006)
 
 ### `qwb-data/basis/lanl2dz.yaml`（lanl2dz 1.0.1）
 
@@ -120,7 +135,7 @@
 - A multicenter numerical integration scheme for polyatomic molecules (Becke partitioning)
 - New Methods For Electronic Structure Calculations on Large Molecules (pseudospectral approach)
 
-### `qwb-data/registry.yaml`（qwb-data 0.7.0）
+### `qwb-data/registry.yaml`（qwb-data 0.8.0）
 
 
 ## 门禁状态

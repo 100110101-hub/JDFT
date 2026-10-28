@@ -26,6 +26,7 @@ pub mod checkpoint;
 pub mod diis;
 pub mod ecp;
 pub mod guess;
+pub mod mp2;
 pub mod pulay;
 pub mod rks;
 pub mod uhf;

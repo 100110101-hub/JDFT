@@ -34,10 +34,12 @@ pub mod deterministic;
 pub mod dipole;
 pub mod hermite2e;
 pub mod one_electron;
+pub mod ri;
 pub mod two_electron;
 
 pub use boys::boys_functions;
 #[cfg(feature = "integral-cache")]
 pub use cache::{IntegralCache, fingerprint};
 pub use one_electron::{OneElectronIntegrals, one_electron};
+pub use ri::{ThreeCenterIntegrals, inverse_sqrt, three_center, two_center_coulomb};
 pub use two_electron::{TwoElectronIntegrals, primitive_ssss, two_electron};

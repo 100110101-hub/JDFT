@@ -32,7 +32,8 @@ pub mod opt;
 use std::sync::{Arc, Mutex};
 
 use qwb_engine_api::{
-    EngineBackend, EngineError, JobInput, JobResult, JobType, Molecule, Reporter,
+    CorrelationResult, EngineBackend, EngineError, JobInput, JobResult, JobType, Molecule, Mp2Kind,
+    Reporter,
 };
 
 /// 优化过程的旁路产物（见模块文档：K2 的 `JobResult` 放不下几何）。
@@ -746,12 +747,46 @@ impl RksBackend {
                 max: input.options.scf_max_iter,
             });
         }
+        // ── M3 / SC-04：canonical MP2（闭壳层参考、单点）─────────────
+        //
+        // 参考态就是上面这一遍 SCF（**同一个**基组与**同一份** 2e 张量），所以 MP2
+        // 的分母与 `(ia|jb)` 都是自洽的；相关能进 K2 的 `correlation` 块 ——
+        // SC-04 的第三条验收就是「`correlation` 块进 `result.json`」。
+        let correlation = match &input.options.mp2 {
+            Some(mp2) if mp2.kind == Mp2Kind::Mp2 => {
+                reporter.progress("mp2", 90.0);
+                let n_occupied = closed_shell_electrons(&input.molecule)? / 2;
+                let orbital_energies: Vec<f64> = (0..result.mo_energies_hartree.len())
+                    .map(|i| result.mo_energies_hartree.get(i))
+                    .collect();
+                let outcome = qwb_scf::mp2::mp2_correlation(
+                    &tensor,
+                    &result.coefficients,
+                    &orbital_energies,
+                    n_occupied,
+                )?;
+                reporter.log(&format!(
+                    "mp2: E_corr = {:.10} Ha, n_occ = {}, n_vir = {}, \
+                     largest pair contribution = {:.6} Ha",
+                    outcome.e2_hartree,
+                    outcome.n_occupied,
+                    outcome.n_virtual,
+                    outcome.dominant_pair_energy
+                ));
+                Some(CorrelationResult::new(
+                    Mp2Kind::Mp2,
+                    outcome.e2_hartree,
+                    result.energy_hartree + outcome.e2_hartree,
+                ))
+            }
+            _ => None,
+        };
         reporter.progress("done", 100.0);
 
         let env = env::build(&self.registry);
         // S-06：偶极矩（Debye）——中性分子对原点不变，`qwb-props` 的测试里有这条自检。
         let dipole = qwb_props::dipole_debye(&basis, &input.molecule, &result.density)?;
-        Ok(JobResult::new(
+        let mut job = JobResult::new(
             result.energy_hartree,
             result.scf_converged,
             self.registry.snapshot(),
@@ -778,7 +813,18 @@ impl RksBackend {
             dipole[0],
             dipole[1],
             dipole[2]
-        )))
+        ));
+        if let Some(correlation) = correlation {
+            job = job
+                .with_log(format!(
+                    "mp2 = {}, E_corr = {:.10} Ha, E_total = {:.10} Ha",
+                    correlation.method.as_str(),
+                    correlation.e2_hartree,
+                    correlation.e_total_hartree
+                ))
+                .with_correlation(correlation);
+        }
+        Ok(job)
     }
 
     /// 几何优化（`Opt`）：BFGS + 解析梯度，收尾再跑一次单点拿轨道/偶极。
@@ -943,6 +989,29 @@ impl EngineBackend for RksBackend {
     }
 }
 
+/// 闭壳层电子数（`Σ Z − charge`）。
+///
+/// MP2 的占据轨道数就是它的一半；奇数电子在闭壳层参考里没有定义，所以显式报错
+/// 而不是悄悄取整。
+fn closed_shell_electrons(molecule: &Molecule) -> Result<usize, EngineError> {
+    let mut electrons = -i64::from(molecule.charge);
+    for atom in &molecule.atoms {
+        let z = qwb_registry::elements::atomic_number(&atom.symbol)
+            .ok_or_else(|| EngineError::Data(format!("MP2: unknown element `{}`", atom.symbol)))?;
+        electrons += i64::from(z);
+    }
+    if electrons <= 0 || electrons % 2 != 0 {
+        return Err(EngineError::InvalidInput(format!(
+            "MP2 needs an even, positive electron count, got {electrons}"
+        )));
+    }
+    usize::try_from(electrons).map_err(|_| {
+        EngineError::Internal(format!(
+            "MP2: electron count {electrons} does not fit usize"
+        ))
+    })
+}
+
 /// 阶段二选项的"契约已就位、引擎未实现"守卫。
 ///
 /// 判据不是"字段非空就拒"：`solvent_model: vacuum` 这种与阶段一行为等价的写法要放过，
@@ -968,10 +1037,45 @@ fn reject_unimplemented_options(input: &JobInput) -> Result<(), EngineError> {
             )));
         }
     }
-    if options.mp2.is_some() {
-        return Err(EngineError::Unsupported(
-            "options.mp2 is not wired yet (MP2/RI-MP2 is phase-2 M3 / SC-04..05)".into(),
-        ));
+    if let Some(mp2) = &options.mp2 {
+        // M3 / SC-04：**canonical MP2** 已接（闭壳层参考、单点）。
+        // SC-05（RI-MP2）还没做，显式拒绝 —— 它的验收要求「与 canonical 差 < 0.1 mHa」
+        // 且 `ri_error_hartree` 落盘，两件事没做之前不能假装成功。
+        match mp2.kind {
+            Mp2Kind::Mp2 => {}
+            _ => {
+                return Err(EngineError::Unsupported(format!(
+                    "options.mp2.kind = `{}` is not wired yet (RI-MP2 is phase-2 M3 / SC-05: \
+                     needs the RI auxiliary basis DA-07 and 3-center integrals IN-01)",
+                    mp2.kind.as_str()
+                )));
+            }
+        }
+        mp2.validate()?;
+        if let Some(scf_type) = options.scf_type
+            && scf_type.is_unrestricted()
+        {
+            return Err(EngineError::Unsupported(format!(
+                "options.mp2 needs a closed-shell reference; scf_type = `{}` is open-shell \
+                 (open-shell MP2 is not in phase-2 M3)",
+                scf_type.as_str()
+            )));
+        }
+        if input.jobtype != JobType::Sp {
+            return Err(EngineError::Unsupported(format!(
+                "options.mp2 currently supports `sp` only (the MP2 gradient is not implemented); \
+                 jobtype = `{}`",
+                input.jobtype.as_str()
+            )));
+        }
+        if options.ecp_name.is_some() {
+            // ECP 会把核电子拿掉，占据空间要按 `z_eff` 数；这条路径没做（M3 不需要）。
+            return Err(EngineError::Unsupported(
+                "options.mp2 with an ECP is not implemented (the occupied space would have to \
+                 be counted from z_eff; M3 validates MP2 on all-electron references)"
+                    .into(),
+            ));
+        }
     }
     if options.excited_states.is_some() {
         return Err(EngineError::Unsupported(

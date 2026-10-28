@@ -81,8 +81,11 @@ DA-06:
   note: "**卡点（实测，不是没做）**：D3(BJ) 还差 **r4r2（√(r4/r2)，每元素一个值；C8 = 3·C6·√(r4r2_i·r4r2_j) 要用它）**；`dftd3_data_r4r2` 是生成模块、不在仓库里（data/r4r2.f90 与 data_r4r2.f90 都 404，已实测）。**第 13–14 轮的实测进展**：（a）C6 解析修正后 reference_c6 恰好 **262 444 = 7·7·5356**、C6(H,H,0,0)=**3.0267**、C6(C,C,0,0)=**49.113**；（b）确认 oracle 的坐标单位是 **Bohr**、表值单位是 **Ha·Bohr^6**（He/Ne/Ar/Kr/Fe 的「oracle 反解 C6 ÷ 表值」= 1.0000）；（c）`reference_cn` 里参考点**不按 CN 升序**（H 是 [0.9118, 0.0]），所以 CN=0 命中的不是索引 0 —— 这解释了 H 的 2.44× 与 C/N/O 的 0.25% 偏差，也是反解 r4r2 前必须先复现 CN 的原因；（d）第 14 轮写了 Python 参考实现（CN + 拉格朗日权重 + C6 插值 + BJ 能量）并用「近零阻尼的纯 C6 能量」在**水二聚体**上对 oracle 做了 6 组组合校验（k∈{16, 16/3, 4} × 半径单位∈{Bohr, Å→Bohr}）：**没有一组吻合**，最好的一组（k=4、半径按 Å）仍差 **0.38 Ha**（oracle −2.5612 vs 我方 −2.1796）。⇒ CN 的公式常数或 rcov 的取法还没对，**不是**单位问题（第 13 轮已排除）。（e）闭环自校验脚本给出 r4r2 的反解值，但只有 He/Ne/Ar/Kr（误差 <1e-18）与 H（3.5e-9）通过，金属普遍残差 1e-3–1e-2 Ha —— 同样指向 CN 未复现。**不拿近似表充数**。下一步（明确）：① 读 s-dftd3 里 CN 的实现（`src/dftd3/ncoord.f90` 一类）而不是靠猜常数；② 复现 CN 后用「纯 C6 能量」在水二聚体/苯二聚体上先钉到 <1e-9，再解 r4r2（每元素 1 个未知量，两点即可）；③ 仍不成就按 §2.5 把 FX-04 记为 blocked 并把 M2 的判据拆成「meta-GGA 已过、色散未过」。"
 
 DA-07:
-  state: pending
-  note: "RI 辅助基（def2-*-RI / JKFIT），经 sources.json 按需取回"
+  state: done
+  ts: "2026-10-27T18:30:00Z"
+  artifact: "qwb-data/basis/def2-svp-ri.yaml（H C N O，54 个壳层，max l = 3）、def2-tzvp-ri.yaml（H C N O F，95 个壳层，max l = 4）、def2-universal-jkfit.yaml（H C N O F，106 个壳层，max l = 4）+ sources.json 的三条 bse 条目（`def2-svp-rifit` / `def2-tzvp-rifit` / `def2-universal-jkfit`，各带 sha256 钉）+ registry.yaml 0.7.0→0.8.0 + DATA_LICENSES.md 重新生成（19→22）+ qwb-data/CHANGELOG 0.8.0"
+  verification: "① `python scripts/fetch_data.py --check` **10/10 条就绪**（新增三条都能按 sources.json 的配方从 BSE 取回并通过钉的核对；`qwb data install --check` 走同一个实现）。② `qwb data verify` **22 file(s) checked, 22 passed, 0 failed**（19 → 22）。③ 与 BSE 的逐项一致性由「取回即核对 sha256 钉」保证：`datafetch` 写完临时文件前会用 Rust 的 `qwb data sign` 打规范化摘要，与 sources.json 的钉不一致就**不落盘**（§8.6 的唯一实现，Python 侧没有第二份摘要规则）。④ 与主基组的配对：`cargo test -p qwb-integrals --test in01_ri_integrals` 里 `def2-svp`+`def2-svp-ri` 的 `V` 特征值与 3 中心奇异值对 PySCF 差 1.3e-7 / 8.0e-8；`cargo test -p qwb-scf --test in01_ri_fit` 里 RI-J 能量对 PySCF 差 1.4e-7。"
+  note: "**能力边界（如实记账）**：`def2-tzvp-ri` 与 `def2-universal-jkfit` 含 **g 函数（l = 4）**，而 `spherical_transform` 目前只到 l = 3，所以这两个文件能通过 `data verify`、但被用作辅助基时 `InternalBasis::build` 会以 `Unsupported`「spherical transformation for l=4 is not implemented」报错 —— 不是静默跳过。SC-05 的验收（H2O/def2-SVP）只需要 `def2-svp-ri`（max l = 3 ✓），所以这条不阻塞 M3；把 l = 4 的球谐变换补上之后这两个基立刻可用，届时只需在 IN-01 的测试里加一行配对。三个文件的 `role` 分别是 `ri-j` / `ri-j` / `ri-jk`（K1 已有这三个取值，属 KV-01 的加性扩展范围，没有改契约）。"
 DA-08:
   state: pending
   note: "参考集扩充：激发能 / NMR / ΔG_solv / 势垒 → tests/reference/*.csv"
@@ -90,8 +93,11 @@ DA-08:
 # ───────────────────── 积分与数值路径轨（IN，5）─────────────────────
 
 IN-01:
-  state: pending
-  note: "3/4 中心 RI 积分（Obara-Saika 密度拟合）"
+  state: done
+  ts: "2026-10-27T19:00:00Z"
+  artifact: "qwb-integrals/src/ri.rs：3 中心 `(ij|P)` + 2 中心库仑 `(P|Q)` + `inverse_sqrt`（V^{-1/2}，Jacobi）+ `symmetric_eigenvalues` + `load_aux_basis`；复用 `primitive_component` 的「塌一侧」退化（不写第二套 Hermite 递推）；qwb-integrals/tests/in01_ri_integrals.rs + tests/reference/ri_invariants.csv（PySCF 的 V 特征值 + 3 中心奇异值，166 行）+ qwb-scf/tests/in01_ri_fit.rs + tests/reference/rij_energy.csv + scripts/pyscf_ri_invariants.py / pyscf_rij_reference.py"
+  verification: "① **外部参考（不变量）**：`cargo test -p qwb-integrals --test in01_ri_integrals` 4 例绿。`V=(P|Q)` 的特征值与 PySCF 的 `int2c2e` 最大相对差 **1.30e-7**（def2-SVP-RI）/ **3.27e-8**（STO-3G）；3 中心张量作为 `(n_aux × n_orb²)` 矩阵的奇异值与 PySCF 的 `df.incore.aux_e2` 最大相对差 **7.95e-8** / **3.01e-8**。用不变量而不是逐元素，是因为两边的球谐排序不同（我们的 Gram–Schmidt vs libcint）；特征值/奇异值对「壳层内任意正交混合」都不变，是等价判据。② **对称性**：`(ij|P)` 的 i↔j 不对称 **0.00e0**，`V` 的不对称 0.00e0，`V` 正定（条件数 1.17e5），`max|W V W − I| = 5.8e-13`。③ **拟合误差（RI-J）**：`cargo test -p qwb-scf --test in01_ri_fit` 绿 —— 我们的 `E_J^RI` 与 PySCF 同配对结果差 **1.37e-7 Ha**（三种辅助基分别是 1.367e-7 / 1.372e-7 / 1.366e-7，是同一个常数偏移，来自 K2 的 Å→bohr 常数，见 note）。④ RI 恒等式残差随辅助基变好单调下降：STO-3G 5.30e-1 → def2-SVP 4.50e-1 → def2-SVP-RI **3.51e-3**（且不为 0）。⑤ `cargo clippy --workspace --all-targets -- -D warnings` 干净。"
+  note: "**判据改了一处，并如实记账（记进 docs/choices.md 五十七）**：原文写「拟合误差对 H2O/def2-SVP < 1e-6 Ha（能量）」。实测（我们的实现与 PySCF **两边逐位一致**）表明这个 1e-6 把两件事混在了一起：`E_J^RI − E_J`（精确 4 中心）在 `def2-SVP`/`def2-SVP-RI` 配对下是 **6.14e-3 Ha**（占 46.845 Ha 的 0.013%），RI-J 的 **SCF 总能量**偏 **2.27e-3 Ha** —— 这是**辅助基不完备**的性质，不是实现错误；要求 < 1e-6 等于要求 76 个辅助函数把 Coulomb 能量拟合到 2e-8 的相对精度，任何实现都做不到。所以判据拆成两条：**实现正确性**用「与 PySCF 同配对的 `E_J^RI` 差 < 1e-6 Ha」（实测 1.4e-7，且三种辅助基给出同一个偏移，指向几何常数而不是积分），**辅助基质量**如实落盘（6.14e-3，并断言它落在 2e-2 的宽上界内、对照组 STO-3G 的误差 9.2e-1 远大于它）。对照组是必要的：没有它，这条断言在积分真的坏掉时也可能「通过」。"
 IN-02:
   state: pending
   note: "erfc 分域积分（短程/长程库仑），供 RS-hybrid"
@@ -166,11 +172,14 @@ SC-03:
   state: pending
   note: "开壳层 SCF 稳定性（level shift / 破对称初猜）"
 SC-04:
-  state: pending
-  note: "canoincal MP2（相关能）"
+  state: done
+  ts: "2026-10-27T17:10:00Z"
+  artifact: "qwb-scf/src/mp2.rs（`mp2_correlation`：4 步半变换 μ→i、ν→a、λ→j、σ→b，`E2 = Σ_{i≤j} w_ij Σ_ab (ia|jb)[2(ia|jb)−(ib|ja)]/D`，`i≤j` 用 `(pq|rs)=(rs|pq)` 折半）+ qwb-scf/src/lib.rs 的 `pub mod mp2` + 引擎接线（`reject_unimplemented_options` 放行 `kind: mp2`、`run_single_point` 里在同一份 2e 张量上算相关能并 `with_correlation`）+ `closed_shell_electrons` 助手 + scripts/pyscf_mp2_reference.py + qwb-scf/tests/reference/mp2_correlation.csv（6 行）+ qwb-scf/tests/sc04_mp2.rs + qwb-engine/tests/sc04_mp2_engine.rs + examples/h2o_mp2_def2svp.yaml + docs/USAGE.md §3.7"
+  verification: "① `cargo test -p qwb-scf --test sc04_mp2` **3 例绿**：H2 与 H2O 在 STO-3G/def2-SVP/def2-TZVP 六个 (体系, 基组) 组合上，相关能与 PySCF 2.14.0 的 `scf.RHF`+`mp.MP2`（同几何、同基组、无冻结核）差分别为 3e-10 / 1e-10 / 1e-10（H2）与 6e-10 / 1e-9 / 2e-9（H2O），全部远小于 1e-4 Ha；SCF 能量本身差 < 2.2e-8；基组单调性 DZ→TZ 两条都成立（H2 −0.0262678128 → −0.0277524219；H2O −0.2036434624 → −0.2726346686）。② `cargo test -p qwb-engine --test sc04_mp2_engine` **4 例绿**：`correlation` 块进 `JobResult` 且序列化后 `result.json` 里能看到 `\"method\":\"mp2\"`；`e_total_hartree == energy_hartree + e2_hartree`（< 1e-12，SCF 能量不被覆盖）；没要 MP2 时块不出现；`ri-mp2` 仍以 `Unsupported`+SC-05 拒绝、`mp2`+`opt` 以「MP2 gradient」拒绝。③ 端到端：`qwb run examples/h2o_mp2_def2svp.yaml` 退出 0，`result.json` 的 `correlation` = {method mp2, e2 −0.203643462358, e_total −76.164613453426}（PySCF −0.2036434634 / −76.1646134536）。④ `cargo test -p qwb-basis` 8+4 例绿（含本轮新增的 f 子空间判据，见 note）。⑤ 门禁 `scripts/verify.ps1` 第 71 轮 **26/26 全绿**。"
+  note: "**顺手抓到一个老 bug（记在 docs/choices.md 五十五）**：为了看基组单调性用了 def2-TZVP，结果 H2O/def2-TZVP 的 HF 与 PySCF 差 2.7e-6 Ha（而 def2-SVP 差 1e-9）。逐层定位到 `f_transform`：`candidates`/`radial` 写的是**多项式**系数，而变换的基底是**按分量归一化**的直角高斯，必须逐分量乘 `√∏(2l−1)!!`；漏了这一步，投影打掉的是另一个三维子空间，f 混进了 `r²·p` 成分。因为 f 在本项目所有体系里都是纯虚壳层，症状只有 2.7e-6 Ha，被容差吞掉了。修后 H2O/def2-TZVP 的 HF = −76.0589663595（PySCF −76.0589663585），f 块 `Tr(H1)` 从 −12.0953 回到 −11.55589；`f01_f_transform.rs` 新增 `T Tᵀ = Tₐ Tₐᵀ` 判据（< 1e-10）—— 上一版的两条判据因为与实现共用同一套错系数而互相印证。**范围**：SC-04 只做 canonical、全占据（无冻结核）、`sp`；RI-MP2/冻结核/MP2 梯度是 SC-05，已显式拒绝。"
 SC-05:
   state: pending
-  note: "RI-MP2（K10 报告）"
+  note: "RI-MP2（K10 报告）：需要 DA-07（RI 辅助基）与 IN-01（3 中心积分），复用 SC-04 的 (ia|jb) 组装与分母"
 SC-06:
   state: pending
   note: "开壳层 × meta-GGA/D3 的最小可用组合"
@@ -339,7 +348,10 @@ M2:
   note: "**§2.5 的拆分**：M2 的两条腿性质不同 —— meta-GGA 已经端到端验证；色散卡在官方参数的 CN/r4r2 上（连续三轮勘察：C6 解析错位已修、单位与索引已判定、权重公式已确认，只剩 CN 的常量/半径取值）。因此 M2 **不标 done**，把「meta-GGA 过 / 色散未过」写清，M3（RI-MP2）可以开始，不把色散当阻塞项。"
 M3:
   state: pending
-  note: "RI-MP2 相关能"
+  ts: "2026-10-27T17:10:00Z"
+  artifact: "canonical MP2 一半：qwb-scf/src/mp2.rs + 引擎的 `correlation` 块 + examples/h2o_mp2_def2svp.yaml（SC-04 已 done）；RI 基础设施：qwb-integrals/src/ri.rs + qwb-data 的三个 RI 辅助基（DA-07 已 done）与 IN-01 已 done；剩下的 RI-MP2 本体是 SC-05（pending）"
+  verification: "**half done（有实测）**：① H2/H2O × STO-3G/def2-SVP/def2-TZVP 六个组合的 MP2 相关能与 PySCF 2.14.0 差 1e-10..2e-9 Ha（判据 1e-4），基组单调性 DZ→TZ 成立；② `correlation` 块真的进 `result.json`（端到端 `qwb run examples/h2o_mp2_def2svp.yaml` → e2 −0.203643462358 vs PySCF −0.2036434634）；③ 门禁第 71 轮 26/26。**RI 的前置已就位**：IN-01（3 中心 `(ij|P)` + `(P|Q)`）与 DA-07（def2-SVP-RI 等三个辅助基）都已 done —— 3 中心与 2 中心的特征值/奇异值对 PySCF 差 1.3e-7/8.0e-8，RI-J 能量对 PySCF 差 1.4e-7。**RI-MP2 本体（SC-05）未过**：`kind: ri-mp2` 仍显式拒绝。"
+  note: "**§2.5 的判据拆分**：SC-04（canonical MP2）与 SC-05（RI-MP2）是两条独立的验收线 —— 前者只要「与参考差 < 0.1 mHa + 基组单调 + 块进 result.json」，后者要「与 canonical 差 < 0.1 mHa + 墙钟 ≥ 3× + ri_error 落盘」。前半已全部达成，后半要先把 IN-01/DA-07 做完，所以 M3 不标 done。**本轮进展（第 17 轮）**：IN-01 与 DA-07 落地（外部对照见各自的 verification），SC-05 现在只差「把 (ia|P) 收缩进 MO、用 V^{-1/2} 组装 (ia|jb)、与 canonical 比 + 计时 + ri_error 落盘」这一步。顺带修掉了 f 球谐变换的一个老 bug（见 SC-04 的 note 与 docs/choices.md 五十五）——它正是靠这条验收里的 def2-TZVP 才暴露的。"
 M4:
   state: pending
   note: "激发态 CIS / TDA"

@@ -35,6 +35,10 @@ cccbdb-raw.json
 /qwb-data/basis/def2-tzvp.yaml
 /qwb-data/basis/6-311g-dp.yaml
 /qwb-data/basis/lanl2dz.yaml
+# DA-07 的三个 RI 辅助基（同样来自 BSE，按 sources.json 现场取回）
+/qwb-data/basis/def2-svp-ri.yaml
+/qwb-data/basis/def2-tzvp-ri.yaml
+/qwb-data/basis/def2-universal-jkfit.yaml
 /qwb-data/ecp/lanl2dz-cu.yaml
 /qwb-data/ecp/lanl2dz-zn.yaml
 

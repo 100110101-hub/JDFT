@@ -89,18 +89,18 @@ impl TwoElectronIntegrals {
 }
 
 /// 一个壳层装配时需要的全部信息。
-struct ShellBlock {
-    center: [f64; 3],
-    exponents: Vec<f64>,
-    coefficients: Vec<f64>,
+pub(crate) struct ShellBlock {
+    pub(crate) center: [f64; 3],
+    pub(crate) exponents: Vec<f64>,
+    pub(crate) coefficients: Vec<f64>,
     /// 直角坐标分量（与 `Transform` 的行一一对应）。
-    components: Vec<[u32; 3]>,
-    transform: Transform,
+    pub(crate) components: Vec<[u32; 3]>,
+    pub(crate) transform: Transform,
     /// 该壳层第一个球谐 AO 的全局下标。
-    first_function: usize,
+    pub(crate) first_function: usize,
 }
 
-fn shell_block(shell: &InternalShell) -> Result<ShellBlock, EngineError> {
+pub(crate) fn shell_block(shell: &InternalShell) -> Result<ShellBlock, EngineError> {
     let transform = spherical_transform(shell.l, shell.angular).ok_or_else(|| {
         EngineError::Unsupported(format!(
             "spherical transformation for l={} is not implemented (R-06; first phase covers s/p/d)",
@@ -130,12 +130,17 @@ fn shell_block(shell: &InternalShell) -> Result<ShellBlock, EngineError> {
 }
 
 /// 四维扁平索引的步长。
-fn strides(dims: [usize; 4]) -> [usize; 4] {
+pub(crate) fn strides(dims: [usize; 4]) -> [usize; 4] {
     [dims[1] * dims[2] * dims[3], dims[2] * dims[3], dims[3], 1]
 }
 
 /// 一个壳层四元组的**直角坐标**块（含归一化与收缩）。
-fn cartesian_block(a: &ShellBlock, b: &ShellBlock, c: &ShellBlock, d: &ShellBlock) -> Vec<f64> {
+pub(crate) fn cartesian_block(
+    a: &ShellBlock,
+    b: &ShellBlock,
+    c: &ShellBlock,
+    d: &ShellBlock,
+) -> Vec<f64> {
     let dims = [
         a.components.len(),
         b.components.len(),
@@ -200,7 +205,7 @@ fn cartesian_block(a: &ShellBlock, b: &ShellBlock, c: &ShellBlock, d: &ShellBloc
 /// 所以「除轴以外的其余下标」必须按各自的 stride 重新编码一次。早期实现复用了输入的
 /// 线性偏移 `base` 再加输出 stride，只要变换的不是最后一根轴就会越界——
 /// def2-SVP 的水（d 壳层）正是这样炸掉的。
-fn contract(
+pub(crate) fn contract(
     data: &[f64],
     dims: [usize; 4],
     axis: usize,

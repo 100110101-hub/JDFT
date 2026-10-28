@@ -88,11 +88,12 @@ fn open_shell_scf_type_is_rejected_with_its_wp() {
 }
 
 #[test]
-fn mp2_is_rejected_with_its_wp() {
+fn ri_mp2_is_rejected_with_its_wp() {
+    // canonical MP2 在 M3 已接（SC-04）；RI-MP2（SC-05）还没做，必须显式拒绝。
     let options = TaskOptions::default()
         .with_mp2(Mp2Options::new(Mp2Kind::RiMp2).with_aux_basis("def2-svp-ri"));
     let message = unsupported(&input("svwn5", 1, options));
-    assert!(message.contains("SC-04"), "{message}");
+    assert!(message.contains("SC-05"), "{message}");
     assert!(message.contains("RI-MP2"), "{message}");
 }
 
@@ -145,11 +146,13 @@ fn phase1_equivalent_options_are_not_rejected() {
 
 #[test]
 fn rejection_happens_before_any_numerics() {
-    let options = TaskOptions::default().with_mp2(Mp2Options::new(Mp2Kind::Mp2));
+    // canonical MP2 已经实装，所以这里用**还没做**的路径（RI-MP2 / SC-05）钉"立刻拒绝"。
+    let options = TaskOptions::default()
+        .with_mp2(Mp2Options::new(Mp2Kind::RiMp2).with_aux_basis("def2-svp-ri"));
     let started = Instant::now();
     let message = unsupported(&input("svwn5", 1, options));
     let elapsed = started.elapsed();
-    assert!(message.contains("SC-04"), "{message}");
+    assert!(message.contains("SC-05"), "{message}");
     // 一次 STO-3G/H2 的 SCF 在本机也要几十毫秒；"立刻拒绝"应当是毫秒级。
     assert!(
         elapsed.as_millis() < 50,

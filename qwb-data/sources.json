@@ -20,7 +20,13 @@
       "fetch": {
         "provider": "bse",
         "basis": "sto-3g",
-        "elements": [1, 6, 7, 8, 9]
+        "elements": [
+          1,
+          6,
+          7,
+          8,
+          9
+        ]
       },
       "transcribe": {
         "name": "sto-3g",
@@ -33,7 +39,11 @@
             "url": "https://www.basissetexchange.org/basis/sto-3g/"
           }
         ],
-        "license": {"spdx": "Apache-2.0", "commercial_ok": true, "redistribute_ok": true},
+        "license": {
+          "spdx": "Apache-2.0",
+          "commercial_ok": true,
+          "redistribute_ok": true
+        },
         "created": "2026-10-22T23:16:10Z",
         "angular": "spherical",
         "normalization": "l2",
@@ -47,7 +57,12 @@
       "fetch": {
         "provider": "bse",
         "basis": "def2-svp",
-        "elements": [1, 6, 7, 8]
+        "elements": [
+          1,
+          6,
+          7,
+          8
+        ]
       },
       "transcribe": {
         "name": "def2-svp",
@@ -60,7 +75,11 @@
             "url": "https://www.basissetexchange.org/basis/def2-svp/"
           }
         ],
-        "license": {"spdx": "Apache-2.0", "commercial_ok": true, "redistribute_ok": true},
+        "license": {
+          "spdx": "Apache-2.0",
+          "commercial_ok": true,
+          "redistribute_ok": true
+        },
         "created": "2026-10-22T23:55:00Z",
         "angular": "spherical",
         "normalization": "none",
@@ -74,7 +93,13 @@
       "fetch": {
         "provider": "bse",
         "basis": "def2-tzvp",
-        "elements": [1, 6, 7, 8, 9]
+        "elements": [
+          1,
+          6,
+          7,
+          8,
+          9
+        ]
       },
       "transcribe": {
         "name": "def2-tzvp",
@@ -87,7 +112,11 @@
             "url": "https://www.basissetexchange.org/basis/def2-tzvp/"
           }
         ],
-        "license": {"spdx": "Apache-2.0", "commercial_ok": true, "redistribute_ok": true},
+        "license": {
+          "spdx": "Apache-2.0",
+          "commercial_ok": true,
+          "redistribute_ok": true
+        },
         "created": "2026-10-25T00:00:00Z",
         "angular": "spherical",
         "normalization": "none",
@@ -101,7 +130,12 @@
       "fetch": {
         "provider": "bse",
         "basis": "6-311G(d,p)",
-        "elements": [1, 6, 7, 8]
+        "elements": [
+          1,
+          6,
+          7,
+          8
+        ]
       },
       "transcribe": {
         "name": "6-311g(d,p)",
@@ -114,7 +148,11 @@
             "url": "https://www.basissetexchange.org/basis/6-311g_d_p/"
           }
         ],
-        "license": {"spdx": "Apache-2.0", "commercial_ok": true, "redistribute_ok": true},
+        "license": {
+          "spdx": "Apache-2.0",
+          "commercial_ok": true,
+          "redistribute_ok": true
+        },
         "created": "2026-10-25T00:00:00Z",
         "angular": "spherical",
         "normalization": "none",
@@ -128,7 +166,12 @@
       "fetch": {
         "provider": "bse",
         "basis": "lanl2dz",
-        "elements": [1, 8, 29, 30]
+        "elements": [
+          1,
+          8,
+          29,
+          30
+        ]
       },
       "transcribe": {
         "name": "lanl2dz",
@@ -141,7 +184,11 @@
             "url": "https://www.basissetexchange.org/basis/lanl2dz/"
           }
         ],
-        "license": {"spdx": "NOASSERTION", "commercial_ok": false, "redistribute_ok": false},
+        "license": {
+          "spdx": "NOASSERTION",
+          "commercial_ok": false,
+          "redistribute_ok": false
+        },
         "created": "2026-10-26T14:40:00Z",
         "angular": "spherical",
         "normalization": "none",
@@ -150,12 +197,124 @@
       "sha256": "bc14a7e191563cb1cb3433e5722901f737cc4995b57758a497a2159c312cb5d7"
     },
     {
+      "path": "basis/def2-svp-ri.yaml",
+      "kind": "basis",
+      "fetch": {
+        "provider": "bse",
+        "basis": "def2-svp-rifit",
+        "elements": [
+          1,
+          6,
+          7,
+          8
+        ]
+      },
+      "transcribe": {
+        "name": "def2-svp-ri",
+        "version": "1.0.0",
+        "notes": "Transcribed from the BSE export of def2-SVP-RI (revision 'Data from Turbomole 7.3') for H/C/N/O; spherical. This is the Coulomb-fitting (RI-J) basis of the def2 family; the same set is used as the RI-MP2 auxiliary basis (SC-05). Declared normalization=none on purpose: the exported contraction coefficients are not renormalized, so the loader normalizes once at load time (project.md 8.1).",
+        "citations": [
+          {
+            "title": "Balanced basis sets of split valence, triple zeta valence and quadruple zeta valence quality for H-Rn (Weigend & Ahlrichs, PCCP 7, 3297, 2005)",
+            "doi": "10.1039/b508541a",
+            "url": "https://www.basissetexchange.org/basis/def2-svp-rifit/"
+          }
+        ],
+        "license": {
+          "spdx": "Apache-2.0",
+          "commercial_ok": true,
+          "redistribute_ok": true
+        },
+        "created": "2026-10-27T18:00:00Z",
+        "angular": "spherical",
+        "normalization": "none",
+        "role": "ri-j"
+      },
+      "sha256": "dd7c72e050bc4240a5ee1b9b0a1f08eb5ed32ad122b8b6d6f277de0f312bd9ad"
+    },
+    {
+      "path": "basis/def2-tzvp-ri.yaml",
+      "kind": "basis",
+      "fetch": {
+        "provider": "bse",
+        "basis": "def2-tzvp-rifit",
+        "elements": [
+          1,
+          6,
+          7,
+          8,
+          9
+        ]
+      },
+      "transcribe": {
+        "name": "def2-tzvp-ri",
+        "version": "1.0.0",
+        "notes": "Transcribed from the BSE export of def2-TZVP-RI (revision 'Data from Turbomole 7.3') for H/C/N/O/F; spherical. Coulomb-fitting (RI-J) basis of the def2 family, also used as the RI-MP2 auxiliary basis (SC-05). normalization=none on purpose (see def2-svp-ri). Contains g functions (l = 4): the spherical transformation currently stops at l = 3, so using this as an auxiliary basis is rejected explicitly.",
+        "citations": [
+          {
+            "title": "Balanced basis sets of split valence, triple zeta valence and quadruple zeta valence quality for H-Rn (Weigend & Ahlrichs, PCCP 7, 3297, 2005)",
+            "doi": "10.1039/b508541a",
+            "url": "https://www.basissetexchange.org/basis/def2-tzvp-rifit/"
+          }
+        ],
+        "license": {
+          "spdx": "Apache-2.0",
+          "commercial_ok": true,
+          "redistribute_ok": true
+        },
+        "created": "2026-10-27T18:00:00Z",
+        "angular": "spherical",
+        "normalization": "none",
+        "role": "ri-j"
+      },
+      "sha256": "ba72aea87b0198f3dc54398bc4101d269dec75f0ff99bfbf8a7f72041e974d2d"
+    },
+    {
+      "path": "basis/def2-universal-jkfit.yaml",
+      "kind": "basis",
+      "fetch": {
+        "provider": "bse",
+        "basis": "def2-universal-jkfit",
+        "elements": [
+          1,
+          6,
+          7,
+          8,
+          9
+        ]
+      },
+      "transcribe": {
+        "name": "def2-universal-jkfit",
+        "version": "1.0.0",
+        "notes": "Transcribed from the BSE export of def2-universal-JKFIT (revision 'Data from Turbomole 7.3') for H/C/N/O/F; spherical. Joint Coulomb+exchange fitting basis for the def2 family (RI-JK, IN-04). normalization=none on purpose (see def2-svp-ri). Contains g functions (l = 4): see def2-tzvp-ri.",
+        "citations": [
+          {
+            "title": "Universal basis sets of Gaussian-type functions for the fitting of the Coulomb and exchange contributions (Weigend, PCCP 8, 1057, 2006)",
+            "doi": "10.1039/b515623h",
+            "url": "https://www.basissetexchange.org/basis/def2-universal-jkfit/"
+          }
+        ],
+        "license": {
+          "spdx": "Apache-2.0",
+          "commercial_ok": true,
+          "redistribute_ok": true
+        },
+        "created": "2026-10-27T18:00:00Z",
+        "angular": "spherical",
+        "normalization": "none",
+        "role": "ri-jk"
+      },
+      "sha256": "5ae042247930034949f51fcd965556113c50924b8d0ab3b9591ee4acc004c811"
+    },
+    {
       "path": "ecp/lanl2dz-cu.yaml",
       "kind": "ecp",
       "fetch": {
         "provider": "bse",
         "basis": "lanl2dz",
-        "elements": [29]
+        "elements": [
+          29
+        ]
       },
       "transcribe": {
         "name": "lanl2dz-cu",
@@ -168,7 +327,11 @@
             "url": "https://www.basissetexchange.org/basis/lanl2dz/"
           }
         ],
-        "license": {"spdx": "NOASSERTION", "commercial_ok": false, "redistribute_ok": false},
+        "license": {
+          "spdx": "NOASSERTION",
+          "commercial_ok": false,
+          "redistribute_ok": false
+        },
         "created": "2026-10-26T14:00:00Z",
         "element": "Cu"
       },
@@ -180,7 +343,9 @@
       "fetch": {
         "provider": "bse",
         "basis": "lanl2dz",
-        "elements": [30]
+        "elements": [
+          30
+        ]
       },
       "transcribe": {
         "name": "lanl2dz-zn",
@@ -193,7 +358,11 @@
             "url": "https://www.basissetexchange.org/basis/lanl2dz/"
           }
         ],
-        "license": {"spdx": "NOASSERTION", "commercial_ok": false, "redistribute_ok": false},
+        "license": {
+          "spdx": "NOASSERTION",
+          "commercial_ok": false,
+          "redistribute_ok": false
+        },
         "created": "2026-10-26T14:00:00Z",
         "element": "Zn"
       },

@@ -3,7 +3,7 @@
 # （否则 grid 的 normal 等级会有两个定义、get_grid_by_level 歧义）。
 schema_version: 1.0.0
 name: qwb-data
-version: 0.7.0
+version: 0.8.0
 created: 2026-10-22T22:53:00Z
 features:
   - "jobtype:sp"
@@ -33,6 +33,19 @@ bases:
   - name: lanl2dz
     path: basis/lanl2dz.yaml
     sha256: bc14a7e191563cb1cb3433e5722901f737cc4995b57758a497a2159c312cb5d7
+  # DA-07：RI 辅助基（不是轨道基组，`role: ri-j` / `ri-jk`）。SC-05 用
+  # def2-svp-ri 配 def2-svp 做 RI-MP2；后两个带 g 函数（l = 4），而球谐变换目前
+  # 只到 l = 3，所以它们能被加载/校验、但**用作辅助基时会被显式拒绝**
+  # （见 docs/status-v2.yaml 的 DA-07）。
+  - name: def2-svp-ri
+    path: basis/def2-svp-ri.yaml
+    sha256: dd7c72e050bc4240a5ee1b9b0a1f08eb5ed32ad122b8b6d6f277de0f312bd9ad
+  - name: def2-tzvp-ri
+    path: basis/def2-tzvp-ri.yaml
+    sha256: ba72aea87b0198f3dc54398bc4101d269dec75f0ff99bfbf8a7f72041e974d2d
+  - name: def2-universal-jkfit
+    path: basis/def2-universal-jkfit.yaml
+    sha256: 5ae042247930034949f51fcd965556113c50924b8d0ab3b9591ee4acc004c811
 # D-07：ECP 数据按元素一文件（K1 的 `Ecp` 只有单个 `element` 字段），
 # 名字用 `<家族>-<元素>`；与 `basis/lanl2dz.yaml` 通过 Registry::load_pair 配对。
 ecps:
