@@ -41,6 +41,28 @@ pub struct Tessera {
     pub atom_index: usize,
 }
 
+impl Tessera {
+    /// 构造一个表面碎片。
+    ///
+    /// 面积由调用方给出（解析 caps 的精确值），这里不做几何自洽检查 ——
+    /// 面积与中心不自洽会让 COSMO 的方程失去物理意义，所以生产代码一律走
+    /// [`cavity`] / [`analytic_area_volume`]。
+    #[must_use]
+    pub fn new(
+        center_angstrom: [f64; 3],
+        normal: [f64; 3],
+        area_angstrom2: f64,
+        atom_index: usize,
+    ) -> Self {
+        Self {
+            center_angstrom,
+            normal,
+            area_angstrom2,
+            atom_index,
+        }
+    }
+}
+
 /// 空腔几何。
 #[derive(Debug, Clone, PartialEq)]
 #[non_exhaustive]

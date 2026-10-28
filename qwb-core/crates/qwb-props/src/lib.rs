@@ -16,6 +16,7 @@
 #![deny(missing_docs)]
 
 pub mod cavity;
+pub mod cosmo;
 
 use qwb_basis::InternalBasis;
 use qwb_engine_api::Molecule;
