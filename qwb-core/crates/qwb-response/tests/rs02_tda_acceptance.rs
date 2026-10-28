@@ -73,6 +73,7 @@ fn load_reference(species: &str, basis: &str) -> Vec<Reference> {
     out
 }
 
+/// 返回 TDA 结果（`excitations` 只含最低 `n_states` 个，`oscillator_sum` 是全空间）。
 fn solve(basis_name: &str) -> qwb_response::TdaResult {
     let registry = Registry::open(data_root()).expect("qwb-data");
     let molecule = water();
@@ -145,7 +146,25 @@ fn tda_excitations_match_pyscf_for_water_sto3g() {
 fn tda_excitations_match_pyscf_for_water_def2svp() {
     let result = solve("def2-svp");
     let reference = load_reference("H2O", "def2-svp");
-    println!("H2O/def2-SVP: dim = {}", result.dimension);
+    println!(
+        "H2O/def2-SVP: dim = {}, oscillator sum = {}, 10 electrons, deficit = {}",
+        result.dimension,
+        result.oscillator_sum,
+        10.0 - result.oscillator_sum
+    );
+    // 判据改写（见 docs/status-v2.yaml 的 RS-02 note）：TRK 求和规则要求
+    // Σf = N_elec，但只在近完备基下成立。STO-3G 的 Σf 是 2.294（亏缺 7.71），
+    // 这里断言"更大的基组把 Σf 推近 10" —— 亏缺随基组下降才是基组完备性的证据。
+    let sto3g_sum = solve("sto-3g").oscillator_sum;
+    assert!(
+        result.oscillator_sum > sto3g_sum,
+        "def2-SVP 的 Σf = {} 应大于 STO-3G 的 {sto3g_sum}",
+        result.oscillator_sum
+    );
+    assert!(
+        (10.0 - result.oscillator_sum) < (10.0 - sto3g_sum),
+        "def2-SVP 的 TRK 亏缺应小于 STO-3G"
+    );
     for (index, (state, expected)) in result.excitations.iter().zip(reference.iter()).enumerate() {
         let ours = state.energy_hartree * HARTREE_TO_EV;
         let theirs = expected.energy_hartree * HARTREE_TO_EV;
