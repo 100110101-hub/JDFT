@@ -1,0 +1,5 @@
+species,basis,method,index,energy_hartree,energy_ev,oscillator_strength,note
+CH2O,sto-3g,tda,0,0.1451879981,3.950767,0.00000000,PySCF 2.14.0 RHF + tdscf.rhf.TDA（单重态，实验几何）
+CH2O,sto-3g,tda,1,0.3334674413,9.074111,0.00833949,PySCF 2.14.0 RHF + tdscf.rhf.TDA（单重态，实验几何）
+CH2O,sto-3g,tda,2,0.4655451818,12.668130,0.37024703,PySCF 2.14.0 RHF + tdscf.rhf.TDA（单重态，实验几何）
+CH2O,sto-3g,tda,3,0.5564123117,15.140750,0.00000000,PySCF 2.14.0 RHF + tdscf.rhf.TDA（单重态，实验几何）
