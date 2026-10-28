@@ -289,8 +289,11 @@ PR-08:
 # ───────────────────────── 验证轨（VF，6）─────────────────────────
 
 VF-01:
-  state: pending
-  note: "激发态基准集"
+  state: blocked
+  ts: "2026-10-28T18:20:00Z"
+  artifact: "（部分：方法匹配的参考集已就位，但没有「逐行带 DOI/URL 的实验值」基准集）已有 tests/reference/tda_excitations.csv（H2O × STO-3G/def2-SVP 各 5 态）、tda_benzene.csv（苯/STO-3G 6 态）、tda_formaldehyde.csv（甲醛/STO-3G 4 态），全部由 scripts/pyscf_tda_reference.py 与同族的 benzene/formaldehyde 生成器产出，带 PySCF 2.14 的出处"
+  verification: "**为什么 blocked（实测，不是没做）**：判据写「CSV 带来源；与库的差在 §6.6 的容差内」，而 §6.6 对激发态的容差是 0.2 eV（H2O）/ 0.3 eV（苯）/ 0.5 eV（甲醛）。我们的 TDA 与**方法匹配的 PySCF 参考**差 3e-7…7e-7 eV（RS-02/RS-03 已实测，远在容差内），但与**实验值**差一个量级以上：H2O/STO-3G 的第一单重态我们 13.20 eV、实验 ¹B₁ 约 7.4 eV（差 5.8 eV）；换 def2-SVP 仍有 9.30 eV（差 1.9 eV）。原因明确：TDA（CIS）在 HF 参考上系统性高估 1–2 eV，STO-3G 又完全没有极化函数，把价态/里德堡激发都算歪。所以「与实验差 < 0.2–0.5 eV」在当前方法层级上**不可达**，要它成立得换方法（TDDFT/ADC(2)/EOM-CCSD）与更大的基组，那不是数据轨（VF-01）能解决的。另外：丙酮（原文要求的第四个分子）本轮没做。**没有伪造任何文献 DOI**：现有 CSV 的来源字段写的是真实的生成脚本与 PySCF 出处，而不是我没有核对过的 DOI。"
+  note: "**按 §2.5 的处理**：VF-01 记 blocked，卡点是「判据的比较对象写错了」——若「与库的差」指**方法匹配的参考库**，RS-02/RS-03 的实测（1e-7 eV 级）已经满足；若指**实验值**，那要求的是方法精度，数据轨提供不了。建议改写（与 IN-01 的 f-sum 同一类处置）：① 「CSV 带来源」保留，指参考的生成脚本 + PySCF 版本；② 「与库的差在容差内」改成「与同方法同基组参考差 < 1e-3 eV」+「与实验值的偏差如实记录并按方法层级归档」；③ 补丙酮。这样 VF-01 就是纯数据活、可执行。**M4 因此保持 in_progress**：RS-02/RS-03 都已 done，缺的就是这一条基准集的判据改写与丙酮。"
 VF-02:
   state: pending
   note: "溶剂化基准集（ΔG_solv）"
@@ -368,7 +371,7 @@ M4:
   state: in_progress
   ts: "2026-10-28T16:50:00Z"
   artifact: "TDA/CIS 数值核心（qwb-response/src/tda.rs）+ 引擎接线（`options.excited_states` → `JobResult.excited_states`）+ CLI 的 `qwb props` + examples/h2o_tddft.yaml + scripts/pyscf_tda_reference.py + tests/reference/tda_excitations.csv + 两份测试（crate 级 `rs02_tda_acceptance.rs`、引擎级 `rs02_tda_engine.rs`）"
-  verification: "**H2O 与接线全过**：① H2O/STO-3G 与 def2-SVP 前 5 个单重态与 PySCF 的 `tdscf.rhf.TDA` 逐态差 **4.2e-7…5.9e-7 eV** 与 **1.2e-7…2.9e-7 eV**（判据 0.2 eV）；振子强度相对差 < 1e-5。② `qwb props examples/h2o_tddft.yaml` 退出 0，输出五个态（13.1998…22.0459 eV）与 f。③ `result.json` 的 `excited_states` 块四件齐全，`sum_rules.deficit = 7.705945`（STO-3G 的 `Σf = 2.294` vs 10 电子）。**仍未做**：VF-01 的基准集扩充（独立 WP，属数据轨）与「与 PySCF 全空间 `Σf` 的逐项对照」（参考脚本目前只存 5/6 个态）。RS-03 还差甲醛。所以 M4 不标 done。"
+  verification: "**H2O 与接线全过**：① H2O/STO-3G 与 def2-SVP 前 5 个单重态与 PySCF 的 `tdscf.rhf.TDA` 逐态差 **4.2e-7…5.9e-7 eV** 与 **1.2e-7…2.9e-7 eV**（判据 0.2 eV）；振子强度相对差 < 1e-5。② `qwb props examples/h2o_tddft.yaml` 退出 0，输出五个态（13.1998…22.0459 eV）与 f。③ `result.json` 的 `excited_states` 块四件齐全，`sum_rules.deficit = 7.705945`（STO-3G 的 `Σf = 2.294` vs 10 电子）。**仍未做**：VF-01 的基准集扩充（独立 WP，属数据轨）与「与 PySCF 全空间 `Σf` 的逐项对照」（参考脚本目前只存 5/6 个态）。RS-03 已于第 25 轮 done（甲醛实测 7.4e-7 eV）。**M4 当前唯一的阻塞是 VF-01**（见该条）：它的判据把「与库的差」写成了对实验值的 0.2–0.5 eV，而 TDA/HF 的方法层级达不到（H2O 上差 5.8 eV），属判据与方法的冲突；丙酮也还没算。所以 M4 不标 done，但能力侧（RS-02/RS-03）已全部交付。"
   note: "**`f-sum` 判据要拆**（与 IN-01 同一类问题）：最小基里 `Σf` 只有电子数的 23%（PySCF 同值），这是基组完备性不是实现错误；判据应改成「与 PySCF 的同求和差 < 1e-3」+「如实记录 deficit」。**另一条踩坑记录**：第一次给引擎接线时锚点 `reporter.progress(\"done\", 100.0);` 在文件里出现多次，`str.replace(..., 1)` 把 TDA 块插进了 UHF 路径 —— 编译报 `cannot find value excited_states` 才发现。改用唯一的锚点 `let mut job = JobResult::new(` 之后一次通过。教训与 choices 五十九 同源：**替换/插入必须用唯一锚点**。"
 M5:
   state: pending
