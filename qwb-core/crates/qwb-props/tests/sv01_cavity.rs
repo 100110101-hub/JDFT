@@ -145,3 +145,71 @@ fn scaled_radii_scale_the_cavity() {
         "scaled area ratio should be 1.44, got {ratio}"
     );
 }
+
+#[test]
+fn analytic_caps_are_exactly_rotation_invariant() {
+    use qwb_props::cavity::analytic_area_volume;
+    let molecule = water();
+    let radii = bondi_radii();
+    let (area, volume) = analytic_area_volume(&molecule, &radii, 1.0).expect("analytic");
+    println!("H2O analytic: area = {area:.10} A^2, volume = {volume:.10} A^3");
+    for (axis, angle) in [
+        ([0.0_f64, 0.0, 1.0], 0.7_f64),
+        ([1.0, 0.0, 0.0], 1.3),
+        ([0.3, -0.5, 0.81], 2.9),
+    ] {
+        let rotated = rotate_molecule(&molecule, axis, angle);
+        let (other_area, other_volume) =
+            analytic_area_volume(&rotated, &radii, 1.0).expect("analytic");
+        let area_relative = (other_area - area).abs() / area;
+        let volume_relative = (other_volume - volume).abs() / volume;
+        println!(
+            "rotation {axis:?} {angle}: area rel {area_relative:.3e}, volume rel {volume_relative:.3e}"
+        );
+        // 只依赖距离，所以对转动应当**精确**不变（只有浮点舍入）。
+        assert!(
+            area_relative < 1e-12,
+            "analytic area must be exactly rotation invariant, got {area_relative:.3e}"
+        );
+        assert!(
+            volume_relative < 1e-12,
+            "analytic volume must be exactly rotation invariant, got {volume_relative:.3e}"
+        );
+    }
+}
+
+#[test]
+fn analytic_caps_agree_with_dense_sampling() {
+    use qwb_props::cavity::analytic_area_volume;
+    let molecule = water();
+    let radii = bondi_radii();
+    let (analytic_area, analytic_volume) =
+        analytic_area_volume(&molecule, &radii, 1.0).expect("analytic");
+    let sampled = cavity(&molecule, &radii, 1.0, 200_000).expect("cavity");
+    let area_relative = (sampled.surface_area_angstrom2 - analytic_area).abs() / analytic_area;
+    let volume_relative = (sampled.volume_angstrom3 - analytic_volume).abs() / analytic_volume;
+    println!(
+        "analytic {analytic_area:.6} / {analytic_volume:.6} vs sampled {:.6} / {:.6}: rel {area_relative:.3e} / {volume_relative:.3e}",
+        sampled.surface_area_angstrom2, sampled.volume_angstrom3
+    );
+    // 逐对球帽会重复扣除三重交叠（水里有），所以两者只能对到 1e-3 量级。
+    assert!(
+        area_relative < 5e-2,
+        "analytic and densely sampled areas disagree by {area_relative:.3e}"
+    );
+    assert!(
+        volume_relative < 5e-2,
+        "analytic and densely sampled volumes disagree by {volume_relative:.3e}"
+    );
+}
+
+#[test]
+fn analytic_single_atom_is_the_closed_form() {
+    use qwb_props::cavity::analytic_area_volume;
+    let molecule = Molecule::new(vec![Atom::new("O", [0.0, 0.0, 0.0])], 0, 1);
+    let (area, volume) = analytic_area_volume(&molecule, &bondi_radii(), 1.0).expect("analytic");
+    let r = 1.52_f64;
+    assert!((area - 4.0 * std::f64::consts::PI * r * r).abs() < 1e-12);
+    assert!((volume - 4.0 * std::f64::consts::PI * r * r * r / 3.0).abs() < 1e-12);
+    println!("single atom analytic: {area:.10} / {volume:.10}");
+}

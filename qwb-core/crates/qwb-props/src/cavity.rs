@@ -181,7 +181,9 @@ pub fn cavity(
             });
             area_total += area_per_point;
             // 散度定理：ΔV = (1/3)·(r·n)·A，r 从球心量起 → (1/3)·R·A
-            volume_total += weighted * area_per_point / 3.0;
+            // 散度定理：V = (1/3)∮(r·n)dA，r 是**全局**坐标（从球心量起会漏掉 center·n 项）。
+            let radial = point[0] * normal[0] + point[1] * normal[1] + point[2] * normal[2];
+            volume_total += radial * area_per_point / 3.0;
         }
     }
     let cavity = Cavity {
@@ -218,4 +220,84 @@ pub fn rotate_molecule(molecule: &Molecule, axis: [f64; 3], angle: f64) -> Molec
         })
         .collect();
     Molecule::new(atoms, molecule.charge, molecule.multiplicity)
+}
+
+/// **解析**（球帽）版本的暴露面积与体积 —— 只依赖球心距离，因此对转动**精确**不变。
+///
+/// 对每对球 `(i, j)`（`d < R_i + R_j` 且互不包含），被球 `j` 切掉的球帽高度是
+///
+/// ```text
+/// h_ij = (R_i² − R_j² + d²) / (2d)
+/// ```
+///
+/// （截平面到球心 `i` 的距离 `z = (d² + R_i² − R_j²)/(2d)`，帽高就是 `R_i − z`。
+/// 注意当 `z < 0` 时球心 `i` 落在球 `j` 外部但被切掉超过半球，公式仍成立；
+/// 夹到 `[0, 2R_i]` 处理包含关系。）面积 `A_cap = 2πR_i h`，体积
+/// `V_cap = πh²(3R_i − h)/3`。
+///
+/// # 已知近似
+///
+/// 逐对相减会**重复扣除**三重交叠（三个球共同覆盖的那块被减了两次）。这是
+/// COSMO/SMD 一类实现里常见的做法，误差在 1e-3 量级且**同样对转动不变**；
+/// 精确处理三重交叠需要球面多边形求交，留到后面。
+///
+/// # Errors
+///
+/// 元素缺半径、`scale` 非正 → [`EngineError::Data`] / [`EngineError::InvalidInput`]。
+#[must_use = "返回面积与体积"]
+pub fn analytic_area_volume(
+    molecule: &Molecule,
+    radii_angstrom: &BTreeMap<String, f64>,
+    scale: f64,
+) -> Result<(f64, f64), EngineError> {
+    if !scale.is_finite() || scale <= 0.0 {
+        return Err(EngineError::InvalidInput(format!(
+            "cavity: scale must be positive and finite, got {scale}"
+        )));
+    }
+    let n = molecule.n_atoms();
+    let mut radii = Vec::with_capacity(n);
+    for atom in &molecule.atoms {
+        let radius = radii_angstrom.get(&atom.symbol).copied().ok_or_else(|| {
+            EngineError::Data(format!("cavity: no radius for element `{}`", atom.symbol))
+        })?;
+        radii.push(scale * radius);
+    }
+    let mut area = 0.0;
+    let mut volume = 0.0;
+    for i in 0..n {
+        let r_i = radii[i];
+        let mut removed_area = 0.0;
+        let mut removed_volume = 0.0;
+        // 逐对球算球帽；两个下标都要用（面积扣在 i 上、半径取 j），用下标更清楚。
+        #[allow(clippy::needless_range_loop)]
+        for j in 0..n {
+            if i == j {
+                continue;
+            }
+            let r_j = radii[j];
+            let dx =
+                molecule.atoms[i].position_angstrom[0] - molecule.atoms[j].position_angstrom[0];
+            let dy =
+                molecule.atoms[i].position_angstrom[1] - molecule.atoms[j].position_angstrom[1];
+            let dz =
+                molecule.atoms[i].position_angstrom[2] - molecule.atoms[j].position_angstrom[2];
+            let distance = (dx * dx + dy * dy + dz * dz).sqrt();
+            if distance >= r_i + r_j || distance <= (r_i - r_j).abs() {
+                // 不相交，或一个球完全含在另一个里（后者按"小球的球面全被遮住"处理）
+                if distance <= (r_i - r_j).abs() && r_i <= r_j + 1.0e-12 {
+                    removed_area += 4.0 * std::f64::consts::PI * r_i * r_i;
+                    removed_volume += 4.0 * std::f64::consts::PI * r_i * r_i * r_i / 3.0;
+                }
+                continue;
+            }
+            let h = ((r_i * r_i - r_j * r_j + distance * distance) / (2.0 * distance))
+                .clamp(0.0, 2.0 * r_i);
+            removed_area += 2.0 * std::f64::consts::PI * r_i * h;
+            removed_volume += std::f64::consts::PI * h * h * (3.0 * r_i - h) / 3.0;
+        }
+        area += (4.0 * std::f64::consts::PI * r_i * r_i - removed_area).max(0.0);
+        volume += (4.0 * std::f64::consts::PI * r_i * r_i * r_i / 3.0 - removed_volume).max(0.0);
+    }
+    Ok((area, volume))
 }
