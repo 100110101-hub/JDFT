@@ -1,0 +1,11 @@
+species,basis,method,n_states,index,energy_hartree,energy_ev,oscillator_strength,note
+H2O,sto-3g,tda,5,0,0.4850835959,13.199797,0.00351910,PySCF 2.14.0 RHF + tdscf.rhf.TDA（单重态）
+H2O,sto-3g,tda,5,1,0.5558108738,15.124384,0.00000000,PySCF 2.14.0 RHF + tdscf.rhf.TDA（单重态）
+H2O,sto-3g,tda,5,2,0.6175838192,16.805312,0.07788072,PySCF 2.14.0 RHF + tdscf.rhf.TDA（单重态）
+H2O,sto-3g,tda,5,3,0.7050847435,19.186333,0.05918567,PySCF 2.14.0 RHF + tdscf.rhf.TDA（单重态）
+H2O,sto-3g,tda,5,4,0.8101714036,22.045887,1.16208291,PySCF 2.14.0 RHF + tdscf.rhf.TDA（单重态）
+H2O,def2-svp,tda,5,0,0.3416668452,9.297228,0.02284524,PySCF 2.14.0 RHF + tdscf.rhf.TDA（单重态）
+H2O,def2-svp,tda,5,1,0.4068746235,11.071623,0.00000000,PySCF 2.14.0 RHF + tdscf.rhf.TDA（单重态）
+H2O,def2-svp,tda,5,2,0.4362813059,11.871819,0.10451109,PySCF 2.14.0 RHF + tdscf.rhf.TDA（单重态）
+H2O,def2-svp,tda,5,3,0.5019954217,13.659991,0.09770729,PySCF 2.14.0 RHF + tdscf.rhf.TDA（单重态）
+H2O,def2-svp,tda,5,4,0.5533995827,15.058770,0.30538011,PySCF 2.14.0 RHF + tdscf.rhf.TDA（单重态）

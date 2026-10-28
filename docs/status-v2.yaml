@@ -196,11 +196,17 @@ RS-01:
   verification: "① **算子核对**：`cargo test -p qwb-response --test rs01_hessian_operator` 绿 —— 水/STO-3G 的三个 (i→a) 对上，能量沿精确旋转的二阶导与 `4·(A+B)_{pp}` 的比值都是 **4.000000**（(A+B) 对角分别 20.1386 / 1.5705 / 0.5237，FD 80.5544 / 6.2819 / 2.0946）；独立 numpy 核对（PySCF 的积分 + 自己的能量泛函）对水/STO-3G 的 **10 个对**都给出 d²E/dλ² = 4·(A+B)_pp，最大差 **2e-5**（= 中心差分步长误差）。② **极化率（判据）**：`cargo test -p qwb-response --test rs01_polarizability` 3 例绿 —— H2O/STO-3G 的 α 张量 diag = [0.04156114, 5.19509832, 2.14694276]，与有限场（±0.001/±0.002 a.u.，Richardson 外推）差 **9.996e-8 / 1.223e-7 / 7.086e-9**；H2O/def2-SVP 的 diag = [2.98186586, 6.79496135, 4.99748958]（iso 4.9248），与有限场差 **3.364e-7 / 1.946e-8 / 1.796e-9** —— 判据是 < 1e-4 a.u.，实测小三个量级。③ **收敛**：CPHF 到 1e-10 容差的迭代步数 1/4/4（STO-3G）与 11/11/12（def2-SVP），最终残差 ≤ 1.2e-10（判据是 1e-8）。④ **确定性**：两次调用张量逐位相同（求解器串行，无归约顺序问题；IN-05 并行化后这条会变成有意义的检查）。⑤ 交叉核对：PySCF 2.14 用 `get_hcore` 覆盖做的有限场给出 H2O/STO-3G 的 α = [0.041562, 5.195082, 2.146960]，与本实现的三条对角全部差 < 1e-6。"
   note: "**第 19 轮那个「三个数互相矛盾」的卡点定位到了**：两处都是同一个错误 —— 把虚轨道的**偏移**（0..n_vir）当成了系数矩阵的**绝对列号**。① `mo_integrals.rs` 的五处 `c(mu, a)` / `c(nu, b)` / `c(lambda, b)` 漏了 `n_occupied +`，于是 MO 变换收缩到了错误的列上（Rust 给 T1=T2=T3=4.7445，numpy 给 0.0313/0.8034/0.0313）；② `rs01_hessian_operator.rs` 把偏移传给了 `rotated_density`（实际旋转的是 i 朝一个占据列），这就是 37.96 与 80.55 的来源。修好后两个独立实现（Rust 与 numpy）在 10 个对上都一致到差分步长误差。**教训**：同一个「偏移 vs 绝对下标」的坑在一轮里出现了两次，说明这类下标应该从一开始就叫 `column_a`/`column_b` 而不是 `a`/`b` —— 现在 `mo_integrals.rs` 里就是这么写的。**遗留观察（不阻塞判据，但要记）**：H2O/def2-SVP 的 α_iso = 4.92 a.u.，约为实验值（≈9.8 a.u.）的一半。三种独立路径（CPHF、我们自己的有限场、PySCF 的有限场）互相一致到 1e-6，所以这不是实现之间的分歧，而是「这个算符/单位是否还有整体因子」的问题未定；另外 STO-3G 的 α_xx = 0.042 很小是合理的（最小基里没有 π 型虚轨道，面外响应被对称性压掉）。把 α 与实验/文献对表属于 VF-01/DA-08 的活，本轮不改判据、也不声称绝对精度。"
 RS-02:
-  state: pending
-  note: "TDA/TDDFT 激发能 + 振子强度"
+  state: in_progress
+  ts: "2026-10-28T15:40:00Z"
+  artifact: "qwb-response/src/tda.rs：闭壳层单重态 TDA（`A_{ia,jb} = δ(ε_a−ε_i) + 2(ia|jb) − (ij|ab)`，复用 CPHF 的两块 MO 积分）+ 跃迁偶极与振子强度 `μ = √2 Σ X⟨a|r|i⟩`、`f = (2/3)ω|μ|²` + `qwb-response/tests/rs02_tda_acceptance.rs` + scripts/pyscf_tda_reference.py + tests/reference/tda_excitations.csv（H2O × STO-3G/def2-SVP 各 5 态）"
+  verification: "**H2O 部分已过（判据 0.2 eV，实测小 6 个量级）**：`cargo test -p qwb-response --test rs02_tda_acceptance` 3 例绿。① H2O/STO-3G 前 5 个单重态：本实现 13.199798 / 15.124385 / 16.805312 / 19.186334 / 22.045888 eV，PySCF `tdscf.rhf.TDA` 13.199797 / 15.124384 / 16.805312 / 19.186333 / 22.045887 eV —— **逐态差 4.2e-7…5.9e-7 eV**；振子强度 0.0035191 / 0.0000000 / 0.0778797 / 0.0591857 / 1.1620829，与 PySCF 相对差 < 1e-5。② H2O/def2-SVP 前 5 态：9.297229 / 11.071623 / 11.871819 / 13.659992 / 15.058770 eV vs PySCF 9.297228 / 11.071623 / 11.871819 / 13.659991 / 15.058770 —— 差 1.2e-7…2.9e-7 eV。③ 振子强度全部 ≥ 0，能量升序。**未过的部分**：苯的 ¹B₂ᵤ/¹B₁ᵤ（需要 `n_occ·n_vir = 1953` 维的稠密对角化 + 苯的 SCF，本轮没跑）、`f-sum` 判据（见 note）、以及引擎/CLI 的 `qwb props` 接线（`result.json` 的 `excited_states` 块）。"
+  note: "**`f-sum` 判据需要改写（与 IN-01 同一类问题）**：原文写「`f-sum rule` 差 < 1e-3」。实测 STO-3G 全空间（10 个激发态）的振子强度之和是 **2.294**，而电子数是 **10** —— TRK 求和规则在**最小基**里差得很远（CIS/STO-3G 典型只有电子数的 20-30%），这不是实现错误：PySCF 在同一基组上给出同样的 10 个本征值与本征矢（我们与它差 5e-7 eV），所以 `Σf` 也必然一致。要拿 TRK 当判据，得用**接近完备的基组**（def2-TZVP 以上）并（或）把判据改成「与 PySCF 的同一个求和差 < 1e-3」——后者才是「实现正确性」的判据，前者是「基组完备性」。下一轮按这个改，并把实测的 `Σf` 与电子数一起落盘（K7 的 `SumRules::deficit` 正是为此准备的字段）。"
 RS-03:
-  state: pending
-  note: "CIS（HF 参考的 TDA）"
+  state: in_progress
+  ts: "2026-10-28T15:40:00Z"
+  artifact: "（与 RS-02 同一份实现）qwb-response/src/tda.rs：`hf` 参考下的 TDA **就是 CIS** —— 闭壳层单重态 A 矩阵 `δ(ε_a−ε_i) + 2(ia|jb) − (ij|ab)` 不加任何 XC kernel，所以 RS-03 复用 RS-02 的求解器，没有第二套公式"
+  verification: "① **与 RS-02 的 HF 极限一致**：`cargo test -p qwb-response --test rs02_tda_acceptance` 里的 `cis_and_tda_are_the_same_equations_for_an_hf_reference` 绿 —— 两次独立调用的激发能逐位相同（判据 1e-6 a.u.，实测 0）。② **H2O 的跃迁能与 PySCF 一致到 5e-7 eV**（见 RS-02 的 verification，判据 0.5 eV）。**未过**：甲醛的跃迁能（原文要求 H2O/甲醛两个体系）与引擎接线。"
+  note: "**为什么 CIS 与 TDA 在这份实现里是同一件事**：CIS 是「HF 参考 + 单激发 + TDA」，TDA 是「丢掉 RPA 的 B 块」；两者在无 XC kernel 时是同一个本征问题。等 ST-01（完整 TDDFT，含 B 块）或 FX-03（RS-hybrid）落地后，`method: cis` / `tda` / `tddft` 才会分开，那时这条测试要改成「三者差多少」的实测记录。现在把「逐位相同」写进测试，是为了钉住「我们没有偷偷用两套公式」。"
 RS-04:
   state: pending
   note: "NMR GIAO 屏蔽（+ length-gauge 一致性）"
