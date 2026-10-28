@@ -102,7 +102,7 @@ pub fn build_cphf_integrals(
                 for b in 0..n_vir {
                     let mut sum = 0.0;
                     for lambda in 0..n {
-                        let cl = c(lambda, b);
+                        let cl = c(lambda, n_occupied + b);
                         if cl == 0.0 {
                             continue;
                         }
@@ -122,7 +122,7 @@ pub fn build_cphf_integrals(
             for q in 0..n_pairs {
                 let mut sum = 0.0;
                 for mu in 0..n {
-                    let ca = c(mu, a);
+                    let ca = c(mu, n_occupied + a);
                     if ca == 0.0 {
                         continue;
                     }
@@ -167,13 +167,14 @@ pub fn build_cphf_integrals(
                     let q = pair_index(n_vir, j, b);
                     let mut sum = 0.0;
                     for mu in 0..n {
-                        let ca = c(mu, a);
+                        let ca = c(mu, n_occupied + a);
                         if ca == 0.0 {
                             continue;
                         }
                         for nu in 0..n {
-                            sum +=
-                                ca * c(nu, b) * y[(mu * n + nu) * n_occ_pairs + i * n_occupied + j];
+                            sum += ca
+                                * c(nu, n_occupied + b)
+                                * y[(mu * n + nu) * n_occ_pairs + i * n_occupied + j];
                         }
                     }
                     t2[p * n_pairs + q] = sum;
@@ -194,7 +195,7 @@ pub fn build_cphf_integrals(
             for a in 0..n_vir {
                 let mut sum = 0.0;
                 for mu in 0..n {
-                    let ca = c(mu, a);
+                    let ca = c(mu, n_occupied + a);
                     if ca == 0.0 {
                         continue;
                     }

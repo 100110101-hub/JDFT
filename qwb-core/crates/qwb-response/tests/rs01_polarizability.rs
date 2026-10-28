@@ -132,7 +132,6 @@ fn finite_field_diagonal(reference: &Reference, axis: usize) -> f64 {
 }
 
 #[test]
-#[ignore = "卡点同 rs01_hessian_operator：(A+B) 的能量二阶导核对未收敛，先别拿它当判据"]
 fn static_polarizability_matches_finite_field_for_sto3g() {
     let reference = setup("sto-3g");
     let n_occ = n_occupied(&reference.molecule);
@@ -181,7 +180,6 @@ fn static_polarizability_matches_finite_field_for_sto3g() {
 }
 
 #[test]
-#[ignore = "卡点同上"]
 fn static_polarizability_matches_finite_field_for_def2svp() {
     let reference = setup("def2-svp");
     let n_occ = n_occupied(&reference.molecule);
@@ -224,7 +222,6 @@ fn static_polarizability_matches_finite_field_for_def2svp() {
 /// 平凡成立的 —— 求解器是串行的，没有归约顺序问题；这里把它钉住，等 IN-05 把
 /// CPHF 并行化时这条测试会立刻变成有意义的检查）。
 #[test]
-#[ignore = "卡点同上（这条依赖同一条求解路径）"]
 fn cphf_is_deterministic() {
     let reference = setup("sto-3g");
     let n_occ = n_occupied(&reference.molecule);

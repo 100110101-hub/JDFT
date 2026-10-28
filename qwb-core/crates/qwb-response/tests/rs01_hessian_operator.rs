@@ -135,11 +135,10 @@ fn rotated_density(reference: &Reference, i: usize, a: usize, lambda: f64) -> qw
     d
 }
 
-// 卡点（第 19 轮）：同一个对 (i=0, a=5) 的能量二阶导，在两份测试里给出 37.96（本条）
-// 与 80.55（同一轮的一次性诊断）两个不同的数，说明**至少有一份**的差分/密度构造有 bug。
-// 在把这个矛盾解开之前不把 RS-01 标 done —— 见 docs/status-v2.yaml 的 RS-01。
+// 第 19 轮的矛盾（本测试给 37.96、独立 numpy 核对给 80.55）已定位：本测试把虚轨道
+// **偏移** `a` 当绝对列号传进 `rotated_density`，实际旋转的是 i 朝一个占据列。
+// 修好后水/STO-3G 的三个对都给出比值 4，与 numpy 的 10 对核对一致。
 #[test]
-#[ignore = "卡点：与本轮另一份诊断给出的 FD 值矛盾（37.96 vs 80.55），先修再用"]
 fn orbital_hessian_diagonal_matches_the_energy_second_derivative() {
     let reference = setup();
     let n_occ = 5;
@@ -168,18 +167,23 @@ fn orbital_hessian_diagonal_matches_the_energy_second_derivative() {
     let mut worst = 0.0_f64;
     let mut ratio_sum = 0.0;
     let mut count = 0.0;
-    for (i, a) in [(0_usize, 0_usize), (1, 3), (4, 1)] {
+    // 水/STO-3G 只有两个虚轨道（偏移 0、1），所以对列表只能用这两个。
+    for (i, a) in [(0_usize, 0_usize), (1, 1), (4, 0)] {
         let step = 1.0e-3;
+        // `rotated_density` 要的是**绝对列号**（n_occ + a）。第 19 轮这里传的是偏移 a，
+        // 于是实际旋转的是 i 朝一个**占据**列 —— 那就是当时本测试给 37.96、而独立
+        // numpy 核对给 80.55 的原因（见 docs/choices.md 五十九）。
+        let column = n_occ + a;
         println!(
             "  eps_i = {:.6}, eps_a = {:.6}, 4Δε = {:.6}, 2Δε = {:.6}",
             reference.orbital_energies[i],
-            reference.orbital_energies[n_occ + a],
-            4.0 * (reference.orbital_energies[n_occ + a] - reference.orbital_energies[i]),
-            2.0 * (reference.orbital_energies[n_occ + a] - reference.orbital_energies[i])
+            reference.orbital_energies[column],
+            4.0 * (reference.orbital_energies[column] - reference.orbital_energies[i]),
+            2.0 * (reference.orbital_energies[column] - reference.orbital_energies[i])
         );
-        let e0 = energy(&reference, &rotated_density(&reference, i, a, 0.0));
-        let plus = energy(&reference, &rotated_density(&reference, i, a, step));
-        let minus = energy(&reference, &rotated_density(&reference, i, a, -step));
+        let e0 = energy(&reference, &rotated_density(&reference, i, column, 0.0));
+        let plus = energy(&reference, &rotated_density(&reference, i, column, step));
+        let minus = energy(&reference, &rotated_density(&reference, i, column, -step));
         let second = (plus - 2.0 * e0 + minus) / (step * step);
         // 算子的对角元：把单位向量 e_p 代进算子。
         let p = pair_index(n_vir, i, a);
@@ -188,20 +192,19 @@ fn orbital_hessian_diagonal_matches_the_energy_second_derivative() {
         let applied = orbital_hessian_apply(&integrals, &reference.orbital_energies, &unit);
         let operator = applied[p];
         println!(
-            "pair (i={i}, a={n_occ}+{a})：d²E/dλ² = {second:.10}，算子对角 = {operator:.10}，\
-             比值 = {:.6}",
+            "pair (i={i}, a={column})：d²E/dλ² = {second:.10}，算子对角 = {operator:.10}，\
+             比值（应为 4）= {:.6}",
             second / operator
         );
         ratio_sum += second / operator;
         count += 1.0;
-        worst = worst.max((second - 2.0 * operator).abs());
+        worst = worst.max((second - 4.0 * operator).abs());
     }
-    println!(
-        "三次测试的平均比值 = {:.6}（下面按 2 断言）",
-        ratio_sum / count
-    );
+    println!("三次测试的平均比值（应为 4）= {:.6}", ratio_sum / count);
+    // 独立核对（numpy，水/STO-3G 的 10 个对，见 .tmp_hessian_check.py 的记录）：
+    // d²E/dλ² = 4·(A+B)_pp，最大差 2e-5 —— 正是中心差分的步长误差。
     assert!(
         worst < 1.0e-4,
-        "d²E/dλ² 与 2·(A+B)_{{pp}} 差 {worst:.3e}；比值说明因子写错了"
+        "d²E/dλ² 与 4·(A+B)_{{pp}} 差 {worst:.3e}；比值说明因子写错了"
     );
 }
