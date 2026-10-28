@@ -779,6 +779,56 @@ impl RksBackend {
                     result.energy_hartree + outcome.e2_hartree,
                 ))
             }
+            // ── M3 / SC-05：RI-MP2 ────────────────────────────────
+            Some(mp2) if mp2.kind == Mp2Kind::RiMp2 => {
+                reporter.progress("mp2", 85.0);
+                let aux_name = mp2.aux_basis_name.as_deref().ok_or_else(|| {
+                    EngineError::InvalidInput(
+                        "options.mp2.aux_basis_name is required for ri-mp2".into(),
+                    )
+                })?;
+                let n_occupied = closed_shell_electrons(&input.molecule)? / 2;
+                let orbital_energies: Vec<f64> = (0..result.mo_energies_hartree.len())
+                    .map(|i| result.mo_energies_hartree.get(i))
+                    .collect();
+                let aux_basis =
+                    qwb_integrals::ri::load_aux_basis(&self.registry, aux_name, &input.molecule)?;
+                let three = qwb_integrals::ri::three_center(&basis, &aux_basis, &input.molecule)?;
+                let v = qwb_integrals::ri::two_center_coulomb(&aux_basis, &input.molecule)?;
+                let outcome = qwb_scf::rimp2::ri_mp2_correlation(
+                    &three,
+                    &v,
+                    &result.coefficients,
+                    &orbital_energies,
+                    n_occupied,
+                )?;
+                // K9/K10：近似必须留痕 —— 用同一份 4 中心张量再算一遍 canonical，
+                // 把差值写进 `ri_error_hartree`。这一步是 `kind: ri-mp2` 的一次作业
+                // 比纯 RI 慢的原因（见 docs/choices.md 五十八）。
+                reporter.progress("mp2", 95.0);
+                let canonical = qwb_scf::mp2::mp2_correlation(
+                    &tensor,
+                    &result.coefficients,
+                    &orbital_energies,
+                    n_occupied,
+                )?;
+                let ri_error = (outcome.e2_hartree - canonical.e2_hartree).abs();
+                reporter.log(&format!(
+                    "ri-mp2: aux = {aux_name} ({} 个辅助函数，V 的秩 {}), \
+                     E_corr = {:.10} Ha vs canonical {:.10} Ha, \
+                     ri_error = {ri_error:.3e} Ha",
+                    outcome.n_auxiliary, outcome.v_rank, outcome.e2_hartree, canonical.e2_hartree
+                ));
+                Some(
+                    CorrelationResult::new(
+                        Mp2Kind::RiMp2,
+                        outcome.e2_hartree,
+                        result.energy_hartree + outcome.e2_hartree,
+                    )
+                    .with_aux_basis(aux_name)
+                    .with_ri_error(ri_error),
+                )
+            }
             _ => None,
         };
         reporter.progress("done", 100.0);
@@ -1038,15 +1088,13 @@ fn reject_unimplemented_options(input: &JobInput) -> Result<(), EngineError> {
         }
     }
     if let Some(mp2) = &options.mp2 {
-        // M3 / SC-04：**canonical MP2** 已接（闭壳层参考、单点）。
-        // SC-05（RI-MP2）还没做，显式拒绝 —— 它的验收要求「与 canonical 差 < 0.1 mHa」
-        // 且 `ri_error_hartree` 落盘，两件事没做之前不能假装成功。
+        // M3：**canonical MP2（SC-04）与 RI-MP2（SC-05）都已接**（闭壳层参考、单点）。
+        // 这里只剩"这个枚举将来可能加新变体"的兜底：不认识的就拒，不能静默降级。
         match mp2.kind {
-            Mp2Kind::Mp2 => {}
+            Mp2Kind::Mp2 | Mp2Kind::RiMp2 => {}
             _ => {
                 return Err(EngineError::Unsupported(format!(
-                    "options.mp2.kind = `{}` is not wired yet (RI-MP2 is phase-2 M3 / SC-05: \
-                     needs the RI auxiliary basis DA-07 and 3-center integrals IN-01)",
+                    "options.mp2.kind = `{}` is not implemented (M3 ships canonical MP2 and RI-MP2)",
                     mp2.kind.as_str()
                 )));
             }

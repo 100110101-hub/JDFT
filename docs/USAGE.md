@@ -417,6 +417,37 @@ $ python -c "import json;print(json.load(open('results/h2o_mp2_def2svp/result.js
 
 另有基组单调性断言（DZ → TZ 时 `|E_corr|` 必须变大）：`cargo test -p qwb-scf --test sc04_mp2`。
 
+#### RI-MP2（SC-05）
+
+把 `kind` 换成 `ri-mp2` 并给 `aux_basis_name`，就走密度拟合（`qwb-data` 里的
+`def2-svp-ri`，见 §8.1）：
+
+```yaml
+options:
+  mp2:
+    kind: ri-mp2
+    aux_basis_name: def2-svp-ri
+```
+
+```console
+$ qwb run examples/h2o_ri_mp2_def2svp.yaml
+$ python -c "import json;print(json.load(open('results/h2o_ri_mp2_def2svp/result.json'))['correlation'])"
+{'method': 'ri-mp2', 'e2_hartree': -0.203558201565, 'e_total_hartree': -76.164528192633,
+ 'aux_basis_name': 'def2-svp-ri', 'ri_error_hartree': 8.526079280921e-05}
+```
+
+三点要知道：
+
+* **拟合误差会落盘**：`ri_error_hartree` 是 `|E2(RI) − E2(canonical)|`，引擎会
+  用同一份 4 中心张量再算一遍 canonical 来填它（K10 第 ③ 条：近似必须留痕）。
+  所以这个作业的墙钟**比纯 RI 慢** —— 这是留痕的价格。
+* **精度**：H2O/def2-SVP + def2-SVP-RI 的误差是 **0.085 mHa**（判据 0.1 mHa），
+  与 PySCF 的 RI-MP2 差 1e-9。苯上同一个辅助基的误差是 0.47 mHa（PySCF 同值）：
+  这是辅助基的性质，不是实现的错。
+* **没有性能优势（实测后降级）**：苯/def2-SVP 上 canonical 7.14 s vs RI 48.32 s。
+  我们的 3 中心张量是逐壳层三元组现算的，建张量就吃掉了大部分时间；要提高得靠
+  壳层块驱动 + 屏蔽（IN-04/IN-05）。所以 RI-MP2 可用但**不宣称更快**。
+
 ### 3.4 阶段二预留的字段（**契约已就位，引擎会显式拒绝**）
 
 阶段二的契约（`project-phase2.md` §4）已经把下面这些字段加进了 `input.yaml` 的合法集合，

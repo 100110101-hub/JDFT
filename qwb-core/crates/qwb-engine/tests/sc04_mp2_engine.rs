@@ -116,21 +116,8 @@ fn mp2_is_absent_when_not_requested() {
     );
 }
 
-#[test]
-fn ri_mp2_is_still_rejected_with_its_wp() {
-    let options = TaskOptions::default()
-        .with_mp2(Mp2Options::new(Mp2Kind::RiMp2).with_aux_basis("def2-svp-ri"));
-    let error = backend()
-        .run(&water_input(options), &NullReporter)
-        .expect_err("RI-MP2 还没做，必须拒绝");
-    match error {
-        EngineError::Unsupported(message) => {
-            assert!(message.contains("SC-05"), "{message}");
-            assert!(message.contains("RI-MP2"), "{message}");
-        }
-        other => panic!("期望 Unsupported（K5 退出码 4），得到 {other:?}"),
-    }
-}
+// `kind: ri-mp2` 的验收在 SC-05 的测试文件里（`sc05_rimp2_engine.rs`）：它要钉
+// `aux_basis_name` 与 `ri_error_hartree` 落盘，而这两条属于 SC-05，不属于 SC-04。
 
 #[test]
 fn mp2_with_opt_is_rejected() {

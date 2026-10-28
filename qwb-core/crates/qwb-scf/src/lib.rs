@@ -28,6 +28,7 @@ pub mod ecp;
 pub mod guess;
 pub mod mp2;
 pub mod pulay;
+pub mod rimp2;
 pub mod rks;
 pub mod uhf;
 pub mod uks;

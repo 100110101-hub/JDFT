@@ -88,13 +88,23 @@ fn open_shell_scf_type_is_rejected_with_its_wp() {
 }
 
 #[test]
-fn ri_mp2_is_rejected_with_its_wp() {
-    // canonical MP2 在 M3 已接（SC-04）；RI-MP2（SC-05）还没做，必须显式拒绝。
-    let options = TaskOptions::default()
-        .with_mp2(Mp2Options::new(Mp2Kind::RiMp2).with_aux_basis("def2-svp-ri"));
-    let message = unsupported(&input("svwn5", 1, options));
-    assert!(message.contains("SC-05"), "{message}");
-    assert!(message.contains("RI-MP2"), "{message}");
+fn both_mp2_kinds_are_wired_now() {
+    // M3 让 canonical MP2（SC-04）与 RI-MP2（SC-05）都真正可算 —— 所以它们**不再**
+    // 出现在"显式拒绝"的清单里。这里只钉"不再拒绝"这一件事；数值与 `correlation`
+    // 块的内容由 `sc04_mp2_engine.rs` 与 `sc05_rimp2_engine.rs` 负责。
+    for kind in [Mp2Kind::Mp2, Mp2Kind::RiMp2] {
+        let mut options = TaskOptions::default().with_mp2(Mp2Options::new(kind));
+        if kind == Mp2Kind::RiMp2 {
+            options = options.with_mp2(Mp2Options::new(kind).with_aux_basis("def2-svp"));
+        }
+        let result = backend()
+            .run(&input("hf", 1, options), &NullReporter)
+            .unwrap_or_else(|e| panic!("{kind:?} 已接线，不该被拒：{e}"));
+        assert!(
+            result.correlation.is_some(),
+            "{kind:?} 应该在结果里留下 correlation 块"
+        );
+    }
 }
 
 #[test]
@@ -146,13 +156,13 @@ fn phase1_equivalent_options_are_not_rejected() {
 
 #[test]
 fn rejection_happens_before_any_numerics() {
-    // canonical MP2 已经实装，所以这里用**还没做**的路径（RI-MP2 / SC-05）钉"立刻拒绝"。
+    // MP2 两个变体都已接线，所以这里用**还没做**的路径（激发态 / RS-02）钉"立刻拒绝"。
     let options = TaskOptions::default()
-        .with_mp2(Mp2Options::new(Mp2Kind::RiMp2).with_aux_basis("def2-svp-ri"));
+        .with_excited_states(ExcitedStatesOptions::new(5, ExcitedStateMethod::Tda));
     let started = Instant::now();
     let message = unsupported(&input("svwn5", 1, options));
     let elapsed = started.elapsed();
-    assert!(message.contains("SC-05"), "{message}");
+    assert!(message.contains("RS-02"), "{message}");
     // 一次 STO-3G/H2 的 SCF 在本机也要几十毫秒；"立刻拒绝"应当是毫秒级。
     assert!(
         elapsed.as_millis() < 50,
