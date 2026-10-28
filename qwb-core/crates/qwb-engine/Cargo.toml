@@ -19,6 +19,7 @@ qwb-registry.workspace = true
 qwb-engine-api.workspace = true
 qwb-scf.workspace = true
 qwb-props.workspace = true
+qwb-response.workspace = true
 qwb-grid.workspace = true
 qwb-xc.workspace = true
 rayon.workspace = true

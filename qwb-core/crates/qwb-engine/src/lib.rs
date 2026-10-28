@@ -836,6 +836,64 @@ impl RksBackend {
         let env = env::build(&self.registry);
         // S-06：偶极矩（Debye）——中性分子对原点不变，`qwb-props` 的测试里有这条自检。
         let dipole = qwb_props::dipole_debye(&basis, &input.molecule, &result.density)?;
+        // ── M4 / RS-02..03：TDA（hf 参考下即 CIS）──────────────
+        let excited_states = match &input.options.excited_states {
+            Some(request) => {
+                reporter.progress("tda", 92.0);
+                let n_occupied = closed_shell_electrons(&input.molecule)? / 2;
+                let orbital_energies: Vec<f64> = (0..result.mo_energies_hartree.len())
+                    .map(|i| result.mo_energies_hartree.get(i))
+                    .collect();
+                let dipole_ao = qwb_integrals::dipole::dipole_integrals(&basis, &input.molecule)?;
+                let cphf_input = qwb_response::mo_integrals::build_cphf_integrals(
+                    &tensor,
+                    &result.coefficients,
+                    &dipole_ao,
+                    n_occupied,
+                )?;
+                let tda = qwb_response::tda::tda_singlet(
+                    &cphf_input,
+                    &orbital_energies,
+                    request.n_states as usize,
+                )?;
+                let transitions: Vec<qwb_engine_api::Transition> = tda
+                    .excitations
+                    .iter()
+                    .enumerate()
+                    .map(|(index, state)| {
+                        qwb_engine_api::Transition::new(
+                            index + 1,
+                            state.energy_hartree,
+                            1_239.841_984 / (state.energy_hartree * 27.211_386_245_988),
+                            state.oscillator_strength,
+                        )
+                    })
+                    .collect();
+                let n_electrons = f64::from(u32::try_from(n_occupied * 2).unwrap_or(u32::MAX));
+                reporter.log(&format!(
+                    "tda: {} state(s) from a {}x{} problem; first = {:.6} Ha ({:.3} eV), \
+                     f = {:.5}; sum of f = {:.6} (N_elec = {n_electrons})",
+                    transitions.len(),
+                    tda.dimension,
+                    tda.dimension,
+                    tda.excitations.first().map_or(0.0, |s| s.energy_hartree),
+                    tda.excitations
+                        .first()
+                        .map_or(0.0, |s| s.energy_hartree * 27.211_386_245_988),
+                    tda.excitations
+                        .first()
+                        .map_or(0.0, |s| s.oscillator_strength),
+                    tda.oscillator_sum
+                ));
+                Some(qwb_engine_api::ExcitedStates::new(
+                    request.method,
+                    transitions.len(),
+                    transitions,
+                    qwb_engine_api::SumRules::new(tda.oscillator_sum, n_electrons),
+                ))
+            }
+            None => None,
+        };
         let mut job = JobResult::new(
             result.energy_hartree,
             result.scf_converged,
@@ -864,6 +922,9 @@ impl RksBackend {
             dipole[1],
             dipole[2]
         ));
+        if let Some(excited_states) = excited_states {
+            job = job.with_excited_states(excited_states);
+        }
         if let Some(correlation) = correlation {
             job = job
                 .with_log(format!(
@@ -1125,10 +1186,43 @@ fn reject_unimplemented_options(input: &JobInput) -> Result<(), EngineError> {
             ));
         }
     }
-    if options.excited_states.is_some() {
-        return Err(EngineError::Unsupported(
-            "options.excited_states is not wired yet (CIS/TDA is phase-2 M4 / RS-02..03)".into(),
-        ));
+    if let Some(excited) = &options.excited_states {
+        // M4 / RS-02..03：cis 与 tda 都接（hf 参考下同一套方程），tddft 还没做。
+        match excited.method {
+            qwb_engine_api::ExcitedStateMethod::Cis | qwb_engine_api::ExcitedStateMethod::Tda => {}
+            _ => {
+                return Err(EngineError::Unsupported(format!(
+                    "options.excited_states.method = `{}` is not wired yet (full TDDFT with the \
+                     B block and the XC kernel is ST-01; cis/tda are available)",
+                    excited.method.as_str()
+                )));
+            }
+        }
+        if let Some(scf_type) = options.scf_type
+            && scf_type.is_unrestricted()
+        {
+            return Err(EngineError::Unsupported(format!(
+                "options.excited_states needs a closed-shell reference; scf_type = `{}` is \
+                 open-shell (open-shell CIS/TDA is not in M4)",
+                scf_type.as_str()
+            )));
+        }
+        if input.jobtype != JobType::Sp {
+            return Err(EngineError::Unsupported(format!(
+                "options.excited_states currently supports `sp` only; jobtype = `{}`",
+                input.jobtype.as_str()
+            )));
+        }
+        if !input.method_name.eq_ignore_ascii_case("hf") {
+            // 现在实现的是纯 CIS / TDA：A 矩阵只有 2(ia|jb) − (ij|ab)，没有 XC kernel。
+            // 拿 pbe 之类的参考跑它，会把 CIS 的数标成 tda 交出去 —— 静默降级，
+            // 所以显式拒绝，指向 ST-01 / FX-03。
+            return Err(EngineError::Unsupported(format!(
+                "options.excited_states needs an `hf` reference for now (method_name = `{}`): \
+                 the XC kernel needed for a DFT reference is ST-01 / FX-03",
+                input.method_name
+            )));
+        }
     }
     if options.numerics.is_some() {
         // 精度等级/近似路径现在没有任何代码在读它：放过就等于"静默忽略"。

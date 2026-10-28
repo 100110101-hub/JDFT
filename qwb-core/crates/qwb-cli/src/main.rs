@@ -256,11 +256,9 @@ fn dispatch(cli: &Cli) -> CliResult<()> {
             DataCommand::Sign { paths, check } => cmd_data_sign(paths, *check),
             DataCommand::Install(args) => cmd_data_install(args),
         },
-        Command::Props(args) => cmd_not_implemented(
-            "props",
-            "excited states / NMR / polarizability land with M4-M7 (RS-02..RS-08)",
-            Some(&args.input_yaml),
-        ),
+        // M4 / RS-02：激发态（TDA/CIS）已经接通，`props` 走与 `run` 同一条执行路径；
+        // 输入里没写 `options.excited_states` 时给一条明确的提示（而不是退出 4）。
+        Command::Props(args) => cmd_props(args),
         Command::Ts(args) => cmd_not_implemented(
             "ts",
             "transition-state search lands with M6 (RP-01)",
@@ -356,6 +354,71 @@ fn cmd_run(args: &RunArgs) -> CliResult<()> {
     let out_root = args.out.clone().unwrap_or_else(|| PathBuf::from("results"));
     let energy = execute_job(&input, &task_id, &out_root)?;
     println!("energy  {energy:.10} Ha");
+    println!("task    {}", out_root.join(&task_id).display());
+    Ok(())
+}
+
+/// `qwb props`：性质（目前是激发态 TDA/CIS）。
+///
+/// 与 `run` 共用 [`execute_job`] —— 一次 `props` 作业就是"同一份输入 + 结果目录"，
+/// 区别只在**输入里必须有 `options.excited_states`**，否则会跑完 SCF 却什么都不报。
+/// 所以先检查这一条，缺了就以退出码 1 说明（输入错误，不是"没实现"）。
+fn cmd_props(args: &PropsArgs) -> CliResult<()> {
+    if !args.input_yaml.is_file() {
+        return Err(CliError::input(format!(
+            "cannot read {}: no such file",
+            args.input_yaml.display()
+        )));
+    }
+    let mut input = load_input(&args.input_yaml)?;
+    if input.options.excited_states.is_none() {
+        return Err(CliError::input(
+            "`qwb props` needs `options.excited_states` in the input (see examples/h2o_tddft.yaml)"
+                .to_string(),
+        ));
+    }
+    if let Some(states) = args.states {
+        let method = input
+            .options
+            .excited_states
+            .as_ref()
+            .map(|options| options.method)
+            .unwrap_or(qwb_engine_api::ExcitedStateMethod::Tda);
+        input.options.excited_states =
+            Some(qwb_engine_api::ExcitedStatesOptions::new(states, method));
+    }
+    ensure_third_party(Some(&args.input_yaml));
+    let task_id = args
+        .input_yaml
+        .file_stem()
+        .and_then(|stem| stem.to_str())
+        .unwrap_or("props")
+        .to_string();
+    let out_root = args.out.clone().unwrap_or_else(|| PathBuf::from("results"));
+    let energy = execute_job(&input, &task_id, &out_root)?;
+    println!("energy  {energy:.10} Ha");
+    let result_path = out_root.join(&task_id).join("result.json");
+    if let Ok(text) = std::fs::read_to_string(&result_path)
+        && let Ok(value) = serde_json::from_str::<serde_json::Value>(&text)
+        && let Some(states) = value.get("excited_states")
+        && let Some(transitions) = states.get("transitions").and_then(|t| t.as_array())
+    {
+        for (index, transition) in transitions.iter().enumerate() {
+            let energy_hartree = transition
+                .get("energy_hartree")
+                .and_then(|v| v.as_f64())
+                .unwrap_or(0.0);
+            let oscillator = transition
+                .get("oscillator_strength")
+                .and_then(|v| v.as_f64())
+                .unwrap_or(0.0);
+            println!(
+                "state {} {energy_hartree:.6} Ha  {:.4} eV  f = {oscillator:.6}",
+                index + 1,
+                energy_hartree * 27.211_386_245_988
+            );
+        }
+    }
     println!("task    {}", out_root.join(&task_id).display());
     Ok(())
 }

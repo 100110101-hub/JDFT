@@ -1,0 +1,36 @@
+# M4 / RS-02：H2O / STO-3G 的 TDA（= CIS）激发态。
+#
+# 参考值由 PySCF 2.14 的 `tdscf.rhf.TDA` 给出（同一几何、同一基组，
+# `scripts/pyscf_tda_reference.py`）：
+#   13.1998 / 15.1244 / 16.8053 eV（前三个单重态），f = 0.00352 / 0 / 0.07788
+#
+# 运行：qwb props examples/h2o_tddft.yaml
+# 结果：results/<名字>/result.json 里的 `excited_states` 块
+molecule:
+  atoms:
+    - symbol: O
+      position_angstrom: [0.0, 0.0, 0.11779]
+    - symbol: H
+      position_angstrom: [0.0, 0.75545, -0.47116]
+    - symbol: H
+      position_angstrom: [0.0, -0.75545, -0.47116]
+  charge: 0
+  multiplicity: 1
+basis_name: sto-3g
+method_name: hf
+grid_level: normal
+solvent: vacuum
+jobtype: sp
+options:
+  scf_max_iter: 200
+  scf_energy_threshold_hartree: 1.0e-11
+  scf_density_threshold: 1.0e-9
+  diis_history: 8
+  threads: 0
+  max_opt_steps: 100
+  opt_gradient_threshold_hartree_per_bohr: 4.5e-4
+  freq_step_angstrom: 0.01
+  ecp_name: null
+  excited_states:
+    n_states: 5
+    method: tda

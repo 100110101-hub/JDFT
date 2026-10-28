@@ -108,12 +108,13 @@ fn both_mp2_kinds_are_wired_now() {
 }
 
 #[test]
-fn excited_states_are_rejected_with_their_wp() {
+fn full_tddft_is_rejected_with_its_wp() {
+    // M4 让 cis/tda（hf 参考、闭壳层）可算，所以只剩完整 TDDFT（含 B 块与 XC kernel）被拒。
     let options = TaskOptions::default()
-        .with_excited_states(ExcitedStatesOptions::new(5, ExcitedStateMethod::Tda));
-    let message = unsupported(&input("svwn5", 1, options));
-    assert!(message.contains("RS-02"), "{message}");
-    assert!(message.contains("CIS/TDA"), "{message}");
+        .with_excited_states(ExcitedStatesOptions::new(5, ExcitedStateMethod::Tddft));
+    let message = unsupported(&input("hf", 1, options));
+    assert!(message.contains("ST-01"), "{message}");
+    assert!(message.contains("cis/tda"), "{message}");
 }
 
 #[test]
@@ -156,13 +157,13 @@ fn phase1_equivalent_options_are_not_rejected() {
 
 #[test]
 fn rejection_happens_before_any_numerics() {
-    // MP2 两个变体都已接线，所以这里用**还没做**的路径（激发态 / RS-02）钉"立刻拒绝"。
+    // MP2 与 cis/tda 都已接线，所以这里用**还没做**的路径（完整 TDDFT / ST-01）钉"立刻拒绝"。
     let options = TaskOptions::default()
-        .with_excited_states(ExcitedStatesOptions::new(5, ExcitedStateMethod::Tda));
+        .with_excited_states(ExcitedStatesOptions::new(5, ExcitedStateMethod::Tddft));
     let started = Instant::now();
-    let message = unsupported(&input("svwn5", 1, options));
+    let message = unsupported(&input("hf", 1, options));
     let elapsed = started.elapsed();
-    assert!(message.contains("RS-02"), "{message}");
+    assert!(message.contains("ST-01"), "{message}");
     // 一次 STO-3G/H2 的 SCF 在本机也要几十毫秒；"立刻拒绝"应当是毫秒级。
     assert!(
         elapsed.as_millis() < 50,

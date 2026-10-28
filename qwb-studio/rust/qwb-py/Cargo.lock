@@ -412,6 +412,7 @@ dependencies = [
  "qwb-linalg",
  "qwb-props",
  "qwb-registry",
+ "qwb-response",
  "qwb-scf",
  "qwb-xc",
  "rayon",
@@ -493,6 +494,18 @@ dependencies = [
  "serde_json",
  "serde_yaml",
  "sha2",
+ "thiserror",
+]
+
+[[package]]
+name = "qwb-response"
+version = "0.1.0"
+dependencies = [
+ "qwb-basis",
+ "qwb-engine-api",
+ "qwb-integrals",
+ "qwb-linalg",
+ "qwb-scf",
  "thiserror",
 ]
 
