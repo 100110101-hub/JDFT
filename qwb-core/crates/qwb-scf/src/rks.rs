@@ -40,6 +40,66 @@ use qwb_xc::{DensityBatch, FunctionalTerm};
 use crate::diis::Diis;
 use crate::{FockMatrices, build_fock};
 
+/// 由**当前密度**给出的一电子算子 —— SCF 内的"外部自洽场"通道。
+///
+/// 目前唯一的用户是 COSMO/C-PCM 的溶剂反应场（SV-01）：表面电荷由溶质的静电势决定、
+/// 反应场再回代进 Fock，所以算子必须每步重算。契约只有两件事：
+///
+/// * [`ExternalField::operator_and_energy`] 返回**加进 `H_core` 的算子** `V` 与一个能量修正
+///   `ΔE`；
+/// * SCF 报告的电子能是 `Tr(P H_eff) + ½Tr(P G) + E_xc + Tr(P V) + ΔE`（`H_eff = H + V`），
+///   其中 `½Tr(P G)` 那一项不变。因此实现方要保证
+///
+///   ```text
+///   E_总 = E_真空 + Tr(P V) + ΔE
+///   ```
+///
+///   与它自己的物理能量定义一致 —— 本仓库的 COSMO 实现里 `½ΣV_K q_K` 是溶剂化自由能，
+///   所以 `ΔE = ½ΣV_K q_K − Tr(P V)`（见 `qwb-engine::cosmo_scf`）。
+pub trait ExternalField: Send + Sync {
+    /// 由密度构建算子与能量修正（单位：Hartree；矩阵尺寸 `n_ao × n_ao`）。
+    ///
+    /// # Errors
+    ///
+    /// 尺寸不符、求解失败等 → [`EngineError`]（会终止 SCF，不做静默降级）。
+    fn operator_and_energy(&self, density: &Matrix) -> Result<(Matrix, f64), EngineError>;
+
+    /// 供日志与错误消息用的名字。
+    fn name(&self) -> &'static str;
+}
+
+/// [`ExternalField`] 的句柄（`RksOptions` 需要 `Clone + PartialEq + Debug`）。
+///
+/// `PartialEq` 比的是句柄本身（`Arc` 指针），不是场的内容 —— 场没有可比较的语义。
+#[derive(Clone)]
+pub struct ExternalFieldHandle(std::sync::Arc<dyn ExternalField>);
+
+impl ExternalFieldHandle {
+    /// 包一个场实现。
+    #[must_use]
+    pub fn new(field: std::sync::Arc<dyn ExternalField>) -> Self {
+        Self(field)
+    }
+
+    /// 取出内部实现。
+    #[must_use]
+    pub fn field(&self) -> &dyn ExternalField {
+        self.0.as_ref()
+    }
+}
+
+impl std::fmt::Debug for ExternalFieldHandle {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(formatter, "ExternalField({})", self.0.name())
+    }
+}
+
+impl PartialEq for ExternalFieldHandle {
+    fn eq(&self, other: &Self) -> bool {
+        std::sync::Arc::ptr_eq(&self.0, &other.0)
+    }
+}
+
 /// SCF 控制参数。
 #[derive(Debug, Clone, PartialEq)]
 #[non_exhaustive]
@@ -97,6 +157,10 @@ pub struct RksOptions {
     /// 近简并 / 电荷转移体系（含 d¹⁰ 的重元素、ECP 体系）上纯 DIIS 会震荡，
     /// 阻尼是标准对策。默认 0（不改变既有行为）。
     pub damping: f64,
+    /// 外部自洽场（目前只有 COSMO/C-PCM 的溶剂反应场用）。
+    ///
+    /// `None`（默认）= 真空 SCF，逐位不变。
+    pub external_field: Option<ExternalFieldHandle>,
 }
 
 impl Default for RksOptions {
@@ -118,6 +182,7 @@ impl Default for RksOptions {
             smearing_steps: 0,
             smearing_temperature: 0.0,
             damping: 0.0,
+            external_field: None,
         }
     }
 }
@@ -1030,6 +1095,40 @@ pub fn rks_scf(
 
     for step in 0..options.max_iter {
         iterations = step + 1;
+        // 外部自洽场（COSMO）：算子依赖密度，所以每步重建。`hcore` 在本循环体内被
+        // 遮蔽为 `H_eff = H + V`，于是能量式 `Tr(P H_eff) + ½Tr(P G)` 自动带上 `Tr(P V)`，
+        // 实现方只需把 `ΔE` 补上（见 trait 文档）。
+        let (field_operator, field_energy) = match &options.external_field {
+            Some(handle) => {
+                let (operator, energy) = handle.field().operator_and_energy(&density)?;
+                (Some(operator), energy)
+            }
+            None => (None, 0.0),
+        };
+        let hcore_effective = match &field_operator {
+            Some(operator) => {
+                if operator.nrows() != n || operator.ncols() != n {
+                    return Err(EngineError::Internal(format!(
+                        "external field `{}` returned a {}x{} operator, expected {n}x{n}",
+                        options
+                            .external_field
+                            .as_ref()
+                            .map_or("unknown", |handle| handle.field().name()),
+                        operator.nrows(),
+                        operator.ncols()
+                    )));
+                }
+                let mut effective = hcore.clone();
+                for i in 0..n {
+                    for j in 0..n {
+                        effective[(i, j)] += operator[(i, j)];
+                    }
+                }
+                effective
+            }
+            None => hcore.clone(),
+        };
+        let hcore = &hcore_effective;
         let fock_data: FockMatrices = build_fock(hcore, tensor, &density).map_err(linalg)?;
         // 纯 HF（terms 为空）**不碰网格**：E_xc = 0、v_xc = 0 是精确结果，
         // 而走一遍网格要按点求 AO 值与密度（H2O/STO-3G 的 grid-coarse 是 29400 点 × 7 个 AO，
@@ -1145,7 +1244,8 @@ pub fn rks_scf(
         } else {
             options.hf_exchange * (-0.25 * tr_pk)
         };
-        electronic = tr_ph + 0.5 * tr_pg + xc_energy + hybrid;
+        // `field_energy` 是「物理场能 − Tr(PV)」的差（Tr(PV) 已随 H_eff 进 tr_ph）。
+        electronic = tr_ph + 0.5 * tr_pg + xc_energy + hybrid + field_energy;
         let energy = electronic + e_nuc;
 
         let mut max_dp = 0.0_f64;

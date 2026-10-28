@@ -24,6 +24,7 @@
 #![deny(unsafe_code)]
 #![deny(missing_docs)]
 
+pub mod cosmo_scf;
 pub mod env;
 pub mod gradient;
 pub mod hessian;
