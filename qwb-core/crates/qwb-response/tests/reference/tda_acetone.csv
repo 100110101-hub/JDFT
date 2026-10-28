@@ -1,0 +1,5 @@
+species,basis,method,index,energy_hartree,energy_ev,oscillator_strength,note
+C3H6O,sto-3g,tda,0,0.1593782673,4.336904,0.00000000,PySCF 2.14.0 RHF + tdscf.rhf.TDA（单重态，丙酮实验几何近似）
+C3H6O,sto-3g,tda,1,0.3358273408,9.138327,0.01380368,PySCF 2.14.0 RHF + tdscf.rhf.TDA（单重态，丙酮实验几何近似）
+C3H6O,sto-3g,tda,2,0.3912068471,10.645281,0.16809399,PySCF 2.14.0 RHF + tdscf.rhf.TDA（单重态，丙酮实验几何近似）
+C3H6O,sto-3g,tda,3,0.4357968994,11.858638,0.00000000,PySCF 2.14.0 RHF + tdscf.rhf.TDA（单重态，丙酮实验几何近似）
