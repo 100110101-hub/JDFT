@@ -15,6 +15,8 @@
 #![deny(unsafe_code)]
 #![deny(missing_docs)]
 
+pub mod cavity;
+
 use qwb_basis::InternalBasis;
 use qwb_engine_api::Molecule;
 use qwb_linalg::{LinalgError, Matrix, matmul, symmetric_eigen};
