@@ -68,8 +68,11 @@ DA-03:
   state: pending
   note: "RS-hybrid 数据：ωB97X-D / CAM-B3LYP（omega_bohr_inv + 混合系数）"
 DA-04:
-  state: pending
-  note: "溶剂数据 v2（ε/n²/半径集/SASA 参数，8 溶剂）"
+  state: in_progress
+  ts: "2026-10-28T19:10:00Z"
+  artifact: "qwb-data/solvent/water.yaml（K1 `solvent` 的第一个生产条目）+ registry.yaml 0.8.0→0.9.0 的 `solvents:` 段 + DATA_LICENSES.md 重新生成（22→23 个文件）。文件里：ε = 78.355、n = 1.3328、temperature_K = 298.15（SMD/Truhlar 表，DOI 10.1021/jp810292n）、atomic_radii 用 **Bondi (1964)** 的 vdW 半径（H 1.20 / C 1.70 / N 1.55 / O 1.52 / F 1.47 / S 1.80 / Cl 1.75 Å，DOI 10.1021/j100785a001）、radii_set: bondi 显式声明、cavity_model: pcm"
+  verification: "① `qwb data verify` **23 file(s) checked, 23 passed, 0 failed** —— 新增的 solvent/water.yaml 过 K1 的 `Solvent::check`（ε ≥ 1、温度为正、scale 为正、atomic_radii 非空且每个半径为正）。② `qwb data sign` 打戳并通过 registry 的 sha256 钉（dada22bb…）。③ `python scripts/gen_data_licenses.py --check` 通过（22→23 个文件，两条 DOI 都进了 DATA_LICENSES 的来源列）。④ `cargo test -p qwb-registry` 全绿（含 KV-02 的溶剂结构检查）。"
+  note: "**只做了 1/8，剩下的卡在「逐项 diff」这一条上，宁可慢也不猜**：DA-04 的判据是「与原论文表逐项 diff < 1e-12 且带 DOI」。ε/n²/温度三项是公开表（SMD 的 Table 1），有 DOI 可直接核对；但 `atomic_radii` 要跟着 `radii_set` 走 —— 本轮用的 **Bondi** 半径本身是经典且可引的（Bondi 1964），所以 water 这一条站得住。**SMD 专用的参数化半径表**（SV-03 真正要用的那套）我没有原文表可逐项核对，凭记忆写就是伪造，所以本轮**没有**写 `radii_set: smd` 的条目。下一步明确：拿到 SMD 原文附录的半径表（或一份许可允许的数据实现）再补 7 个溶剂；同时 DA-05（SMD 的 4 项非极性参数）同样需要原文表。K1 侧不用改：`refractive_index`/`radii_set`/`surface_tension_cal_per_mol_angstrom2`/`ionic_strength_molar` 四个字段在 KV-02 就已经落位。"
 DA-05:
   state: pending
   note: "SMD 的 4 项非极性参数表"

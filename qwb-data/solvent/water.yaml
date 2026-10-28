@@ -1,0 +1,35 @@
+sha256: dada22bb4ba2d89a3cf307d00e6f5d69cc8ad748cc3d82048336760db7443ea0
+name: water
+version: 1.0.0
+notes: "DA-04 v1: dielectric constant, refractive index and temperature are the SMD/Truhlar
+  values (Marenich-Cramer-Truhlar 2009, Table 1); atomic_radii are the Bondi (1964) van der
+  Waals radii, declared explicitly through radii_set=bondi so no two radius conventions can be
+  mixed silently. cavity_model=pcm keeps this entry usable by the C-PCM implementation (SV-01);
+  switching a solvent to SMD needs the SMD-specific parameterised radii plus the four nonpolar
+  terms (DA-05), which are NOT transcribed here."
+citation:
+  - title: "Universal solvation model based on solute electron density and on a continuum model of the solvent defined by the bulk dielectric constant and atomic surface tensions (SMD)"
+    doi: "10.1021/jp810292n"
+    url: "https://doi.org/10.1021/jp810292n"
+  - title: "van der Waals volumes and radii (Bondi)"
+    doi: "10.1021/j100785a001"
+    url: "https://doi.org/10.1021/j100785a001"
+license:
+  spdx: Apache-2.0
+  commercial_ok: true
+  redistribute_ok: true
+created: 2026-10-28T19:00:00Z
+epsilon: 78.355
+temperature_K: 298.15
+refractive_index: 1.3328
+radii_set: bondi
+cavity_model: pcm
+scale: 1.0
+atomic_radii:
+  H: 1.20
+  C: 1.70
+  N: 1.55
+  O: 1.52
+  F: 1.47
+  S: 1.80
+  Cl: 1.75

@@ -3,7 +3,7 @@
 # （否则 grid 的 normal 等级会有两个定义、get_grid_by_level 歧义）。
 schema_version: 1.0.0
 name: qwb-data
-version: 0.8.0
+version: 0.9.0
 created: 2026-10-22T22:53:00Z
 features:
   - "jobtype:sp"
@@ -94,3 +94,10 @@ numerics:
   - name: numerics
     path: numerics/numerics.yaml
     sha256: fea96fd0bd356da0acba2bf2c2b3de28596e1914b0668c114bbecaeae2096def
+
+# DA-04：溶剂数据（K1 `solvent`）。`radii_set` 必须显式声明 —— 混用半径集会静默错数，
+# 所以 K1 里它是必填的声明字段而不是默认值。
+solvents:
+  - name: water
+    path: solvent/water.yaml
+    sha256: dada22bb4ba2d89a3cf307d00e6f5d69cc8ad748cc3d82048336760db7443ea0

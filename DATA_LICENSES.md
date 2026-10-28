@@ -3,7 +3,7 @@
 本文件由 `scripts/gen_data_licenses.py` 生成。重跑必须得到**逐字节相同**的结果
 （排序固定 + 不含时间戳），所以它可以直接进 CI 比对。
 
-共 22 个生产数据文件。`qwb-data/examples/` 下的 SPECIMEN 不计入
+共 23 个生产数据文件。`qwb-data/examples/` 下的 SPECIMEN 不计入
 （它们是形状示例，不在 manifest 里）。
 
 其中 `qwb-data/basis/` 与 `qwb-data/ecp/` 的部分文件是从 Basis Set Exchange 导出的
@@ -35,7 +35,8 @@
 | `qwb-data/grid/grid-normal.yaml` | 1.0.0 | Apache-2.0 | true | true | `a792b362b1fdb278` |
 | `qwb-data/grid/grid-veryfine.yaml` | 1.0.0 | Apache-2.0 | true | true | `5c630f5a1ec0688d` |
 | `qwb-data/numerics/numerics.yaml` | 1.0.0 | Apache-2.0 | true | true | `fea96fd0bd356da0` |
-| `qwb-data/registry.yaml` | 0.8.0 | ? | ? | ? | `—（manifest，条目各自带` |
+| `qwb-data/registry.yaml` | 0.9.0 | ? | ? | ? | `—（manifest，条目各自带` |
+| `qwb-data/solvent/water.yaml` | 1.0.0 | Apache-2.0 | true | true | `dada22bb4ba2d89a` |
 
 ## 引用
 
@@ -135,8 +136,13 @@
 - A multicenter numerical integration scheme for polyatomic molecules (Becke partitioning)
 - New Methods For Electronic Structure Calculations on Large Molecules (pseudospectral approach)
 
-### `qwb-data/registry.yaml`（qwb-data 0.8.0）
+### `qwb-data/registry.yaml`（qwb-data 0.9.0）
 
+
+### `qwb-data/solvent/water.yaml`（water 1.0.0）
+
+- Universal solvation model based on solute electron density and on a continuum model of the solvent defined by the bulk dielectric constant and atomic surface tensions (SMD)
+- van der Waals volumes and radii (Bondi)
 
 ## 门禁状态
 
