@@ -1,0 +1,24 @@
+[package]
+name = "qwb-response"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "QWB 响应：CPHF/UCPHF 求解器与静态极化率（阶段二 RS-01）"
+
+[dependencies]
+qwb-basis.workspace = true
+qwb-linalg.workspace = true
+qwb-integrals.workspace = true
+qwb-scf.workspace = true
+qwb-engine-api.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+qwb-registry.workspace = true
+qwb-grid.workspace = true
+qwb-props.workspace = true
+
+[lints]
+workspace = true

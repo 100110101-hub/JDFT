@@ -190,8 +190,11 @@ SC-06:
 # ───────────────────── 响应与性质轨（RS，8）─────────────────────
 
 RS-01:
-  state: pending
-  note: "qwb-response：CPHF/UCPHF 求解器 + 静态极化率"
+  state: in_progress
+  ts: "2026-10-28T12:30:00Z"
+  artifact: "新 crate `qwb-response`：`mo_integrals.rs`（AO→MO 的两块 2e 积分 T1=(ai|bj)、T2=(ab|ij) 与偶极矩阵元，只变换响应方程用到的块，不做完整 n⁴ 张量）+ `cphf.rs`（矩阵自由的 (A+B) 算子 + Jacobi 预条件共轭梯度，收敛判据是残差 2-范数）+ `polarizability.rs`（α = 4 dᵀ(A+B)⁻¹d + 各向同性/各向异性 + 对称性/正定自检）+ 两份测试（`rs01_hessian_operator.rs` 用能量二阶导核对算子、`rs01_polarizability.rs` 用 ±0.001/±0.002 a.u. 有限场核对 α）——**两份测试当前都是 `#[ignore]`，见 note**"
+  verification: "**未达成（这就是 in_progress 的原因）**：`cargo test -p qwb-response` 编译与运行都干净（0 failed / 4 ignored），但两条判据都还没通过 —— 用同一个对 (i=0, a=5)（水/STO-3G）的能量二阶导，`rs01_hessian_operator.rs` 的有限差分给 **37.96**，第 19 轮那份一次性诊断给 **80.55**，两者矛盾；而 (A+B) 算子给的是 `Δε + 4(ai|ai) − (aa|ii) − (ai|ia) = 30.34`。三者不一致说明**至少有一处**的差分实现或指数映射写错了。已确认的基础事实：① 测试里的能量泛函 `E[P] = tr(Ph) + ½(PJ) − ¼(PK)` 与 SCF 的 `electronic_hartree` 一致到 5e-12；② 两块 MO 积分的半变换与 `(aj|ib) = T1[(j,a)][(i,b)]` 的映射已逐项手算核对（并且注意到 `(ai|ai) = (ai|ia)` 因为 r↔s 对称）；③ 电场通过 `RksOptions::ecp_potential`（语义就是「加到 H_core 的矩阵」）注入，`dipole_debye` 的符号约定 `(nuclear − electronic)` 已核对。**外部参考也没拿到**：PySCF 2.14 的 `mf.polarizability()`/`pyscf.scf.polarizability`/`pyscf.prop` 在这个安装里都不存在，`cphf.solve` 对 RHS 形状的要求（(occ,vir) vs (vir,occ)）与内部 flatten 顺序不一致，直接调会 `ValueError`；PySCF 的有限场（覆盖 `get_hcore`）倒是能跑出 H2O/STO-3G 的 α = [0.042, 5.195, 2.147]（iso 2.46），但 α_xx ≈ 0.04 明显不对（水中 x 是面外方向，应约 4.5），说明那一路也要先查 SCF 在 x 场下的收敛。"
+  note: "**卡点具体是什么**：`(A+B)` 的**因子/项**没定死。三条互相矛盾的数（37.96 / 80.55 / 30.34）说明问题不在「小数点后几位」，而在某个系数或映射。下一步（明确，不是「再试试」）：① 把能量二阶导的核对**只留一份实现**（当前两份独立写的 `rotated_density` 是矛盾的来源），并在同一份里打印 3 个不同步长（1e-2/1e-3/1e-4）的值，确认不是步长/抖动问题；② 用 H2/STO-3G（只有 1 个占据 × 1 个虚，2 个基函数）做**解析可算**的最小案例，把 `(A+B)` 的四个候选系数（Δε、T1、T2、T3）解出来；③ 拿到 PySCF 的 CPHF α：正确调用是 `cphf.solve(mf.gen_response(...), mo_energy, mo_occ, h1)` 且 `h1` 必须是内部 flatten 的顺序（读 `pyscf/scf/cphf.py` 的 `solve_nos1` 前几行即可确定），或者改用 `mf.Polarizability` 插件；④ 三者一致后再把两条测试的 `#[ignore]` 去掉、按 §6.6 的判据验收。**这一轮没有把 RS-01 标 done**：判据一条都没过，外部尺子也没跑通，标 done 就是伪造。"
 RS-02:
   state: pending
   note: "TDA/TDDFT 激发能 + 振子强度"
