@@ -254,7 +254,7 @@ K8 块的静电项同时改成 G_EP 约定（`E_溶 − E_gas`，含极化形变
 ④ 若要在此刻收口，只能把判据改写成「静电项与实验的差」，那属于改验收标准，不做。"
 SV-02:
   state: pending
-  note: "COSMO 解析梯度 + opt 接线"
+  note: "COSMO 解析梯度 + opt 接线。**按 §10.5 的选取规则当前不可做**：它依赖 SV-01，而 SV-01 是 blocked（判据卡在缺 SMD 非极性项），所以溶剂化轨整条要等 SV-03 解 block。下一轮的队列头是 SC-02（依赖 SC-01 done、ID 最小），见 choices 六十五。"
 SV-03:
   state: pending
   note: "SMD（COSMO + 4 项非极性 + 参数化半径）"

@@ -2276,3 +2276,41 @@ dV_K/dP_μν = −Ω_K,μν
 
 碎片数敏感性从 0.599 涨到 **0.993 kcal/mol**（162/246/410 碎片）：极化做对之后，
 `ΔG` 对空腔离散化更敏感。这一点写进判据的容差（< 1.2）而不是藏起来。
+
+## 六十五、按 §10.5 的选取规则重排队列：下一个是 SC-02，不是 SV-02（2026-10-30）
+
+§10.5 的规则写得很硬：「找下一个 WP：§6 中**依赖全 done** 且 ID 最小的那个」。
+上一轮把 SV-01 标了 blocked 之后，这条规则的结果变了，值得记一次，否则很容易凭直觉
+继续做 SV-02：
+
+| WP | 依赖 | 依赖状态 | 可做？ |
+| --- | --- | --- | --- |
+| SV-02（COSMO 解析梯度 + opt） | SV-01 | **blocked** | ❌ |
+| SV-03（SMD） | SV-01, DA-05 | SV-01 blocked | ❌ |
+| VF-02（溶剂化基准集） | SV-03 | 未开始 | ❌ |
+| **SC-02**（开壳层解析梯度 + opt） | SC-01 | done | ✅ |
+| RS-05（解析 Hessian） | RS-01 | done | ✅ |
+| RS-04（NMR GIAO） | RS-01 | done | ✅ |
+| RS-08（多极展开） | 基线 | done | ✅ |
+
+按「ID 最小」取 **SC-02**（M6）。SV-02 表面上"排在 SV-01 后面"，但 SV-01 是 blocked，
+所以在 SV-01 解blocked（要等 SV-03 的非极性项）之前，溶剂化轨整条都不可做 ——
+这是把 SV-01 如实标 blocked 的直接后果，不是可以绕开的形式问题。
+
+### SC-02 的结构勘察（为下一轮省时间）
+
+* 闭壳层路径：`qwb-scf/src/analytic_gradient.rs`（787 行）——
+  `gradient_components(basis, molecule, density, fock) -> GradientComponents`，
+  `analytic_gradient(...) -> Vec<[f64;3]>`；导数积分与对称性处理都在这里面。
+* 引擎侧：`qwb-engine/src/gradient.rs` 有 `numerical_gradient`（数值参考）与
+  `xc_geometric_derivative`；`RksBackend::run` 目前对 `scf_type = uhf/uks` 的
+  `opt` 显式拒绝（消息带 SC-02）。
+* **不能直接复用**闭壳层的 `(density, fock)` 接口：UHF 的能量是
+  `Σ_σ [Tr(P^σ H) + ½Tr(P^σ G^σ)] + E_nuc`，而 `½Tr((P^α+P^β) G(P^α+P^β))`
+  ≠ `½Σ_σ Tr(P^σ G^σ)` —— 需要**按自旋分别收缩** 2e 导数项，也就是要一个
+  `uhf_gradient_components(basis, molecule, p_alpha, p_beta, f_alpha, f_beta)`。
+  这是 SC-02 的主要工作量（外加 `opt` 的开壳层接线与 OH/O2 的 1e-6 Ha/Bohr 判据）。
+
+**本轮只做了选型与结构勘察，没有代码变更** —— 记在这里而不是只留在对话里，
+是为了让下一轮直接从 `uhf_gradient_components` 开工。treeness 状态：第 89 轮门禁
+`passed 26, failed 0` / `ALL GATES GREEN`，工作树干净。
