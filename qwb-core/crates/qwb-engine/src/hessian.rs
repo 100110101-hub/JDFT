@@ -111,6 +111,34 @@ fn is_linear(molecule: &Molecule) -> bool {
 }
 
 /// 位移一组的能量梯度（内部用）。
+/// 参考几何的收敛密度（Hessian 热启动用）；拿不到就返回 `None`（退回 core guess）。
+fn reference_density(
+    registry: &Registry,
+    molecule: &Molecule,
+    options: &OptOptions,
+) -> Result<Option<qwb_linalg::Matrix>, EngineError> {
+    let mut scf = options.scf_options();
+    scf.resume_from = None;
+    if options.functional.is_empty() {
+        let basis = qwb_basis::InternalBasis::build(registry.get_basis(&options.basis)?, molecule)?;
+        let tensor = qwb_integrals::two_electron::two_electron(&basis, molecule)?;
+        let grid = qwb_grid::molecular_grid(registry.get_grid(&options.grid)?, molecule)
+            .map_err(|err| EngineError::Data(format!("grid: {err}")))?;
+        let result = qwb_scf::rks::rks_scf(&basis, molecule, &tensor, &grid, &[], scf)?;
+        Ok(Some(result.density))
+    } else {
+        let result = qwb_scf::rks::rks_from_data(
+            registry,
+            molecule,
+            &options.basis,
+            &options.functional,
+            &options.grid,
+            scf,
+        )?;
+        Ok(Some(result.density))
+    }
+}
+
 fn gradient_at(
     registry: &Registry,
     molecule: &Molecule,
@@ -189,6 +217,12 @@ pub fn numerical_hessian_with_delta(
 ) -> Result<HessianResult, EngineError> {
     let natoms = molecule.atoms.len();
     let dof = 3 * natoms;
+    // RS-05：先用参考几何把 SCF 解出来，之后每个位移都从这条密度**热启动** ——
+    // 同一条势能面上相邻几何的密度差别很小，SCF 迭代数能掉一大截（choices 七十二）。
+    let reference = reference_density(registry, molecule, options)?;
+    let mut options = options.clone();
+    options.scf_initial_density = reference;
+    let options = &options;
     // 每个位移需要 ±δ 两个几何的梯度
     let displacements: Vec<(usize, usize)> = (0..dof).map(|k| (k / 3, k % 3)).collect();
 

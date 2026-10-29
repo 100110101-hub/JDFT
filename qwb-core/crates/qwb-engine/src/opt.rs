@@ -60,6 +60,11 @@ pub struct OptOptions {
     pub scf_density_threshold: f64,
     /// 自旋设置（`None`/`Rks`/`Rhf` = 闭壳层；`Uhf` = 开壳层 UHF，SC-02）。
     pub scf_type: Option<qwb_engine_api::ScfType>,
+    /// 每一步 SCF 的热启动密度（`None` = core guess）。
+    ///
+    /// 用途是 Hessian：同一条势能面上相邻几何的密度几乎一样，从参考密度出发
+    /// SCF 迭代数能从十几次掉到几次（RS-05 的墙钟优化，见 choices 七十二）。
+    pub scf_initial_density: Option<qwb_linalg::Matrix>,
 }
 
 impl OptOptions {
@@ -83,14 +88,18 @@ impl OptOptions {
             scf_energy_threshold: 1.0e-8,
             scf_density_threshold: 1.0e-6,
             scf_type: None,
+            scf_initial_density: None,
         }
     }
 
-    fn scf_options(&self) -> RksOptions {
+    pub(crate) fn scf_options(&self) -> RksOptions {
         let mut options = RksOptions::default();
         options.max_iter = self.scf_max_iter;
         options.energy_threshold = self.scf_energy_threshold;
         options.density_threshold = self.scf_density_threshold;
+        if let Some(density) = &self.scf_initial_density {
+            options.resume_from = Some(qwb_scf::checkpoint::ScfCheckpoint::new(density, None, 0));
+        }
         options
     }
 }

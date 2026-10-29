@@ -219,7 +219,7 @@ RS-04:
   state: pending
   note: "NMR GIAO 屏蔽（+ length-gauge 一致性）"
 RS-05:
-  state: in_progress
+  state: blocked
   ts: "2026-11-01T06:00:00Z"
   artifact: "（本轮只做基线测量与方案，尚未改代码）"
   verification: "**基线实测**（release 构建，`H2O/def2-SVP/HF`，实验几何，`grid-coarse`）：现有数值 Hessian 墙钟 **67.46 s**，dof = 9，18 个位移几何（每个 1 次 SCF + 1 次解析梯度装配），频率 4058.9 / 3972.2 / 1794.6 cm⁻¹。判据要求「比数值快 ≥ 20×」，所以解析 Hessian 必须 < **3.37 s** 才算达成。"
