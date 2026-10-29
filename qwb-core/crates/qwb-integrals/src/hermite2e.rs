@@ -143,6 +143,156 @@ pub(crate) fn derivative_boys(l: u32, m: u32, n: u32, scale: f64, r: [f64; 3]) -
 /// 一个笛卡尔分量 `(a b|c d)` 的原函数积分（未归一化、未收缩）。
 ///
 /// `pa`…`pd` 是四个笛卡尔高斯的幂次 `(x, y, z)`。
+/// 一个 primitive 四元组里**与幂次无关**的那部分（中心、指数、预因子）以及
+/// Hermite-Coulomb 核的懒缓存 —— 求导数积分时 12 次调用共用同一份。
+struct PrimitiveContext {
+    a: [f64; 3],
+    b: [f64; 3],
+    c: [f64; 3],
+    d: [f64; 3],
+    p: f64,
+    q: f64,
+    p_center: [f64; 3],
+    q_center: [f64; 3],
+    rho: f64,
+    r: [f64; 3],
+    prefactor: f64,
+    /// 懒缓存：`derivative_boys(l,m,n)` 只依赖三元组，跨 12 次调用复用。
+    kernel: Vec<f64>,
+    /// 每个方向的最高 Hermite 指标（缓存的长宽高）。
+    ly: u32,
+    lz: u32,
+}
+
+impl PrimitiveContext {
+    fn new(
+        a: [f64; 3],
+        alpha: f64,
+        b: [f64; 3],
+        beta: f64,
+        c: [f64; 3],
+        gamma: f64,
+        d: [f64; 3],
+        delta: f64,
+        max_powers: [u32; 3],
+    ) -> Self {
+        let p = alpha + beta;
+        let q = gamma + delta;
+        let p_center = [
+            (alpha * a[0] + beta * b[0]) / p,
+            (alpha * a[1] + beta * b[1]) / p,
+            (alpha * a[2] + beta * b[2]) / p,
+        ];
+        let q_center = [
+            (gamma * c[0] + delta * d[0]) / q,
+            (gamma * c[1] + delta * d[1]) / q,
+            (gamma * c[2] + delta * d[2]) / q,
+        ];
+        let ab2 = (0..3).map(|axis| (a[axis] - b[axis]).powi(2)).sum::<f64>();
+        let cd2 = (0..3).map(|axis| (c[axis] - d[axis]).powi(2)).sum::<f64>();
+        let e_ab = (-alpha * beta / p * ab2).exp();
+        let e_cd = (-gamma * delta / q * cd2).exp();
+        let pq = p + q;
+        let rho = p * q / pq;
+        let r = [
+            p_center[0] - q_center[0],
+            p_center[1] - q_center[1],
+            p_center[2] - q_center[2],
+        ];
+        let prefactor = 2.0 * PI.powf(2.5) / (p * q * pq.sqrt()) * e_ab * e_cd;
+        let (lx, ly, lz) = (max_powers[0], max_powers[1], max_powers[2]);
+        Self {
+            a,
+            b,
+            c,
+            d,
+            p,
+            q,
+            p_center,
+            q_center,
+            rho,
+            r,
+            prefactor,
+            kernel: vec![f64::NAN; ((lx + 1) * (ly + 1) * (lz + 1)) as usize],
+            ly,
+            lz,
+        }
+    }
+
+    /// 给定的四个幂次三元组的原函数积分（未归一化、未收缩）。
+    fn integral(&mut self, pa: [u32; 3], pb: [u32; 3], pc: [u32; 3], pd: [u32; 3]) -> f64 {
+        let e_a: Vec<Vec<f64>> = (0..3)
+            .map(|axis| {
+                hermite_1d(
+                    pa[axis],
+                    pb[axis],
+                    self.p,
+                    self.p_center[axis] - self.a[axis],
+                    self.p_center[axis] - self.b[axis],
+                )
+            })
+            .collect();
+        let e_c: Vec<Vec<f64>> = (0..3)
+            .map(|axis| {
+                hermite_1d(
+                    pc[axis],
+                    pd[axis],
+                    self.q,
+                    self.q_center[axis] - self.c[axis],
+                    self.q_center[axis] - self.d[axis],
+                )
+            })
+            .collect();
+        let stride_y = (self.lz + 1) as usize;
+        let stride_x = ((self.ly + 1) * (self.lz + 1)) as usize;
+        let mut total = 0.0;
+        for tx in 0..=pa[0] + pb[0] {
+            for ty in 0..=pa[1] + pb[1] {
+                for tz in 0..=pa[2] + pb[2] {
+                    let bra = e_a[0][tx as usize] * e_a[1][ty as usize] * e_a[2][tz as usize];
+                    if bra == 0.0 {
+                        continue;
+                    }
+                    for ux in 0..=pc[0] + pd[0] {
+                        for uy in 0..=pc[1] + pd[1] {
+                            for uz in 0..=pc[2] + pd[2] {
+                                let ket =
+                                    e_c[0][ux as usize] * e_c[1][uy as usize] * e_c[2][uz as usize];
+                                if ket == 0.0 {
+                                    continue;
+                                }
+                                let sign = if (ux + uy + uz) % 2 == 0 { 1.0 } else { -1.0 };
+                                let index = ((tx + ux) * stride_x as u32
+                                    + (ty + uy) * stride_y as u32
+                                    + (tz + uz))
+                                    as usize;
+                                let value = if self.kernel[index].is_nan() {
+                                    let computed = derivative_boys(
+                                        tx + ux,
+                                        ty + uy,
+                                        tz + uz,
+                                        self.rho,
+                                        self.r,
+                                    );
+                                    self.kernel[index] = computed;
+                                    computed
+                                } else {
+                                    self.kernel[index]
+                                };
+                                total += bra * ket * sign * value;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        self.prefactor * total
+    }
+}
+
+/// 一个笛卡尔分量 `(a b|c d)` 的原函数积分（未归一化、未收缩）。
+///
+/// `pa`…`pd` 是四个笛卡尔高斯的幂次 `(x, y, z)`。
 #[allow(clippy::too_many_arguments)]
 #[must_use]
 pub fn primitive_component(
@@ -159,101 +309,71 @@ pub fn primitive_component(
     d: [f64; 3],
     delta: f64,
 ) -> f64 {
-    let p = alpha + beta;
-    let q = gamma + delta;
-    let p_center = [
-        (alpha * a[0] + beta * b[0]) / p,
-        (alpha * a[1] + beta * b[1]) / p,
-        (alpha * a[2] + beta * b[2]) / p,
+    let max_powers = [
+        pa[0] + pb[0] + pc[0] + pd[0],
+        pa[1] + pb[1] + pc[1] + pd[1],
+        pa[2] + pb[2] + pc[2] + pd[2],
     ];
-    let q_center = [
-        (gamma * c[0] + delta * d[0]) / q,
-        (gamma * c[1] + delta * d[1]) / q,
-        (gamma * c[2] + delta * d[2]) / q,
+    let mut context = PrimitiveContext::new(a, alpha, b, beta, c, gamma, d, delta, max_powers);
+    context.integral(pa, pb, pc, pd)
+}
+
+/// 一个 primitive 四元组对**四个中心**的导数 `[[∂/∂A_i]; [∂/∂B_i]; [∂/∂C_i]; [∂/∂D_i]]`。
+///
+/// 用抬/降幂恒等式 `∂/∂A_k = 2α·(a+e_k) − a_k·(a−e_k)`，而四个中心共享同一份
+/// [`PrimitiveContext`]（预因子、指数、Hermite-Coulomb 核缓存）—— 这正是原来那 24 次
+/// 独立 `primitive_component` 调用（4 槽 × 3 轴 × 抬/降）里最贵的那部分 setup。
+///
+/// `∂/∂D` 由平动不变性 `∂/∂A + ∂/∂B + ∂/∂C + ∂/∂D = 0` 得到。
+///
+/// # Panics
+///
+/// 不会 panic；幂次都是 `u32`，抬升后仍在缓存范围内（缓存按 `max_powers` 开）。
+#[allow(clippy::too_many_arguments)]
+#[must_use]
+pub fn primitive_component_derivatives(
+    pa: [u32; 3],
+    a: [f64; 3],
+    alpha: f64,
+    pb: [u32; 3],
+    b: [f64; 3],
+    beta: f64,
+    pc: [u32; 3],
+    c: [f64; 3],
+    gamma: f64,
+    pd: [u32; 3],
+    d: [f64; 3],
+    delta: f64,
+) -> [[f64; 3]; 4] {
+    // 缓存要覆盖「某一侧抬一阶」后的最高指标。
+    let max_powers = [
+        pa[0] + pb[0] + pc[0] + pd[0] + 1,
+        pa[1] + pb[1] + pc[1] + pd[1] + 1,
+        pa[2] + pb[2] + pc[2] + pd[2] + 1,
     ];
-    let ab2 = (0..3).map(|axis| (a[axis] - b[axis]).powi(2)).sum::<f64>();
-    let cd2 = (0..3).map(|axis| (c[axis] - d[axis]).powi(2)).sum::<f64>();
-    let e_ab = (-alpha * beta / p * ab2).exp();
-    let e_cd = (-gamma * delta / q * cd2).exp();
-    let pq = p + q;
-    let rho = p * q / pq;
-    let r = [
-        p_center[0] - q_center[0],
-        p_center[1] - q_center[1],
-        p_center[2] - q_center[2],
-    ];
-    let prefactor = 2.0 * PI.powf(2.5) / (p * q * pq.sqrt()) * e_ab * e_cd;
-
-    let e_a: Vec<Vec<f64>> = (0..3)
-        .map(|axis| {
-            hermite_1d(
-                pa[axis],
-                pb[axis],
-                p,
-                p_center[axis] - a[axis],
-                p_center[axis] - b[axis],
-            )
-        })
-        .collect();
-    let e_c: Vec<Vec<f64>> = (0..3)
-        .map(|axis| {
-            hermite_1d(
-                pc[axis],
-                pd[axis],
-                q,
-                q_center[axis] - c[axis],
-                q_center[axis] - d[axis],
-            )
-        })
-        .collect();
-
-    // **缓存 Hermite-Coulomb 核**：`derivative_boys(l,m,n)` 只依赖三元组
-    // `(tx+ux, ty+uy, tz+uz)`，而内层循环里大量 `(tx,ux)` 组合会落到同一个三元组上。
-    // 原来的写法对每个 (tx,ty,tz,ux,uy,uz) 都重算一次（`Kernel` 链 + Boys），
-    // 这是解析梯度最贵的一段（`docs/choices.md` 七十二 的成本分解）。三元组总数很小
-    // （每个方向 ≤ l_a+l_b+l_c+l_d），整张表一次求完即可。
-    let lx = pa[0] + pb[0] + pc[0] + pd[0];
-    let ly = pa[1] + pb[1] + pc[1] + pd[1];
-    let lz = pa[2] + pb[2] + pc[2] + pd[2];
-    let stride_y = (lz + 1) as usize;
-    let stride_x = ((ly + 1) * (lz + 1)) as usize;
-    // 懒填充：只有真正被访问到的三元组才算（实测「全表预计算」比原来还慢 —— 多数
-    // 三元组根本用不上，预计算反而把 setup 做大了；见 choices 七十二 第 54 轮）。
-    let mut kernel = vec![f64::NAN; ((lx + 1) * (ly + 1) * (lz + 1)) as usize];
-
-    let mut total = 0.0;
-    for tx in 0..=pa[0] + pb[0] {
-        for ty in 0..=pa[1] + pb[1] {
-            for tz in 0..=pa[2] + pb[2] {
-                let bra = e_a[0][tx as usize] * e_a[1][ty as usize] * e_a[2][tz as usize];
-                if bra == 0.0 {
-                    continue;
-                }
-                for ux in 0..=pc[0] + pd[0] {
-                    for uy in 0..=pc[1] + pd[1] {
-                        for uz in 0..=pc[2] + pd[2] {
-                            let ket =
-                                e_c[0][ux as usize] * e_c[1][uy as usize] * e_c[2][uz as usize];
-                            if ket == 0.0 {
-                                continue;
-                            }
-                            let sign = if (ux + uy + uz) % 2 == 0 { 1.0 } else { -1.0 };
-                            let index = ((tx + ux) * stride_x as u32
-                                + (ty + uy) * stride_y as u32
-                                + (tz + uz)) as usize;
-                            let value = if kernel[index].is_nan() {
-                                let computed = derivative_boys(tx + ux, ty + uy, tz + uz, rho, r);
-                                kernel[index] = computed;
-                                computed
-                            } else {
-                                kernel[index]
-                            };
-                            total += bra * ket * sign * value;
-                        }
-                    }
-                }
+    let mut context = PrimitiveContext::new(a, alpha, b, beta, c, gamma, d, delta, max_powers);
+    let mut out = [[0.0_f64; 3]; 4];
+    let centers = [pa, pb, pc, pd];
+    let exponents = [alpha, beta, gamma, delta];
+    for slot in 0..3 {
+        for axis in 0..3 {
+            let mut raised = centers;
+            raised[slot][axis] += 1;
+            let mut value = 2.0
+                * exponents[slot]
+                * context.integral(raised[0], raised[1], raised[2], raised[3]);
+            if centers[slot][axis] > 0 {
+                let mut lowered = centers;
+                lowered[slot][axis] -= 1;
+                value -= f64::from(centers[slot][axis])
+                    * context.integral(lowered[0], lowered[1], lowered[2], lowered[3]);
             }
+            out[slot][axis] = value;
         }
     }
-    prefactor * total
+    #[allow(clippy::needless_range_loop)]
+    for axis in 0..3 {
+        out[3][axis] = -(out[0][axis] + out[1][axis] + out[2][axis]);
+    }
+    out
 }

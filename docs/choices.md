@@ -2672,6 +2672,22 @@ Hessian 50.55 → 65.65 s）。原因很清楚：内层循环实际只碰到 Tab
 频率逐位不变；`g01_analytic_def2svp`、`g01_components`、`g01_nuclear_derivative`、
 `g01_analytic_pbe`（3 例）、`g01_analytic_water` 与 `qwb-integrals` 全部测试继续绿。
 
+**第 55 轮：第三刀 —— 一次 setup 出全部 12 个导数（累计 2.12×）。**
+把 `primitive_component` 拆成 `PrimitiveContext`（中心、指数、预因子、Hermite-Coulomb 核缓存，
+全部与幂次无关）+ 一个只吃幂次的 `integral()`；新 API `primitive_component_derivatives` 用同一份
+context 求四个中心 × 三轴的导数（`∂/∂D` 由平动不变性），`analytic_gradient` 里那 24 次独立调用
+合并成 1 次，`quartet_derivative` 随之删除。
+
+| 量 | 初始 | 53 轮 | 54 轮 | **55 轮** | 累计 |
+| --- | --- | --- | --- | --- | --- |
+| SCF + 解析梯度 | 16.946 s | 12.641 s | 11.612 s | **7.188 s** | 2.36× |
+| 数值 Hessian | 67.46 s | 50.55 s | 44.487 s | **31.782 s** | **2.12×** |
+
+频率逐位不变，`g01_*` 五条与 `qwb-integrals` 全部测试绿。**注意门槛也跟着变了**：判据是
+「解析比数值快 20×」，而基线（数值 Hessian）现在是 31.78 s，所以解析 Hessian 要 **< 1.59 s**。
+再往下走的两条：①`hermite_1d` 也在 12 次调用里重复，可以提到 `PrimitiveContext` 里按轴缓存；
+②二阶导要一次 quartet 遍历累加 `(3N)²` 个贡献（RS-05 的 CPHF 部分仍需要它）。
+
 **教训**：这一刀说明瓶颈不只在"内层重复算"，更在"每次 `primitive_component` 的 setup"。
 离 3.37 s 还差 13 倍，剩下的必须是**一次 setup 出全部 12 个导数**的 Hermite 表提升
 （把 4 槽 × 3 轴 × 抬/降那 24 次调用合并成 1 次），内层缓存只能再挤出个位数百分比。

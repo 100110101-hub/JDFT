@@ -298,52 +298,6 @@ fn pair_derivative(
     total
 }
 
-/// 2e：`(ab|cd)` 的 `slot`（0=a,1=b,2=c,3=d）所在中心求导。
-///
-/// `d` 只有「槽位 0」，这里用 `(i j|k l)` 的对内互换与换对把目标槽位换到 0。
-fn quartet_derivative(
-    quartet: [usize; 4],
-    exponents: &[f64; 4],
-    cartesian: &[CartAo],
-    slot: usize,
-    axis: usize,
-) -> f64 {
-    let order: [usize; 4] = match slot {
-        0 => [0, 1, 2, 3],
-        1 => [1, 0, 2, 3],
-        2 => [2, 3, 0, 1],
-        _ => [3, 2, 0, 1],
-    };
-    let index = [
-        quartet[order[0]],
-        quartet[order[1]],
-        quartet[order[2]],
-        quartet[order[3]],
-    ];
-    let exponent = [
-        exponents[order[0]],
-        exponents[order[1]],
-        exponents[order[2]],
-        exponents[order[3]],
-    ];
-    raise_lower(exponent[0], cartesian[index[0]].powers, axis, |powers| {
-        primitive_component(
-            powers,
-            cartesian[index[0]].center,
-            exponent[0],
-            cartesian[index[1]].powers,
-            cartesian[index[1]].center,
-            exponent[1],
-            cartesian[index[2]].powers,
-            cartesian[index[2]].center,
-            exponent[2],
-            cartesian[index[3]].powers,
-            cartesian[index[3]].center,
-            exponent[3],
-        )
-    })
-}
-
 /// 2e 项：`½ Σ P P d(ab|cd) − ¼ Σ P P d(ac|bd)`。
 ///
 /// # 两个乘数级的加速（2026-10-25，T4 的前置）
@@ -435,27 +389,30 @@ fn two_electron_all(cartesian: &[CartAo], density: &Matrix) -> (Vec<[f64; 3]>, V
                                     if weight == 0.0 {
                                         continue;
                                     }
-                                    let owners = [a, b, c, d];
                                     #[allow(clippy::needless_range_loop)]
                                     // slot/axis 同时用作下标
                                     // 平动不变性：`∂/∂A + ∂/∂B + ∂/∂C + ∂/∂D = 0`（四个中心同时平移
                                     // 时积分不变），所以第 4 个槽位可以直接从前面三个得到 —— 省掉
                                     // 1/4 的 `primitive_component` 调用（这是梯度里最贵的一段）。
                                     #[allow(clippy::needless_range_loop)]
-                                    let mut local = [[0.0_f64; 3]; 4];
-                                    #[allow(clippy::needless_range_loop)]
-                                    for slot in 0..3 {
-                                        for axis in 0..3 {
-                                            local[slot][axis] = quartet_derivative(
-                                                owners, &exponents, cartesian, slot, axis,
-                                            );
-                                        }
-                                    }
-                                    #[allow(clippy::needless_range_loop)]
-                                    for axis in 0..3 {
-                                        local[3][axis] =
-                                            -(local[0][axis] + local[1][axis] + local[2][axis]);
-                                    }
+                                    // 一次 setup 出全部 12 个导数：`primitive_component_derivatives`
+                                    // 用同一份 `PrimitiveContext`（预因子 + Hermite-Coulomb 核缓存）
+                                    // 拿四个中心的三轴导数，`∂/∂D` 由平动不变性得到。
+                                    let local =
+                                        qwb_integrals::hermite2e::primitive_component_derivatives(
+                                            cartesian[a].powers,
+                                            cartesian[a].center,
+                                            exponents[0],
+                                            cartesian[b].powers,
+                                            cartesian[b].center,
+                                            exponents[1],
+                                            cartesian[c].powers,
+                                            cartesian[c].center,
+                                            exponents[2],
+                                            cartesian[d].powers,
+                                            cartesian[d].center,
+                                            exponents[3],
+                                        );
                                     #[allow(clippy::needless_range_loop)]
                                     for slot in 0..4 {
                                         for axis in 0..3 {
