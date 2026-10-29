@@ -1,0 +1,37 @@
+sha256: 44962e541357f1246cb396096a763835deba1756f36e2ac9150882c075dd5e5b
+name: dmso
+version: 1.0.0
+notes: "DA-04 v1: dielectric constant and refractive index are the SMD solvent-table
+  values (Marenich-Cramer-Truhlar 2009, Table 1, 298.15 K); atomic_radii are the Bondi
+  (1964) van der Waals radii, declared through radii_set=bondi so no two radius
+  conventions can be mixed silently. cavity_model=pcm keeps this entry usable by the
+  C-PCM implementation (SV-01); switching to SMD needs the SMD parameterised radii and
+  the four nonpolar terms (DA-05), which are NOT transcribed here. NIST handbook values
+  differ in the third decimal for some solvents (e.g. acetonitrile 35.94 vs 35.69); this
+  file stays on one source so all eight solvents are mutually consistent with water.yaml."
+citation:
+  - title: "Universal solvation model based on solute electron density and on a continuum model of the solvent defined by the bulk dielectric constant and atomic surface tensions (SMD)"
+    doi: "10.1021/jp810292n"
+    url: "https://doi.org/10.1021/jp810292n"
+  - title: "van der Waals volumes and radii (Bondi)"
+    doi: "10.1021/j100785a001"
+    url: "https://doi.org/10.1021/j100785a001"
+license:
+  spdx: Apache-2.0
+  commercial_ok: true
+  redistribute_ok: true
+created: 2026-11-01T08:00:00Z
+epsilon: 46.83
+temperature_K: 298.15
+refractive_index: 1.4793
+radii_set: bondi
+cavity_model: pcm
+scale: 1.0
+atomic_radii:
+  H: 1.20
+  C: 1.70
+  N: 1.55
+  O: 1.52
+  F: 1.47
+  S: 1.80
+  Cl: 1.75

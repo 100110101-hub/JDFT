@@ -3,7 +3,7 @@
 # （否则 grid 的 normal 等级会有两个定义、get_grid_by_level 歧义）。
 schema_version: 1.0.0
 name: qwb-data
-version: 0.9.0
+version: 0.10.0
 created: 2026-10-22T22:53:00Z
 features:
   - "jobtype:sp"
@@ -101,3 +101,24 @@ solvents:
   - name: water
     path: solvent/water.yaml
     sha256: dada22bb4ba2d89a3cf307d00e6f5d69cc8ad748cc3d82048336760db7443ea0
+  - name: methanol
+    path: solvent/methanol.yaml
+    sha256: 2e9889d7110700a7f8c8ef72a89a80d8c6f0893468df4ebed1489f98bab5144f
+  - name: ethanol
+    path: solvent/ethanol.yaml
+    sha256: 140f562b0cce88c60825563cbd638d444f7e3198d9cc0da42189675c15f7f545
+  - name: acetonitrile
+    path: solvent/acetonitrile.yaml
+    sha256: 37037550345d7dd1edbca3d3677a0fdb4053efd2c799ead63fcc09d5298ec600
+  - name: dmso
+    path: solvent/dmso.yaml
+    sha256: 44962e541357f1246cb396096a763835deba1756f36e2ac9150882c075dd5e5b
+  - name: chloroform
+    path: solvent/chloroform.yaml
+    sha256: 1ee62fd64ec9bfbd47e59a1b9c1fcd1d4ce1a307648077c864da7fafdcf03ff1
+  - name: toluene
+    path: solvent/toluene.yaml
+    sha256: a0cc3d0cfb2d7dcb90035ddc6f97c1a8af4988aad71a5d9e2a5ab97f7f931d61
+  - name: thf
+    path: solvent/thf.yaml
+    sha256: 7e0ae91ff5abbc20922ee463f031fea1884282dd9c1bab35fc89c92880fab917
