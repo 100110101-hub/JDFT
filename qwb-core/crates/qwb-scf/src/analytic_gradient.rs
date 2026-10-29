@@ -436,13 +436,31 @@ fn two_electron_all(cartesian: &[CartAo], density: &Matrix) -> (Vec<[f64; 3]>, V
                                         continue;
                                     }
                                     let owners = [a, b, c, d];
-                                    #[allow(clippy::needless_range_loop)] // slot/axis 同时用作下标
+                                    #[allow(clippy::needless_range_loop)]
+                                    // slot/axis 同时用作下标
+                                    // 平动不变性：`∂/∂A + ∂/∂B + ∂/∂C + ∂/∂D = 0`（四个中心同时平移
+                                    // 时积分不变），所以第 4 个槽位可以直接从前面三个得到 —— 省掉
+                                    // 1/4 的 `primitive_component` 调用（这是梯度里最贵的一段）。
+                                    #[allow(clippy::needless_range_loop)]
+                                    let mut local = [[0.0_f64; 3]; 4];
+                                    #[allow(clippy::needless_range_loop)]
+                                    for slot in 0..3 {
+                                        for axis in 0..3 {
+                                            local[slot][axis] = quartet_derivative(
+                                                owners, &exponents, cartesian, slot, axis,
+                                            );
+                                        }
+                                    }
+                                    #[allow(clippy::needless_range_loop)]
+                                    for axis in 0..3 {
+                                        local[3][axis] =
+                                            -(local[0][axis] + local[1][axis] + local[2][axis]);
+                                    }
+                                    #[allow(clippy::needless_range_loop)]
                                     for slot in 0..4 {
                                         for axis in 0..3 {
-                                            slot_derivatives[0][slot][axis] += weight
-                                                * quartet_derivative(
-                                                    owners, &exponents, cartesian, slot, axis,
-                                                );
+                                            slot_derivatives[0][slot][axis] +=
+                                                weight * local[slot][axis];
                                         }
                                     }
                                 }
