@@ -132,3 +132,6 @@
      Running tests\scratch_blypmin.rs (target\debug\deps\scratch_blypmin-afdceaea0e732a26.exe)
      Running tests\t01_reference.rs (target\debug\deps\t01_reference-62190401b60ee162.exe)
      Running tests\t02_h2o_def2svp.rs (target\debug\deps\t02_h2o_def2svp-03af7bf74672af25.exe)
+     Running tests\t02_water_hf.rs (target\debug\deps\t02_water_hf-084d7511c3794c04.exe)
+     Running tests\t06_benzene.rs (target\debug\deps\t06_benzene-22820be1a8caf2c6.exe)
+     Running tests\t06_n2_multistart.rs (target\debug\deps\t06_n2_multistart-7df24a00981f0575.exe)
