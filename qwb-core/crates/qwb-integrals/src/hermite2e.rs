@@ -207,6 +207,20 @@ pub fn primitive_component(
         })
         .collect();
 
+    // **缓存 Hermite-Coulomb 核**：`derivative_boys(l,m,n)` 只依赖三元组
+    // `(tx+ux, ty+uy, tz+uz)`，而内层循环里大量 `(tx,ux)` 组合会落到同一个三元组上。
+    // 原来的写法对每个 (tx,ty,tz,ux,uy,uz) 都重算一次（`Kernel` 链 + Boys），
+    // 这是解析梯度最贵的一段（`docs/choices.md` 七十二 的成本分解）。三元组总数很小
+    // （每个方向 ≤ l_a+l_b+l_c+l_d），整张表一次求完即可。
+    let lx = pa[0] + pb[0] + pc[0] + pd[0];
+    let ly = pa[1] + pb[1] + pc[1] + pd[1];
+    let lz = pa[2] + pb[2] + pc[2] + pd[2];
+    let stride_y = (lz + 1) as usize;
+    let stride_x = ((ly + 1) * (lz + 1)) as usize;
+    // 懒填充：只有真正被访问到的三元组才算（实测「全表预计算」比原来还慢 —— 多数
+    // 三元组根本用不上，预计算反而把 setup 做大了；见 choices 七十二 第 54 轮）。
+    let mut kernel = vec![f64::NAN; ((lx + 1) * (ly + 1) * (lz + 1)) as usize];
+
     let mut total = 0.0;
     for tx in 0..=pa[0] + pb[0] {
         for ty in 0..=pa[1] + pb[1] {
@@ -224,10 +238,17 @@ pub fn primitive_component(
                                 continue;
                             }
                             let sign = if (ux + uy + uz) % 2 == 0 { 1.0 } else { -1.0 };
-                            total += bra
-                                * ket
-                                * sign
-                                * derivative_boys(tx + ux, ty + uy, tz + uz, rho, r);
+                            let index = ((tx + ux) * stride_x as u32
+                                + (ty + uy) * stride_y as u32
+                                + (tz + uz)) as usize;
+                            let value = if kernel[index].is_nan() {
+                                let computed = derivative_boys(tx + ux, ty + uy, tz + uz, rho, r);
+                                kernel[index] = computed;
+                                computed
+                            } else {
+                                kernel[index]
+                            };
+                            total += bra * ket * sign * value;
                         }
                     }
                 }
