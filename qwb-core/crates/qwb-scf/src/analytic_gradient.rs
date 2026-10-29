@@ -49,7 +49,7 @@ use qwb_integrals::hermite2e::primitive_component;
 use qwb_integrals::one_electron::{
     primitive_kinetic, primitive_norm, primitive_nuclear, primitive_overlap,
 };
-use qwb_linalg::Matrix;
+use qwb_linalg::{Matrix, Vector};
 use qwb_registry::elements::atomic_number;
 
 use crate::pulay::pulay_w;
@@ -784,4 +784,196 @@ pub fn d_ssss_slot(prims: &[(f64, [f64; 3]); 4], slot: usize, axis: usize) -> f6
     let c = prims[order[2]];
     let d = prims[order[3]];
     d_ssss(a.0, a.1, b.0, b.1, c.0, c.1, d.0, d.1, axis)
+}
+
+/// 由（球谐）MO 系数与轨道能构造**能量权重密度矩阵** `W = Σ_{i<n_occ} ε_i C_μi C_νi`。
+///
+/// 收敛的 HF/KS 里它与 `P F P` 等价（`P = Σ_i C_iC_iᵀ`、`F C_i = ε_i C_i`），但这里
+/// 不需要 Fock —— 开壳层两条自旋各有自己的 `(C, ε)`，直接按自旋算最省事。
+///
+/// # Errors
+///
+/// 尺寸不匹配或 `n_occupied > 轨道数` → [`EngineError::Internal`]。
+pub fn energy_weighted_density(
+    coefficients: &Matrix,
+    mo_energies: &Vector,
+    n_occupied: usize,
+) -> Result<Matrix, EngineError> {
+    let n = coefficients.nrows();
+    if coefficients.ncols() != mo_energies.len() || n_occupied > mo_energies.len() {
+        return Err(EngineError::Internal(format!(
+            "energy_weighted_density: {}x{} coefficients for {} MO energies, {} occupied",
+            coefficients.nrows(),
+            coefficients.ncols(),
+            mo_energies.len(),
+            n_occupied
+        )));
+    }
+    let mut w = Matrix::zeros(n, n);
+    for i in 0..n_occupied {
+        let eps = mo_energies.get(i);
+        for mu in 0..n {
+            let c_mu = coefficients.get(mu, i);
+            if c_mu == 0.0 {
+                continue;
+            }
+            for nu in 0..n {
+                w[(mu, nu)] += eps * c_mu * coefficients.get(nu, i);
+            }
+        }
+    }
+    Ok(w)
+}
+
+/// **UHF 的解析梯度**（开壳层，纯 HF；SC-02）。
+///
+/// 能量与导数：
+///
+/// ```text
+/// E = Σ_σ [ Tr(P^σ H) + ½ Tr(P^σ G^σ) ] + E_nuc ,   G^σ = J(P^α+P^β) − K(P^σ)
+/// dE/dR = Σ_σ Tr(P^σ dH/dR) + ½ Σ_σ Tr(P^σ dG^σ/dR) − Tr(W dS/dR) + dE_nuc/dR
+/// ```
+///
+/// 注意 `½ Σ_σ Tr(P^σ dG^σ)` **不能**写成闭壳层的 `½Tr(P_tot dG(P_tot))`：
+/// 库仑项用 `P_tot` 收缩，交换项必须**按自旋分开**收缩。本函数里的做法是
+///
+/// ```text
+/// 2e 项 = 库仑(P_tot) + 2·[交换(P^α) + 交换(P^β)]
+/// ```
+///
+/// 其中 `交换(P)` 取闭壳层 `two_electron_all` 的交换分量（值 = `−¼ ΣPP(μλ|νσ)^R`），
+/// 系数 2 来自 `−½ Σ_σ Σ P^σP^σ(μλ|νσ)^R = 2 Σ_σ 交换(P^σ)`。闭壳层极限
+/// （`P^α = P^β = P/2`）下它与 [`analytic_gradient`] 逐位一致 —— 测试
+/// `tests/sc02_uhf_gradient.rs` 钉住这一点以及 OH/O2 的数值梯度判据。
+///
+/// # Errors
+///
+/// 尺寸不匹配，或基组的球谐变换不一致。
+#[allow(clippy::needless_range_loop)]
+pub fn uhf_analytic_gradient(
+    basis: &InternalBasis,
+    molecule: &Molecule,
+    p_alpha: &Matrix,
+    p_beta: &Matrix,
+    w_alpha: &Matrix,
+    w_beta: &Matrix,
+) -> Result<Vec<[f64; 3]>, EngineError> {
+    let (cartesian, expansion) = cartesian_orbitals(basis, molecule)?;
+    let n = cartesian.len();
+    let n_functions = basis.n_functions();
+    for (name, matrix) in [
+        ("p_alpha", p_alpha),
+        ("p_beta", p_beta),
+        ("w_alpha", w_alpha),
+        ("w_beta", w_beta),
+    ] {
+        if matrix.nrows() != n_functions || matrix.ncols() != n_functions {
+            return Err(EngineError::Internal(format!(
+                "uhf_analytic_gradient: {name} is {}x{} for {n_functions} AO",
+                matrix.nrows(),
+                matrix.ncols()
+            )));
+        }
+    }
+
+    let mut p_total = Matrix::zeros(n_functions, n_functions);
+    let mut w_total = Matrix::zeros(n_functions, n_functions);
+    for mu in 0..n_functions {
+        for nu in 0..n_functions {
+            p_total[(mu, nu)] = p_alpha[(mu, nu)] + p_beta[(mu, nu)];
+            w_total[(mu, nu)] = w_alpha[(mu, nu)] + w_beta[(mu, nu)];
+        }
+    }
+    let density_cart = cartesian_density(&p_total, &expansion, n);
+    let w_cart = cartesian_density(&w_total, &expansion, n);
+    let alpha_cart = cartesian_density(p_alpha, &expansion, n);
+    let beta_cart = cartesian_density(p_beta, &expansion, n);
+
+    let nuclei = nuclei_of(molecule)?;
+    let natoms = molecule.atoms.len();
+    // 2e 导数：库仑用总密度收缩一次，交换按自旋各收缩一次。
+    let (coulomb, _) = two_electron_all(&cartesian, &density_cart);
+    let (_, exchange_alpha) = two_electron_all(&cartesian, &alpha_cart);
+    let (_, exchange_beta) = two_electron_all(&cartesian, &beta_cart);
+
+    let mut gradient = vec![[0.0_f64; 3]; natoms];
+    for atom in 0..natoms {
+        for axis in 0..3 {
+            gradient[atom][axis] = nuclear_repulsion_axis(&nuclei, atom, axis)
+                + nuclear_center_axis(&cartesian, &density_cart, &nuclei, atom, axis)
+                + coulomb[atom][axis]
+                + 2.0 * (exchange_alpha[atom][axis] + exchange_beta[atom][axis]);
+            let mut kinetic = 0.0;
+            let mut nuclear_ao = 0.0;
+            let mut pulay = 0.0;
+            for mu in 0..n {
+                for nu in 0..n {
+                    let p_mu_nu = density_cart[(mu, nu)];
+                    let w_mu_nu = w_cart[(mu, nu)];
+                    if cartesian[mu].center_index == atom {
+                        if p_mu_nu != 0.0 {
+                            kinetic += p_mu_nu
+                                * pair_derivative(
+                                    &cartesian[mu],
+                                    &cartesian[nu],
+                                    &nuclei,
+                                    axis,
+                                    PairKind::Kinetic,
+                                );
+                            nuclear_ao += p_mu_nu
+                                * pair_derivative(
+                                    &cartesian[mu],
+                                    &cartesian[nu],
+                                    &nuclei,
+                                    axis,
+                                    PairKind::Nuclear,
+                                );
+                        }
+                        if w_mu_nu != 0.0 {
+                            pulay -= w_mu_nu
+                                * pair_derivative(
+                                    &cartesian[mu],
+                                    &cartesian[nu],
+                                    &nuclei,
+                                    axis,
+                                    PairKind::Overlap,
+                                );
+                        }
+                    }
+                    if cartesian[nu].center_index == atom {
+                        if p_mu_nu != 0.0 {
+                            kinetic += p_mu_nu
+                                * pair_derivative(
+                                    &cartesian[nu],
+                                    &cartesian[mu],
+                                    &nuclei,
+                                    axis,
+                                    PairKind::Kinetic,
+                                );
+                            nuclear_ao += p_mu_nu
+                                * pair_derivative(
+                                    &cartesian[nu],
+                                    &cartesian[mu],
+                                    &nuclei,
+                                    axis,
+                                    PairKind::Nuclear,
+                                );
+                        }
+                        if w_mu_nu != 0.0 {
+                            pulay -= w_mu_nu
+                                * pair_derivative(
+                                    &cartesian[nu],
+                                    &cartesian[mu],
+                                    &nuclei,
+                                    axis,
+                                    PairKind::Overlap,
+                                );
+                        }
+                    }
+                }
+            }
+            gradient[atom][axis] += kinetic + nuclear_ao + pulay;
+        }
+    }
+    Ok(gradient)
 }

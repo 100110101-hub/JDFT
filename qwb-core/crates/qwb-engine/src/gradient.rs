@@ -28,6 +28,8 @@ pub struct GradientOptions {
     pub grid: String,
     /// 差分步长，单位 **Bohr**。
     pub delta_bohr: f64,
+    /// 自旋设置；`Uhf`/`Uks` 走开壳层的单点（SC-02）。
+    pub scf_type: Option<qwb_engine_api::ScfType>,
 }
 
 impl GradientOptions {
@@ -43,6 +45,7 @@ impl GradientOptions {
             functional: functional.into(),
             grid: grid.into(),
             delta_bohr: 1.0e-3,
+            scf_type: None,
         }
     }
 }
@@ -154,6 +157,25 @@ fn single_point_energy(
 ) -> Result<f64, EngineError> {
     let mut scf_options = RksOptions::default();
     scf_options.max_iter = 400;
+    // 开壳层的数值参照（SC-02）：UHF 走 `uhf_scf`，与解析梯度用的是同一套 SCF。
+    if matches!(
+        options.scf_type,
+        Some(qwb_engine_api::ScfType::Uhf | qwb_engine_api::ScfType::Uks)
+    ) {
+        if !options.functional.is_empty() {
+            return Err(EngineError::Unsupported(
+                "open-shell numerical gradients are wired for UHF only (UKS is the remaining                  half of SC-02)"
+                    .into(),
+            ));
+        }
+        let basis_k1 = registry.get_basis(&options.basis)?;
+        let basis = qwb_basis::InternalBasis::build(basis_k1, molecule)?;
+        let tensor = qwb_integrals::two_electron::two_electron(&basis, molecule)?;
+        let mut uhf_options = qwb_scf::uhf::UhfOptions::default();
+        uhf_options.max_iter = 400;
+        let result = qwb_scf::uhf::uhf_scf(&basis, molecule, &tensor, uhf_options)?;
+        return Ok(result.energy_hartree);
+    }
     if options.functional.is_empty() {
         // HF：空 terms
         let basis_k1 = registry.get_basis(&options.basis)?;

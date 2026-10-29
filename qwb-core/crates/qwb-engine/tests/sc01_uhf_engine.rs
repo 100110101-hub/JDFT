@@ -131,15 +131,18 @@ fn uhf_is_hartree_fock_only() {
 }
 
 #[test]
-fn uhf_is_single_point_only_for_now() {
+fn uhf_supports_sp_and_opt_but_not_the_rest() {
+    // SC-02 之后 `uhf` + `opt` 是**实装**的（解析梯度，见 tests/sc02_uhf_optimisation.rs），
+    // 这里改成钉住"其余作业类型仍然被拒"，否则会拿闭壳层的 Hessian/路径当真。
     let mut input = o2_input();
-    input.jobtype = JobType::Opt;
+    input.jobtype = JobType::Freq;
     let error = backend()
         .run(&input, &qwb_engine_api::reporter::NullReporter)
-        .expect_err("uhf + opt 必须被拒");
+        .expect_err("uhf + freq 必须被拒");
     match error {
         EngineError::Unsupported(message) => {
             assert!(message.contains("SC-02"), "{message}");
+            assert!(message.contains("sp"), "{message}");
         }
         other => panic!("期望 Unsupported，得到 {other:?}"),
     }

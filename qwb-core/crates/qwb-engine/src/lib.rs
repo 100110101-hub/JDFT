@@ -441,9 +441,12 @@ impl RksBackend {
                 input.method_name
             )));
         }
-        if input.jobtype != JobType::Sp {
+        // `opt` 的**收尾单点**也走这里（`run_optimisation` 有意不改 jobtype），所以放行；
+        // freq/ts/irc/scan 由分派处拒绝（见 `reject_unimplemented_options` 上方）。
+        if !matches!(input.jobtype, JobType::Sp | JobType::Opt) {
             return Err(EngineError::Unsupported(format!(
-                "options.scf_type = `uhf` currently supports `sp` only (gradients for open                  shells are SC-02); jobtype = `{}`",
+                "options.scf_type = `uhf` supports `sp` and `opt` only (the rest of the \
+                 open-shell track is later WPs); jobtype = `{}`",
                 input.jobtype.as_str()
             )));
         }
@@ -1094,6 +1097,8 @@ impl RksBackend {
         options.scf_max_iter = input.options.scf_max_iter;
         options.scf_energy_threshold = input.options.scf_energy_threshold_hartree;
         options.scf_density_threshold = input.options.scf_density_threshold;
+        // SC-02：开壳层（UHF）的解析梯度。UKS 还没接（见 `opt::analytic_energy_and_gradient`）。
+        options.scf_type = input.options.scf_type;
 
         reporter.progress("load", 0.0);
         reporter.log(&format!(
@@ -1202,20 +1207,23 @@ impl EngineBackend for RksBackend {
                 )));
             }
         }
-        // UHF 只有单点：`opt` 会在 `run_optimisation` 里白跑一遍闭壳层优化才发现不兼容，
-        // 所以把拒绝提前到分派处（梯度是 SC-02 的事）。
-        if matches!(
-            input.options.scf_type,
-            Some(qwb_engine_api::ScfType::Uhf | qwb_engine_api::ScfType::Uks)
-        ) && input.jobtype != JobType::Sp
+        // SC-02 只接了一半：UHF 的解析梯度与 `opt` 通了，UKS 的 XC 自旋拆分还没做。
+        // 别让 `uks` + `opt` 走进闭壳层的优化器拿到"看起来成功"的结果。
+        if matches!(input.options.scf_type, Some(qwb_engine_api::ScfType::Uhf))
+            && !matches!(input.jobtype, JobType::Sp | JobType::Opt)
+        {
+            // freq/ts/irc/scan 里没有开壳层实现：放过去就是拿闭壳层的 Hessian/路径当真。
+            return Err(EngineError::Unsupported(format!(
+                "options.scf_type = `uhf` supports `sp` and `opt` only (SC-02); jobtype = `{}`",
+                input.jobtype.as_str()
+            )));
+        }
+        if matches!(input.options.scf_type, Some(qwb_engine_api::ScfType::Uks))
+            && input.jobtype != JobType::Sp
         {
             return Err(EngineError::Unsupported(format!(
-                "options.scf_type = `{}` currently supports `sp` only (open-shell gradients \
-                 are phase-2 SC-02); jobtype = `{}`",
-                input
-                    .options
-                    .scf_type
-                    .map_or("closed-shell", qwb_engine_api::ScfType::as_str),
+                "options.scf_type = `uks` currently supports `sp` only: the spin-resolved XC \
+                 terms are the remaining half of SC-02; jobtype = `{}`",
                 input.jobtype.as_str()
             )));
         }
