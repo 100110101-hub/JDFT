@@ -133,6 +133,89 @@ pub fn xc_geometric_derivative(
     Ok(gradient)
 }
 
+/// 固定**两条自旋密度**下的 `E_xc` 几何导数（UKS 的 XC 网格项；SC-02）。
+///
+/// 与 [`xc_geometric_derivative`] 同一套做法（固定密度、中心差分），只是把
+/// `E_xc[rho^a, rho^b]` 换成自旋分辨的求值。
+///
+/// # Errors
+///
+/// 任一几何的 XC 求值失败，或 `delta_bohr` 非法。
+#[allow(clippy::too_many_arguments)]
+pub fn xc_geometric_derivative_spin(
+    registry: &Registry,
+    molecule: &Molecule,
+    basis_name: &str,
+    grid_name: &str,
+    density_alpha: &qwb_linalg::Matrix,
+    density_beta: &qwb_linalg::Matrix,
+    terms: &[Box<dyn qwb_xc::FunctionalTerm>],
+    delta_bohr: f64,
+) -> Result<Vec<[f64; 3]>, EngineError> {
+    if terms.is_empty() {
+        return Ok(vec![[0.0_f64; 3]; molecule.atoms.len()]);
+    }
+    if !(delta_bohr.is_finite() && delta_bohr > 0.0) {
+        return Err(EngineError::InvalidInput(format!(
+            "xc geometric derivative delta must be positive and finite, got {delta_bohr}"
+        )));
+    }
+    let mut gradient = vec![[0.0_f64; 3]; molecule.atoms.len()];
+    for (atom, row) in gradient.iter_mut().enumerate() {
+        for (axis, slot) in row.iter_mut().enumerate() {
+            let plus = xc_energy_spin_at(
+                registry,
+                &displaced(molecule, atom, axis, delta_bohr),
+                basis_name,
+                grid_name,
+                density_alpha,
+                density_beta,
+                terms,
+            )?;
+            let minus = xc_energy_spin_at(
+                registry,
+                &displaced(molecule, atom, axis, -delta_bohr),
+                basis_name,
+                grid_name,
+                density_alpha,
+                density_beta,
+                terms,
+            )?;
+            *slot = (plus - minus) / (2.0 * delta_bohr);
+        }
+    }
+    Ok(gradient)
+}
+
+/// 固定两条自旋密度下的 `E_xc`（网格按当前几何重建）。
+fn xc_energy_spin_at(
+    registry: &Registry,
+    molecule: &Molecule,
+    basis_name: &str,
+    grid_name: &str,
+    density_alpha: &qwb_linalg::Matrix,
+    density_beta: &qwb_linalg::Matrix,
+    terms: &[Box<dyn qwb_xc::FunctionalTerm>],
+) -> Result<f64, EngineError> {
+    let basis = qwb_basis::InternalBasis::build(registry.get_basis(basis_name)?, molecule)?;
+    let grid = qwb_grid::molecular_grid(registry.get_grid(grid_name)?, molecule)
+        .map_err(|err| EngineError::Data(format!("grid: {err}")))?;
+    let needs_sigma = terms.iter().any(|term| term.requires().sigma);
+    let needs_laplacian = terms.iter().any(|term| term.requires().laplacian);
+    let needs_tau = terms.iter().any(|term| term.requires().kinetic_density);
+    let cache =
+        qwb_scf::rks::GridAoCached::build(&basis, &grid, needs_sigma, needs_laplacian, needs_tau)?;
+    let evaluation = qwb_scf::uks::evaluate_xc_spin_cached(
+        &basis,
+        &grid,
+        &cache,
+        density_alpha,
+        density_beta,
+        terms,
+    )?;
+    Ok(evaluation.energy_hartree)
+}
+
 /// 固定密度矩阵下的 `E_xc`（网格按 `molecule` 的**当前**几何重建）。
 fn xc_energy_at(
     registry: &Registry,
@@ -158,13 +241,24 @@ fn single_point_energy(
     let mut scf_options = RksOptions::default();
     scf_options.max_iter = 400;
     // 开壳层的数值参照（SC-02）：UHF 走 `uhf_scf`，与解析梯度用的是同一套 SCF。
-    if matches!(
-        options.scf_type,
-        Some(qwb_engine_api::ScfType::Uhf | qwb_engine_api::ScfType::Uks)
-    ) {
+    if matches!(options.scf_type, Some(qwb_engine_api::ScfType::Uks)) {
+        // UKS（开壳层 DFT）的数值参照：与解析路径用同一套 SCF。
+        let level = registry.get_grid(&options.grid)?;
+        let basis = qwb_basis::InternalBasis::build(registry.get_basis(&options.basis)?, molecule)?;
+        let tensor = qwb_integrals::two_electron::two_electron(&basis, molecule)?;
+        let grid = qwb_grid::molecular_grid(level, molecule)
+            .map_err(|err| EngineError::Data(format!("grid: {err}")))?;
+        let (terms, hf_exchange) = crate::terms_and_hf_exchange(registry, &options.functional)?;
+        let mut uks_options = qwb_scf::uks::UksOptions::default();
+        uks_options.max_iter = 400;
+        uks_options.hf_exchange = hf_exchange;
+        let result = qwb_scf::uks::uks_scf(&basis, molecule, &tensor, &grid, &terms, uks_options)?;
+        return Ok(result.energy_hartree);
+    }
+    if matches!(options.scf_type, Some(qwb_engine_api::ScfType::Uhf)) {
         if !options.functional.is_empty() {
             return Err(EngineError::Unsupported(
-                "open-shell numerical gradients are wired for UHF only (UKS is the remaining                  half of SC-02)"
+                "options.scf_type = `uhf` is Hartree-Fock only; use `uks` for open-shell DFT"
                     .into(),
             ));
         }

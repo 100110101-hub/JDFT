@@ -181,11 +181,18 @@ pub fn analytic_energy_and_gradient(
 ) -> Result<(f64, Vec<[f64; 3]>), EngineError> {
     // SC-02：开壳层（UHF）走 `uhf_scf` + `uhf_analytic_gradient`。UKS 还需要把
     // XC 项按自旋拆开（以及 `v_xc` 进 Pulay），是 SC-02 的剩余一半 —— 显式拒绝。
-    if matches!(
-        options.scf_type,
-        Some(qwb_engine_api::ScfType::Uhf | qwb_engine_api::ScfType::Uks)
-    ) {
+    if matches!(options.scf_type, Some(qwb_engine_api::ScfType::Uhf)) {
         return uhf_analytic_energy_and_gradient(registry, molecule, options);
+    }
+    if matches!(options.scf_type, Some(qwb_engine_api::ScfType::Uks)) {
+        // UKS 的梯度**装配**已经写好并过了闭壳层极限测试
+        // （`tests/sc02_uks_gradient.rs`），但开壳层的 UKS SCF 在 OH/SVWN5/STO-3G 上
+        // 400 步不收敛（DIIS/阻尼/能级移动/初猜缩放都不行），所以还不敢把它接进
+        // 生产路径 —— 那会变成一个"梯度算得出来但密度没收敛"的假结果。
+        return Err(EngineError::Unsupported(
+            "options.scf_type = `uks` gradients are not enabled yet: the UKS gradient assembly              is verified (closed-shell limit) but open-shell UKS SCF convergence is the              remaining half of SC-02"
+                .into(),
+        ));
     }
     let basis = qwb_basis::InternalBasis::build(registry.get_basis(&options.basis)?, molecule)?;
     let one = qwb_integrals::one_electron::one_electron(&basis, molecule)?;
@@ -273,6 +280,63 @@ fn uhf_analytic_energy_and_gradient(
     Ok((result.energy_hartree, gradient))
 }
 
+/// 开壳层 DFT（UKS）的一次「SCF + 解析梯度」（SC-02）。
+///
+/// `v_xc` 按自旋进 `W`（Pulay 项），XC 的网格项走
+/// [`crate::gradient::xc_geometric_derivative_spin`]（固定自旋密度的中心差分）。
+///
+/// # Errors
+///
+/// 泛函数据不可用、泛函不支持自旋、SCF 未收敛。
+#[allow(dead_code)]
+fn uks_analytic_energy_and_gradient(
+    registry: &Registry,
+    molecule: &Molecule,
+    options: &OptOptions,
+) -> Result<(f64, Vec<[f64; 3]>), EngineError> {
+    let basis = qwb_basis::InternalBasis::build(registry.get_basis(&options.basis)?, molecule)?;
+    let one = qwb_integrals::one_electron::one_electron(&basis, molecule)?;
+    let tensor = qwb_integrals::two_electron::two_electron(&basis, molecule)?;
+    let grid = qwb_grid::molecular_grid(registry.get_grid(&options.grid)?, molecule)
+        .map_err(|err| EngineError::Data(format!("grid: {err}")))?;
+    let (terms, hf_exchange) = crate::terms_and_hf_exchange(registry, &options.functional)?;
+    let mut uks_options = qwb_scf::uks::UksOptions::default();
+    uks_options.max_iter = options.scf_max_iter;
+    uks_options.energy_threshold = options.scf_energy_threshold;
+    uks_options.density_threshold = options.scf_density_threshold;
+    uks_options.hf_exchange = hf_exchange;
+    let result = qwb_scf::uks::uks_scf(&basis, molecule, &tensor, &grid, &terms, uks_options)?;
+    if !result.scf_converged {
+        return Err(EngineError::ScfNotConverged {
+            iters: result.iterations,
+            max: options.scf_max_iter,
+        });
+    }
+    let xc = crate::gradient::xc_geometric_derivative_spin(
+        registry,
+        molecule,
+        &options.basis,
+        &options.grid,
+        &result.density_alpha,
+        &result.density_beta,
+        &terms,
+        XC_DERIVATIVE_DELTA_BOHR,
+    )?;
+    let gradient = qwb_scf::analytic_gradient::uks_analytic_gradient(
+        &basis,
+        molecule,
+        &grid,
+        &one.core_hamiltonian,
+        &tensor,
+        &result.density_alpha,
+        &result.density_beta,
+        &terms,
+        hf_exchange,
+        &xc,
+    )?;
+    Ok((result.energy_hartree, gradient))
+}
+
 /// 一次"能量 + 梯度"的结果：`(能量, 梯度, 退到数值梯度的原因)`。
 type EnergyAndGradient = (f64, Vec<[f64; 3]>, Option<String>);
 
@@ -310,10 +374,19 @@ fn single_point(
     let tensor = qwb_integrals::two_electron::two_electron(&basis, molecule)?;
     let grid = qwb_grid::molecular_grid(registry.get_grid(&options.grid)?, molecule)
         .map_err(|err| EngineError::Data(format!("grid: {err}")))?;
-    if matches!(
-        options.scf_type,
-        Some(qwb_engine_api::ScfType::Uhf | qwb_engine_api::ScfType::Uks)
-    ) {
+    if matches!(options.scf_type, Some(qwb_engine_api::ScfType::Uks)) {
+        let (terms, hf_exchange) = crate::terms_and_hf_exchange(registry, &options.functional)?;
+        let mut uks_options = qwb_scf::uks::UksOptions::default();
+        uks_options.max_iter = options.scf_max_iter;
+        uks_options.energy_threshold = options.scf_energy_threshold;
+        uks_options.density_threshold = options.scf_density_threshold;
+        uks_options.hf_exchange = hf_exchange;
+        return Ok(
+            qwb_scf::uks::uks_scf(&basis, molecule, &tensor, &grid, &terms, uks_options)?
+                .energy_hartree,
+        );
+    }
+    if matches!(options.scf_type, Some(qwb_engine_api::ScfType::Uhf)) {
         let mut uhf_options = qwb_scf::uhf::UhfOptions::default();
         uhf_options.max_iter = options.scf_max_iter;
         uhf_options.energy_threshold = options.scf_energy_threshold;

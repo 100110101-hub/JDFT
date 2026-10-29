@@ -2369,3 +2369,28 @@ Hessian/路径当真）。
 **UKS（开壳层 DFT）的解析梯度**没做：需要把 XC 项按自旋拆开（`E_xc[ρ^α, ρ^β]`）、
 把 `v_xc^σ` 进 `W^σ`、以及自旋分辨的 XC 几何导数。现在 `uks` + `opt` 显式拒绝，
 所以 SC-02 记 `in_progress` 而不是 done。
+
+## 六十七、SC-02 的 UKS 半：装配对了，卡在开壳层 UKS SCF 的收敛（2026-10-31）
+
+UKS 的解析梯度装配这一轮写完了（`uks_analytic_gradient` +
+`gradient::xc_geometric_derivative_spin`），并且用**闭壳层极限**钉住了：
+
+| 量 | 实测 |
+| --- | --- |
+| `E(RKS)` vs `E(UKS)`（水/SVWN5/STO-3G，n_α=n_β） | −74.9285711607 vs −74.9285711636（差 2.9e-9 Ha） |
+| `rks_analytic_gradient_with_xc` vs `uks_analytic_gradient` | 最大差 **1.455e-9 Ha/Bohr**（容差取 1e-8，因为两条 SCF 收敛到略有差别的密度） |
+
+这条测试把三件事一起钉死：`J` 用总密度、`K`/`v_xc` 按自旋各取一半、`W^σ = P^σF^σP^σ`
+的和要回到 `pulay_w` 的 `½PFP`。
+
+**卡点（如实记账）**：OH/SVWN5/STO-3G（9 电子、双重态）的 **UKS SCF 400 步不收敛**，
+`DIIS`、密度阻尼 0.3、能级移动 0.2、初猜缩放 0.5 全试过（实测四种都不行）。
+UHF 的同体系是好的（SC-02 前半，3.6e-7 Ha/Bohr），所以问题不在分子或基组，
+而在开壳层 UKS 那套 SCF 的收敛性。拿不到收敛密度，梯度就无从验证 ——
+所以 `uks` + `opt` 与 UKS 的解析梯度**仍然拒绝**（消息里写明卡点是 SC-02 的剩余一半），
+`opt.rs` 里的 `uks_analytic_energy_and_gradient` 保留但标了 `#[allow(dead_code)]`，
+等收敛问题解决再接线。
+
+**为什么不换分子凑第一条判据**：判据里写的是 OH、O2；OH 上跑不出收敛密度，
+换成 O2（17 电子、三重态）虽然多半能过，但那会把"UKS SCF 在难体系上不收敛"
+这件事藏起来。现在这样记，下一步是谁来修收敛一目了然。

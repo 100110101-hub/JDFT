@@ -724,6 +724,119 @@ pub fn analytic_gradient(
         .collect())
 }
 
+/// UHF 的解析梯度（= [`open_shell_analytic_gradient`]，`α_hf = 1`、无 XC）。
+///
+/// # Errors
+///
+/// 同 [`open_shell_analytic_gradient`]。
+pub fn uhf_analytic_gradient(
+    basis: &InternalBasis,
+    molecule: &Molecule,
+    p_alpha: &Matrix,
+    p_beta: &Matrix,
+    w_alpha: &Matrix,
+    w_beta: &Matrix,
+) -> Result<Vec<[f64; 3]>, EngineError> {
+    let zeros = vec![[0.0_f64; 3]; molecule.atoms.len()];
+    open_shell_analytic_gradient(
+        basis, molecule, p_alpha, p_beta, w_alpha, w_beta, 1.0, &zeros,
+    )
+}
+
+/// **UKS 的解析梯度**（开壳层 DFT；SC-02）。
+///
+/// 与闭壳层的 [`crate::rks::rks_analytic_gradient_with_xc`] 对应，只是把 `J` 用总密度、
+/// `K`/`v_xc` 按自旋拆开：
+///
+/// ```text
+/// F^σ = H + J(P_tot) − ½α_hf K(P^σ) + v_xc^σ    ⇒   W^σ = P^σ F^σ P^σ
+/// ```
+///
+/// `v_xc^σ` 由 [`crate::uks::evaluate_xc_spin_cached`] 给出（GGA/meta-GGA 的 ∇ρ 项已经在
+/// 泛函导数里），`xc_gradient` 是固定密度下的 XC 几何导数。
+///
+/// # Errors
+///
+/// XC 求值失败、尺寸不匹配、泛函不支持自旋。
+#[allow(clippy::too_many_arguments)]
+pub fn uks_analytic_gradient(
+    basis: &InternalBasis,
+    molecule: &Molecule,
+    grid: &qwb_grid::Grid,
+    hcore: &Matrix,
+    tensor: &qwb_integrals::two_electron::TwoElectronIntegrals,
+    p_alpha: &Matrix,
+    p_beta: &Matrix,
+    terms: &[Box<dyn qwb_xc::FunctionalTerm>],
+    hf_exchange: f64,
+    xc_gradient: &[[f64; 3]],
+) -> Result<Vec<[f64; 3]>, EngineError> {
+    let n = basis.n_functions();
+    let mut p_total = Matrix::zeros(n, n);
+    for mu in 0..n {
+        for nu in 0..n {
+            p_total[(mu, nu)] = p_alpha[(mu, nu)] + p_beta[(mu, nu)];
+        }
+    }
+    let coulomb = crate::build_fock(hcore, tensor, &p_total)
+        .map_err(|err| EngineError::Internal(format!("uks_analytic_gradient: J: {err}")))?
+        .coulomb;
+    let k_alpha = crate::build_fock(hcore, tensor, p_alpha)
+        .map_err(|err| EngineError::Internal(format!("uks_analytic_gradient: K_alpha: {err}")))?
+        .exchange;
+    let k_beta = crate::build_fock(hcore, tensor, p_beta)
+        .map_err(|err| EngineError::Internal(format!("uks_analytic_gradient: K_beta: {err}")))?
+        .exchange;
+    let needs_sigma = terms.iter().any(|term| term.requires().sigma);
+    let needs_laplacian = terms.iter().any(|term| term.requires().laplacian);
+    let needs_tau = terms.iter().any(|term| term.requires().kinetic_density);
+    let cache =
+        crate::rks::GridAoCached::build(basis, grid, needs_sigma, needs_laplacian, needs_tau)?;
+    let xc = crate::uks::evaluate_xc_spin_cached(basis, grid, &cache, p_alpha, p_beta, terms)?;
+
+    let mut w_alpha = Matrix::zeros(n, n);
+    let mut w_beta = Matrix::zeros(n, n);
+    let mut fock = Matrix::zeros(n, n);
+    for spin_alpha in [true, false] {
+        let (p, v_xc, k) = if spin_alpha {
+            (p_alpha, &xc.v_alpha, &k_alpha)
+        } else {
+            (p_beta, &xc.v_beta, &k_beta)
+        };
+        for mu in 0..n {
+            for nu in 0..n {
+                fock[(mu, nu)] = hcore[(mu, nu)] + coulomb[(mu, nu)]
+                    - 0.5 * hf_exchange * k[(mu, nu)]
+                    + v_xc[(mu, nu)];
+            }
+        }
+        let pf = qwb_linalg::matmul(p, &fock)
+            .map_err(|err| EngineError::Internal(format!("uks_analytic_gradient: PF: {err}")))?;
+        let pfp = qwb_linalg::matmul(&pf, p)
+            .map_err(|err| EngineError::Internal(format!("uks_analytic_gradient: PFP: {err}")))?;
+        let target = if spin_alpha {
+            &mut w_alpha
+        } else {
+            &mut w_beta
+        };
+        for mu in 0..n {
+            for nu in 0..n {
+                target[(mu, nu)] = pfp[(mu, nu)];
+            }
+        }
+    }
+    open_shell_analytic_gradient(
+        basis,
+        molecule,
+        p_alpha,
+        p_beta,
+        &w_alpha,
+        &w_beta,
+        hf_exchange,
+        xc_gradient,
+    )
+}
+
 /// `s` 型核吸引「核移动」的显式闭式（只给 `tests/g01_nuclear_derivative.rs` 用）。
 ///
 /// 新实现对任意角动量走 `∂/∂C = −(∂/∂A + ∂/∂B)`，不再需要它；保留是因为它当初写错过，
@@ -849,14 +962,23 @@ pub fn energy_weighted_density(
 /// # Errors
 ///
 /// 尺寸不匹配，或基组的球谐变换不一致。
-#[allow(clippy::needless_range_loop)]
-pub fn uhf_analytic_gradient(
+///
+/// `hf_exchange` 缩放交换项（UHF = 1、纯泛函 = 0、杂化 = α），`xc_gradient` 是
+/// **固定密度**下的 XC 几何导数（网格/权重随核移动那一半；UHF 传全零）。
+///
+/// # Errors
+///
+/// 尺寸不匹配、`xc_gradient` 长度不对，或基组的球谐变换不一致。
+#[allow(clippy::needless_range_loop, clippy::too_many_arguments)]
+pub fn open_shell_analytic_gradient(
     basis: &InternalBasis,
     molecule: &Molecule,
     p_alpha: &Matrix,
     p_beta: &Matrix,
     w_alpha: &Matrix,
     w_beta: &Matrix,
+    hf_exchange: f64,
+    xc_gradient: &[[f64; 3]],
 ) -> Result<Vec<[f64; 3]>, EngineError> {
     let (cartesian, expansion) = cartesian_orbitals(basis, molecule)?;
     let n = cartesian.len();
@@ -876,6 +998,13 @@ pub fn uhf_analytic_gradient(
         }
     }
 
+    if xc_gradient.len() != molecule.atoms.len() {
+        return Err(EngineError::Internal(format!(
+            "open_shell_analytic_gradient: xc gradient has {} entries, molecule has {} atoms",
+            xc_gradient.len(),
+            molecule.atoms.len()
+        )));
+    }
     let mut p_total = Matrix::zeros(n_functions, n_functions);
     let mut w_total = Matrix::zeros(n_functions, n_functions);
     for mu in 0..n_functions {
@@ -902,7 +1031,8 @@ pub fn uhf_analytic_gradient(
             gradient[atom][axis] = nuclear_repulsion_axis(&nuclei, atom, axis)
                 + nuclear_center_axis(&cartesian, &density_cart, &nuclei, atom, axis)
                 + coulomb[atom][axis]
-                + 2.0 * (exchange_alpha[atom][axis] + exchange_beta[atom][axis]);
+                + 2.0 * hf_exchange * (exchange_alpha[atom][axis] + exchange_beta[atom][axis])
+                + xc_gradient[atom][axis];
             let mut kinetic = 0.0;
             let mut nuclear_ao = 0.0;
             let mut pulay = 0.0;

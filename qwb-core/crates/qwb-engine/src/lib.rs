@@ -1221,9 +1221,12 @@ impl EngineBackend for RksBackend {
         if matches!(input.options.scf_type, Some(qwb_engine_api::ScfType::Uks))
             && input.jobtype != JobType::Sp
         {
+            // UKS 的梯度**装配**已写好并过了闭壳层极限（1.5e-9 Ha/Bohr），但开壳层 UKS SCF
+            // （OH/SVWN5/STO-3G）400 步不收敛（DIIS/阻尼/能级移动/初猜缩放都不行），
+            // 所以还不接进生产路径 —— 见 docs/choices.md 六十七。
             return Err(EngineError::Unsupported(format!(
-                "options.scf_type = `uks` currently supports `sp` only: the spin-resolved XC \
-                 terms are the remaining half of SC-02; jobtype = `{}`",
+                "options.scf_type = `uks` currently supports `sp` only: open-shell UKS SCF \
+                 convergence is the remaining half of SC-02; jobtype = `{}`",
                 input.jobtype.as_str()
             )));
         }
