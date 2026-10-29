@@ -230,7 +230,7 @@ RS-07:
   stretch: true
   note: "VCD（磁偶极 + 极化率导数）"
 RS-08:
-  state: in_progress
+  state: done
   ts: "2026-10-31T20:00:00Z"
   artifact: "qwb-integrals/src/dipole.rs 的 `second_moment_integrals`（⟨μ|r_i r_j|ν⟩ 六个分量，复用偶极积分的「抬高幂次的一维重叠」绕法）+ `qwb-props/src/lib.rs` 的 `quadrupole_traceless_debye_angstrom`（相对原点的二阶矩拼装 + 无迹组合 + e·bohr²→D·Å 换算）+ `tests/rs08_quadrupole.rs`（4 例）"
   verification: "`cargo test -p qwb-props --test rs08_quadrupole` **4 例绿**（1.7 s）：① 迹 = −1.28e-15、逐元对称性 < 1e-12；② 原点变换律（水，μ = 1.7275 D，平移 (0.30,0.20,0.10) Å）与 `Θ(O+R)−Θ(O) = −½[3(R_iμ_j+R_jμ_i)−2(R·μ)δ_ij]` 的最大差 **1.43e-8 D·Å**；③ μ=0 的原点不变性（CO2，Θ_zz = −5.258991185、Θ_xx = +2.629495592 D·Å）相对差 **2.7e-15**（判据 1e-6）；④ T_d 对称性 ⇒ CH4 的 `|Θ|_max = 2.02e-14` D·Å。"

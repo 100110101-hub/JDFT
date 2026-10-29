@@ -974,6 +974,31 @@ impl RksBackend {
             }
             None => None,
         };
+        // RS-08：无迹四极矩进 K7 的 `multipoles` 块。原点取**核电荷加权的质心**
+        // （`qwb-registry` 没有质量表，所以这不是"质心"而是"核电荷中心"——名字与
+        // `origin_angstrom` 一起落盘，读的人能看清用的是哪个原点）。
+        let origin_angstrom = {
+            let mut weight = 0.0;
+            let mut moment = [0.0_f64; 3];
+            for atom in &input.molecule.atoms {
+                let z = f64::from(qwb_registry::elements::atomic_number(&atom.symbol).unwrap_or(0));
+                weight += z;
+                for (axis, value) in atom.position_angstrom.iter().enumerate() {
+                    moment[axis] += z * value;
+                }
+            }
+            if weight > 0.0 {
+                [moment[0] / weight, moment[1] / weight, moment[2] / weight]
+            } else {
+                [0.0; 3]
+            }
+        };
+        let quadrupole = qwb_props::quadrupole_traceless_debye_angstrom(
+            &basis,
+            &input.molecule,
+            &result.density,
+            origin_angstrom,
+        )?;
         let mut job = JobResult::new(
             result.energy_hartree,
             result.scf_converged,
@@ -1002,6 +1027,10 @@ impl RksBackend {
             dipole[1],
             dipole[2]
         ));
+        // RS-08：四极矩（K7）。`origin_angstrom` 一起落盘 —— 多极矩对原点敏感。
+        job = job.with_multipoles(
+            qwb_engine_api::Multipoles::new(origin_angstrom).with_quadrupole(quadrupole),
+        );
         if let Some(excited_states) = excited_states {
             job = job.with_excited_states(excited_states);
         }

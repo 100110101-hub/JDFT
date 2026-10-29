@@ -216,9 +216,12 @@ fn rs08_quadrupole_matches_the_pyscf_reference() {
     const DEBYE_PER_BOHR: f64 = 2.541_746_632_031_1;
     const ANGSTROM_PER_BOHR: f64 = 0.529_177_210_903;
     let registry = Registry::open(data_root()).expect("qwb-data");
-    let molecules = [("water", water()), ("co2", carbon_dioxide()), ("methane", methane())];
-    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("tests/reference/quadrupole.csv");
+    let molecules = [
+        ("water", water()),
+        ("co2", carbon_dioxide()),
+        ("methane", methane()),
+    ];
+    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/reference/quadrupole.csv");
     let text = std::fs::read_to_string(&path).expect("quadrupole.csv");
     let mut checked = 0usize;
     let mut worst = 0.0_f64;
@@ -251,7 +254,10 @@ fn rs08_quadrupole_matches_the_pyscf_reference() {
         );
     }
     println!("checked {checked} components, worst relative difference {worst:.2e}");
-    assert!(checked >= 12, "expected the full reference set, checked {checked}");
+    assert!(
+        checked >= 12,
+        "expected the full reference set, checked {checked}"
+    );
     assert!(
         worst < 5.0e-2,
         "quadrupole differs from the PySCF reference by {worst:.3e} (criterion 5%)"
