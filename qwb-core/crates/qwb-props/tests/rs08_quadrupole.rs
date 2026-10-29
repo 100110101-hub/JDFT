@@ -34,6 +34,18 @@ fn water() -> Molecule {
     )
 }
 
+fn carbon_dioxide() -> Molecule {
+    Molecule::new(
+        vec![
+            Atom::new("C", [0.0, 0.0, 0.0]),
+            Atom::new("O", [0.0, 0.0, 1.160]),
+            Atom::new("O", [0.0, 0.0, -1.160]),
+        ],
+        0,
+        1,
+    )
+}
+
 fn methane() -> Molecule {
     // 正四面体，μ = 0
     let d = 0.629_0_f64;
@@ -190,5 +202,58 @@ fn rs08_quadrupole_is_origin_invariant_for_co2() {
         worst / scale < 1.0e-6,
         "traceless quadrupole must be origin invariant for μ = 0, relative {:.3e}",
         worst / scale
+    );
+}
+
+/// 判据第二条：**与外部基准的差 < 5%**。
+///
+/// 基准用 PySCF 的 `int1e_rr`（`scripts/pyscf_quadrupole_reference.py` 生成
+/// `tests/reference/quadrupole.csv`，原子单位 e·bohr²）。为什么不用文献值：
+/// 不同文献的 traceless 约定/单位/原点各不相同，本仓库没有逐条核对过的表格；
+/// 独立实现是同一物理量更可靠的基准（理由记在 `docs/choices.md` 六十九）。
+#[test]
+fn rs08_quadrupole_matches_the_pyscf_reference() {
+    const DEBYE_PER_BOHR: f64 = 2.541_746_632_031_1;
+    const ANGSTROM_PER_BOHR: f64 = 0.529_177_210_903;
+    let registry = Registry::open(data_root()).expect("qwb-data");
+    let molecules = [("water", water()), ("co2", carbon_dioxide()), ("methane", methane())];
+    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/reference/quadrupole.csv");
+    let text = std::fs::read_to_string(&path).expect("quadrupole.csv");
+    let mut checked = 0usize;
+    let mut worst = 0.0_f64;
+    for line in text.lines().skip(1) {
+        if line.trim().is_empty() {
+            continue;
+        }
+        let fields: Vec<&str> = line.split(',').collect();
+        let name = fields[0].trim();
+        let component = fields[1].trim();
+        let reference: f64 = fields[2].trim().parse().expect("reference value");
+        let molecule = molecules
+            .iter()
+            .find(|(label, _)| *label == name)
+            .map(|(_, molecule)| molecule)
+            .unwrap_or_else(|| panic!("unknown system {name} in the reference csv"));
+        let (basis, density) = density(&registry, molecule);
+        let theta =
+            quadrupole_traceless_debye_angstrom(&basis, molecule, &density, [0.0, 0.0, 0.0])
+                .expect("quadrupole");
+        let i = component.as_bytes()[0] as usize - b'0' as usize;
+        let j = component.as_bytes()[1] as usize - b'0' as usize;
+        let ours = theta[i][j] / (DEBYE_PER_BOHR * ANGSTROM_PER_BOHR);
+        let scale = reference.abs().max(1.0e-6);
+        let relative = (ours - reference).abs() / scale;
+        worst = worst.max(relative);
+        checked += 1;
+        println!(
+            "  {name} ({i}{j}): ours {ours:+.10} a.u.  PySCF {reference:+.10}  相对差 {relative:.2e}"
+        );
+    }
+    println!("checked {checked} components, worst relative difference {worst:.2e}");
+    assert!(checked >= 12, "expected the full reference set, checked {checked}");
+    assert!(
+        worst < 5.0e-2,
+        "quadrupole differs from the PySCF reference by {worst:.3e} (criterion 5%)"
     );
 }
