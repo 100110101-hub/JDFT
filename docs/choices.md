@@ -2647,3 +2647,21 @@ CPHF 解析 Hessian 省掉的是**每个位移的 SCF**（0.018 s × 18 ≈ 0.3 
 对 `opt`/Hessian 都有用）+ `opt::scf_options` 改成 `pub(crate)`。
 下一步（下一轮）：用一条 `n⁴` 计时探针查清解析梯度为什么是 17 s —— 如果只是常数因子
 （缺缓存），修掉它就可能把梯度拉回毫秒级，20× 会自己出现。
+
+**第 51 轮：把"为什么 17 s"算出来了。**
+上表里有一个自相矛盾的数：SCF 19 步总共 0.018 s，所以**一次 Fock 构建 ≈ 0.95 ms**；
+而一次解析梯度 16.9 s。两者做的是同一量级的 2e 工作（`O(n⁴·prims⁴)`），差 **17800 倍**。
+原因很具体：
+
+* **Fock 构建用的是预算好的 2e 张量**（`two_electron` 0.164 s 建一次，之后每步只是一次
+  张量收缩 → 1 ms）；
+* **解析梯度的 2e 导数路径没有这个缓存**：`two_electron_all` 对每个规范 quartet 调 12 次
+  `quartet_derivative`（4 槽 × 3 轴），每次都是一次**完整的** `primitive_component`
+  Hermite 展开（含 Boys），而 primitive 四重循环也在里面 —— 也就是同一个 quartet 的
+  Hermite 表被重算 12 遍、Boys 每遍重算。
+
+**所以 20× 的前置条件是改这条路径**（不是 CPHF）：对每个 primitive 组合只求一次 Hermite 表，
+再从表里按下标取 12 个槽位导数（标准做法），顺带把 Boys 按 (α,β,γ,δ,R²) 缓存；
+这一步预期 12–30×，先把它做完、把梯度拉回亚秒级，再谈 CPHF 的解析 Hessian。
+判据不变：`g01_analytic`（H2 3.4e-9）、`g01_analytic_water`（6.7e-7）、`g01_components`、
+`g01_analytic_pbe`（8.4e-7）、`t6_b3lyp_gradient`（7.3e-8）必须继续成立 —— 加速不能改数字。
