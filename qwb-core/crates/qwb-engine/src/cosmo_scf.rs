@@ -197,12 +197,15 @@ impl CosmoScfField {
                 result.residual
             )));
         }
+        // **符号**：`ΔG = ½ΣV_K q_K = −½ qᵀSq`（`Sq = −V`），对密度求导给出
+        // `∂ΔG/∂P_μν = −V_solv,μν` —— 不是 `+V_solv`。判据是变分一致性：
+        // 数值 `dΔG/dλ` 必须等于 `−Tr(V_solv·dP)`（见 tests/sv01_solvation_variational.rs）。
         let mut operator = Matrix::zeros(self.n_functions, self.n_functions);
         for (index, charge) in result.charges.iter().enumerate() {
             let omega = &self.omega[index];
             for mu in 0..self.n_functions {
                 for nu in 0..self.n_functions {
-                    operator[(mu, nu)] += charge * omega[(mu, nu)];
+                    operator[(mu, nu)] -= charge * omega[(mu, nu)];
                 }
             }
         }

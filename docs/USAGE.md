@@ -485,7 +485,7 @@ options:
 `result.json` 里会出现 K8 的 `solvation` 块（`model` / `solvent_name` /
 `electrostatic_hartree` / `surface_area_angstrom2` / `surface_volume_angstrom3` /
 `n_tesserae` / `iterations` / `converged`）。水/STO-3G 的实测：`E_solv − E_vac =
-−5.325 kcal/mol`，表面 36.458 Å² / 19.388 Å³ / 410 碎片。空腔碎片数随原子数自动降采样
+−7.274 kcal/mol`（实验 −6.32，差 −0.95），表面 36.458 Å² / 19.388 Å³ / 410 碎片。空腔碎片数随原子数自动降采样
 （上限 1500），降采样会写进日志，不静默改变精度。
 
 两条现状规则（都由测试钉住）：

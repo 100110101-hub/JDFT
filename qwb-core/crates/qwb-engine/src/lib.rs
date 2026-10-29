@@ -1017,7 +1017,30 @@ impl RksBackend {
             // （`total = 静电 + 非极性三项`，见 `SolvationResult::decomposition_gap_hartree`），
             // 体系绝对能量仍在 `JobResult.energy_hartree`。COSMO 没有非极性项，
             // 所以 total 恰好等于 electrostatic。
-            let electrostatic = field.last_solvation_energy();
+            //
+            // 静电项取 **`E_溶 + E_gas` 的差**（SMx 的 G_EP 约定）：它含溶质的极化形变能，
+            // 而 `½ΣV_K q_K` 只是溶剂-溶质相互作用的一半，两者差 5–10e-4 Ha。
+            // 判据（与实验比 1.5 kcal/mol）必须用前者，所以这里真的再跑一次气相 SCF。
+            let mut gas_options = options.clone();
+            gas_options.external_field = None;
+            let gas = qwb_scf::rks::rks_scf(
+                &basis,
+                &input.molecule,
+                &tensor,
+                &grid,
+                &spec.terms,
+                gas_options,
+            )?;
+            let distortion =
+                field.last_solvation_energy() - (result.energy_hartree - gas.energy_hartree);
+            reporter.log(&format!(
+                "solvation: G_EP = E_sol - E_gas = {:.10} Ha, ½ΣVq = {:.10} Ha, \
+                 polarisation/distortion term = {:.3e} Ha",
+                result.energy_hartree - gas.energy_hartree,
+                field.last_solvation_energy(),
+                distortion
+            ));
+            let electrostatic = result.energy_hartree - gas.energy_hartree;
             let block = qwb_engine_api::SolvationResult::new(
                 qwb_engine_api::SolventModel::Cosmo,
                 &solvent_name,
