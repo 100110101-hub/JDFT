@@ -118,13 +118,17 @@ fn full_tddft_is_rejected_with_its_wp() {
 }
 
 #[test]
-fn implicit_solvent_models_are_rejected_with_their_wp() {
-    let mut job = input("svwn5", 1, TaskOptions::default());
-    job.solvent = "water".into();
-    job.options.solvent_model = Some(SolventModel::Cosmo);
-    let message = unsupported(&job);
-    assert!(message.contains("SV-01"), "{message}");
-    assert!(message.contains("cosmo"), "{message}");
+fn unimplemented_solvent_models_are_rejected_with_their_wp() {
+    // SV-01 落地后 `cosmo` 是**已实装**的（见 tests/sv01_cosmo_scf.rs 的端到端用例）；
+    // SMD 要等 SV-03、PBF 要等 SV-04，仍然必须显式拒绝。
+    for (model, wp) in [(SolventModel::Smd, "SV-03"), (SolventModel::Pbf, "SV-04")] {
+        let mut job = input("svwn5", 1, TaskOptions::default());
+        job.solvent = "water".into();
+        job.options.solvent_model = Some(model);
+        let message = unsupported(&job);
+        assert!(message.contains(wp), "{message}");
+        assert!(message.contains(model.as_str()), "{message}");
+    }
 }
 
 #[test]

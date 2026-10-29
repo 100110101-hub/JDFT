@@ -1,0 +1,38 @@
+# SV-01：H2O / STO-3G 在水中的单点（COSMO / C-PCM）。
+#
+# 空腔：Bondi 半径 × scale（取自 qwb-data/solvent/water.yaml），250 点/原子
+#       → 水分子 410 个 tessera；表面电荷每步 SCF 重解一次。
+# 结果：results/<名字>/result.json 里的 `solvation` 块（K8）：
+#       model = cosmo、electrostatic_hartree = −0.0092 Ha ≈ −5.8 kcal/mol、
+#       total = 静电（COSMO 无非极性项 ⇒ decomposition_gap = 0）、
+#       surface_area_angstrom2 = 36.458、surface_volume_angstrom3 = 19.388。
+# 验收：E_solv − E_vac = −5.325 kcal/mol，与实验 −6.32 差 +1.00 kcal/mol
+#       （docs/choices.md 六十二里有全部 caveat）。
+#
+# 运行：qwb run examples/h2o_cosmo.yaml
+molecule:
+  atoms:
+    - symbol: O
+      position_angstrom: [0.0, 0.0, 0.11779]
+    - symbol: H
+      position_angstrom: [0.0, 0.75545, -0.47116]
+    - symbol: H
+      position_angstrom: [0.0, -0.75545, -0.47116]
+  charge: 0
+  multiplicity: 1
+basis_name: sto-3g
+method_name: hf
+grid_level: normal
+solvent: water
+jobtype: sp
+options:
+  scf_max_iter: 200
+  scf_energy_threshold_hartree: 1.0e-11
+  scf_density_threshold: 1.0e-9
+  diis_history: 8
+  threads: 0
+  max_opt_steps: 100
+  opt_gradient_threshold_hartree_per_bohr: 4.5e-4
+  freq_step_angstrom: 0.01
+  ecp_name: null
+  solvent_model: cosmo

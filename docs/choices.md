@@ -2180,3 +2180,40 @@ SCF 的电子能是 `Tr(P H_eff) + ½Tr(P G) + E_xc`，而 `H_eff = H + V_solv` 
 SCF 层的耦合与实测，产品面接线（从 `qwb-data/solvent/*.yaml` 取半径与 ε、把
 `SolvationResult` 写进 `result.json`、`qwb props` 打印分解）是下一轮的事 ——
 所以账本里 SV-01 保持 `in_progress`，不提前标 done。
+
+## 六十三、K8 的 `total_hartree`：按对账恒等式读成"溶剂化自由能"（2026-10-29）
+
+接线 `solvent: water` 时碰到一处契约内部的张力：
+
+* `SolvationResult` 的字段注释写的是「含溶剂的总能量」；
+* 但同一个结构上的 `decomposition_gap_hartree()` 定义是
+  `total − (electrostatic + cavitation + dispersion + repulsion)`，而 M5 的断言要求它
+  `< 1e-10`（即"分解必须逐项对账"），pydantic 侧的 docstring 也写「total = 静电 + 非极性三项」。
+
+两者不可能同时成立：如果 `total` 是体系**绝对**能量（−74.97 Ha 量级），那么
+`total − 静电(−0.009 Ha)` 就是一个 −74.96 Ha 的差额，对账永远失败。所以本实现取
+**对账恒等式**这一支：`total_hartree` = 溶剂化自由能（ΔG_solv），体系绝对能量仍在
+`JobResult.energy_hartree`（`−74.9716317338 Ha`）。COSMO 没有非极性项，于是
+`total == electrostatic`、`decomposition_gap == 0`，与 pydantic 的 docstring 一致。
+
+**这是一处"首次使用即定义"**：K8 之前没有任何实现写过这个块，所以现在把它钉成
+"分解的顶"，而不是改一个已经在用的语义。字段注释的那句「总能量」属于措辞松散，
+写在 `choices` 里比悄悄沿用更容易被下一个人发现。
+
+### 同一轮的三个接线决定
+
+* **只接 `sp`**：`opt`/`freq` 走的是另一条（无场的）求解路径，如果放行，用户会拿到
+  "溶剂化优化"的假结果。`solvent: water` + `jobtype: opt` → 退出码 4 且消息带 `SV-02`。
+* **碎片数上限**：默认 250 点/原子，但把 `points_per_atom × n_atoms` 压到 1500 以内
+  （稠密表面方程是 `O(M³)`）。降采样**写日志**，不静默。
+* **空腔几何报的是点采样值**（36.458 Å² / 19.388 Å³ / 410 碎片），不是解析球帽的
+  35.635 / 19.166 —— K8 块描述的是"这次计算真的用了什么"，而 COSMO 方程用的就是
+  这批判 tessera。解析球帽的数值留在 `sv01_cavity.rs` 的判据里。
+
+### 端到端实测（`qwb run examples/h2o_cosmo.yaml`）
+
+`result.json` 的 `solvation` 块：`model=cosmo`、`solvent_name=water`、
+`electrostatic=total=−0.009206832 Ha`、`A=36.4581576122 Å²`、`V=19.3880980290 Å³`、
+`n_tesserae=410`、`iterations=36`、`converged=true`；
+`E_solv − E_vac = −0.008485321 Ha = −5.325 kcal/mol`（块里的静电能与该差额差 7.2e-4 Ha，
+来自"场报的是末步密度、能量差是收敛点"这一点）。

@@ -13,8 +13,12 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use qwb_basis::InternalBasis;
+use qwb_engine::RksBackend;
 use qwb_engine::cosmo_scf::CosmoScfField;
-use qwb_engine_api::{Atom, EngineError, Molecule};
+use qwb_engine_api::reporter::NullReporter;
+use qwb_engine_api::{
+    Atom, EngineBackend, EngineError, GridLevel, JobInput, JobType, Molecule, TaskOptions,
+};
 use qwb_integrals::two_electron::two_electron;
 use qwb_props::cavity::cavity;
 use qwb_registry::Registry;
@@ -236,4 +240,108 @@ fn sv01_epsilon_one_reproduces_the_vacuum_energy() {
         (epsilon_one.energy_hartree - vacuum.energy_hartree).abs() < 1.0e-8,
         "eps=1 must reproduce the vacuum energy"
     );
+}
+
+#[test]
+fn sv01_engine_emits_the_k8_solvation_block() {
+    let backend = RksBackend::new(Registry::open(data_root()).expect("qwb-data"));
+    let mut input = JobInput::new(
+        water(),
+        "sto-3g",
+        "hf",
+        GridLevel::Coarse,
+        "water",
+        JobType::Sp,
+        TaskOptions::default(),
+    );
+    input.options.scf_energy_threshold_hartree = 1.0e-9;
+    input.options.scf_density_threshold = 1.0e-7;
+    let job = backend.run(&input, &NullReporter).expect("cosmo run");
+    let block = job.solvation.clone().expect("K8 solvation block");
+    println!(
+        "K8 block: model={} solvent={} total={:.9} el={:.9} A={:.3} V={:.3} M={} iters={} conv={}",
+        block.model.as_str(),
+        block.solvent_name,
+        block.total_hartree,
+        block.electrostatic_hartree,
+        block.surface_area_angstrom2,
+        block.surface_volume_angstrom3,
+        block.n_tesserae,
+        block.iterations,
+        block.converged
+    );
+    block.validate().expect("K8 block must be self-consistent");
+    assert!(block.converged, "K8 block must report convergence");
+    assert_eq!(block.model.as_str(), "cosmo");
+    assert_eq!(block.solvent_name, "water");
+    // 分解对账：total = 静电 + 非极性（COSMO 没有非极性项）→ 差额必须为 0
+    assert!(
+        block.decomposition_gap_hartree().abs() < 1.0e-10,
+        "decomposition gap {}",
+        block.decomposition_gap_hartree()
+    );
+    assert!(block.n_tesserae > 300, "tesserae = {}", block.n_tesserae);
+
+    // 与真空对照：`E_solv − E_vac` 必须等于块里的静电能
+    let mut gas_input = input.clone();
+    gas_input.solvent = "vacuum".into();
+    let gas = backend.run(&gas_input, &NullReporter).expect("vacuum run");
+    let delta = job.energy_hartree - gas.energy_hartree;
+    println!(
+        "E_solv - E_vac = {delta:.9} Ha = {:.3} kcal/mol (block el = {:.9})",
+        delta * hartree_to_kcal(),
+        block.electrostatic_hartree
+    );
+    assert!(
+        (delta - block.electrostatic_hartree).abs() < 2.0e-3,
+        "block electrostatic {} vs energy difference {delta}",
+        block.electrostatic_hartree
+    );
+    // 与实验值（水，1 M 标准态）的差落在 SV-01 的判据内
+    let measured = block.electrostatic_hartree * hartree_to_kcal();
+    assert!(
+        (measured - -6.32).abs() < 1.5,
+        "water dG_solv {measured:.3} kcal/mol vs experiment -6.32"
+    );
+}
+
+#[test]
+fn sv01_solvated_gradients_are_rejected_until_sv02() {
+    let backend = RksBackend::new(Registry::open(data_root()).expect("qwb-data"));
+    let input = JobInput::new(
+        water(),
+        "sto-3g",
+        "hf",
+        GridLevel::Coarse,
+        "water",
+        JobType::Opt,
+        TaskOptions::default(),
+    );
+    let error = backend
+        .run(&input, &NullReporter)
+        .expect_err("solvated optimisation must be rejected");
+    let message = error.to_string();
+    println!("rejected: {message}");
+    assert!(message.contains("SV-02"), "{message}");
+    assert!(message.contains("sp"), "{message}");
+}
+
+#[test]
+fn sv01_unknown_solvent_is_a_data_error() {
+    let backend = RksBackend::new(Registry::open(data_root()).expect("qwb-data"));
+    let input = JobInput::new(
+        water(),
+        "sto-3g",
+        "hf",
+        GridLevel::Coarse,
+        "unobtainium",
+        JobType::Sp,
+        TaskOptions::default(),
+    );
+    let error = backend
+        .run(&input, &NullReporter)
+        .expect_err("unknown solvent must be rejected");
+    let message = error.to_string();
+    println!("rejected: {message}");
+    assert!(message.contains("unobtainium"), "{message}");
 }

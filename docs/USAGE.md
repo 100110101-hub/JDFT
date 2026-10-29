@@ -193,7 +193,8 @@ molecule:
 basis_name: def2-svp             # 必须是 qwb-data/registry.yaml 里注册过的名字
 method_name: pbe                 # hf / svwn5 / pbe / pbe0 / b88（见 §9.1）
 grid_level: normal               # coarse | normal | fine | veryfine
-solvent: vacuum                  # 目前只支持 vacuum（隐式溶剂是接口占位）
+solvent: water                   # vacuum 或 qwb-data/solvent/ 里的溶剂名（如 water）
+                                 # 隐式溶剂目前只接线到单点（sp）：COSMO / C-PCM，`opt`/`freq` 仍是 exit 4（SV-02）
 jobtype: sp                      # sp | opt（freq 还没接线，会以退出码 4 拒绝）
 
 options:
@@ -464,8 +465,28 @@ options:
   excited_states:          # 激发态未实现 → exit 4（M4 / RS-02..03）
     n_states: 5
     method: tda            # cis|tda|tddft
-  solvent_model: cosmo     # vacuum|cosmo|smd|pbf；非真空未实现 → exit 4（M5 / SV-01..03）
+  solvent_model: cosmo     # vacuum|cosmo 已实装（需配 `solvent: <溶剂名>` 与 sp）；
+                           # smd → exit 4（SV-03）、pbf → exit 4（SV-04）
 ```
+
+COSMO / C-PCM 的最小可用例子（完整文件：`qwb-core/examples/h2o_cosmo.yaml`）：
+
+```yaml
+molecule: { atoms: [...] }
+basis_name: sto-3g
+method_name: hf
+grid_level: normal
+solvent: water          # 从 qwb-data/solvent/water.yaml 取 ε、Bondi 半径与 scale
+jobtype: sp
+options:
+  solvent_model: cosmo
+```
+
+`result.json` 里会出现 K8 的 `solvation` 块（`model` / `solvent_name` /
+`electrostatic_hartree` / `surface_area_angstrom2` / `surface_volume_angstrom3` /
+`n_tesserae` / `iterations` / `converged`）。水/STO-3G 的实测：`E_solv − E_vac =
+−5.325 kcal/mol`，表面 36.458 Å² / 19.388 Å³ / 410 碎片。空腔碎片数随原子数自动降采样
+（上限 1500），降采样会写进日志，不静默改变精度。
 
 两条现状规则（都由测试钉住）：
 

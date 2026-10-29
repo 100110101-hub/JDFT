@@ -614,6 +614,82 @@ impl RksBackend {
             options.ecp_potential = Some(potential);
         }
 
+        // SV-01 / KV-02：隐式溶剂（COSMO / C-PCM）。
+        //
+        // 空腔的碎片数是**稠密**表面方程的规模（`O(M³)` 一次分解、每步 SCF 重解一次），
+        // 所以这里既给默认值也设上限：大分子自动降采样并**记日志**，不静默改变精度。
+        // 250 点/原子是 `docs/choices.md` 六十二里的实测选择（160→250 差 0.6 kcal/mol）。
+        const COSMO_POINTS_PER_ATOM: usize = 250;
+        const COSMO_MAX_TESSERAE: usize = 1500;
+        let mut cosmo: Option<(std::sync::Arc<cosmo_scf::CosmoScfField>, f64, f64, usize)> = None;
+        let solvent_name = input.solvent.clone();
+        if solvent_name != "vacuum" {
+            let (epsilon, scale, radii, cavity_model) = {
+                let solvent = self.registry.get_solvent(&solvent_name)?;
+                (
+                    solvent.epsilon,
+                    solvent.scale,
+                    solvent.atomic_radii.clone(),
+                    solvent.cavity_model,
+                )
+            };
+            match cavity_model {
+                qwb_registry::CavityModel::Pcm => {}
+                qwb_registry::CavityModel::Smd => {
+                    return Err(EngineError::Unsupported(format!(
+                        "solvent `{solvent_name}` declares cavity_model = smd, which is SV-03"
+                    )));
+                }
+                qwb_registry::CavityModel::None => {
+                    return Err(EngineError::Data(format!(
+                        "solvent `{solvent_name}` declares cavity_model = none"
+                    )));
+                }
+                _ => {
+                    return Err(EngineError::Unsupported(format!(
+                        "solvent `{solvent_name}` declares an unimplemented cavity_model"
+                    )));
+                }
+            }
+            if !epsilon.is_finite() || epsilon < 1.0 {
+                return Err(EngineError::Data(format!(
+                    "solvent `{solvent_name}` has epsilon = {epsilon}"
+                )));
+            }
+            if let Some(model) = input.options.solvent_model
+                && model == qwb_engine_api::SolventModel::Vacuum
+            {
+                return Err(EngineError::InvalidInput(format!(
+                    "solvent `{solvent_name}` was requested together with solvent_model = vacuum"
+                )));
+            }
+            let atoms = input.molecule.n_atoms().max(1);
+            let mut points = COSMO_POINTS_PER_ATOM;
+            while points > 60 && points.saturating_mul(atoms) > COSMO_MAX_TESSERAE {
+                points /= 2;
+            }
+            let cavity = qwb_props::cavity::cavity(&input.molecule, &radii, scale, points)?;
+            let field = std::sync::Arc::new(cosmo_scf::CosmoScfField::build(
+                &basis,
+                &input.molecule,
+                &cavity.tesserae,
+                epsilon,
+            )?);
+            reporter.log(&format!(
+                "solvation: cosmo/c-pcm, solvent = {solvent_name} (eps = {epsilon}),                  {} tesserae at {points} points/atom, surface A = {:.3} A^2, V = {:.3} A^3",
+                cavity.tesserae.len(),
+                cavity.surface_area_angstrom2,
+                cavity.volume_angstrom3
+            ));
+            options.external_field = Some(field.handle());
+            cosmo = Some((
+                field,
+                cavity.surface_area_angstrom2,
+                cavity.volume_angstrom3,
+                cavity.tesserae.len(),
+            ));
+        }
+
         // SCF 的三级退路（近简并体系：N2、含 d/f 的重元素、ECP 体系）。全部**确定**：
         // 初猜序列/温度/步数都固定，没有随机化 ⇒ 同一输入给同一输出。
         //
@@ -936,6 +1012,35 @@ impl RksBackend {
                 ))
                 .with_correlation(correlation);
         }
+        if let Some((field, area, volume, n_tesserae)) = &cosmo {
+            // K8：`total_hartree` 按**对账恒等式**取溶剂化自由能
+            // （`total = 静电 + 非极性三项`，见 `SolvationResult::decomposition_gap_hartree`），
+            // 体系绝对能量仍在 `JobResult.energy_hartree`。COSMO 没有非极性项，
+            // 所以 total 恰好等于 electrostatic。
+            let electrostatic = field.last_solvation_energy();
+            let block = qwb_engine_api::SolvationResult::new(
+                qwb_engine_api::SolventModel::Cosmo,
+                &solvent_name,
+                electrostatic,
+                electrostatic,
+                qwb_engine_api::solvation::CavityGeometry::new(*area, *volume, *n_tesserae),
+                // 表面电荷每步 SCF 重解一次，所以「求解次数」= SCF 迭代数
+                result.iterations as usize,
+            )
+            .with_converged(result.scf_converged);
+            block.validate()?;
+            job = job
+                .with_log(format!(
+                    "solvation = cosmo/{}: dG_el = {:.10} Ha ({:.3} kcal/mol),                      A = {:.3} A^2, V = {:.3} A^3, {} tesserae",
+                    solvent_name,
+                    electrostatic,
+                    electrostatic * 627.509_474_063_6,
+                    area,
+                    volume,
+                    n_tesserae
+                ))
+                .with_solvation(block);
+        }
         Ok(job)
     }
 
@@ -1063,10 +1168,16 @@ impl EngineBackend for RksBackend {
         // 的闭壳层结果去当他想要的 UKS/MP2/溶剂化结果（那正是 §10.3 禁止的事）。
         reject_unimplemented_options(input)?;
         if input.solvent != "vacuum" {
-            return Err(EngineError::Unsupported(format!(
-                "solvent `{}` is not implemented (first phase: vacuum only, 8.5)",
-                input.solvent
-            )));
+            // SV-01：单点的隐式溶剂（COSMO / C-PCM）已实装，但**还没接到**梯度的
+            // 自洽求解里（SV-02）。`opt`/`freq` 走的是另一条路径，如果在这里放行，
+            // 用户会拿到一个"溶剂化优化"的假结果 —— 所以显式拒绝，不静默降级。
+            if input.jobtype != JobType::Sp {
+                return Err(EngineError::Unsupported(format!(
+                    "solvent `{}` currently supports `sp` only (solvated gradients/optimisation                      are SV-02); jobtype = `{}`",
+                    input.solvent,
+                    input.jobtype.as_str()
+                )));
+            }
         }
         // UHF 只有单点：`opt` 会在 `run_optimisation` 里白跑一遍闭壳层优化才发现不兼容，
         // 所以把拒绝提前到分派处（梯度是 SC-02 的事）。
@@ -1234,13 +1345,30 @@ fn reject_unimplemented_options(input: &JobInput) -> Result<(), EngineError> {
                 .into(),
         ));
     }
-    if let Some(model) = options.solvent_model
-        && model != qwb_engine_api::SolventModel::Vacuum
-    {
-        return Err(EngineError::Unsupported(format!(
-            "options.solvent_model = `{}` is not wired yet (implicit solvation is phase-2 M5 / SV-01..03)",
-            model.as_str()
-        )));
+    if let Some(model) = options.solvent_model {
+        // SV-01 落地后 cosmo 是**已实装**的（需要 `input.solvent` 给出溶剂名）；
+        // SMD 要等 SV-03、PBF 要等 SV-04，仍然显式拒绝。
+        match model {
+            qwb_engine_api::SolventModel::Vacuum | qwb_engine_api::SolventModel::Cosmo => {}
+            qwb_engine_api::SolventModel::Smd => {
+                return Err(EngineError::Unsupported(
+                    "options.solvent_model = `smd` is not implemented yet (the four nonpolar                      terms and the parameterised radii are SV-03)"
+                        .into(),
+                ));
+            }
+            qwb_engine_api::SolventModel::Pbf => {
+                return Err(EngineError::Unsupported(
+                    "options.solvent_model = `pbf` is not implemented yet (boundary/finite                      element Poisson-Boltzmann is SV-04)"
+                        .into(),
+                ));
+            }
+            _ => {
+                return Err(EngineError::Unsupported(format!(
+                    "options.solvent_model = `{}` is not implemented",
+                    model.as_str()
+                )));
+            }
+        }
     }
     Ok(())
 }
