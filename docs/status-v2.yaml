@@ -230,7 +230,11 @@ RS-07:
   stretch: true
   note: "VCD（磁偶极 + 极化率导数）"
 RS-08:
-  state: pending
+  state: in_progress
+  ts: "2026-10-31T20:00:00Z"
+  artifact: "qwb-integrals/src/dipole.rs 的 `second_moment_integrals`（⟨μ|r_i r_j|ν⟩ 六个分量，复用偶极积分的「抬高幂次的一维重叠」绕法）+ `qwb-props/src/lib.rs` 的 `quadrupole_traceless_debye_angstrom`（相对原点的二阶矩拼装 + 无迹组合 + e·bohr²→D·Å 换算）+ `tests/rs08_quadrupole.rs`（4 例）"
+  verification: "`cargo test -p qwb-props --test rs08_quadrupole` **4 例绿**（1.7 s）：① 迹 = −1.28e-15、逐元对称性 < 1e-12；② 原点变换律（水，μ = 1.7275 D，平移 (0.30,0.20,0.10) Å）与 `Θ(O+R)−Θ(O) = −½[3(R_iμ_j+R_jμ_i)−2(R·μ)δ_ij]` 的最大差 **1.43e-8 D·Å**；③ μ=0 的原点不变性（CO2，Θ_zz = −5.258991185、Θ_xx = +2.629495592 D·Å）相对差 **2.7e-15**（判据 1e-6）；④ T_d 对称性 ⇒ CH4 的 `|Θ|_max = 2.02e-14` D·Å。"
+  note: "判据原文「原点平移后 traceless 四极不变 < 1e-6」只在 μ=0 时成立；一般情形按 §6.7 的变换律变（水就是这个情形），所以测试两件都钉：CO2 验证不变、水验证按律变。**未 done 的原因**：① 判据第二条「H2O 四极矩与文献差 < 5%」还没做（计划用 PySCF `int1e_rr` 作黑箱基准并写明不用文献值的理由）；② 引擎侧还没把 `Multipoles::with_quadrupole` 写进 `result.json`（K7 字段已存在）。八极矩（RS-08 的可选项）未做。"
   note: "多极展开（traceless 四极 / 八极）"
 
 # ───────────────────────── 溶剂化轨（SV，5）─────────────────────────

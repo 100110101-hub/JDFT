@@ -153,6 +153,89 @@ pub fn populations(
     })
 }
 
+/// 相对某个原点的**无迹四极矩** `Θ_ij = ½ Σ_a q_a (3 r_i r_j − r² δ_ij)`，单位 Debye·Å。
+///
+/// 二阶矩用「相对原点」的形式从**固定积分**拼出来（积分本身只算一次）：
+///
+/// ```text
+/// ∫φφ (R_i − O_i)(R_j − O_j) = S^(2)_ij − O_i D_j − O_j D_i + O_i O_j S
+/// ```
+///
+/// 然后按电荷加权求和（核 +Z、电子由 `P` 收缩并带负号），再做无迹组合
+/// `Θ_ij = ½[3 M_ij − tr(M) δ_ij]`（这样迹恒为零）。
+///
+/// **原点敏感性**：`Θ` 只在中性且偶极矩为零时才与原点无关；一般情形满足
+/// `Θ(O+R) − Θ(O) = −½[3(R_i μ_j + R_j μ_i) − 2(R·μ)δ_ij]`。两条性质都在测试里钉住。
+///
+/// # Errors
+///
+/// 积分计算失败（球谐变换未实现等）。
+pub fn quadrupole_traceless_debye_angstrom(
+    basis: &InternalBasis,
+    molecule: &Molecule,
+    density: &Matrix,
+    origin_angstrom: [f64; 3],
+) -> Result<[[f64; 3]; 3], qwb_engine_api::EngineError> {
+    const DEBYE_PER_BOHR: f64 = 2.541_746_632_031_1;
+    const ANGSTROM_PER_BOHR: f64 = 0.529_177_210_903;
+    let bohr_per_angstrom = qwb_engine_api::molecule::BOHR_PER_ANGSTROM;
+    let moments = qwb_integrals::dipole::second_moment_integrals(basis, molecule)?;
+    let dipoles = qwb_integrals::dipole::dipole_integrals(basis, molecule)?;
+    let overlap = qwb_integrals::one_electron::one_electron(basis, molecule)?.overlap;
+    let n = basis.n_functions();
+    let origin = [
+        origin_angstrom[0] * bohr_per_angstrom,
+        origin_angstrom[1] * bohr_per_angstrom,
+        origin_angstrom[2] * bohr_per_angstrom,
+    ];
+    let components = [(0usize, 0usize), (1, 1), (2, 2), (0, 1), (0, 2), (1, 2)];
+    let mut electronic = [[0.0_f64; 3]; 3];
+    for (component, (i, j)) in components.into_iter().enumerate() {
+        let mut value = 0.0;
+        for mu in 0..n {
+            for nu in 0..n {
+                let reduced = moments[component][(mu, nu)]
+                    - origin[i] * dipoles[j][(mu, nu)]
+                    - origin[j] * dipoles[i][(mu, nu)]
+                    + origin[i] * origin[j] * overlap[(mu, nu)];
+                value += density[(mu, nu)] * reduced;
+            }
+        }
+        electronic[i][j] = value;
+        electronic[j][i] = value;
+    }
+    let mut nuclear = [[0.0_f64; 3]; 3];
+    for atom in &molecule.atoms {
+        let z = f64::from(atomic_number(&atom.symbol).unwrap_or(0));
+        let r = [
+            atom.position_bohr()[0] - origin[0],
+            atom.position_bohr()[1] - origin[1],
+            atom.position_bohr()[2] - origin[2],
+        ];
+        for i in 0..3 {
+            for j in 0..3 {
+                nuclear[i][j] += z * r[i] * r[j];
+            }
+        }
+    }
+    let mut moment = [[0.0_f64; 3]; 3];
+    let mut trace = 0.0;
+    for i in 0..3 {
+        for j in 0..3 {
+            moment[i][j] = nuclear[i][j] - electronic[i][j];
+        }
+        trace += moment[i][i];
+    }
+    let mut quadrupole = [[0.0_f64; 3]; 3];
+    for i in 0..3 {
+        for j in 0..3 {
+            let operator = 3.0 * moment[i][j] - if i == j { trace } else { 0.0 };
+            quadrupole[i][j] = 0.5 * operator * DEBYE_PER_BOHR * ANGSTROM_PER_BOHR;
+        }
+    }
+    Ok(quadrupole)
+}
+
 /// 偶极矩，单位 Debye（原子单位 → Debye 用 2.5417466320311）。
 ///
 /// `μ = Σ_A Z_A R_A − Tr(P · D)`，其中 `D` 是偶极积分矩阵（原子单位 `e·bohr`）。
