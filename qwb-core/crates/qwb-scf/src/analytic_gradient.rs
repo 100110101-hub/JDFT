@@ -806,7 +806,8 @@ pub fn uks_analytic_gradient(
         for mu in 0..n {
             for nu in 0..n {
                 fock[(mu, nu)] = hcore[(mu, nu)] + coulomb[(mu, nu)]
-                    - 0.5 * hf_exchange * k[(mu, nu)]
+                    // 开壳层没有 ½：`uks.rs` 的 Fock 是 H + J + v − α_hf·K_σ
+                    - hf_exchange * k[(mu, nu)]
                     + v_xc[(mu, nu)];
             }
         }
