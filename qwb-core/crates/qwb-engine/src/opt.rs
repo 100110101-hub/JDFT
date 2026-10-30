@@ -321,13 +321,25 @@ pub(crate) fn uks_scf_with_convergence_aids(
     terms: &[Box<dyn qwb_xc::FunctionalTerm>],
     base: qwb_scf::uks::UksOptions,
 ) -> Result<qwb_scf::uks::UksResult, EngineError> {
-    let mut plain = base.clone();
-    plain.level_shift = 0.0;
-    plain.initial_density = None;
-    if let Ok(result) = qwb_scf::uks::uks_scf(basis, molecule, tensor, grid, terms, plain)
-        && brillouin_residual(basis, molecule, tensor, grid, terms, &result)? < 1.0e-6
-    {
-        return Ok(result);
+    // 正统算法（DIIS、无能级移动）+ **阈值阶梯**：难体系（OH/SVWN5）在 1e-9/1e-8 的
+    // 密度阈值上会一直在 1e-8 量级摆动而不收敛，而 1e-7 就够给出残差 9e-7 的真驻点
+    // （`docs/choices.md` 七十六）。所以按「先严后松」依次试，接受第一个残差 < 1e-6 的解。
+    for (energy_threshold, density_threshold) in [
+        (base.energy_threshold, base.density_threshold),
+        (1.0e-9, 1.0e-7),
+        (1.0e-8, 1.0e-6),
+    ] {
+        let mut plain = base.clone();
+        plain.level_shift = 0.0;
+        plain.level_shift_decay = 0.0;
+        plain.initial_density = None;
+        plain.energy_threshold = energy_threshold;
+        plain.density_threshold = density_threshold;
+        if let Ok(result) = qwb_scf::uks::uks_scf(basis, molecule, tensor, grid, terms, plain)
+            && brillouin_residual(basis, molecule, tensor, grid, terms, &result)? < 1.0e-6
+        {
+            return Ok(result);
+        }
     }
     let mut last_error: Option<EngineError> = None;
     for (damping, level_shift, guess_scale) in [(0.3, 0.2, 1.0), (0.3, 0.2, 0.5), (0.3, 0.2, 1.5)] {

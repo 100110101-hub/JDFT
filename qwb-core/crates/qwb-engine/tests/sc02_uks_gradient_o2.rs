@@ -30,6 +30,54 @@ fn dioxygen() -> Molecule {
     )
 }
 
+fn hydroxyl() -> Molecule {
+    Molecule::new(
+        vec![
+            Atom::new("O", [0.0, 0.0, 0.0]),
+            Atom::new("H", [0.0, 0.0, 0.969_66]),
+        ],
+        0,
+        2,
+    )
+}
+
+/// 与 [`sc02_uks_gradient_matches_numerical_for_o2`] 同一条判据，换 OH（双重态）。
+#[test]
+fn sc02_uks_gradient_matches_numerical_for_oh() {
+    check_gradient("OH", &hydroxyl());
+}
+
+fn check_gradient(name: &str, molecule: &Molecule) {
+    let registry = Registry::open(data_root()).expect("qwb-data");
+    let mut options = OptOptions::new("sto-3g", "svwn5", "grid-coarse");
+    options.scf_type = Some(ScfType::Uks);
+    options.scf_energy_threshold = 1.0e-9;
+    options.scf_density_threshold = 1.0e-7;
+    let (energy, analytic) =
+        analytic_energy_and_gradient(&registry, molecule, &options).expect("uks analytic");
+    let mut gradient_options = GradientOptions::new("sto-3g", "svwn5", "grid-coarse");
+    gradient_options.scf_type = Some(ScfType::Uks);
+    gradient_options.delta_bohr = 1.0e-3;
+    let numeric = numerical_gradient(&registry, molecule, &gradient_options).expect("numeric");
+    let mut worst = 0.0_f64;
+    println!("{name}/SVWN5/STO-3G (UKS): E = {energy:.9} Ha");
+    for atom in 0..analytic.len() {
+        for axis in 0..3 {
+            let difference = (analytic[atom][axis] - numeric[atom][axis]).abs();
+            worst = worst.max(difference);
+            println!(
+                "  atom {atom} axis {axis}: 解析 {:>13.9}  数值 {:>13.9}  差 {difference:.2e}",
+                analytic[atom][axis], numeric[atom][axis]
+            );
+        }
+    }
+    println!("  {name} 最大差 {worst:.3e} Ha/Bohr（判据 1e-6）");
+    assert!(
+        worst < 1.0e-6,
+        "{name}: UKS analytic vs numerical gradient differs by {worst:.3e} Ha/Bohr"
+    );
+}
+
 #[test]
 fn sc02_uks_gradient_matches_numerical_for_o2() {
     let registry = Registry::open(data_root()).expect("qwb-data");

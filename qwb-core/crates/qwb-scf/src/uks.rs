@@ -531,7 +531,6 @@ pub fn uks_scf(
         let total_density = add(&density_alpha, &density_beta)?;
         let xc =
             evaluate_xc_spin_cached(basis, grid, &cache, &density_alpha, &density_beta, terms)?;
-        xc_energy = xc.energy_hartree;
 
         // J 只看总密度；K 只在 hybrid 时需要。
         let coulomb = build_fock(&hcore, tensor, &total_density)
@@ -607,17 +606,39 @@ pub fn uks_scf(
         coefficients_alpha = coeffs_alpha;
         coefficients_beta = coeffs_beta;
 
-        // 能量（用新密度，XC 势来自旧密度：变分下两者收敛到同一个数）。
+        // 能量：**所有项都用同一套（更新后的）密度**。
+        //
+        // 原来的写法是「新密度的 2e 项 + 旧密度的 XC 能量」，那种混用让能量不是任何一套
+        // 密度的泛函值，SCF 的迭代映射因此可能没有不动点 —— OH/SVWN5 就是这样：19 种
+        // 配方全都不收敛（`docs/choices.md` 七十六）。这里改成用新密度重算 J/K/XC
+        // （每步多 2 次 Fock 构建 + 1 次 XC 求值，STO-3G 上是毫秒量级）。
         let total_new = add(&new_alpha, &new_beta)?;
+        let coulomb_new = build_fock(&hcore, tensor, &total_new)
+            .map_err(linalg)?
+            .coulomb;
+        let (exchange_alpha_new, exchange_beta_new) = if options.hf_exchange.abs() > 0.0 {
+            (
+                build_fock(&hcore, tensor, &new_alpha)
+                    .map_err(linalg)?
+                    .exchange,
+                build_fock(&hcore, tensor, &new_beta)
+                    .map_err(linalg)?
+                    .exchange,
+            )
+        } else {
+            (Matrix::zeros(n, n), Matrix::zeros(n, n))
+        };
+        let xc_new = evaluate_xc_spin_cached(basis, grid, &cache, &new_alpha, &new_beta, terms)?;
+        xc_energy = xc_new.energy_hartree;
         let mut tr_ph = 0.0;
         let mut tr_pj = 0.0;
         let mut tr_pk = 0.0;
         for i in 0..n {
             for j in 0..n {
                 tr_ph += new_alpha[(i, j)] * hcore[(i, j)] + new_beta[(i, j)] * hcore[(i, j)];
-                tr_pj += total_new[(i, j)] * coulomb[(i, j)];
-                tr_pk += new_alpha[(i, j)] * exchange_alpha[(i, j)]
-                    + new_beta[(i, j)] * exchange_beta[(i, j)];
+                tr_pj += total_new[(i, j)] * coulomb_new[(i, j)];
+                tr_pk += new_alpha[(i, j)] * exchange_alpha_new[(i, j)]
+                    + new_beta[(i, j)] * exchange_beta_new[(i, j)];
             }
         }
         electronic = tr_ph + 0.5 * tr_pj + xc_energy - 0.5 * options.hf_exchange * tr_pk;

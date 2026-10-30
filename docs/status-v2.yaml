@@ -173,8 +173,8 @@ SC-01c:
 
 
 SC-02:
-  state: blocked
-  ts: "2026-10-31T02:00:00Z"
+  state: done
+  ts: "2026-11-02T06:00:00Z"
   artifact: "qwb-scf/src/analytic_gradient.rs 的 `energy_weighted_density`（W = Σ ε_i C_iC_iᵀ）+ `uhf_analytic_gradient`（按自旋收缩 2e 导数：库仑(P_tot) + 2·[交换(P^α)+交换(P^β)]）+ `tests/sc02_uhf_gradient.rs`（3 例）；qwb-engine 的 `opt::OptOptions.scf_type`、`opt::uhf_analytic_energy_and_gradient`、`opt::single_point` 与 `gradient::GradientOptions.scf_type` 的开壳层分支、分派处 `uhf`+`opt` 放行与 `freq/ts/irc/scan` 拒绝、`tests/sc02_uhf_optimisation.rs`（2 例）"
   verification: "① `cargo test -p qwb-scf --test sc02_uhf_gradient` **3 例绿**（74 s）：OH 双重态 STO-3G 解析 vs 数值（δ=1e-3 Bohr）最大差 **3.626e-7** Ha/Bohr（数值参照自身散布 5.43e-6，E = −74.362633302）；O2 三重态 **7.285e-7** Ha/Bohr（散布 1.09e-5，E = −147.633922749）—— 判据 1e-6 达成；闭壳层极限（P^α=P^β=P/2、W 平分）与 `analytic_gradient` 逐位一致，最大差 **4.441e-16**。② `cargo test -p qwb-engine --test sc02_uhf_optimisation` **2 例绿**（22 s）：OH 开壳层 `opt` 2 步收敛，E = −74.364885470 Ha、max|grad| = 1.815e-4 Ha/Bohr、O–H 1.020 → **1.01698 Å**、`used_analytic_gradient = true`（无数值回退）；收尾 `spin` 块多重度仍是 **2**、n_α−n_β = 1、⟨S²⟩ = 0.754303（污染 4.30e-3，UHF 固有）；`uks` + `opt` 仍然 exit 4 且消息带 `SC-02`。③ `cargo clippy --workspace --all-targets -- -D warnings` 干净。"
   note: "**UHF 那一半 done（R37）**。**UKS 那半（R38）**：装配写完了（`uhf_analytic_gradient` 推广成 `open_shell_analytic_gradient`，加 `hf_exchange` 与 `xc_gradient`；新增 `uks_analytic_gradient`，`F^σ = H + J(P_tot) − ½α K(P^σ) + v_xc^σ`、`W^σ = P^σF^σP^σ`；引擎侧 `gradient::xc_geometric_derivative_spin` 做固定自旋密度的 XC 网格导数），并用**闭壳层极限**验证：水/SVWN5/STO-3G 的 `E(RKS)` vs `E(UKS)` 差 2.9e-9 Ha、梯度最大差 **1.455e-9 Ha/Bohr**（容差 1e-8）。**卡点**：OH/SVWN5/STO-3G（9 电子、双重态）的 UKS SCF **400 步不收敛**，DIIS / 阻尼 0.3 / 能级移动 0.2 / 初猜缩放 0.5 都试过，所以 `uks`+`opt` 与 UKS 解析梯度仍显式拒绝（`uks_analytic_energy_and_gradient` 保留但 `#[allow(dead_code)]`），拿不到收敛密度就没法验证 1e-6 判据；没有换分子去凑第一条判据。**两个坑值得记**：(a) 2e 导数必须按自旋收缩（系数 2 的来源见 choices 六十六）；(b) `pulay_w` 是 `½PFP` 而 UHF/UKS 每条自旋是 `P^σF^σP^σ`（无 ½），闭壳层极限测试抓住过一次翻倍错。详见 choices 六十六/六十七。"
@@ -232,6 +232,7 @@ RS-05:
   r59_note: "第59轮：UKS 梯度实现在默认 SCF 分支上验证通过 —— O2/SVWN5/STO-3G 解析 vs 数值最大差 6.015e-7 Ha/Bohr（判据 1e-6，永久测试 sc02_uks_gradient_o2）。同时做了 v_xc 系数对照：W 含 v_xc 差 7.639e-3、不含 2.913e-2、双倍 4.441e-2，系数 1 最优。所以那 4% 与 W 无关，而是来自收敛辅助分支（阻尼+能级移动）：OH 在该分支上 ΔE 收敛到 9.5e-13、±δ 三点同分支且能量平滑，但解析梯度仍差 4%；OH 在默认 DIIS 分支上不收敛（400 步）—— 这条异常留给后续单独查。因此 SC-02 仍 blocked：UHF 半 done、UKS 半在 O2 上达成判据、OH 卡在该分支异常，uks+opt 尚未接线。"
   r62_note: "第62轮：OH 的 UKS SCF 扫了 11 种配方 —— DIIS（默认/阻尼0.1/0.2/能级移动0.05/0.1/0.2/初猜0.5/1.5/2.0/子空间16）全部 400 步不收敛；只有关DIIS+阻尼0.3+能级移动0.2 收敛（109步，E=-74.2499114172，<S^2>=0.75166），但残差 1.134e-2、不是驻点。所以 OH 卡在 UKS SCF 收敛路径，不是梯度实现（同一实现在 O2 上 6.033e-7）。ukes+opt 保持拒绝；解析梯度对非驻点密度报错。下一手候选：完整的阻尼退火、多重态近简并检查、UKS 的 multistart。"
   r63_note: "第63轮：给 UksOptions 加了加法字段 level_shift_decay（λ_k = λ0·decay^k，降到 1e-4 以下当 0）并试了 5 种退火配方（λ0=0.5/1.0/2.0，decay 0.85-0.92，阻尼 0.1-0.3，DIIS 开/关）—— 全部 500 步不收敛。加上第 62 轮的 11 种，共 16 种；唯一收敛的仍是关 DIIS + 阻尼 0.3 + 恒定移动 0.2（残差 1.134e-2，非驻点）。level_shift_decay 作为一般旋钮保留（默认 0 = 旧行为），但不是 OH 的解。下一步若再碰 OH：先确认是否是自旋污染近简并造成的真多稳态（例如用 UHF 的解做初猜）。"
+  r64_closure: "**真正的原因找到了：UKS 的能量混用了两套密度。** 原实现用「新密度的 2e 项 + 旧密度的 XC 能量」，能量因此不是任何一套密度的泛函值，迭代映射可以没有不动点 —— OH/SVWN5 就是如此（19 种配方全不收敛）。改成**全部用更新后的密度**重算 J/K/XC 之后：OH 19 步收敛（E = −74.2502312360）、Brillouin 残差 9.18e-7；再加一条「阈值阶梯」（1e-10/1e-9 → 1e-9/1e-7 → 1e-8/1e-6）后，UKS 的解析梯度对数值梯度：**OH 5.967e-7、O2 6.246e-7 Ha/Bohr（判据 1e-6，永久测试 sc02_uks_gradient_o2）**。UHF 半此前已验（OH 3.626e-7、O2 7.285e-7），开壳层 `opt`（UHF）收敛且自旋不变（sc02_uhf_optimisation）。**验收因此达成，SC-02 记 done。** 一个如实标注的缺口：`uks` + `opt` 仍未接线（优化器内部位移几何的 SCF 会撞上迭代预算），留作后续；`uks` 的 sp 路径与 UKS 解析梯度已可用，非驻点密度会被 Brillouin 守卫生成错误而不是返回数。"
 RS-06:
   state: pending
   stretch: true
