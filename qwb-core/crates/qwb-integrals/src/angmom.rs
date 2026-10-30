@@ -257,3 +257,179 @@ pub fn angular_momentum_integrals(
     }
     Ok(out)
 }
+
+/// `∂_axis` 作用在一个笛卡尔分量上的两项展开：`(幂次, 权重)`。
+///
+/// `∂_x (x−A)^p e^{−α(x−A)²} = p (x−A)^{p−1} e^{…} − 2α (x−A)^{p+1} e^{…}`
+fn derivative_terms(powers: [u32; 3], axis: usize, exponent: f64) -> Vec<([u32; 3], f64)> {
+    let mut terms = Vec::with_capacity(2);
+    if powers[axis] > 0 {
+        terms.push((bump(powers, axis, -1), powers[axis] as f64));
+    }
+    terms.push((bump(powers, axis, 1), -2.0 * exponent));
+    terms
+}
+
+/// 轨道超精细的原语：`G_βγ = ⟨∂_β φ_μ| 1/|r−R_A| |∂_γ φ_ν⟩`（9 个分量）。
+fn primitive_hyperfine(
+    powers_a: [u32; 3],
+    a: [f64; 3],
+    alpha: f64,
+    powers_b: [u32; 3],
+    b: [f64; 3],
+    beta: f64,
+    nucleus: [f64; 3],
+) -> [[f64; 3]; 3] {
+    let mut out = [[0.0_f64; 3]; 3];
+    for (moment, row) in out.iter_mut().enumerate() {
+        for (deriv, value) in row.iter_mut().enumerate() {
+            let mut total = 0.0;
+            for (shifted_a, weight_a) in derivative_terms(powers_a, moment, alpha) {
+                for (shifted_b, weight_b) in derivative_terms(powers_b, deriv, beta) {
+                    // `primitive_nuclear` 的返回值带吸引符号（负），取负得纯 1/r 积分。
+                    let attraction = crate::one_electron::primitive_nuclear(
+                        alpha,
+                        (shifted_a[0], shifted_a[1], shifted_a[2]),
+                        a,
+                        beta,
+                        (shifted_b[0], shifted_b[1], shifted_b[2]),
+                        b,
+                        nucleus,
+                        1.0,
+                    );
+                    total -= weight_a * weight_b * attraction;
+                }
+            }
+            *value = total;
+        }
+    }
+    out
+}
+
+/// 三个实**轨道超精细**矩阵 `⟨μ| ((r−R_A) × ∇)_α / |r−R_A|³ |ν⟩`（原子单位，球谐基）。
+///
+/// 物理算符是 `L_A/r_A³ = −i · (这一层)` —— 顺磁屏蔽里核那一侧的耦合。
+///
+/// **推导（避免二阶导）**：令 `G_βγ = ⟨∂_βμ| r_A^{−1} |∂_γν⟩`。把 `(r_Aβ/r_A³) = −∂_β(1/r_A)`
+/// 代入并分部积分：
+///
+/// ```text
+/// ⟨μ| (r_Aβ/r_A³) ∂_γ |ν⟩ = −⟨∂_β(φ_μ ∂_γφ_ν)| r_A^{−1}⟩
+///                          = −G_βγ − ⟨μ| ∂_β∂_γφ_ν / r_A⟩
+/// ```
+///
+/// 而 `∂_β∂_γ` 对 `β↔γ` 对称、`ε_αβγ` 反对称，所以第二项在缩并后**恒为零**：
+///
+/// ```text
+/// M_α = −ε_αβγ G_βγ = −ε_αβγ ⟨∂_βμ| r_A^{−1} |∂_γν⟩
+/// ```
+///
+/// 于是只用到「导数基函数 × 导数基函数」的核吸引积分，全部落在现成的
+/// [`crate::one_electron::primitive_nuclear`] 上（导数只是幂次 ±1 的两项）。
+/// 代价：每个原函数对要 9 × 4 次核吸引积分。
+///
+/// # Errors
+///
+/// 球谐变换未实现（`l > 2`）。
+pub fn hyperfine_integrals(
+    basis: &InternalBasis,
+    _molecule: &Molecule,
+    nucleus_bohr: [f64; 3],
+) -> Result<[Matrix; 3], EngineError> {
+    let mut transforms = Vec::with_capacity(basis.shells().len());
+    for shell in basis.shells() {
+        let transform = qwb_basis::spherical::spherical_transform(shell.l, shell.angular)
+            .ok_or_else(|| {
+                EngineError::Unsupported(format!(
+                    "spherical transformation for l={} is not implemented (R06)",
+                    shell.l
+                ))
+            })?;
+        transforms.push(transform);
+    }
+    let mut cart_offsets = Vec::with_capacity(transforms.len());
+    let mut n_cartesian = 0usize;
+    for transform in &transforms {
+        cart_offsets.push(n_cartesian);
+        n_cartesian += transform.n_cartesian;
+    }
+    let mut hyperfine = [
+        Matrix::zeros(n_cartesian, n_cartesian),
+        Matrix::zeros(n_cartesian, n_cartesian),
+        Matrix::zeros(n_cartesian, n_cartesian),
+    ];
+
+    let shells: Vec<_> = basis.shells().iter().collect();
+    for (ia, shell_a) in shells.iter().enumerate() {
+        for (ib, shell_b) in shells.iter().enumerate() {
+            let components_a = qwb_basis::cartesian_components(shell_a.l);
+            let components_b = qwb_basis::cartesian_components(shell_b.l);
+            for (ca, powers_a) in components_a.iter().enumerate() {
+                for (cb, powers_b) in components_b.iter().enumerate() {
+                    let pa = [powers_a.0, powers_a.1, powers_a.2];
+                    let pb = [powers_b.0, powers_b.1, powers_b.2];
+                    let mut g = [[0.0_f64; 3]; 3];
+                    for (alpha, coefficient_a) in
+                        shell_a.exponents.iter().zip(&shell_a.coefficients)
+                    {
+                        let norm_a = primitive_norm(*powers_a, *alpha);
+                        for (beta, coefficient_b) in
+                            shell_b.exponents.iter().zip(&shell_b.coefficients)
+                        {
+                            let norm_b = primitive_norm(*powers_b, *beta);
+                            let weight = coefficient_a * coefficient_b * norm_a * norm_b;
+                            let primitive = primitive_hyperfine(
+                                pa,
+                                shell_a.center_bohr,
+                                *alpha,
+                                pb,
+                                shell_b.center_bohr,
+                                *beta,
+                                nucleus_bohr,
+                            );
+                            for row in 0..3 {
+                                for column in 0..3 {
+                                    g[row][column] += weight * primitive[row][column];
+                                }
+                            }
+                        }
+                    }
+                    // M_α = −ε_αβγ G_βγ
+                    let values = [
+                        -(g[1][2] - g[2][1]),
+                        -(g[2][0] - g[0][2]),
+                        -(g[0][1] - g[1][0]),
+                    ];
+                    let row = cart_offsets[ia] + ca;
+                    let column = cart_offsets[ib] + cb;
+                    for axis in 0..3 {
+                        hyperfine[axis][(row, column)] = values[axis];
+                    }
+                }
+            }
+        }
+    }
+
+    let n_spherical = basis.n_functions();
+    let mut global_transform = Matrix::zeros(n_cartesian, n_spherical);
+    for (shell_index, shell) in shells.iter().enumerate() {
+        let transform = &transforms[shell_index];
+        for row in 0..transform.n_cartesian {
+            for column in 0..transform.n_spherical {
+                global_transform[(
+                    cart_offsets[shell_index] + row,
+                    shell.first_function + column,
+                )] = transform.get(row, column);
+            }
+        }
+    }
+    let mut out = [
+        Matrix::zeros(n_spherical, n_spherical),
+        Matrix::zeros(n_spherical, n_spherical),
+        Matrix::zeros(n_spherical, n_spherical),
+    ];
+    for axis in 0..3 {
+        out[axis] = transform_matrix(&hyperfine[axis], &global_transform)?;
+    }
+    Ok(out)
+}
