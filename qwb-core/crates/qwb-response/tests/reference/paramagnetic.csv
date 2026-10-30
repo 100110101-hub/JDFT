@@ -1,0 +1,4 @@
+system,basis,nucleus_index,symbol,sigma_dia_ppm,sigma_p_ppm,sigma_total_ppm,lambda,mu
+water,cc-pvtz,0,O,416.143947,-106.338538,309.805409,0.02,0.02
+water,cc-pvtz,1,H,102.586891,-61.143493,41.443398,0.02,0.02
+water,cc-pvtz,2,H,102.586891,-61.143493,41.443398,0.02,0.02
