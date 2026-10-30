@@ -20,6 +20,9 @@ $script:pass = 0
 $script:fail = 0
 $script:failedNames = @()
 
+# EX-04：每一步的墙钟。没有这个，门禁的 19 min 就只能靠猜「时间花在哪」。
+$script:stepTimes = @()
+
 function Step {
     param(
         [string]$Name,
@@ -28,6 +31,7 @@ function Step {
     )
     Write-Host ''
     Write-Host "== $Name =="
+    $stopwatch = [Diagnostics.Stopwatch]::StartNew()
     Push-Location (Join-Path $root $Dir)
     $global:LASTEXITCODE = 0
     try {
@@ -40,6 +44,10 @@ function Step {
     finally {
         Pop-Location
     }
+    $stopwatch.Stop()
+    $seconds = [math]::Round($stopwatch.Elapsed.TotalSeconds, 1)
+    $script:stepTimes += [pscustomobject]@{ Name = $Name; Seconds = $seconds }
+    Write-Host ("   [{0,7:N1}s]" -f $seconds)
     $code = $global:LASTEXITCODE
     if ($code -ne 0) {
         $script:fail++
@@ -199,6 +207,11 @@ else {
 
 Write-Host ''
 Write-Host '----------------------------------------'
+# EX-04：最慢的五步 + 总计（预算见 project-phase2.md 附录 A.3：总墙钟 ≤ 15 min）
+$script:stepTimes | Sort-Object Seconds -Descending | Select-Object -First 5 |
+    ForEach-Object { Write-Host ("  slowest: {0,7:N1}s  {1}" -f $_.Seconds, $_.Name) }
+$totalSeconds = ($script:stepTimes | Measure-Object Seconds -Sum).Sum
+Write-Host ("  total step time: {0:N1}s ({1:N1} min)" -f $totalSeconds, ($totalSeconds / 60))
 Write-Host "passed $($script:pass), failed $($script:fail)"
 if ($script:fail -ne 0) {
     Write-Host 'failed checks:'

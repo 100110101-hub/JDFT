@@ -13,11 +13,18 @@ pass=0
 fail=0
 names_failed=""
 
+step_times=""
 step() { # step <name> <cmd...>
     local name="$1"
     shift
     printf '\n== %s ==\n' "$name"
+    # EX-04：与 verify.ps1 同步，逐步报墙钟（预算见附录 A.3：总墙钟 ≤ 15 min）
+    local started ended seconds
+    started=$(date +%s)
     if "$@"; then
+        ended=$(date +%s); seconds=$((ended - started)); step_times="$step_times$seconds $name
+"
+        printf '   [%7ss]\n' "$seconds"
         pass=$((pass + 1))
     else
         local rc=$?
@@ -131,6 +138,10 @@ else
 fi
 
 printf '\n────────────────────────────────────────\n'
+printf '\nEX-04 最慢五步：\n'
+printf '%s' "$step_times" | sort -rn | head -5 | awk '{printf "  slowest: %7ss  %s\n", $1, substr($0, index($0,$2))}'
+total=$(printf '%s' "$step_times" | awk '{sum+=$1} END {print sum+0}')
+printf '  total step time: %ss (%s min)\n' "$total" "$(awk "BEGIN{printf \"%.1f\", $total/60}")"
 printf '通过 %d 项，失败 %d 项\n' "$pass" "$fail"
 if [ "$fail" -ne 0 ]; then
     printf '失败清单：%s\n' "$names_failed"

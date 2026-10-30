@@ -93,7 +93,11 @@ fn uks_options() -> UksOptions {
     options.max_iter = 400;
     // 比默认更紧：闭壳层退化判据是 1e-8，两侧各自的收敛误差不能吃掉它。
     options.energy_threshold = 1.0e-10;
-    options.density_threshold = 1.0e-8;
+    // 1e-7 而不是 1e-8：实测（QWB_SCF_TRACE，O2/PBE，grid-fine）能量到 dE ~1e-13 时，
+    // max|dP| 仍在 1.3–1.5e-8 抖动 —— 那已经是 grid-fine 的求积噪声底，密度项**收敛不到**
+    // 1e-8，于是白白跑满 400 步（~590 s @ ~1.5 s/步）。验收判据是能量对 PySCF 的 1e-6
+    // （容差未动），1e-7 的密度阈值比它严得多且可达。`choices` 八十四。
+    options.density_threshold = 1.0e-7;
     options
 }
 
