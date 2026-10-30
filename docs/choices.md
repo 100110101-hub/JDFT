@@ -3246,3 +3246,49 @@ WP 编号、§6 判据、KV 契约、K10、台账纪律一律不动，冲突时�
 
 一族互不依赖的 WP 交子代理并行；子代理只碰自己的 crate 与测试文件，**不写台账**；
 台账（`docs/status-v2.yaml`）单写者，只在主会话写。
+
+## 八十三、EX-01 与 D0 审计：nextest 装上了，门禁瓶颈定位到「单个最重测试」（2026-11-05）
+
+### EX-01：`cargo-nextest 0.9.150` 可用，并立刻暴露了真正的瓶颈
+
+装好之后用 `cargo nextest run --workspace --test-threads 8 --no-fail-fast` 实测：
+**461 个测试里 458 个在 300 s 内跑完**（同一套断言、容差一字未改），对照门禁里那一段
+~45–70 min 的顺序执行 —— 数量级的差别，而且**没有改任何测试**。
+
+但尾部日志同时暴露了下一层瓶颈：最后十几个测试几乎都是 `SLOW`，其中
+`qwb-scf::sc01b_uks uks_matches_pyscf_for_o2_and_oh` 单独就 > 300 s，
+`t06_n2_multistart`、`t06_reference`、`scratch_blypmin` 也都在 100–200 s 量级。
+也就是说 8 路并行下，**墙钟被单个最重的测试钉住**，不是 CPU 不够。
+
+结论（写进 EX-01/EX-02 的验收方式）：
+- 只说「并行跑一遍」不够；必须同时把它们移进 `slow` lane（EX-02），否则总墙钟还是被拖住。
+- 8 路并行本身已经拿到主要收益；提高到 16 路没意义（8 物理核）。
+
+### D0-01：基组/ECP 已完整且钉住
+
+`qwb-data/basis` 下 8 个文件（sto-3g、def2-svp、def2-tzvp、6-311g**、lanl2dz +
+3 个 RI 辅助基）、`ecp` 下 2 个（Cu/Zn），`registry.yaml` 对每个都有 sha256；
+`qwb data verify` 30/30 通过。D0-01 的缺口不在「有没有文件」，而在**新增数据时的钉法**。
+
+### D0-02：SMD 参数有可机读来源，但有两个坑
+
+PySCF 的 `pyscf/solvent/smd.py` 带着 **180 条** SMD 溶剂参数表
+（字段：`n, n25, alpha, beta, gamma, epsilon, phi, psi`，即折射率/Abraham α,β/
+表面张力/介电常数/φ²/ψ²），来源标注为 `comp.chem.umn.edu/solvation/mnsddb.pdf`
+（即 Marenich–Cramer–Truhlar, J. Phys. Chem. A 2009, doi 10.1021/jp810292n 的表）。
+
+**坑一（许可）**：那个文件是 **GPL-3**（copyright GPU4PySCF）。本仓库是 Apache-2.0，
+**不能**把它的表整体复制进来。正确做法是从**一手数据库/论文表**转录数字（数据事实本身
+不受 GPL 保护），引用 DOI，并在 `DATA_LICENSES.md` 写清「数字来自 mnsddb，非取自 PySCF 代码」。
+
+**坑二（水是特例）**：表里 water 的 `gamma/phi/psi` 是 **-1**（占位，表示不在该表内），
+只有 `n=1.3328, epsilon=78.355` 可用。所以 SV-02/SV-03 在 7 个溶剂上可以直接做，
+**水必须单独处理**（SMD 对水用的是另一套 CDS 处理），不能拿 -1 当 0 算。
+
+**交叉验证**：表里 7 个溶剂的 `n`、`epsilon` 与我们 `qwb-data/solvent/*.yaml` 的
+`refractive_index`、`epsilon` **逐位一致**（水 1.3328/78.355、甲醇 1.3288/32.613、
+乙醇 1.3611/24.852、乙腈 1.3442/35.688、氯仿 1.4459/4.7113、甲苯 1.4961/2.3741、
+THF 1.405/7.4257）—— 说明 DA-04 的转录是对的，且这条独立来源可以当它的复核。
+
+`dmso` 在那张表里键名不是 `dimethyl sulfoxide`（需要另找键名），这一条留给下一轮确认，
+不猜。
