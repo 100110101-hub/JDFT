@@ -18,7 +18,9 @@ use qwb_linalg::Matrix;
 use crate::one_electron::primitive_norm;
 
 /// 一维重叠 `M(i,j)` 的标准递推。
-fn overlap_1d(i: u32, j: u32, alpha: f64, beta: f64, a: f64, b: f64) -> f64 {
+///
+/// `pub(crate)`：`angmom` 模块的「抬高幂次 × 导数」也建在同一个递推上。
+pub(crate) fn overlap_1d(i: u32, j: u32, alpha: f64, beta: f64, a: f64, b: f64) -> f64 {
     let p = alpha + beta;
     let center = (alpha * a + beta * b) / p;
     let (iu, ju) = (i as usize, j as usize);
@@ -80,7 +82,9 @@ fn primitive_dipole(
 }
 
 /// 把每个指标按壳层的球谐变换处理（与 `one_electron` 完全相同的约定）。
-fn transform_matrix(m: &Matrix, transform: &Matrix) -> Result<Matrix, EngineError> {
+///
+/// `pub(crate)`：`angmom` 模块共用。
+pub(crate) fn transform_matrix(m: &Matrix, transform: &Matrix) -> Result<Matrix, EngineError> {
     let transposed = transform.transpose();
     let left = qwb_linalg::matmul(&transposed, m)
         .map_err(|err| EngineError::Internal(format!("dipole T^T M: {err}")))?;
