@@ -110,7 +110,18 @@ Step -Name 'core: fmt' -Dir 'qwb-core' -Body { cargo fmt --all --check }
 Step -Name 'core: clippy -D warnings' -Dir 'qwb-core' -Body {
     cargo clippy --workspace --all-targets -- -D warnings
 }
-Step -Name 'core: test' -Dir 'qwb-core' -Body { cargo test --workspace }
+# EX-02：进程级并行（cargo-nextest）。**测试集合不变** —— nextest 不跑 doctest，
+# 所以 doctest 单独跑一步补上；没装 nextest 的机器退回 `cargo test --workspace`（同一个集合）。
+Step -Name 'core: test' -Dir 'qwb-core' -Body {
+    if (Get-Command cargo-nextest -ErrorAction SilentlyContinue) {
+        & cargo nextest run --workspace --no-fail-fast
+        if ($LASTEXITCODE -ne 0) { throw 'nextest failed' }
+        & cargo test --workspace --doc
+    }
+    else {
+        & cargo test --workspace
+    }
+}
 Step -Name 'core: I-06 integral cache (feature on)' -Dir 'qwb-core' -Body {
     # I-06 acceptance: cache on/off must give identical results.
     cargo test -p qwb-integrals --features integral-cache --test i06_cache

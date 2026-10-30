@@ -83,7 +83,18 @@ step "contracts(K2): test" bash -c "cd qwb-contracts/engine-api && \"\$0\" test 
 # ---- qwb-core ----
 step "core: fmt" bash -c "cd qwb-core && \"\$0\" fmt --all --check" "$CARGO"
 step "core: clippy -D warnings" bash -c "cd qwb-core && \"\$0\" clippy --workspace --all-targets -- -D warnings" "$CARGO"
-step "core: test" bash -c "cd qwb-core && \"\$0\" test --workspace" "$CARGO"
+# EX-02：与 verify.ps1 同步 —— 有 cargo-nextest 就走进程级并行（doctest 单独跑一步，
+# 集合不变），没有就退回 `cargo test --workspace`。
+step "core: test" bash -c '
+    cd qwb-core || exit 1
+    NEXTEST="$(command -v cargo-nextest || command -v cargo-nextest.exe || true)"
+    if [ -n "$NEXTEST" ]; then
+        "$NEXTEST" run --workspace --no-fail-fast || exit 1
+        "$0" test --workspace --doc
+    else
+        "$0" test --workspace
+    fi
+' "$CARGO"
 # I-00 验收：两个后端都必须编译，且给出同样的数（tests/backend_consistency.rs 的 golden 值）。
 step "core: I-06 integral cache" bash -c "cd qwb-core && \"\$0\" test -p qwb-integrals --features integral-cache --test i06_cache" "$CARGO"
 step "core: I-00 faer backend" bash -c "cd qwb-core && \"\$0\" test -p qwb-linalg --no-default-features --features faer" "$CARGO"

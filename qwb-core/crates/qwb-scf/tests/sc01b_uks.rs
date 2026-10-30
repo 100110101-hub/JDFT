@@ -97,72 +97,117 @@ fn uks_options() -> UksOptions {
     options
 }
 
-#[test]
-fn uks_matches_pyscf_for_o2_and_oh() {
-    let registry = Registry::open(data_root()).expect("qwb-data");
-    let rows = reference_rows();
-    let mut checked = 0usize;
-    for row in &rows {
-        if row.energy.is_nan() {
-            println!(
-                "{}/{}: PySCF 参考是 nan（未收敛），跳过",
-                row.species, row.functional
-            );
-            continue;
-        }
-        let molecule = match row.species.as_str() {
-            "O2" => o2(),
-            "OH" => oh(),
-            other => panic!("未知体系 {other}"),
-        };
-        let result = uks_from_data(
-            &registry,
-            &molecule,
-            &row.basis_placeholder(),
-            &row.functional,
-            "grid-fine",
-            uks_options(),
-        )
-        .unwrap_or_else(|err| panic!("{}/{}: {err}", row.species, row.functional));
+/// 跑一行参考数据（逐行断言）。**拆成三个 `#[test]` 只是为了并行**：
+/// 这里每个体系的 UKS 各自要几十秒到几分钟，串在一个测试里会把门禁尾巴拖到
+/// 10 分钟以上；断言集合与容差一字未改（`choices` 八十三）。
+fn check_reference_row(row: &ReferenceRow) {
+    if row.energy.is_nan() {
         println!(
-            "{}/{}: E = {:.10} (PySCF {:.10}, 差 {:+.2e})  <S^2> = {:.6} (PySCF {:.6})  {} iters",
-            row.species,
-            row.functional,
-            result.energy_hartree,
-            row.energy,
-            result.energy_hartree - row.energy,
-            result.s_squared,
-            row.s_squared,
-            result.iterations
+            "{}/{}: PySCF 参考是 nan（未收敛），跳过",
+            row.species, row.functional
         );
-        assert!(
-            (result.energy_hartree - row.energy).abs() < row.tolerance,
-            "{}/{}: E = {:.10} vs PySCF {:.10}（容差 {:.1e}）",
-            row.species,
-            row.functional,
-            result.energy_hartree,
-            row.energy,
-            row.tolerance
-        );
-        assert!(
-            (result.s_squared - row.s_squared).abs() < 1.0e-4,
-            "{}/{}: <S^2> = {:.6} vs PySCF {:.6}",
-            row.species,
-            row.functional,
-            result.s_squared,
-            row.s_squared
-        );
-        assert_eq!(result.n_alpha, row.n_alpha, "{}: n_alpha", row.species);
-        assert_eq!(result.n_beta, row.n_beta, "{}: n_beta", row.species);
-        // 污染必须能被读者看到（不是只写在日志里）
-        assert!(
-            result.spin_contamination.is_finite(),
-            "{}: spin_contamination 必须是有限数",
-            row.species
-        );
-        checked += 1;
+        return;
     }
-    assert!(checked >= 3, "只对照了 {checked} 行参考数据");
+    let registry = Registry::open(data_root()).expect("qwb-data");
+    let molecule = match row.species.as_str() {
+        "O2" => o2(),
+        "OH" => oh(),
+        other => panic!("未知体系 {other}"),
+    };
+    let result = uks_from_data(
+        &registry,
+        &molecule,
+        &row.basis_placeholder(),
+        &row.functional,
+        "grid-fine",
+        uks_options(),
+    )
+    .unwrap_or_else(|err| panic!("{}/{}: {err}", row.species, row.functional));
+    println!(
+        "{}/{}: E = {:.10} (PySCF {:.10}, 差 {:+.2e})  <S^2> = {:.6} (PySCF {:.6})  {} iters",
+        row.species,
+        row.functional,
+        result.energy_hartree,
+        row.energy,
+        result.energy_hartree - row.energy,
+        result.s_squared,
+        row.s_squared,
+        result.iterations
+    );
+    assert!(
+        (result.energy_hartree - row.energy).abs() < row.tolerance,
+        "{}/{}: E = {:.10} vs PySCF {:.10}（容差 {:.1e}）",
+        row.species,
+        row.functional,
+        result.energy_hartree,
+        row.energy,
+        row.tolerance
+    );
+    assert!(
+        (result.s_squared - row.s_squared).abs() < 1.0e-4,
+        "{}/{}: <S^2> = {:.6} vs PySCF {:.6}",
+        row.species,
+        row.functional,
+        result.s_squared,
+        row.s_squared
+    );
+    assert_eq!(result.n_alpha, row.n_alpha, "{}: n_alpha", row.species);
+    assert_eq!(result.n_beta, row.n_beta, "{}: n_beta", row.species);
+    // 污染必须能被读者看到（不是只写在日志里）
+    assert!(
+        result.spin_contamination.is_finite(),
+        "{}: spin_contamination 必须是有限数",
+        row.species
+    );
+}
+
+/// 拆测试不许顺手丢掉覆盖：表是 4 行（O2/svwn5、O2/pbe、OH/svwn5=[nan]、OH/pbe），
+/// 其中至少 3 行有可用参考值 —— 这正是拆之前那条 `checked >= 3` 断言。
+#[test]
+fn uks_reference_rows_cover_three_systems() {
+    let rows = reference_rows();
+    let names: Vec<String> = rows
+        .iter()
+        .map(|row| format!("{}/{}", row.species, row.functional))
+        .collect();
+    println!("参考行: {names:?}");
+    let usable = rows.iter().filter(|row| !row.energy.is_nan()).count();
+    assert_eq!(rows.len(), 4, "参考表行数变了（现在 {names:?}）");
+    assert!(
+        usable >= 3,
+        "至少要有 3 行可用参考值（现在只有 {usable} 行）"
+    );
+}
+
+fn run_reference_row(index: usize) {
+    let rows = reference_rows();
+    assert!(
+        index < rows.len(),
+        "参考表只有 {} 行，取不到第 {index} 行",
+        rows.len()
+    );
+    check_reference_row(&rows[index]);
+}
+
+#[test]
+fn uks_matches_pyscf_for_o2_and_oh_row0() {
+    run_reference_row(0);
+}
+
+#[test]
+fn uks_matches_pyscf_for_o2_and_oh_row1() {
+    run_reference_row(1);
+}
+
+#[test]
+fn uks_matches_pyscf_for_o2_and_oh_row2() {
+    // OH/svwn5：PySCF 参考是 nan，这里只确认「跳过」这条路仍然成立。
+    run_reference_row(2);
+}
+
+#[test]
+fn uks_matches_pyscf_for_o2_and_oh_row3() {
+    run_reference_row(3);
 }
 
 #[test]
