@@ -48,3 +48,10 @@ cccbdb-raw.json
 /.tmp-*
 
 .d3-upstream/
+
+# gate 的日志与桌面端重定向文件（*.log 已在上面忽略）
+/verify-r*.err
+
+# 本轮临时脚本/提交信息草稿
+/tmp_*.py
+/tmp_*.txt

@@ -153,6 +153,67 @@ pub fn populations(
     })
 }
 
+/// **抗磁（diamagnetic）NMR 屏蔽**，单位 ppm，每个原子一个。
+///
+/// Ramsey 的抗磁项，规范取「核在原点」的共原（common-origin）形式：
+///
+/// ```text
+/// σ_dia(A) = 1/(3c²) · Σ_μν P_μν ⟨μ| 1/|r − R_A| |ν⟩
+/// ```
+///
+/// 来源是 `A_ext · A_μ` 交叉项 `A_ext = ½ B×(r−R_O)`、`A_μ = μ×(r−R_A)/|r−R_A|³`：
+///
+/// ```text
+/// σ^dia_αβ(A) = 1/(2c²) Σ P ⟨ (r_O·r_A)δ_αβ − r_Oα r_Aβ | / r_A³ ⟩,  r_O = r − R_O, r_A = r − R_A
+/// ```
+///
+/// 取迹、并把规范原点放在核上（`R_O = R_A`）就得到上面的 `⟨1/r_A⟩` 形式
+/// （`tr = 2/r_A`，`σ_iso = ⅓·tr`）。**锚点**：氢原子（1s 精确解，`⟨1/r⟩ = 1`、
+/// 两个电子）→ `2/(3c²) = 35.50 ppm`，正是教科书的氢原子抗磁屏蔽。
+///
+/// 积分用 [`qwb_integrals::one_electron::one_electron_with_charges`] 的**单位电荷**
+/// 技巧：对目标核那一列放 `Z = 1`、其余放 0，得到的核吸引矩阵就是该核的
+/// `−⟨μ|1/r_A|ν⟩`。这样不必另写一套积分（同一段经过验证的球谐变换）。
+///
+/// **范围**：只做抗磁项。顺磁项（`⟨μ|L_A/r_A³|ν⟩` + CPHF 响应）还没做 —— 注意抗磁项
+/// 本身就是几百 ppm 的量级（水 ¹H 在这里是 103 ppm，因为氧的 8 个电子都在
+/// `1/r_H` 里贡献了 4.6），**不能**当化学位移用；`docs/choices.md` 七十九 记了这次
+/// 公式订正（先写成 `⟨|r−R|²⟩`，那是错的）。
+///
+/// # Errors
+///
+/// 积分计算失败（球谐变换未实现等）。
+pub fn diamagnetic_shielding_ppm(
+    basis: &InternalBasis,
+    molecule: &Molecule,
+    density: &Matrix,
+) -> Result<Vec<f64>, qwb_engine_api::EngineError> {
+    /// 原子单位下的光速（CODATA 2018）。
+    const SPEED_OF_LIGHT: f64 = 137.035_999_084;
+    /// 1/(3c²) 换成 ppm 的因子：每个 `⟨1/r⟩` 单位（每个电子）17.7512 ppm。
+    const PPM_PER_UNIT_INVERSE_R: f64 = 1.0e6 / (3.0 * SPEED_OF_LIGHT * SPEED_OF_LIGHT);
+    let n_atoms = molecule.n_atoms();
+    let mut shielding = Vec::with_capacity(n_atoms);
+    for target in 0..n_atoms {
+        // 单位电荷技巧：只保留目标核的 1/|r − R_A| 吸引。
+        let mut charges = vec![0.0; n_atoms];
+        charges[target] = 1.0;
+        let attraction =
+            qwb_integrals::one_electron::one_electron_with_charges(basis, molecule, &charges)?
+                .nuclear;
+        // `nuclear` 带吸引符号（负），所以 Σ P·V 是 −⟨1/r_A⟩。
+        let n = basis.n_functions();
+        let mut expectation = 0.0;
+        for mu in 0..n {
+            for nu in 0..n {
+                expectation -= density[(mu, nu)] * attraction[(mu, nu)];
+            }
+        }
+        shielding.push(expectation * PPM_PER_UNIT_INVERSE_R);
+    }
+    Ok(shielding)
+}
+
 /// 相对某个原点的**无迹四极矩** `Θ_ij = ½ Σ_a q_a (3 r_i r_j − r² δ_ij)`，单位 Debye·Å。
 ///
 /// 二阶矩用「相对原点」的形式从**固定积分**拼出来（积分本身只算一次）：
