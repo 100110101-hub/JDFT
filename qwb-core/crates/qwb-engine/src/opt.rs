@@ -338,25 +338,35 @@ pub(crate) fn uks_scf_with_convergence_aids(
         aid.initial_guess_scale = guess_scale;
         match qwb_scf::uks::uks_scf(basis, molecule, tensor, grid, terms, aid) {
             Ok(found) => {
-                let mut polished = base.clone();
-                polished.level_shift = 0.0;
-                polished.damping = 0.0;
-                polished.use_diis = true;
-                polished.initial_density =
-                    Some((found.density_alpha.clone(), found.density_beta.clone()));
-                match qwb_scf::uks::uks_scf(basis, molecule, tensor, grid, terms, polished) {
-                    Ok(result) => {
-                        let residual =
-                            brillouin_residual(basis, molecule, tensor, grid, terms, &result)?;
-                        if residual < 1.0e-6 {
-                            return Ok(result);
+                // **能级移动的延拓抛光**：λ 逐级降到 0，每一步都从上一解热启动。
+                // 一次性从 λ=0.2 直接跳到 0，OH 这类体系又会飘走（实测 400 步不收敛）；
+                // 逐级降 λ 能把解连续地带到真驻点上（残差随之收敛到 < 1e-6）。
+                let mut current = found;
+                for level_shift in [0.05_f64, 0.01, 0.002, 0.0005, 0.0] {
+                    let mut step = base.clone();
+                    step.level_shift = level_shift;
+                    step.damping = 0.0;
+                    step.use_diis = true;
+                    step.initial_density =
+                        Some((current.density_alpha.clone(), current.density_beta.clone()));
+                    match qwb_scf::uks::uks_scf(basis, molecule, tensor, grid, terms, step) {
+                        Ok(result) => current = result,
+                        Err(err) => {
+                            let _ = err;
+                            break;
                         }
-                        last_error = Some(EngineError::Internal(format!(
-                            "uks: the converged density is not a Brillouin point                              (||FPS-SPF|| = {residual:.3e}); a gradient from it would be wrong"
-                        )));
                     }
-                    Err(err) => last_error = Some(err),
                 }
+                let residual = brillouin_residual(basis, molecule, tensor, grid, terms, &current)?;
+                if residual < 1.0e-6 {
+                    return Ok(current);
+                }
+                return Ok(current).and_then(|_| {
+                    Err(EngineError::Internal(format!(
+                        "uks: the converged density is not a Brillouin point \
+                         (||FPS-SPF|| = {residual:.3e}); a gradient from it would be wrong"
+                    )))
+                });
             }
             Err(err) => last_error = Some(err),
         }

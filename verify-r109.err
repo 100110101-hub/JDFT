@@ -1,0 +1,64 @@
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.30s
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.24s
+   Generated D:\python_II\Jaguar\qwb-contracts\engine-api\target\doc\qwb_engine_api\index.html
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.08s
+     Running unittests src\lib.rs (target\debug\deps\qwb_engine_api-ebe514a51303a545.exe)
+    Checking qwb-engine v0.1.0 (D:\python_II\Jaguar\qwb-core\crates\qwb-engine)
+error: value assigned to `last_error` is never read
+   --> crates\qwb-engine\src\opt.rs:355:29
+    |
+355 | ...                   last_error = Some(err);
+    |                       ^^^^^^^^^^
+    |
+    = help: maybe it is overwritten before being read?
+    = note: `-D unused-assignments` implied by `-D warnings`
+    = help: to override `-D warnings` add `#[allow(unused_assignments)]`
+
+error: could not compile `qwb-engine` (lib) due to 1 previous error
+warning: build failed, waiting for other jobs to finish...
+error: could not compile `qwb-engine` (lib test) due to 1 previous error
+   Compiling qwb-registry v0.1.0 (D:\python_II\Jaguar\qwb-core\crates\qwb-registry)
+   Compiling qwb-engine v0.1.0 (D:\python_II\Jaguar\qwb-core\crates\qwb-engine)
+warning: value assigned to `last_error` is never read
+   --> crates\qwb-engine\src\opt.rs:355:29
+    |
+355 | ...                   last_error = Some(err);
+    |                       ^^^^^^^^^^
+    |
+    = help: maybe it is overwritten before being read?
+    = note: `#[warn(unused_assignments)]` (part of `#[warn(unused)]`) on by default
+
+warning: `qwb-engine` (lib test) generated 1 warning
+warning: `qwb-engine` (lib) generated 1 warning (1 duplicate)
+   Compiling qwb-cli v0.1.0 (D:\python_II\Jaguar\qwb-core\crates\qwb-cli)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 12.22s
+     Running unittests src\lib.rs (target\debug\deps\qwb_basis-a075a74befce26da.exe)
+     Running tests\d01_basis_layer.rs (target\debug\deps\d01_basis_layer-0d88f2da9bfb12b9.exe)
+     Running tests\f01_f_transform.rs (target\debug\deps\f01_f_transform-6b729442d60ff96c.exe)
+     Running unittests src\main.rs (target\debug\deps\qwb-3e42a1dc3a173c32.exe)
+     Running tests\d02_verify_regression.rs (target\debug\deps\d02_verify_regression-29910ddcf6b68c67.exe)
+     Running tests\p08_replay.rs (target\debug\deps\p08_replay-56a6e1f80275bfbc.exe)
+     Running tests\t07_batch_recovery.rs (target\debug\deps\t07_batch_recovery-a61642b9bead2b35.exe)
+     Running tests\t07_inspect_env.rs (target\debug\deps\t07_inspect_env-977ce5432ff88186.exe)
+     Running tests\t8_opt_cli.rs (target\debug\deps\t8_opt_cli-135d1950c07c96e6.exe)
+     Running unittests src\lib.rs (target\debug\deps\qwb_engine-fee3dc4f7cf84d8c.exe)
+     Running tests\f01_hessian_h2.rs (target\debug\deps\f01_hessian_h2-e2ee3a9d7a9928e7.exe)
+     Running tests\f01_hessian_water.rs (target\debug\deps\f01_hessian_water-2a43d8b9c13b8d2a.exe)
+     Running tests\f02_frequencies.rs (target\debug\deps\f02_frequencies-f8e50def1f47ad25.exe)
+     Running tests\f02_ir.rs (target\debug\deps\f02_ir-afb0ef5f63737caa.exe)
+     Running tests\f02_thermochemistry.rs (target\debug\deps\f02_thermochemistry-a2dbd2292534cdc6.exe)
+     Running tests\fx01_tau_engine.rs (target\debug\deps\fx01_tau_engine-e484ac82e4760b4b.exe)
+     Running tests\g01_analytic_def2svp.rs (target\debug\deps\g01_analytic_def2svp-f60e39cbd6dd2582.exe)
+     Running tests\g01_analytic_pbe.rs (target\debug\deps\g01_analytic_pbe-c0e37754280ed4ef.exe)
+     Running tests\g01_analytic_water.rs (target\debug\deps\g01_analytic_water-e9ce92aaf522ba5a.exe)
+     Running tests\g01_gradient_localize.rs (target\debug\deps\g01_gradient_localize-0db51e169c968ca5.exe)
+     Running tests\g01_numeric_gradient.rs (target\debug\deps\g01_numeric_gradient-0e91db1498e82584.exe)
+     Running tests\g02_optimize_water.rs (target\debug\deps\g02_optimize_water-3521c9a67d6c9a02.exe)
+     Running tests\g03_three_molecules.rs (target\debug\deps\g03_three_molecules-a5eda9c3178fedac.exe)
+     Running tests\kv_phase2_options.rs (target\debug\deps\kv_phase2_options-eaf84001f48d4bf8.exe)
+     Running tests\rs02_tda_engine.rs (target\debug\deps\rs02_tda_engine-3116a9197cab5171.exe)
+     Running tests\rs08_multipoles_engine.rs (target\debug\deps\rs08_multipoles_engine-f3ba55dbae4e5910.exe)
+     Running tests\sc01_uhf_engine.rs (target\debug\deps\sc01_uhf_engine-33eff73a2dcf7879.exe)
+     Running tests\sc01b_uks_engine.rs (target\debug\deps\sc01b_uks_engine-7fdd8df31ac606be.exe)
+     Running tests\sc02_uhf_optimisation.rs (target\debug\deps\sc02_uhf_optimisation-5798b1abeadadf91.exe)
+     Running tests\sc02_uks_gradient_o2.rs (target\debug\deps\sc02_uks_gradient_o2-436f66f0f0d8467f.exe)
