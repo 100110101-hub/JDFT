@@ -1,163 +1,62 @@
-//! SC-02（UKS 半）的**可判定验收**：O2/SVWN5/STO-3G 的解析梯度 vs 数值梯度 < 1e-6。
+//! SC-02（UKS 半）的引擎级验收：O2/SVWN5/STO-3G 的解析梯度 vs 数值梯度 < 1e-6。
 //!
-//! 第 59 轮的诊断结论（`docs/choices.md` 七十五）：
+//! 两个诊断结论（`docs/choices.md` 七十五）决定了本测试的形状：
 //!
-//! * 用**默认 SCF**（DIIS）收敛时，`W^σ = P^σ(H+J+v_xc^σ)P^σ` 的解析梯度与数值梯度的
-//!   最大差 **6.240e-7 Ha/Bohr** —— 判据达成；
-//! * 用「阻尼 0.3 + 能级移动 0.2」这条**收敛辅助**分支时，同一实现差 7.6e-3，而 ±δ 三点
-//!   在同一条分支上且能量平滑（说明不是跨解差分）。所以 4% 的差异与 `W` 的系数**无关**
-//!   （含/不含/2×v_xc 三种实测：7.6e-3 / 2.9e-2 / 4.4e-2，含 v_xc 最好），而与那个
-//!   辅助分支的性质有关 —— 这条留给后续，先把**已验证的分支**钉成判据。
-#![allow(clippy::field_reassign_with_default, clippy::needless_range_loop)]
+//! * `W` 里 `v_xc` 的系数是对的（含/不含/2× 三种实测：7.6e-3 / 2.9e-2 / 4.4e-2）；
+//! * 4% 的差来自**收敛辅助分支**：能级移动的不动点交换子残差 1.1e-2，不是 Brillouin 点。
+//!   正文算法分支（DIIS）上残差 6.7e-11，解析梯度与数值梯度一致到 6.0e-7。
+//!
+//! OH（双重态）在这个基组/泛函上**达不到真驻点**（DIIS 400 步不收敛；辅助分支收敛但残差
+//! 1.1e-2），所以 `uks` + `opt` 仍保持显式拒绝，OH 的梯度不对外提供 —— 宁缺勿错。
 use std::path::PathBuf;
 
-use qwb_basis::InternalBasis;
-use qwb_engine_api::{Atom, Molecule};
-use qwb_integrals::one_electron::one_electron;
-use qwb_integrals::two_electron::two_electron;
-use qwb_linalg::Matrix;
+use qwb_engine::gradient::{GradientOptions, numerical_gradient};
+use qwb_engine::opt::{OptOptions, analytic_energy_and_gradient};
+use qwb_engine_api::{Atom, Molecule, ScfType};
 use qwb_registry::Registry;
-use qwb_scf::analytic_gradient::open_shell_analytic_gradient;
-use qwb_scf::rks::GridAoCached;
-use qwb_scf::uks::{UksOptions, evaluate_xc_spin_cached, uks_scf};
-
-const BOHR_PER_ANGSTROM: f64 = 1.889_726_089_838_572;
 
 fn data_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../qwb-data")
 }
 
-fn displaced(molecule: &Molecule, atom: usize, axis: usize, delta_bohr: f64) -> Molecule {
-    let mut atoms = Vec::new();
-    for (index, item) in molecule.atoms.iter().enumerate() {
-        let mut position = item.position_angstrom;
-        if index == atom {
-            position[axis] += delta_bohr / BOHR_PER_ANGSTROM;
-        }
-        atoms.push(Atom::new(item.symbol.clone(), position));
-    }
-    Molecule::new(atoms, molecule.charge, molecule.multiplicity)
-}
-
-fn scf_energy(
-    registry: &Registry,
-    molecule: &Molecule,
-    terms: &[Box<dyn qwb_xc::FunctionalTerm>],
-) -> f64 {
-    let basis = InternalBasis::build(registry.get_basis("sto-3g").unwrap(), molecule).unwrap();
-    let tensor = two_electron(&basis, molecule).unwrap();
-    let grid =
-        qwb_grid::molecular_grid(registry.get_grid("grid-coarse").unwrap(), molecule).unwrap();
-    let mut options = UksOptions::default();
-    options.max_iter = 400;
-    options.hf_exchange = 0.0;
-    uks_scf(&basis, molecule, &tensor, &grid, terms, options)
-        .unwrap()
-        .energy_hartree
-}
-
-#[test]
-fn sc02_uks_gradient_matches_numerical_for_o2() {
-    let registry = Registry::open(data_root()).expect("qwb-data");
-    let molecule = Molecule::new(
+fn dioxygen() -> Molecule {
+    Molecule::new(
         vec![
             Atom::new("O", [0.0, 0.0, -0.603_5]),
             Atom::new("O", [0.0, 0.0, 0.603_5]),
         ],
         0,
         3,
-    );
-    let basis = InternalBasis::build(registry.get_basis("sto-3g").unwrap(), &molecule).unwrap();
-    let one = one_electron(&basis, &molecule).unwrap();
-    let tensor = two_electron(&basis, &molecule).unwrap();
-    let grid =
-        qwb_grid::molecular_grid(registry.get_grid("grid-coarse").unwrap(), &molecule).unwrap();
-    let (terms, hf) = qwb_engine::terms_and_hf_exchange(&registry, "svwn5").unwrap();
-    let mut options = UksOptions::default();
-    options.max_iter = 400;
-    options.hf_exchange = hf;
-    let result = uks_scf(&basis, &molecule, &tensor, &grid, &terms, options).unwrap();
-    assert!(result.scf_converged, "UKS SCF");
-    let n = basis.n_functions();
-    let mut p_total = Matrix::zeros(n, n);
-    for i in 0..n {
-        for j in 0..n {
-            p_total[(i, j)] = result.density_alpha[(i, j)] + result.density_beta[(i, j)];
-        }
-    }
-    let coulomb = qwb_scf::build_fock(&one.core_hamiltonian, &tensor, &p_total)
-        .unwrap()
-        .coulomb;
-    let cache = GridAoCached::build(&basis, &grid, false, false, false).unwrap();
-    let xc = evaluate_xc_spin_cached(
-        &basis,
-        &grid,
-        &cache,
-        &result.density_alpha,
-        &result.density_beta,
-        &terms,
     )
-    .unwrap();
-    let xc_geometric = qwb_engine::gradient::xc_geometric_derivative_spin(
-        &registry,
-        &molecule,
-        "sto-3g",
-        "grid-coarse",
-        &result.density_alpha,
-        &result.density_beta,
-        &terms,
-        1.0e-3,
-    )
-    .unwrap();
-    let mut w_alpha = Matrix::zeros(n, n);
-    let mut w_beta = Matrix::zeros(n, n);
-    for (p, v, target) in [
-        (&result.density_alpha, &xc.v_alpha, &mut w_alpha),
-        (&result.density_beta, &xc.v_beta, &mut w_beta),
-    ] {
-        let mut fock = Matrix::zeros(n, n);
-        for i in 0..n {
-            for j in 0..n {
-                fock[(i, j)] = one.core_hamiltonian[(i, j)] + coulomb[(i, j)] + v[(i, j)];
-            }
-        }
-        let pf = qwb_linalg::matmul(p, &fock).unwrap();
-        let pfp = qwb_linalg::matmul(&pf, p).unwrap();
-        for i in 0..n {
-            for j in 0..n {
-                (*target)[(i, j)] = pfp[(i, j)];
-            }
-        }
-    }
-    let analytic = open_shell_analytic_gradient(
-        &basis,
-        &molecule,
-        &result.density_alpha,
-        &result.density_beta,
-        &w_alpha,
-        &w_beta,
-        hf,
-        &xc_geometric,
-    )
-    .unwrap();
+}
 
-    let natoms = molecule.atoms.len();
+#[test]
+fn sc02_uks_gradient_matches_numerical_for_o2() {
+    let registry = Registry::open(data_root()).expect("qwb-data");
+    let molecule = dioxygen();
+    let mut options = OptOptions::new("sto-3g", "svwn5", "grid-coarse");
+    options.scf_type = Some(ScfType::Uks);
+    options.scf_energy_threshold = 1.0e-10;
+    options.scf_density_threshold = 1.0e-9;
+    let (energy, analytic) =
+        analytic_energy_and_gradient(&registry, &molecule, &options).expect("uks analytic");
+    let mut gradient_options = GradientOptions::new("sto-3g", "svwn5", "grid-coarse");
+    gradient_options.scf_type = Some(ScfType::Uks);
+    gradient_options.delta_bohr = 1.0e-3;
+    let numeric = numerical_gradient(&registry, &molecule, &gradient_options).expect("numeric");
     let mut worst = 0.0_f64;
-    for atom in 0..natoms {
+    println!("O2/SVWN5/STO-3G (UKS): E = {energy:.9} Ha");
+    for atom in 0..analytic.len() {
         for axis in 0..3 {
-            let step = 1.0e-3;
-            let plus = scf_energy(&registry, &displaced(&molecule, atom, axis, step), &terms);
-            let minus = scf_energy(&registry, &displaced(&molecule, atom, axis, -step), &terms);
-            let numeric = (plus - minus) / (2.0 * step);
-            let difference = (analytic[atom][axis] - numeric).abs();
+            let difference = (analytic[atom][axis] - numeric[atom][axis]).abs();
             worst = worst.max(difference);
             println!(
                 "  atom {atom} axis {axis}: 解析 {:>13.9}  数值 {:>13.9}  差 {difference:.2e}",
-                analytic[atom][axis], numeric
+                analytic[atom][axis], numeric[atom][axis]
             );
         }
     }
-    println!("O2/SVWN5/STO-3G UKS 梯度最大差 {worst:.3e} Ha/Bohr（判据 1e-6）");
+    println!("O2 最大差 {worst:.3e} Ha/Bohr（判据 1e-6）");
     assert!(
         worst < 1.0e-6,
         "UKS analytic vs numerical gradient differs by {worst:.3e} Ha/Bohr"

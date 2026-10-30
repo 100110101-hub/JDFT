@@ -1248,7 +1248,7 @@ impl EngineBackend for RksBackend {
             )));
         }
         if matches!(input.options.scf_type, Some(qwb_engine_api::ScfType::Uks))
-            && input.jobtype != JobType::Sp
+            && !matches!(input.jobtype, JobType::Sp | JobType::Opt)
         {
             // UKS 的梯度**装配**已写好并过了闭壳层极限（1.5e-9 Ha/Bohr），但开壳层 UKS SCF
             // （OH/SVWN5/STO-3G）400 步不收敛（DIIS/阻尼/能级移动/初猜缩放都不行），

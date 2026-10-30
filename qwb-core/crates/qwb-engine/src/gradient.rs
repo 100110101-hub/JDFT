@@ -255,6 +255,25 @@ fn single_point_energy(
         let result = qwb_scf::uks::uks_scf(&basis, molecule, &tensor, &grid, &terms, uks_options)?;
         return Ok(result.energy_hartree);
     }
+    if matches!(options.scf_type, Some(qwb_engine_api::ScfType::Uks)) {
+        let basis = qwb_basis::InternalBasis::build(registry.get_basis(&options.basis)?, molecule)?;
+        let tensor = qwb_integrals::two_electron::two_electron(&basis, molecule)?;
+        let grid = qwb_grid::molecular_grid(registry.get_grid(&options.grid)?, molecule)
+            .map_err(|err| EngineError::Data(format!("grid: {err}")))?;
+        let (terms, hf_exchange) = crate::terms_and_hf_exchange(registry, &options.functional)?;
+        let mut uks_options = qwb_scf::uks::UksOptions::default();
+        uks_options.max_iter = 400;
+        uks_options.hf_exchange = hf_exchange;
+        let result = crate::opt::uks_scf_with_convergence_aids(
+            &basis,
+            molecule,
+            &tensor,
+            &grid,
+            &terms,
+            uks_options,
+        )?;
+        return Ok(result.energy_hartree);
+    }
     if matches!(options.scf_type, Some(qwb_engine_api::ScfType::Uhf)) {
         if !options.functional.is_empty() {
             return Err(EngineError::Unsupported(

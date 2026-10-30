@@ -78,6 +78,12 @@ pub struct UksOptions {
     pub ecp_potential: Option<Matrix>,
     /// hybrid 泛函的精确交换混入比例（纯泛函 = 0，PBE0 = 0.25）。
     pub hf_exchange: f64,
+    /// 自旋密度热启动（`None` = 用 `initial_guess`）。
+    ///
+    /// 用途：先靠「阻尼 + 能级移动」那条辅助分支找到解，再**从这条密度**用无移动的正统
+    /// 算法收敛到真驻点 —— 辅助分支的不动点不是 Brillouin 点（实测交换子残差 1.1e-2，
+    /// 见 `docs/choices.md` 七十五）。
+    pub initial_density: Option<(Matrix, Matrix)>,
 }
 
 impl Default for UksOptions {
@@ -95,6 +101,7 @@ impl Default for UksOptions {
             nuclear_charges: None,
             ecp_potential: None,
             hf_exchange: 0.0,
+            initial_density: None,
         }
     }
 }
@@ -451,32 +458,44 @@ pub fn uks_scf(
         }
         scaled
     };
-    // 初猜：spin-averaged SAD（与 UHF 同一套；core guess 做退路）。
-    let (mut density_alpha, mut density_beta) = match options.initial_guess {
-        UhfInitialGuess::AtomicDensities => {
-            let (alpha, beta) = crate::guess::sad_guess(basis, molecule)?;
-            if alpha.as_column_major().iter().all(|value| *value == 0.0) {
-                let (a, _, _) = density_from_fock(&guess_hcore, &x, n_alpha)?;
-                let b = if n_beta == n_alpha {
-                    a.clone()
-                } else {
-                    density_from_fock(&guess_hcore, &x, n_beta)?.0
-                };
-                (a, b)
-            } else {
-                (alpha, beta)
+    // 初猜：优先用调用方给的热启动密度，其次 spin-averaged SAD（core guess 做退路）。
+    let (mut density_alpha, mut density_beta) =
+        if let Some((alpha, beta)) = &options.initial_density {
+            if alpha.nrows() != n || beta.nrows() != n {
+                return Err(EngineError::Internal(format!(
+                    "uks: initial_density is {0}x{0}/{1}x{1} for {n} AO",
+                    alpha.nrows(),
+                    beta.nrows()
+                )));
             }
-        }
-        UhfInitialGuess::Core => {
-            let (a, _, _) = density_from_fock(&guess_hcore, &x, n_alpha)?;
-            let b = if n_beta == n_alpha {
-                a.clone()
-            } else {
-                density_from_fock(&guess_hcore, &x, n_beta)?.0
-            };
-            (a, b)
-        }
-    };
+            (alpha.clone(), beta.clone())
+        } else {
+            match options.initial_guess {
+                UhfInitialGuess::AtomicDensities => {
+                    let (alpha, beta) = crate::guess::sad_guess(basis, molecule)?;
+                    if alpha.as_column_major().iter().all(|value| *value == 0.0) {
+                        let (a, _, _) = density_from_fock(&guess_hcore, &x, n_alpha)?;
+                        let b = if n_beta == n_alpha {
+                            a.clone()
+                        } else {
+                            density_from_fock(&guess_hcore, &x, n_beta)?.0
+                        };
+                        (a, b)
+                    } else {
+                        (alpha, beta)
+                    }
+                }
+                UhfInitialGuess::Core => {
+                    let (a, _, _) = density_from_fock(&guess_hcore, &x, n_alpha)?;
+                    let b = if n_beta == n_alpha {
+                        a.clone()
+                    } else {
+                        density_from_fock(&guess_hcore, &x, n_beta)?.0
+                    };
+                    (a, b)
+                }
+            }
+        };
 
     let mut diis_alpha = if options.use_diis {
         Some(Diis::new(options.diis_max_vectors))

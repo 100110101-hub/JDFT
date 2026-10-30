@@ -194,6 +194,9 @@ pub fn analytic_energy_and_gradient(
         return uhf_analytic_energy_and_gradient(registry, molecule, options);
     }
     if matches!(options.scf_type, Some(qwb_engine_api::ScfType::Uks)) {
+        return uks_analytic_energy_and_gradient(registry, molecule, options);
+    }
+    if matches!(options.scf_type, Some(qwb_engine_api::ScfType::Uks)) {
         // UKS 的梯度**装配**已经写好并过了闭壳层极限测试
         // （`tests/sc02_uks_gradient.rs`），但开壳层的 UKS SCF 在 OH/SVWN5/STO-3G 上
         // 400 步不收敛（DIIS/阻尼/能级移动/初猜缩放都不行），所以还不敢把它接进
@@ -243,6 +246,124 @@ pub fn analytic_energy_and_gradient(
 /// # Errors
 ///
 /// 泛函非空、SCF 未收敛、或梯度尺寸不符。
+/// 驻点（Brillouin）判据：`‖F^σ P^σ S − S P^σ F^σ‖_max`（两条自旋取最大）。
+///
+/// 解析梯度假定它为零。**能级移动分支的不动点不满足**（实测 1.1e-2，见 `choices` 七十五），
+/// 所以梯度路径必须先查这一条，否则会静默给出错的梯度。
+fn brillouin_residual(
+    basis: &qwb_basis::InternalBasis,
+    molecule: &Molecule,
+    tensor: &qwb_integrals::two_electron::TwoElectronIntegrals,
+    grid: &qwb_grid::Grid,
+    terms: &[Box<dyn qwb_xc::FunctionalTerm>],
+    result: &qwb_scf::uks::UksResult,
+) -> Result<f64, EngineError> {
+    let one = qwb_integrals::one_electron::one_electron(basis, molecule)?;
+    let n = basis.n_functions();
+    let mut total = qwb_linalg::Matrix::zeros(n, n);
+    for i in 0..n {
+        for j in 0..n {
+            total[(i, j)] = result.density_alpha[(i, j)] + result.density_beta[(i, j)];
+        }
+    }
+    let coulomb = qwb_scf::build_fock(&one.core_hamiltonian, tensor, &total)
+        .map_err(|err| EngineError::Internal(format!("uks: J: {err}")))?
+        .coulomb;
+    let needs_sigma = terms.iter().any(|term| term.requires().sigma);
+    let needs_laplacian = terms.iter().any(|term| term.requires().laplacian);
+    let needs_tau = terms.iter().any(|term| term.requires().kinetic_density);
+    let cache =
+        qwb_scf::rks::GridAoCached::build(basis, grid, needs_sigma, needs_laplacian, needs_tau)?;
+    let xc = qwb_scf::uks::evaluate_xc_spin_cached(
+        basis,
+        grid,
+        &cache,
+        &result.density_alpha,
+        &result.density_beta,
+        terms,
+    )?;
+    let mut worst = 0.0_f64;
+    for (density, potential) in [
+        (&result.density_alpha, &xc.v_alpha),
+        (&result.density_beta, &xc.v_beta),
+    ] {
+        let mut fock = qwb_linalg::Matrix::zeros(n, n);
+        for i in 0..n {
+            for j in 0..n {
+                fock[(i, j)] = one.core_hamiltonian[(i, j)] + coulomb[(i, j)] + potential[(i, j)];
+            }
+        }
+        let fp = qwb_linalg::matmul(&fock, density)
+            .map_err(|err| EngineError::Internal(format!("uks: FP: {err}")))?;
+        let fps = qwb_linalg::matmul(&fp, &one.overlap)
+            .map_err(|err| EngineError::Internal(format!("uks: FPS: {err}")))?;
+        let sp = qwb_linalg::matmul(&one.overlap, density)
+            .map_err(|err| EngineError::Internal(format!("uks: SP: {err}")))?;
+        let spf = qwb_linalg::matmul(&sp, &fock)
+            .map_err(|err| EngineError::Internal(format!("uks: SPF: {err}")))?;
+        for i in 0..n {
+            for j in 0..n {
+                worst = worst.max((fps[(i, j)] - spf[(i, j)]).abs());
+            }
+        }
+    }
+    Ok(worst)
+}
+
+/// UKS 的收敛与**驻点**保证：正统算法先试；不行就走「能级移动找解 → 无移动重启抛光」。
+///
+/// 抛光后仍要查 [`brillouin_residual`]，超过 1e-6 就报错 —— 梯度不能建在非驻点上。
+pub(crate) fn uks_scf_with_convergence_aids(
+    basis: &qwb_basis::InternalBasis,
+    molecule: &Molecule,
+    tensor: &qwb_integrals::two_electron::TwoElectronIntegrals,
+    grid: &qwb_grid::Grid,
+    terms: &[Box<dyn qwb_xc::FunctionalTerm>],
+    base: qwb_scf::uks::UksOptions,
+) -> Result<qwb_scf::uks::UksResult, EngineError> {
+    let mut plain = base.clone();
+    plain.level_shift = 0.0;
+    plain.initial_density = None;
+    if let Ok(result) = qwb_scf::uks::uks_scf(basis, molecule, tensor, grid, terms, plain)
+        && brillouin_residual(basis, molecule, tensor, grid, terms, &result)? < 1.0e-6
+    {
+        return Ok(result);
+    }
+    let mut last_error: Option<EngineError> = None;
+    for (damping, level_shift, guess_scale) in [(0.3, 0.2, 1.0), (0.3, 0.2, 0.5), (0.3, 0.2, 1.5)] {
+        let mut aid = base.clone();
+        aid.use_diis = false;
+        aid.damping = damping;
+        aid.level_shift = level_shift;
+        aid.initial_guess_scale = guess_scale;
+        match qwb_scf::uks::uks_scf(basis, molecule, tensor, grid, terms, aid) {
+            Ok(found) => {
+                let mut polished = base.clone();
+                polished.level_shift = 0.0;
+                polished.damping = 0.0;
+                polished.use_diis = true;
+                polished.initial_density =
+                    Some((found.density_alpha.clone(), found.density_beta.clone()));
+                match qwb_scf::uks::uks_scf(basis, molecule, tensor, grid, terms, polished) {
+                    Ok(result) => {
+                        let residual =
+                            brillouin_residual(basis, molecule, tensor, grid, terms, &result)?;
+                        if residual < 1.0e-6 {
+                            return Ok(result);
+                        }
+                        last_error = Some(EngineError::Internal(format!(
+                            "uks: the converged density is not a Brillouin point                              (||FPS-SPF|| = {residual:.3e}); a gradient from it would be wrong"
+                        )));
+                    }
+                    Err(err) => last_error = Some(err),
+                }
+            }
+            Err(err) => last_error = Some(err),
+        }
+    }
+    Err(last_error.unwrap_or_else(|| EngineError::Internal("uks: no attempt ran".into())))
+}
+
 fn uhf_analytic_energy_and_gradient(
     registry: &Registry,
     molecule: &Molecule,
@@ -297,7 +418,6 @@ fn uhf_analytic_energy_and_gradient(
 /// # Errors
 ///
 /// 泛函数据不可用、泛函不支持自旋、SCF 未收敛。
-#[allow(dead_code)]
 fn uks_analytic_energy_and_gradient(
     registry: &Registry,
     molecule: &Molecule,
@@ -314,13 +434,8 @@ fn uks_analytic_energy_and_gradient(
     uks_options.energy_threshold = options.scf_energy_threshold;
     uks_options.density_threshold = options.scf_density_threshold;
     uks_options.hf_exchange = hf_exchange;
-    let result = qwb_scf::uks::uks_scf(&basis, molecule, &tensor, &grid, &terms, uks_options)?;
-    if !result.scf_converged {
-        return Err(EngineError::ScfNotConverged {
-            iters: result.iterations,
-            max: options.scf_max_iter,
-        });
-    }
+    let result =
+        uks_scf_with_convergence_aids(&basis, molecule, &tensor, &grid, &terms, uks_options)?;
     let xc = crate::gradient::xc_geometric_derivative_spin(
         registry,
         molecule,
@@ -394,6 +509,27 @@ fn single_point(
             qwb_scf::uks::uks_scf(&basis, molecule, &tensor, &grid, &terms, uks_options)?
                 .energy_hartree,
         );
+    }
+    if matches!(options.scf_type, Some(qwb_engine_api::ScfType::Uks)) {
+        let basis = qwb_basis::InternalBasis::build(registry.get_basis(&options.basis)?, molecule)?;
+        let tensor = qwb_integrals::two_electron::two_electron(&basis, molecule)?;
+        let grid = qwb_grid::molecular_grid(registry.get_grid(&options.grid)?, molecule)
+            .map_err(|err| EngineError::Data(format!("grid: {err}")))?;
+        let (terms, hf_exchange) = crate::terms_and_hf_exchange(registry, &options.functional)?;
+        let mut uks_options = qwb_scf::uks::UksOptions::default();
+        uks_options.max_iter = options.scf_max_iter;
+        uks_options.energy_threshold = options.scf_energy_threshold;
+        uks_options.density_threshold = options.scf_density_threshold;
+        uks_options.hf_exchange = hf_exchange;
+        return Ok(uks_scf_with_convergence_aids(
+            &basis,
+            molecule,
+            &tensor,
+            &grid,
+            &terms,
+            uks_options,
+        )?
+        .energy_hartree);
     }
     if matches!(options.scf_type, Some(qwb_engine_api::ScfType::Uhf)) {
         let mut uhf_options = qwb_scf::uhf::UhfOptions::default();
