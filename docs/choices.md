@@ -3313,3 +3313,38 @@ THF 1.405/7.4257）—— 说明 DA-04 的转录是对的，且这条独立来�
 
 这正好是 EX-02 的设计依据：**分层 + 限线程**，而不是单纯提高 `--test-threads`。
 下一轮先做这个组合的实测对照（同一套 461 个测试，两种编排，比墙钟），再改 `verify.ps1`。
+
+## 八十四、EX-02 第一次整跑：门禁 19.4 min（原 45–70 min），缺口被单个测试钉住（2026-11-05）
+
+### 结论先行
+
+`scripts/verify.ps1` 整跑 **EXIT=0、`ALL GATES GREEN`、墙钟 1162.4 s ≈ 19.4 min**，测试数
+从 461 变成 **465**（拆测试 +5、替换 −1，集合没有丢项）。对照重规划前的 45–70 min，降了约
+2.5–3.5×。但**目标 15 min 还没达到**，差额约 4–5 min，而这段差额几乎全部来自一个测试：
+拆出来的 `uks_matches_pyscf_for_o2_and_oh_row1`（O2/PBE）单独 **590 s**。
+
+### 这一步到底改了什么（可审计清单）
+
+1. `scripts/verify.ps1` 的 `core: test`：有 `cargo-nextest` 就走 `cargo nextest run --workspace
+   --no-fail-fast`，**doctest 单独一步**（nextest 不跑 doctest，这是集合不变的关键）；没装
+   nextest 的机器退回 `cargo test --workspace`。
+2. `scripts/verify.sh` 同一处同步改（`bash -n` 通过）。
+3. `sc01b_uks.rs`：把 4 行参考数据的循环拆成 4 个测试 + 1 条覆盖断言；`check_reference_row`
+   是原循环体逐字搬移，**断言与容差一字未改**；覆盖断言比原来的 `checked >= 3` 更严
+   （同时钉住 4 行布局）。
+
+### 缺口分析（不用猜）
+
+| 段 | 耗时 | 说明 |
+| --- | --- | --- |
+| 测试段（465 个） | ≈ 10–11 min | 尾巴是 `row1`(O2/PBE) 590 s；其余 464 个在 ~330 s 内跑完 |
+| 其余 25 步 | ≈ 8–9 min | clippy、fmt、deny、maturin 构建、studio pytest 等 |
+
+即：**先把 O2/PBE 那 590 s 降下来**，测试段就能从 ~11 min 掉到 ~5 min，总墙钟随之进 15 min。
+两条路已记录在案：(a) 移进 `slow` lane（快，但降低门禁信任度）；(b) 让它真的变快（可查：
+`QWB_SCF_TRACE` 已在用，先确认它是不是把 400 次迭代跑满、以及 1e-10 的能量收敛阈值是否过度）。
+
+### 记账
+
+CPU 基准路径没有任何改动（没有新 feature、没有换后端）；本轮的改动只有测试编排与测试拆分，
+属于附录 A.5 允许的范围。
