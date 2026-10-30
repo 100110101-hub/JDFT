@@ -68,6 +68,12 @@ pub struct UksOptions {
     pub damping: f64,
     /// 静态能级移动 `λ`。
     pub level_shift: f64,
+    /// 能级移动的**逐步衰减因子**（`0` = 不衰减，恒定 `level_shift`）。
+    ///
+    /// 退火用：λ_k = λ_0 · decay^k，衰减到 1e-4 以下就当 0。OH/SVWN5 这类在两个
+    /// 自旋解之间跳的体系，恒定 λ 只能停在"移位哈密顿量的不动点"（不是驻点），
+    /// 逐步退火才可能被带到真驻点上（`docs/choices.md` 七十六）。
+    pub level_shift_decay: f64,
     /// 初猜的非对角缩放（多初猜用）。
     pub initial_guess_scale: f64,
     /// 初猜策略（默认原子密度叠加）。
@@ -96,6 +102,7 @@ impl Default for UksOptions {
             diis_max_vectors: 8,
             damping: 0.0,
             level_shift: 0.0,
+            level_shift_decay: 0.0,
             initial_guess_scale: 1.0,
             initial_guess: UhfInitialGuess::default(),
             nuclear_charges: None,
@@ -543,13 +550,21 @@ pub fn uks_scf(
             (Matrix::zeros(n, n), Matrix::zeros(n, n))
         };
 
+        // 退火：λ_k = λ_0 · decay^k（decay = 0 时恒为 λ_0）。
+        let effective_shift = if options.level_shift_decay > 0.0 {
+            let factor = options.level_shift_decay.powi(step as i32);
+            let value = options.level_shift * factor;
+            if value < 1.0e-4 { 0.0 } else { value }
+        } else {
+            options.level_shift
+        };
         let fock_alpha = assemble_fock(
             &hcore,
             &coulomb,
             &xc.v_alpha,
             &exchange_alpha,
             options.hf_exchange,
-            options.level_shift,
+            effective_shift,
             &density_alpha,
             overlap,
         )?;
@@ -559,7 +574,7 @@ pub fn uks_scf(
             &xc.v_beta,
             &exchange_beta,
             options.hf_exchange,
-            options.level_shift,
+            effective_shift,
             &density_beta,
             overlap,
         )?;
