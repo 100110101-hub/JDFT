@@ -8,12 +8,25 @@ import csv
 import os
 import sys
 
+import reference_sources
 import numpy as np
 import yaml
 from pyscf import gto, scf, tdscf
 
 CSV_PATH = os.path.join(
     "qwb-core", "crates", "qwb-response", "tests", "reference", "tda_excitations.csv"
+)
+
+FIELDS = (
+    "species",
+    "basis",
+    "method",
+    "n_states",
+    "index",
+    "energy_hartree",
+    "energy_ev",
+    "oscillator_strength",
+    "note",
 )
 
 WATER = """
@@ -75,29 +88,25 @@ def run(species, geometry, basis_name, n_states):
     ]
 
 
-def main():
+def main(check_only: bool = False):
     rows = []
     rows += run("H2O", WATER, "sto-3g", 5)
     rows += run("H2O", WATER, "def2-svp", 5)
-    os.makedirs(os.path.dirname(CSV_PATH), exist_ok=True)
-    fields = [
-        "species",
-        "basis",
-        "method",
-        "n_states",
-        "index",
-        "energy_hartree",
-        "energy_ev",
-        "oscillator_strength",
-        "note",
-    ]
-    with open(CSV_PATH, "w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=fields)
-        writer.writeheader()
-        for row in rows:
-            writer.writerow(row)
+    rows = reference_sources.stamp(rows)
+    fields = list(FIELDS)
+    status = reference_sources.check_csv(CSV_PATH, fields, rows)
+    if status == 0 or check_only:
+        return status
+    reference_sources.write_csv(CSV_PATH, fields, rows)
     print(f"写入 {CSV_PATH}（{len(rows)} 行）")
+    return 0
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    import argparse
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--check", action="store_true",
+                        help="只重算并比对文件，不写盘（DA-08）")
+    arguments = parser.parse_args()
+    sys.exit(main(arguments.check))

@@ -3,10 +3,14 @@
 //! `σ_dia(A) = 1/(3c²) Σ_μν P_μν ⟨μ| 1/|r − R_A| |ν⟩`（ppm，核在原点，Ramsey 抗磁项）。
 //!
 //! 三条检查：
-//! 1. 与 PySCF 的**独立**实现逐位对照（水 + 甲烷，8 个核，STO-3G）。基准由
-//!    `scripts/pyscf_nmr_diamagnetic_reference.py` 生成 —— 那边是 PySCF 自己的
+//! 1. 与 PySCF 的**独立**实现逐位对照（水 + 甲烷 + 甲醇，14 个核，STO-3G）。基准由
+//!    `scripts/pyscf_nmr_shieldings_reference.py` 生成 —— 那边是 PySCF 自己的
 //!    `int1e_rinv`（把分子平移到核在原点后取 `1/|r|`），这边是高斯递推的核吸引矩阵
 //!    （单位电荷技巧）。两条不同的积分路径。
+//!
+//!    **几何从 `nmr_molecules.csv` 读**，不在测试里硬编码：同一份几何同时喂 PySCF 生成器
+//!    与这里，"同一个几何"才成立（DA-08）。参考文件每行还带 `source_doi`/`source_url`
+//!    （PySCF 论文 DOI，Crossref 核对过卷期），门禁 `scripts/check_reference_sources.py` 查。
 //! 2. **旋转不变性**（精确）：`1/r_A` 是标量算符，把分子整体转一下，每个核的 σ 必须不变。
 //! 3. **自由原子极限**：20 bohr 处的一对 H 原子，每个核只剩自己的一个电子，
 //!    σ 必须回到「单个电子 + STO-3G 的 ⟨1/r_H⟩ = 1.2266」→ 21.77 ppm。
@@ -26,31 +30,62 @@ fn data_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../qwb-data")
 }
 
-fn water() -> Molecule {
-    Molecule::new(
-        vec![
-            Atom::new("O", [0.0, 0.0, 0.117_790]),
-            Atom::new("H", [0.0, 0.755_450, -0.471_160]),
-            Atom::new("H", [0.0, -0.755_450, -0.471_160]),
-        ],
-        0,
-        1,
-    )
+fn reference_path(name: &str) -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("tests")
+        .join("reference")
+        .join(name)
 }
 
-fn methane() -> Molecule {
-    let d = 0.629_0_f64;
-    Molecule::new(
-        vec![
-            Atom::new("C", [0.0, 0.0, 0.0]),
-            Atom::new("H", [d, d, d]),
-            Atom::new("H", [-d, -d, d]),
-            Atom::new("H", [-d, d, -d]),
-            Atom::new("H", [d, -d, -d]),
-        ],
-        0,
-        1,
-    )
+/// 从 `nmr_molecules.csv` 读几何（列：system,atom_index,symbol,x,y,z,source_doi,source_url）。
+///
+/// 分子按出现顺序组装；`atom_index` 必须从 0 连续递增 —— 否则说明文件被改坏了。
+fn reference_molecules() -> Vec<(String, Molecule)> {
+    let text = std::fs::read_to_string(reference_path("nmr_molecules.csv"))
+        .expect("nmr_molecules.csv（DA-08 的几何真值源）");
+    let mut out: Vec<(String, Molecule)> = Vec::new();
+    for (lineno, line) in text.lines().enumerate() {
+        if lineno == 0 || line.trim().is_empty() {
+            continue;
+        }
+        let fields: Vec<&str> = line.split(',').collect();
+        assert!(
+            fields.len() >= 6,
+            "row {lineno} has {} fields",
+            fields.len()
+        );
+        let name = fields[0].trim().to_string();
+        let index: usize = fields[1].trim().parse().expect("atom_index");
+        let symbol = fields[2].trim();
+        let mut position = [0.0_f64; 3];
+        for (slot, field) in position.iter_mut().zip(&fields[3..6]) {
+            *slot = field.trim().parse().expect("coordinate");
+        }
+        match out.last_mut() {
+            Some((label, molecule)) if *label == name => {
+                assert_eq!(
+                    molecule.atoms.len(),
+                    index,
+                    "{name}: atom_index must be dense and ascending"
+                );
+                molecule.atoms.push(Atom::new(symbol, position));
+            }
+            _ => {
+                assert_eq!(index, 0, "{name}: the first atom must be index 0");
+                out.push((name, Molecule::new(vec![Atom::new(symbol, position)], 0, 1)));
+            }
+        }
+    }
+    out
+}
+
+/// `nmr_molecules.csv` 里的某个体系（不变性测试要与参考集用同一个几何）。
+fn reference_molecule(label: &str) -> Molecule {
+    reference_molecules()
+        .into_iter()
+        .find(|(name, _)| name == label)
+        .map(|(_, molecule)| molecule)
+        .unwrap_or_else(|| panic!("{label} in nmr_molecules.csv"))
 }
 
 /// 绕 `(1,1,1)/√3` 转 30°，用 Rodrigues 公式手写（不引罗盘依赖）。
@@ -113,24 +148,33 @@ fn solve_density(
 #[test]
 fn rs04_diamagnetic_shielding_matches_the_pyscf_reference() {
     let registry = Registry::open(data_root()).expect("qwb-data");
-    let molecules = [("water", water()), ("methane", methane())];
-    let path =
-        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/reference/nmr_diamagnetic.csv");
-    let text = std::fs::read_to_string(&path).expect("nmr_diamagnetic.csv");
+    let molecules = reference_molecules();
+    let labels: Vec<&str> = molecules.iter().map(|(label, _)| label.as_str()).collect();
+    assert_eq!(
+        labels,
+        ["water", "methane", "methanol"],
+        "DA-08 的 NMR 家族是这三个体系"
+    );
+    // 列：system,basis,atom_index,symbol,inverse_r_bohr,sigma_dia_ppm,source_doi,source_url
+    let text = std::fs::read_to_string(reference_path("nmr_diamagnetic.csv"))
+        .expect("nmr_diamagnetic.csv");
     let mut checked = 0usize;
     let mut worst = 0.0_f64;
+    let mut sources = std::collections::BTreeSet::new();
     for line in text.lines().skip(1) {
         if line.trim().is_empty() {
             continue;
         }
         let fields: Vec<&str> = line.split(',').collect();
+        assert_eq!(fields.len(), 8, "nmr_diamagnetic.csv 每行 8 列：{fields:?}");
         let name = fields[0].trim();
-        let index: usize = fields[1].trim().parse().expect("atom index");
-        let symbol = fields[2].trim();
-        let reference: f64 = fields[4].trim().parse().expect("reference");
+        let index: usize = fields[2].trim().parse().expect("atom index");
+        let symbol = fields[3].trim();
+        let reference: f64 = fields[5].trim().parse().expect("reference");
+        sources.insert((fields[6].trim().to_string(), fields[7].trim().to_string()));
         let molecule = molecules
             .iter()
-            .find(|(label, _)| *label == name)
+            .find(|(label, _)| label == name)
             .map(|(_, molecule)| molecule)
             .unwrap_or_else(|| panic!("unknown system {name}"));
         let (basis, density, _energy) = solve_density(&registry, molecule);
@@ -145,17 +189,21 @@ fn rs04_diamagnetic_shielding_matches_the_pyscf_reference() {
         );
     }
     println!("checked {checked} nuclei, worst relative difference {worst:.2e}");
-    assert_eq!(checked, 8, "expected the full reference set");
+    assert_eq!(
+        checked, 14,
+        "expected the full reference set (3+5+6 nuclei)"
+    );
     assert!(
         worst < 1.0e-6,
         "diamagnetic shielding differs from the PySCF reference by {worst:.3e}"
     );
+    assert_eq!(sources.len(), 1, "每行都该带同一个来源：{sources:?}");
 }
 
 #[test]
 fn rs04_diamagnetic_shielding_is_rotation_invariant() {
     let registry = Registry::open(data_root()).expect("qwb-data");
-    let molecule = water();
+    let molecule = reference_molecule("water");
     let (basis, density, energy) = solve_density(&registry, &molecule);
     let base = diamagnetic_shielding_ppm(&basis, &molecule, &density).unwrap();
 

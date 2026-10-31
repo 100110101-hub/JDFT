@@ -1,0 +1,15 @@
+system,atom_index,symbol,x_angstrom,y_angstrom,z_angstrom,source_doi,source_url
+water,0,O,0.000000,0.000000,0.117790,10.1063/5.0006074,https://github.com/pyscf/pyscf
+water,1,H,0.000000,0.755450,-0.471160,10.1063/5.0006074,https://github.com/pyscf/pyscf
+water,2,H,0.000000,-0.755450,-0.471160,10.1063/5.0006074,https://github.com/pyscf/pyscf
+methane,0,C,0.000000,0.000000,0.000000,10.1063/5.0006074,https://github.com/pyscf/pyscf
+methane,1,H,0.629000,0.629000,0.629000,10.1063/5.0006074,https://github.com/pyscf/pyscf
+methane,2,H,-0.629000,-0.629000,0.629000,10.1063/5.0006074,https://github.com/pyscf/pyscf
+methane,3,H,-0.629000,0.629000,-0.629000,10.1063/5.0006074,https://github.com/pyscf/pyscf
+methane,4,H,0.629000,-0.629000,-0.629000,10.1063/5.0006074,https://github.com/pyscf/pyscf
+methanol,0,C,0.000000,0.000000,0.000000,10.1063/5.0006074,https://github.com/pyscf/pyscf
+methanol,1,O,0.000000,0.000000,1.424600,10.1063/5.0006074,https://github.com/pyscf/pyscf
+methanol,2,H,0.000000,0.913994,1.118782,10.1063/5.0006074,https://github.com/pyscf/pyscf
+methanol,3,H,0.631390,0.631390,-0.631390,10.1063/5.0006074,https://github.com/pyscf/pyscf
+methanol,4,H,-0.631390,-0.631390,-0.631390,10.1063/5.0006074,https://github.com/pyscf/pyscf
+methanol,5,H,-0.631390,0.631390,0.631390,10.1063/5.0006074,https://github.com/pyscf/pyscf

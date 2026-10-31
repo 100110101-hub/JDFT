@@ -175,6 +175,13 @@ Step -Name 'D-15: DATA_LICENSES.md matches the data' -Dir '.' -Body {
     & python scripts/gen_data_licenses.py --check
 }
 
+# ---- DA-08: every reference CSV row must carry its source ----
+# 纯标准库（不 import PySCF），所以 Windows 侧也能查：逐行非空 + DOI/URL 形状 +
+# 来源白名单 + 每个家族文件都有带 `--check` 的生成脚本。
+Step -Name 'DA-08: reference CSVs carry source_doi/source_url' -Dir '.' -Body {
+    & python scripts/check_reference_sources.py
+}
+
 # ---- 10.6: the project ledger must stay machine-readable ----
 Step -Name '10.6: docs/status.yaml ledger validity' -Dir '.' -Body {
     & $script:ledgerPython scripts/check_status.py
