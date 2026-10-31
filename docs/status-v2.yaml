@@ -280,6 +280,7 @@ K8 块的静电项同时改成 G_EP 约定（`E_溶 − E_gas`，含极化形变
 ② 卡点 —— 这些非极性项需要表面张力、原子色散系数与 SMD 参数化半径，属于 **SV-03**；
 ③ 本方**没有**为了过判据去调 ε/半径/容差，也没有把甲醇换成更容易的分子；
 ④ 若要在此刻收口，只能把判据改写成「静电项与实验的差」，那属于改验收标准，不做。"
+  epsilon_basis: "2026-11-06 用更正后的 SMD 表 ε 重测（DA-04 correction）：water ε=78.355 未变 -> dG_solv **−7.274 kcal/mol**（实验 −6.32，gap −0.95）；methanol ε 32.7->32.613（0.27%）-> dG_solv **−5.789 kcal/mol**（实验 −3.71，gap −2.08），在原记录精度下**没有变化**（位移 < 1e-3 kcal/mol）。tessera 散布 0.993 kcal/mol（100/150/250 points per atom：−6.281 / −6.739 / −7.274）。cargo test -p qwb-engine --test sv01_cosmo_scf 7 例绿（5.57 s）。"
 SV-02:
   state: pending
   note: "COSMO 解析梯度 + opt 接线。**按 §10.5 的选取规则当前不可做**：它依赖 SV-01，而 SV-01 是 blocked（判据卡在缺 SMD 非极性项），所以溶剂化轨整条要等 SV-03 解 block。下一轮的队列头是 SC-02（依赖 SC-01 done、ID 最小），见 choices 六十五。"
