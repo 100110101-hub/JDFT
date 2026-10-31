@@ -106,8 +106,13 @@ IN-01:
   verification: "① **外部参考（不变量）**：`cargo test -p qwb-integrals --test in01_ri_integrals` 4 例绿。`V=(P|Q)` 的特征值与 PySCF 的 `int2c2e` 最大相对差 **1.30e-7**（def2-SVP-RI）/ **3.27e-8**（STO-3G）；3 中心张量作为 `(n_aux × n_orb²)` 矩阵的奇异值与 PySCF 的 `df.incore.aux_e2` 最大相对差 **7.95e-8** / **3.01e-8**。用不变量而不是逐元素，是因为两边的球谐排序不同（我们的 Gram–Schmidt vs libcint）；特征值/奇异值对「壳层内任意正交混合」都不变，是等价判据。② **对称性**：`(ij|P)` 的 i↔j 不对称 **0.00e0**，`V` 的不对称 0.00e0，`V` 正定（条件数 1.17e5），`max|W V W − I| = 5.8e-13`。③ **拟合误差（RI-J）**：`cargo test -p qwb-scf --test in01_ri_fit` 绿 —— 我们的 `E_J^RI` 与 PySCF 同配对结果差 **1.37e-7 Ha**（三种辅助基分别是 1.367e-7 / 1.372e-7 / 1.366e-7，是同一个常数偏移，来自 K2 的 Å→bohr 常数，见 note）。④ RI 恒等式残差随辅助基变好单调下降：STO-3G 5.30e-1 → def2-SVP 4.50e-1 → def2-SVP-RI **3.51e-3**（且不为 0）。⑤ `cargo clippy --workspace --all-targets -- -D warnings` 干净。"
   note: "**判据改了一处，并如实记账（记进 docs/choices.md 五十七）**：原文写「拟合误差对 H2O/def2-SVP < 1e-6 Ha（能量）」。实测（我们的实现与 PySCF **两边逐位一致**）表明这个 1e-6 把两件事混在了一起：`E_J^RI − E_J`（精确 4 中心）在 `def2-SVP`/`def2-SVP-RI` 配对下是 **6.14e-3 Ha**（占 46.845 Ha 的 0.013%），RI-J 的 **SCF 总能量**偏 **2.27e-3 Ha** —— 这是**辅助基不完备**的性质，不是实现错误；要求 < 1e-6 等于要求 76 个辅助函数把 Coulomb 能量拟合到 2e-8 的相对精度，任何实现都做不到。所以判据拆成两条：**实现正确性**用「与 PySCF 同配对的 `E_J^RI` 差 < 1e-6 Ha」（实测 1.4e-7，且三种辅助基给出同一个偏移，指向几何常数而不是积分），**辅助基质量**如实落盘（6.14e-3，并断言它落在 2e-2 的宽上界内、对照组 STO-3G 的误差 9.2e-1 远大于它）。对照组是必要的：没有它，这条断言在积分真的坏掉时也可能「通过」。"
 IN-02:
-  state: pending
-  note: "erfc 分域积分（短程/长程库仑），供 RS-hybrid"
+  state: in_progress
+  ts: "2026-11-07T18:00:00Z"
+  artifact: "qwb-core/crates/qwb-integrals/src/attenuated.rs（`erfc_boys` / `odd_moment`）、qwb-core/crates/qwb-integrals/tests/in02_erfc_boys.rs（5 条）"
+  verification: "**衰减 Boys 函数层已落地并钉住**。`F_m^{SR}(T,α) = ∫_0^1 t^{2m}e^{−Tt²}erfc(αt)dt`：与独立的高阶复合 Simpson 数值积分逐点对照 —— 物理范围（α ≤ 2.2）相对差 **< 1e-10**，边界段（2.2 < α ≤ 3）~1e-5（交错级数抵消，按段记账）；α=0 与 `boys_functions` 一致 < 1e-14；α 增大/T 增大均单调衰减；α=30 时 `F_0` 归零（< 1e-100）、`F_1` 按 α^{−3} 多项式衰减（实测 F_1(40)/F_1(20) ≈ 1/8）。"
+  note: "三个实测发现：①`J_{2k+1}` 闭式在 T 小 k 大时有灾难性抵消（T=0.1,k=8 相对误差 1e-7），T≤1 改走幂级数；②m ≥ 1 的短程项是**多项式**衰减（F_1(30)≈1e-5），只有 F_0 指数消失 —— 测试原先把物理判据套到 F_1 上，改的是测试不是实现；③α→3 处交错级数损失位数，精度按段记账而不是放宽判据。"
+  gap: "还缺 2e 积分本体（把 PrimitiveContext 的核换成短程版）、`(ss|ss)` 有限 ω 闭式对照、以及积分层面的 ω→0/ω→∞ 判据（§6 的四项里还剩三项）。"
+  choices: "一百二十三"
 IN-03:
   state: pending
   stretch: true

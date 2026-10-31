@@ -28,6 +28,7 @@
 #![allow(clippy::too_many_arguments)] // 积分内核的签名由数学决定（四中心 + 指数 + 分量）
 
 pub mod angmom;
+pub mod attenuated;
 pub mod boys;
 #[cfg(feature = "integral-cache")]
 pub mod cache;
@@ -38,6 +39,7 @@ pub mod one_electron;
 pub mod ri;
 pub mod two_electron;
 
+pub use attenuated::erfc_boys;
 pub use boys::boys_functions;
 #[cfg(feature = "integral-cache")]
 pub use cache::{IntegralCache, fingerprint};
