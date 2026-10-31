@@ -82,6 +82,42 @@ pub struct Solvent {
     /// 离子强度，单位 mol/L（PBF 用）；`None` = 纯溶剂。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ionic_strength_molar: Option<f64>,
+
+    /// SMD 非极性项（可选；缺省 = 该溶剂没有可用的 SMD 参数）。
+    #[serde(default)]
+    pub smd: Option<SmdParameters>,
+}
+
+/// **SMD 非极性项**（DA-05 / D0-02）。加性扩展：缺省表示该溶剂没有可用的 SMD 非极性参数。
+///
+/// 数据来源是 Minnesota 溶剂化数据库表（Marenich–Cramer–Truhlar, J. Phys. Chem. A 2009,
+/// `doi:10.1021/jp810292n`，Table 1）—— 数字是数据事实，不是从任何 GPL 源码文件复制的文本。
+///
+/// `nonpolar_terms_available = false` 是**有意义的状态**：water 在该表里
+/// `gamma/phi²/psi²` 是 `-1` 占位（SMD 对水走单独的 CDS 处理），所以这三个量
+/// 不能当 0 用、也不许编造。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+#[non_exhaustive]
+pub struct SmdParameters {
+    /// 表面张力 γ（mN/m，数据库原值）。
+    pub gamma_mn_per_m: Option<f64>,
+    /// φ² 参数。
+    pub phi_sq: Option<f64>,
+    /// ψ² 参数。
+    pub psi_sq: Option<f64>,
+    /// Abraham α（氢键酸性）。
+    pub abraham_alpha: Option<f64>,
+    /// Abraham β（氢键碱性）。
+    pub abraham_beta: Option<f64>,
+    /// 20 °C 折射率。
+    pub refractive_index_20c: Option<f64>,
+    /// 25 °C 折射率。
+    pub refractive_index_25c: Option<f64>,
+    /// 该溶剂的 SMD 非极性项是否可用（water 为 `false`）。
+    pub nonpolar_terms_available: bool,
+    /// 数据来源与说明（含 DOI）。
+    pub source: Option<String>,
 }
 
 impl_data_common!(Solvent);
@@ -188,6 +224,7 @@ mod tests {
         radii.insert("O".to_string(), 1.5);
         Solvent {
             name: "water".into(),
+            smd: None,
             version: "1.0.0".into(),
             citation: vec![Citation::with_url(
                 "NIST Chemistry WebBook",

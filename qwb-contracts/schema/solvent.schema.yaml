@@ -63,6 +63,71 @@ $defs:
     - const: smd
       description: SMD 的参数化半径。
       type: string
+  SmdParameters:
+    additionalProperties: false
+    description: |-
+      **SMD 非极性项**（DA-05 / D0-02）。加性扩展：缺省表示该溶剂没有可用的 SMD 非极性参数。
+
+      数据来源是 Minnesota 溶剂化数据库表（Marenich–Cramer–Truhlar, J. Phys. Chem. A 2009,
+      `doi:10.1021/jp810292n`，Table 1）—— 数字是数据事实，不是从任何 GPL 源码文件复制的文本。
+
+      `nonpolar_terms_available = false` 是**有意义的状态**：water 在该表里
+      `gamma/phi²/psi²` 是 `-1` 占位（SMD 对水走单独的 CDS 处理），所以这三个量
+      不能当 0 用、也不许编造。
+    properties:
+      abraham_alpha:
+        description: Abraham α（氢键酸性）。
+        format: double
+        type:
+        - number
+        - 'null'
+      abraham_beta:
+        description: Abraham β（氢键碱性）。
+        format: double
+        type:
+        - number
+        - 'null'
+      gamma_mn_per_m:
+        description: 表面张力 γ（mN/m，数据库原值）。
+        format: double
+        type:
+        - number
+        - 'null'
+      nonpolar_terms_available:
+        description: 该溶剂的 SMD 非极性项是否可用（water 为 `false`）。
+        type: boolean
+      phi_sq:
+        description: φ² 参数。
+        format: double
+        type:
+        - number
+        - 'null'
+      psi_sq:
+        description: ψ² 参数。
+        format: double
+        type:
+        - number
+        - 'null'
+      refractive_index_20c:
+        description: 20 °C 折射率。
+        format: double
+        type:
+        - number
+        - 'null'
+      refractive_index_25c:
+        description: 25 °C 折射率。
+        format: double
+        type:
+        - number
+        - 'null'
+      source:
+        description: 数据来源与说明（含 DOI）。
+        type:
+        - string
+        - 'null'
+    required:
+    - nonpolar_terms_available
+    type: object
 $schema: https://json-schema.org/draft/2020-12/schema
 additionalProperties: false
 description: 溶剂（`qwb-data/solvent/*.yaml` 的形态）。
@@ -125,6 +190,12 @@ properties:
     type:
     - string
     - 'null'
+  smd:
+    anyOf:
+    - $ref: '#/$defs/SmdParameters'
+    - type: 'null'
+    default: null
+    description: SMD 非极性项（可选；缺省 = 该溶剂没有可用的 SMD 参数）。
   surface_tension_cal_per_mol_angstrom2:
     description: 表面张力，单位 cal/(mol·Å²)；SMD 的空化项用。
     format: double

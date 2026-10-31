@@ -1,6 +1,6 @@
-sha256: dada22bb4ba2d89a3cf307d00e6f5d69cc8ad748cc3d82048336760db7443ea0
+sha256: e570c568d7ec55a0bd779ab78607c16e9248a6b5206756eb8584d86e2a6363db
 name: water
-version: 1.0.0
+version: 2.0.0
 notes: "DA-04 v1: dielectric constant, refractive index and temperature are the SMD/Truhlar
   values (Marenich-Cramer-Truhlar 2009, Table 1); atomic_radii are the Bondi (1964) van der
   Waals radii, declared explicitly through radii_set=bondi so no two radius conventions can be
@@ -24,6 +24,9 @@ temperature_K: 298.15
 refractive_index: 1.3328
 radii_set: bondi
 cavity_model: pcm
+smd:
+  nonpolar_terms_available: false
+  source: "Minnesota solvation database, Table 1 (Marenich-Cramer-Truhlar, J. Phys. Chem. A 2009, doi:10.1021/jp810292n)；该表里 water 的 gamma/phi^2/psi^2 是 -1 占位，SMD 对水走单独的 CDS 处理，故不填这三个量（不编造、不当 0 用）"
 scale: 1.0
 atomic_radii:
   H: 1.20

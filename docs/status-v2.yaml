@@ -462,3 +462,10 @@ EX-04:
   ts: "2026-11-06T12:00:00Z"
   artifact: "`scripts/verify.ps1` 的 `Step` 函数加 `[Diagnostics.Stopwatch]`（每步打印 `[  N.Ns]`，结尾打印最慢五步与总步时）+ `scripts/verify.sh` 的 `step()` 同步（`date +%s` 计时、`awk` 汇总）"
   verification: "门禁 123 实测输出：`core: test` 161.0 s、studio pytest 124.8 s、`core: clippy` 91.2 s、maturin 3.6 s、其余 < 2 s，**总步时 396.0 s（6.6 min）**。没有这一步，前面几轮只能靠猜「时间花在哪」。"
+
+D0-02:
+  state: done
+  ts: "2026-11-06T18:00:00Z"
+  artifact: "K1 加性扩展 `qwb-registry/src/solvent.rs` 的 `SmdParameters` + `Solvent.smd`（`#[serde(default)]`，`qwb-gen-schemas` 重生成 `qwb-contracts/schema/solvent.schema.{yaml,json}`）；8 个 `qwb-data/solvent/*.yaml` 的 `smd:` 块（version 2.0.0）；`registry.yaml` 8 条 sha256 + 版本 0.10.0→0.11.0；`DATA_LICENSES.md` 重生成"
+  verification: "`qwb data verify` **30/30 通过**；门禁 128 `ALL GATES GREEN`（26 项，588.5 s），含 K1 schema 新鲜度与 DATA_LICENSES 一致性检查。数据来源：Minnesota 溶剂化数据库 / `doi:10.1021/jp810292n` Table 1（`n, n25, α, β, γ, ε, φ², ψ²`），7 个溶剂完整；**water 的 γ/φ²/ψ² 在表里是 -1 占位**，故 `nonpolar_terms_available: false` 并写明原因，不填、不猜。"
+  note: "**附带发现（未改数据，待 DA-04 复核）**：7 个溶剂的 `epsilon` 与数据库有差 —— methanol 32.7 vs 32.613、ethanol 24.55 vs 24.852、acetonitrile 35.69 vs 35.688、dmso 46.83 vs 46.826、chloroform 4.81 vs 4.7113、toluene 2.374 vs 2.3741、thf 7.43 vs 7.4257（water 78.355 一致）。差异最大的是 chloroform（2.1%），不像舍入。**没有静默覆盖**：本轮只加 SMD 非极性项，`epsilon` 保持原值，留给 DA-04 判断该采用哪一套（SMD 计算本身应当用数据库值）。"

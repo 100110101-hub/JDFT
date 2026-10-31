@@ -1,6 +1,6 @@
-sha256: 140f562b0cce88c60825563cbd638d444f7e3198d9cc0da42189675c15f7f545
+sha256: 6e98e823ece22dc0b8867939ff34aa6cb74661ce6351261749fb156f3c427395
 name: ethanol
-version: 1.0.0
+version: 2.0.0
 notes: "DA-04 v1: dielectric constant and refractive index are the SMD solvent-table
   values (Marenich-Cramer-Truhlar 2009, Table 1, 298.15 K); atomic_radii are the Bondi
   (1964) van der Waals radii, declared through radii_set=bondi so no two radius
@@ -26,6 +26,16 @@ temperature_K: 298.15
 refractive_index: 1.3614
 radii_set: bondi
 cavity_model: pcm
+smd:
+  gamma_mn_per_m: 31.62
+  phi_sq: 0.0
+  psi_sq: 0.0
+  abraham_alpha: 0.37
+  abraham_beta: 0.48
+  refractive_index_20c: 1.3611
+  refractive_index_25c: 1.3593
+  nonpolar_terms_available: true
+  source: "Minnesota solvation database, Table 1 (Marenich-Cramer-Truhlar, J. Phys. Chem. A 2009, doi:10.1021/jp810292n)"
 scale: 1.0
 atomic_radii:
   H: 1.20

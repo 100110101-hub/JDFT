@@ -3531,3 +3531,39 @@ K1 的溶剂 schema 是**严格**的（未知字段即错）。所以这不是�
 
 没有动任何计算路径；本轮只做了数据摸底与一次回滚。上面那张表本身就是 D0-02 的输入，
 下一轮直接照它写 schema 与数据，不需要再去查一遍。
+
+## 八十八、D0-02 落地：SMD 数据进库（K1 加性扩展 + 30/30），顺带发现 ε 与数据库不一致（2026-11-06）
+
+### 流程（按规矩走的，值得记）
+
+1. **先扩契约**：`Solvent` 加 `smd: Option<SmdParameters>`（`#[serde(default)]`，加性、不动老字段语义），
+   `cargo run -p qwb-registry --bin qwb-gen-schemas` 重生成 `solvent.schema.{yaml,json}`。
+   注意：**CLI 也必须重编**，否则旧二进制仍在用旧 struct，`data verify` 会报 `unknown field smd` ——
+   我一开始就被这个误导了一轮。
+2. **再落数据**：8 个 YAML 加 `smd:` 块（`gamma_mn_per_m/phi_sq/psi_sq/abraham_alpha/abraham_beta/
+   refractive_index_20c/25c/nonpolar_terms_available/source`），version → 2.0.0。
+3. **重签**：`qwb data sign <8 个文件>`（要传显式路径，PowerShell 的 `*.yaml` 通配被 CLI 当字面量）。
+4. **更新清单**：`registry.yaml` 8 条 sha256 + 版本 0.10.0 → 0.11.0；重生成 `DATA_LICENSES.md`（LF）。
+5. **校验**：`qwb data verify` → **30/30**；门禁 128 全绿（26 项、588.5 s）。
+
+### 水的特殊性（不编造）
+
+数据库里 water 的 `gamma/phi²/psi²` 是 **-1 占位**（SMD 对水走单独的 CDS 处理）。所以 water 记
+`nonpolar_terms_available: false` 并在 `source` 里写明原因，而不是填 0 或猜一个值。
+
+### 附带发现：7 个溶剂的 ε 与数据库不一致（**未改**）
+
+| 溶剂 | 我们文件 | 数据库 | 相对差 |
+| --- | --- | --- | --- |
+| water | 78.355 | 78.355 | 0 |
+| methanol | 32.7 | 32.613 | 0.27% |
+| ethanol | 24.55 | 24.852 | 1.2% |
+| acetonitrile | 35.69 | 35.688 | 0.006% |
+| dmso | 46.83 | 46.826 | 0.009% |
+| chloroform | **4.81** | **4.7113** | **2.1%** |
+| toluene | 2.374 | 2.3741 | 0.004% |
+| thf | 7.43 | 7.4257 | 0.06% |
+
+一半是舍入（4 位有效数字），但 ethanol（1.2%）与 chloroform（2.1%）不像舍入 —— 可能是 DA-04 当时
+取了另一套表（不同温度/不同汇编）。**本轮没有静默覆盖**：只加 SMD 非极性项，`epsilon` 原值保留，
+差异写进台账，等 DA-04 决定用哪一套。SMD 计算本身应使用数据库值，所以这件事必须在 SV-02/SV-03 之前定。

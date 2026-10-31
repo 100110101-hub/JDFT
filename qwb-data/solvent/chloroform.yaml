@@ -1,6 +1,6 @@
-sha256: 1ee62fd64ec9bfbd47e59a1b9c1fcd1d4ce1a307648077c864da7fafdcf03ff1
+sha256: 48988bc16c38396afe07c7bbbed28abdf3f2a5f808d3da782e74e37fae520f03
 name: chloroform
-version: 1.0.0
+version: 2.0.0
 notes: "DA-04 v1: dielectric constant and refractive index are the SMD solvent-table
   values (Marenich-Cramer-Truhlar 2009, Table 1, 298.15 K); atomic_radii are the Bondi
   (1964) van der Waals radii, declared through radii_set=bondi so no two radius
@@ -26,6 +26,16 @@ temperature_K: 298.15
 refractive_index: 1.4459
 radii_set: bondi
 cavity_model: pcm
+smd:
+  gamma_mn_per_m: 38.39
+  phi_sq: 0.0
+  psi_sq: 0.75
+  abraham_alpha: 0.15
+  abraham_beta: 0.02
+  refractive_index_20c: 1.4459
+  refractive_index_25c: 1.4431
+  nonpolar_terms_available: true
+  source: "Minnesota solvation database, Table 1 (Marenich-Cramer-Truhlar, J. Phys. Chem. A 2009, doi:10.1021/jp810292n)"
 scale: 1.0
 atomic_radii:
   H: 1.20

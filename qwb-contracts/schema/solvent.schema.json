@@ -86,6 +86,18 @@
         "null"
       ]
     },
+    "smd": {
+      "description": "SMD 非极性项（可选；缺省 = 该溶剂没有可用的 SMD 参数）。",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/SmdParameters"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
     "surface_tension_cal_per_mol_angstrom2": {
       "description": "表面张力，单位 cal/(mol·Å²)；SMD 的空化项用。",
       "type": [
@@ -208,6 +220,83 @@
           "type": "string",
           "const": "smd"
         }
+      ]
+    },
+    "SmdParameters": {
+      "description": "**SMD 非极性项**（DA-05 / D0-02）。加性扩展：缺省表示该溶剂没有可用的 SMD 非极性参数。\n\n数据来源是 Minnesota 溶剂化数据库表（Marenich–Cramer–Truhlar, J. Phys. Chem. A 2009,\n`doi:10.1021/jp810292n`，Table 1）—— 数字是数据事实，不是从任何 GPL 源码文件复制的文本。\n\n`nonpolar_terms_available = false` 是**有意义的状态**：water 在该表里\n`gamma/phi²/psi²` 是 `-1` 占位（SMD 对水走单独的 CDS 处理），所以这三个量\n不能当 0 用、也不许编造。",
+      "type": "object",
+      "properties": {
+        "abraham_alpha": {
+          "description": "Abraham α（氢键酸性）。",
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "abraham_beta": {
+          "description": "Abraham β（氢键碱性）。",
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "gamma_mn_per_m": {
+          "description": "表面张力 γ（mN/m，数据库原值）。",
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "nonpolar_terms_available": {
+          "description": "该溶剂的 SMD 非极性项是否可用（water 为 `false`）。",
+          "type": "boolean"
+        },
+        "phi_sq": {
+          "description": "φ² 参数。",
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "psi_sq": {
+          "description": "ψ² 参数。",
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "refractive_index_20c": {
+          "description": "20 °C 折射率。",
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "refractive_index_25c": {
+          "description": "25 °C 折射率。",
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "source": {
+          "description": "数据来源与说明（含 DOI）。",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "nonpolar_terms_available"
       ]
     }
   }
