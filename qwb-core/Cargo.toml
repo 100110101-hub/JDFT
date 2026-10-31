@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/qwb-registry", "crates/qwb-io", "crates/qwb-cli", "crates/qwb-linalg", "crates/qwb-basis", "crates/qwb-integrals", "crates/qwb-xc", "crates/qwb-scf", "crates/qwb-grid", "crates/qwb-props", "crates/qwb-response", "crates/qwb-engine"]
+members = ["crates/qwb-gpu", "crates/qwb-registry", "crates/qwb-io", "crates/qwb-cli", "crates/qwb-linalg", "crates/qwb-basis", "crates/qwb-integrals", "crates/qwb-xc", "crates/qwb-scf", "crates/qwb-grid", "crates/qwb-props", "crates/qwb-response", "crates/qwb-engine"]
 
 [workspace.package]
 version = "0.1.0"
@@ -23,6 +23,7 @@ anyhow = "1"
 clap = { version = "4", features = ["derive"] }
 zip = { version = "9", default-features = false, features = ["deflate"] }
 nalgebra = "0.35"
+libloading = "0.8"
 # R-11：faer 是 qwb-linalg 的可选后端（`--no-default-features --features faer`）。
 faer = "0.24"
 proptest = "1"

@@ -456,7 +456,7 @@ EX-03:
   ts: "2026-11-06T12:00:00Z"
   artifact: "（已证明可行性、已撤回实现）cuBLAS gemm 后端：`fda59de` 里的 `qwb-core/crates/qwb-gpu`（`libloading` + cuBLAS dgemm，行主序）。当前工作树里**没有**这个 crate"
   verification: "**可行性实测（fda59de）**：GPU vs CPU 最大绝对差 **5.55e-16**（判据 1e-12）；吞吐 512³ **10.8 GFLOPS**、1024³ **124**、2048³ **173**（RTX 3070 Laptop，sm_86，CUDA 13.0，`cublas64_13.dll`）；512³ 时与单线程朴素 CPU（~10 GFLOPS）打平 —— 小尺寸不值得上 GPU。**被门禁拦下**：`check_unsafe.sh`（R-16）禁止自研 `unsafe`，FFI 需**人类批准 + `unsafe_allowlist.txt` 登记**；`check_deps_centralized.sh` 要求三方依赖走 `[workspace.dependencies]`。"
-  note: "**卡点**：R-16 需要人工决定。两条合规路径：(a) 改用封装 FFI 的依赖（如 `cudarc`），我们自己的代码保持零 `unsafe`——**未验证其对 CUDA 13 的支持**；(b) 人类批准后把 `qwb-gpu/src/lib.rs` 登记白名单并写明理由。**没有把这条标 done**：门禁里目前没有任何一步走 GPU。"
+  note: "**已获批并回填**（2026-11-06，用户选「登记 unsafe_allowlist.txt」）：`qwb-gpu` 重新进工作区，合规形态为 —— 依赖走 `[workspace.dependencies]`（`libloading`）、crate 级 `#![deny(unsafe_code)]` + 只在 FFI 函数上 `#[allow(unsafe_code)]`、白名单登记并写明理由（类别属 §3.7 的「FFI（BLAS）」）。实测：`check_unsafe.sh` 与 `check_deps_centralized.sh` 均 ok，门禁 125 全绿（369.2 s）。**仍未标 done**：门禁里目前没有任何一步走 GPU，且 gemm 尚未接进 J 构建 / AO→MO / XC。附带结论：`cudarc 0.19.10` 支持 CUDA 13（`cuda-13000` 特性）且能编译，但它的 `gemm` 也是 `unsafe fn`，所以并不能免除本例外。"
 EX-04:
   state: done
   ts: "2026-11-06T12:00:00Z"

@@ -6,4 +6,11 @@
 #   3. PR body 里写明理由与收益（热点/FFI/SIMD）。
 #
 # 允许的例外类别只有 §3.7 的三类：FFI（BLAS）、SIMD intrinsics（`wide` 已封装）、
-# 获批的热点优化。当前为**空**。
+# 获批的热点优化。
+#
+# 2026-11-06：用户在本会话中明确批准（GPU 优先，选项「登记 unsafe_allowlist.txt」）。
+# 理由与收益：cuBLAS 只能通过 FFI 调用；自研 loader（libloading）使**构建期不依赖 cuBLAS**，
+# 没有 GPU 的机器照样构建/运行（运行时得到 GpuError::Unavailable 并退回 CPU），
+# 这比引入 cudarc 更符合附录 A.3 的「CPU 永远是基准、GPU 可回退」；cudarc 的 gemm 同样是
+# `unsafe fn`，并不能免除本例外。每处 unsafe 都有 `// SAFETY:` 说明。
+qwb-core/crates/qwb-gpu/src/lib.rs
