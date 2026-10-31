@@ -95,12 +95,20 @@ step "core: clippy -D warnings" bash -c "cd qwb-core && \"\$0\" clippy --workspa
 step "core: test" bash -c '
     cd qwb-core || exit 1
     NEXTEST="$(command -v cargo-nextest || command -v cargo-nextest.exe || true)"
-    if [ -n "$NEXTEST" ]; then
-        "$NEXTEST" run --workspace --no-fail-fast || exit 1
-        "$0" test --workspace --doc
-    else
+    if [ -z "$NEXTEST" ]; then
         "$0" test --workspace
+        exit $?
     fi
+    # EX-02：与 verify.ps1 同步 —— --partition 保证两片恰好覆盖全集（不会漏测）。
+    "$NEXTEST" run --workspace -j 4 --partition count:1/2 --no-fail-fast > shard1.log 2>&1 &
+    shard1_pid=$!
+    "$NEXTEST" run --workspace -j 4 --partition count:2/2 --no-fail-fast
+    shard2_code=$?
+    wait $shard1_pid
+    shard1_code=$?
+    tail -3 shard1.log
+    if [ $shard1_code -ne 0 ] || [ $shard2_code -ne 0 ]; then exit 1; fi
+    "$0" test --workspace --doc
 ' "$CARGO"
 # I-00 验收：两个后端都必须编译，且给出同样的数（tests/backend_consistency.rs 的 golden 值）。
 step "core: I-06 integral cache" bash -c "cd qwb-core && \"\$0\" test -p qwb-integrals --features integral-cache --test i06_cache" "$CARGO"

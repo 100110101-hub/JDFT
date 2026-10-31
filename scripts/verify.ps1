@@ -121,14 +121,26 @@ Step -Name 'core: clippy -D warnings' -Dir 'qwb-core' -Body {
 # EX-02：进程级并行（cargo-nextest）。**测试集合不变** —— nextest 不跑 doctest，
 # 所以 doctest 单独跑一步补上；没装 nextest 的机器退回 `cargo test --workspace`（同一个集合）。
 Step -Name 'core: test' -Dir 'qwb-core' -Body {
-    if (Get-Command cargo-nextest -ErrorAction SilentlyContinue) {
-        & cargo nextest run --workspace --no-fail-fast
-        if ($LASTEXITCODE -ne 0) { throw 'nextest failed' }
-        & cargo test --workspace --doc
-    }
-    else {
+    if (-not (Get-Command cargo-nextest -ErrorAction SilentlyContinue)) {
         & cargo test --workspace
+        return
     }
+    # EX-02 两泳道：`--partition` 由 nextest 保证「两片恰好覆盖全集、互不重叠」，
+    # 所以不会因为名单写错而静默漏测（上一版按名字过滤就出过这个问题）。
+    # 两条进程各 4 线程 = 8 = 物理核数；单进程 8 线程时最长的测试常常最后才起，
+    # 两个独立调度器能把这种「阶梯尾巴」摊平。
+    & cargo nextest list --workspace *> nextest-list.log
+    $listed = (Get-Content nextest-list.log | Where-Object { $_ -match '\S' }).Count
+    $laneA = Start-Process -FilePath 'cargo' -PassThru -NoNewWindow `
+        -RedirectStandardOutput slow-lane.log -RedirectStandardError slow-lane.err `
+        -ArgumentList @('nextest', 'run', '--workspace', '-j', '4', '--partition', 'count:1/2', '--no-fail-fast')
+    & cargo nextest run --workspace -j 4 --partition 'count:2/2' --no-fail-fast
+    $codeB = $LASTEXITCODE
+    $laneA.WaitForExit()
+    $codeA = $laneA.ExitCode
+    Write-Host ("   lanes: shard1 exit {0}, shard2 exit {1}, nextest list count {2}" -f $codeA, $codeB, $listed)
+    if ($codeA -ne 0 -or $codeB -ne 0) { throw 'test lane failed' }
+    & cargo test --workspace --doc
 }
 Step -Name 'core: I-06 integral cache (feature on)' -Dir 'qwb-core' -Body {
     # I-06 acceptance: cache on/off must give identical results.
