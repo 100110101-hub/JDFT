@@ -29,8 +29,10 @@ use pyo3::types::{PyModule, PyTuple};
 
 use qwb_engine_api::{
     Atom as ApiAtom, DataSnapshot as ApiDataSnapshot, Engine as ApiEngine, EngineError as ApiError,
-    EnvInfo as ApiEnvInfo, GridLevel, JobInput as ApiJobInput, JobResult as ApiJobResult, JobType,
-    Molecule as ApiMolecule, Reporter as ApiReporter, TaskOptions as ApiTaskOptions,
+    EnvInfo as ApiEnvInfo, ExcitedStatesOptions as ApiExcitedStatesOptions, GridLevel,
+    JobInput as ApiJobInput, JobResult as ApiJobResult, JobType, Molecule as ApiMolecule,
+    Mp2Options as ApiMp2Options, NumericsOptions as ApiNumericsOptions, Reporter as ApiReporter,
+    TaskOptions as ApiTaskOptions,
 };
 
 // ---------------------------------------------------------------------------
@@ -187,9 +189,198 @@ impl Molecule {
 // TaskOptions
 // ---------------------------------------------------------------------------
 
-/// 数值控制参数（全部有默认值）。
+// ---------------------------------------------------------------------------
+// 阶段二（KV-05）新增选项：MP2 / 激发态 / 数值路径 / SCF 类型 / 溶剂模型
+//
+// 字符串 ↔ 枚举的映射**只有 serde 一处**：进来用 `serde_json::from_value`（非法
+// 名字报的是 serde 的「unknown variant ..., expected ...」），出去用 [`enum_name`]
+// （`serde_json::to_value`）。这样 Python 桩里的名字表不会与 K2 的 serde rename
+// 漂移 —— 桩里写的 `"ri-mp2"` 就是 `input.yaml` / 数据文件里那个字面量。
+// ---------------------------------------------------------------------------
+
+// 本 crate 只依赖 `serde_json`，**不**依赖 `serde` 本体（依赖集刻意保持最小），
+// 所以这里不写 `T: Serialize` 这种泛型约束 —— 每个调用点直接 `serde_json::to_value`
+// / `from_value`，具体类型由上下文推出来，trait 名一次都不用写。
+macro_rules! json_name {
+    ($value:expr) => {
+        serde_json::to_value($value)
+            .ok()
+            .and_then(|value| value.as_str().map(str::to_string))
+            .unwrap_or_default()
+    };
+}
+
+fn invalid_input(field: &str, error: serde_json::Error) -> PyErr {
+    PyErr::new::<InvalidInputError, _>(format!("invalid {field}: {error}"))
+}
+
+/// MP2 选项（`options.mp2`；phase-2 K9）。
 #[pyclass(module = "qwb_engine")]
 #[derive(Debug, Clone)]
+pub struct Mp2Options {
+    /// 方法（`mp2` | `ri-mp2`）。
+    #[pyo3(get, set)]
+    pub kind: String,
+    /// 辅助基名（RI 必填；canonical 忽略）。
+    #[pyo3(get, set)]
+    pub aux_basis_name: Option<String>,
+}
+
+impl Mp2Options {
+    fn to_api(&self) -> PyResult<ApiMp2Options> {
+        serde_json::from_value(serde_json::json!({
+            "kind": self.kind,
+            "aux_basis_name": self.aux_basis_name,
+        }))
+        .map_err(|error| invalid_input("options.mp2", error))
+    }
+
+    fn from_api(options: &ApiMp2Options) -> Self {
+        Self {
+            kind: json_name!(&options.kind),
+            aux_basis_name: options.aux_basis_name.clone(),
+        }
+    }
+}
+
+#[pymethods]
+impl Mp2Options {
+    #[new]
+    #[pyo3(signature = (kind = "mp2", aux_basis_name = None))]
+    fn new(py: Python<'_>, kind: &str, aux_basis_name: Option<String>) -> PyResult<Self> {
+        let candidate = Self {
+            kind: kind.to_string(),
+            aux_basis_name,
+        };
+        // 名字非法 / RI 缺辅助基：都在构造时报错，不拖到 run
+        let outcome = candidate.to_api()?.validate();
+        outcome.map_err(|error| to_py_error(py, error))?;
+        Ok(candidate)
+    }
+
+    /// 取值区间校验（RI 必须给辅助基名 —— 规则在 K2，这里只转错误）。
+    fn validate(&self, py: Python<'_>) -> PyResult<()> {
+        let outcome = self.to_api()?.validate();
+        outcome.map_err(|error| to_py_error(py, error))
+    }
+}
+
+/// 激发态选项（`options.excited_states`；phase-2 RS-02/RS-03）。
+#[pyclass(module = "qwb_engine")]
+#[derive(Debug, Clone)]
+pub struct ExcitedStatesOptions {
+    /// 请求的态数（>= 1）。
+    #[pyo3(get, set)]
+    pub n_states: u32,
+    /// 方法（`cis` | `tda` | `tddft`）。
+    #[pyo3(get, set)]
+    pub method: String,
+}
+
+impl ExcitedStatesOptions {
+    fn to_api(&self) -> PyResult<ApiExcitedStatesOptions> {
+        serde_json::from_value(serde_json::json!({
+            "n_states": self.n_states,
+            "method": self.method,
+        }))
+        .map_err(|error| invalid_input("options.excited_states", error))
+    }
+
+    fn from_api(options: &ApiExcitedStatesOptions) -> Self {
+        Self {
+            n_states: options.n_states,
+            method: json_name!(&options.method),
+        }
+    }
+}
+
+#[pymethods]
+impl ExcitedStatesOptions {
+    #[new]
+    #[pyo3(signature = (n_states, method = "tda"))]
+    fn new(n_states: u32, method: &str) -> PyResult<Self> {
+        let candidate = Self {
+            n_states,
+            method: method.to_string(),
+        };
+        candidate.to_api()?; // 方法名非法先报
+        candidate.validate()?; // 再查 n_states >= 1
+        Ok(candidate)
+    }
+
+    /// `n_states >= 1`（规则在 K2 的 `TaskOptions::validate` 里；这个子结构体
+    /// 自己没有 `validate` 方法，所以这里照抄同一条规则并给出同样的措辞）。
+    fn validate(&self) -> PyResult<()> {
+        if self.n_states == 0 {
+            return Err(PyErr::new::<InvalidInputError, _>(
+                "options.excited_states.n_states must be >= 1",
+            ));
+        }
+        Ok(())
+    }
+}
+
+/// 数值路径选项（`options.numerics`；K10）。
+#[pyclass(module = "qwb_engine")]
+#[derive(Debug, Clone)]
+pub struct NumericsOptions {
+    /// 路径（`analytic` | `ri` | `pseudospectral`）；None = 解析路径。
+    #[pyo3(get, set)]
+    pub path: Option<String>,
+    /// 精度等级 `1..=5`（语义在 `qwb-data/numerics/*.yaml`）。
+    #[pyo3(get, set)]
+    pub accuracy_level: u8,
+}
+
+impl NumericsOptions {
+    fn to_api(&self) -> PyResult<ApiNumericsOptions> {
+        let path = match &self.path {
+            Some(path) => serde_json::json!(path),
+            None => serde_json::Value::Null,
+        };
+        serde_json::from_value(serde_json::json!({
+            "path": path,
+            "accuracy_level": self.accuracy_level,
+        }))
+        .map_err(|error| invalid_input("options.numerics", error))
+    }
+
+    fn from_api(options: &ApiNumericsOptions) -> Self {
+        Self {
+            path: options.path.as_ref().map(|path| json_name!(path)),
+            accuracy_level: options.accuracy_level,
+        }
+    }
+}
+
+#[pymethods]
+impl NumericsOptions {
+    #[new]
+    #[pyo3(signature = (accuracy_level = 3, path = None))]
+    fn new(py: Python<'_>, accuracy_level: u8, path: Option<String>) -> PyResult<Self> {
+        let candidate = Self {
+            accuracy_level,
+            path,
+        };
+        let outcome = candidate.to_api()?.validate();
+        outcome.map_err(|error| to_py_error(py, error))?;
+        Ok(candidate)
+    }
+
+    fn validate(&self, py: Python<'_>) -> PyResult<()> {
+        let outcome = self.to_api()?.validate();
+        outcome.map_err(|error| to_py_error(py, error))
+    }
+}
+
+/// 数值控制参数（全部有默认值）。
+///
+/// 注意：**不 derive `Clone`**。阶段二新增的 `mp2` / `excited_states` / `numerics`
+/// 是 `Py<...>` 引用，语义是"同一个 Python 对象的活引用"（Python 侧改了子对象，
+/// 父对象下次 `to_api` 就能看到）。pyo3 0.22 里 `Py<T>: Clone` 要开 `py-clone`
+/// feature，而复制一份快照并不是我们想要的行为。
+#[pyclass(module = "qwb_engine")]
+#[derive(Debug)]
 pub struct TaskOptions {
     /// SCF 最大迭代步数。
     #[pyo3(get, set)]
@@ -218,10 +409,26 @@ pub struct TaskOptions {
     /// 与基组配对的 ECP 名称；None = 全电子。
     #[pyo3(get, set)]
     pub ecp_name: Option<String>,
+    // ── 阶段二（KV-05）新增；缺省全部 None = 阶段一行为 ──────────────────
+    /// SCF 类型（`rhf|rohf|uhf|rks|uks`）；None = 由 `method_name` 推断。
+    #[pyo3(get, set)]
+    pub scf_type: Option<String>,
+    /// MP2 选项（`mp2` | `ri-mp2`）。
+    #[pyo3(get, set)]
+    pub mp2: Option<Py<Mp2Options>>,
+    /// 激发态选项。
+    #[pyo3(get, set)]
+    pub excited_states: Option<Py<ExcitedStatesOptions>>,
+    /// 溶剂模型（`vacuum|cosmo|smd|pbf`）。
+    #[pyo3(get, set)]
+    pub solvent_model: Option<String>,
+    /// 数值路径 / 精度等级。
+    #[pyo3(get, set)]
+    pub numerics: Option<Py<NumericsOptions>>,
 }
 
 impl TaskOptions {
-    fn to_api(&self) -> ApiTaskOptions {
+    fn to_api(&self, py: Python<'_>) -> PyResult<ApiTaskOptions> {
         let mut out = ApiTaskOptions::default();
         out.scf_max_iter = self.scf_max_iter;
         out.scf_energy_threshold_hartree = self.scf_energy_threshold_hartree;
@@ -232,11 +439,32 @@ impl TaskOptions {
         out.opt_gradient_threshold_hartree_per_bohr = self.opt_gradient_threshold_hartree_per_bohr;
         out.freq_step_angstrom = self.freq_step_angstrom;
         out.ecp_name = self.ecp_name.clone();
-        out
+        if let Some(text) = &self.scf_type {
+            out.scf_type = Some(
+                serde_json::from_value(serde_json::json!(text))
+                    .map_err(|error| invalid_input("options.scf_type", error))?,
+            );
+        }
+        if let Some(text) = &self.solvent_model {
+            out.solvent_model = Some(
+                serde_json::from_value(serde_json::json!(text))
+                    .map_err(|error| invalid_input("options.solvent_model", error))?,
+            );
+        }
+        if let Some(mp2) = &self.mp2 {
+            out.mp2 = Some(mp2.borrow(py).to_api()?);
+        }
+        if let Some(excited) = &self.excited_states {
+            out.excited_states = Some(excited.borrow(py).to_api()?);
+        }
+        if let Some(numerics) = &self.numerics {
+            out.numerics = Some(numerics.borrow(py).to_api()?);
+        }
+        Ok(out)
     }
 
-    fn from_api(options: &ApiTaskOptions) -> Self {
-        Self {
+    fn from_api(options: &ApiTaskOptions, py: Python<'_>) -> PyResult<Self> {
+        Ok(Self {
             scf_max_iter: options.scf_max_iter,
             scf_energy_threshold_hartree: options.scf_energy_threshold_hartree,
             scf_density_threshold: options.scf_density_threshold,
@@ -247,20 +475,37 @@ impl TaskOptions {
                 .opt_gradient_threshold_hartree_per_bohr,
             freq_step_angstrom: options.freq_step_angstrom,
             ecp_name: options.ecp_name.clone(),
-        }
+            scf_type: options.scf_type.as_ref().map(|value| json_name!(value)),
+            mp2: match &options.mp2 {
+                Some(mp2) => Some(Py::new(py, Mp2Options::from_api(mp2))?),
+                None => None,
+            },
+            excited_states: match &options.excited_states {
+                Some(excited) => Some(Py::new(py, ExcitedStatesOptions::from_api(excited))?),
+                None => None,
+            },
+            solvent_model: options
+                .solvent_model
+                .as_ref()
+                .map(|value| json_name!(value)),
+            numerics: match &options.numerics {
+                Some(numerics) => Some(Py::new(py, NumericsOptions::from_api(numerics))?),
+                None => None,
+            },
+        })
     }
 }
 
 #[pymethods]
 impl TaskOptions {
     #[new]
-    fn new() -> Self {
-        Self::from_api(&ApiTaskOptions::default())
+    fn new(py: Python<'_>) -> PyResult<Self> {
+        Self::from_api(&ApiTaskOptions::default(), py)
     }
 
-    /// 取值区间校验。
+    /// 取值区间校验（含阶段二新增的 `mp2` / `numerics` / `excited_states`）。
     fn validate(&self, py: Python<'_>) -> PyResult<()> {
-        let outcome = self.to_api().validate();
+        let outcome = self.to_api(py)?.validate();
         outcome.map_err(|error| to_py_error(py, error))
     }
 }
@@ -324,7 +569,7 @@ pub struct JobInput {
 impl JobInput {
     fn to_api(&self, py: Python<'_>) -> PyResult<ApiJobInput> {
         let molecule = self.molecule.borrow(py).to_api(py)?;
-        let options = self.options.borrow(py).to_api();
+        let options = self.options.borrow(py).to_api(py)?;
         Ok(ApiJobInput::new(
             molecule,
             self.basis_name.clone(),
@@ -356,7 +601,7 @@ impl JobInput {
         parse_job_type(jobtype)?;
         let options = match options {
             Some(options) => options,
-            None => Py::new(py, TaskOptions::new())?,
+            None => Py::new(py, TaskOptions::new(py)?)?,
         };
         Ok(Self {
             molecule,
@@ -538,6 +783,39 @@ fn numpy_vector(py: Python<'_>, value: Vec<f64>) -> PyResult<PyObject> {
     Ok(module.getattr("array")?.call1((value,))?.into_py(py))
 }
 
+/// `serde_json::Value` → Python 对象（dict / list / float / bool / str / None）。
+///
+/// 阶段二的结果块（激发态、溶剂化、NMR……）在 K7 里是**普通数据**，键名与
+/// `result.json` 一致。这里按同一形状转成 dict，而不是给每个块手写 pyclass：
+/// 块的结构还在长（KV-01 的加性扩展），一份「结构体 → JSON → Python」的通道
+/// 不会因为加字段就漏掉某个 getter。
+fn json_to_py(py: Python<'_>, value: &serde_json::Value) -> PyResult<PyObject> {
+    use serde_json::Value;
+    Ok(match value {
+        Value::Null => py.None(),
+        Value::Bool(flag) => flag.into_py(py),
+        Value::Number(number) => match number.as_i64() {
+            Some(integer) => integer.into_py(py),
+            None => number.as_f64().unwrap_or(f64::NAN).into_py(py),
+        },
+        Value::String(text) => text.into_py(py),
+        Value::Array(items) => {
+            let list = pyo3::types::PyList::empty_bound(py);
+            for item in items {
+                list.append(json_to_py(py, item)?)?;
+            }
+            list.into_py(py)
+        }
+        Value::Object(map) => {
+            let dict = pyo3::types::PyDict::new_bound(py);
+            for (key, item) in map {
+                dict.set_item(key, json_to_py(py, item)?)?;
+            }
+            dict.into_py(py)
+        }
+    })
+}
+
 /// 一次作业的结果（`result.json` 的形态）。
 #[pyclass(module = "qwb_engine")]
 #[derive(Debug, Clone)]
@@ -626,6 +904,139 @@ impl JobResult {
     fn env(&self) -> EnvInfo {
         EnvInfo {
             inner: self.inner.env.clone(),
+        }
+    }
+
+    // ── 阶段二（KV-05）新增结果块：缺块时是 `None`，形状与 `result.json` 一致 ──
+    /// 色散校正能量（Hartree；`FX-04` 的 D3(BJ)/D4）。
+    #[getter]
+    fn dispersion_energy_hartree(&self) -> Option<f64> {
+        self.inner.dispersion_energy_hartree
+    }
+
+    /// 自旋信息（`⟨S²⟩` 与污染）。
+    #[getter]
+    fn spin(&self, py: Python<'_>) -> PyResult<PyObject> {
+        match &self.inner.spin {
+            None => Ok(py.None()),
+            Some(block) => {
+                let json = serde_json::to_value(block).map_err(|error| {
+                    PyErr::new::<DataError, _>(format!("cannot serialise result block: {error}"))
+                })?;
+                json_to_py(py, &json)
+            }
+        }
+    }
+
+    /// 相关能（MP2 / RI-MP2）。
+    #[getter]
+    fn correlation(&self, py: Python<'_>) -> PyResult<PyObject> {
+        match &self.inner.correlation {
+            None => Ok(py.None()),
+            Some(block) => {
+                let json = serde_json::to_value(block).map_err(|error| {
+                    PyErr::new::<DataError, _>(format!("cannot serialise result block: {error}"))
+                })?;
+                json_to_py(py, &json)
+            }
+        }
+    }
+
+    /// 溶剂化（COSMO/SMD/PBF）。
+    #[getter]
+    fn solvation(&self, py: Python<'_>) -> PyResult<PyObject> {
+        match &self.inner.solvation {
+            None => Ok(py.None()),
+            Some(block) => {
+                let json = serde_json::to_value(block).map_err(|error| {
+                    PyErr::new::<DataError, _>(format!("cannot serialise result block: {error}"))
+                })?;
+                json_to_py(py, &json)
+            }
+        }
+    }
+
+    /// 激发态（TDA/CIS 的态表与跃迁）。
+    #[getter]
+    fn excited_states(&self, py: Python<'_>) -> PyResult<PyObject> {
+        match &self.inner.excited_states {
+            None => Ok(py.None()),
+            Some(block) => {
+                let json = serde_json::to_value(block).map_err(|error| {
+                    PyErr::new::<DataError, _>(format!("cannot serialise result block: {error}"))
+                })?;
+                json_to_py(py, &json)
+            }
+        }
+    }
+
+    /// 展宽后的 UV/Vis 谱（`PR-04`）。
+    #[getter]
+    fn uv_vis_spectrum(&self, py: Python<'_>) -> PyResult<PyObject> {
+        match &self.inner.uv_vis_spectrum {
+            None => Ok(py.None()),
+            Some(block) => {
+                let json = serde_json::to_value(block).map_err(|error| {
+                    PyErr::new::<DataError, _>(format!("cannot serialise result block: {error}"))
+                })?;
+                json_to_py(py, &json)
+            }
+        }
+    }
+
+    /// NMR 屏蔽 / 化学位移。
+    #[getter]
+    fn nmr_shieldings(&self, py: Python<'_>) -> PyResult<PyObject> {
+        match &self.inner.nmr_shieldings {
+            None => Ok(py.None()),
+            Some(block) => {
+                let json = serde_json::to_value(block).map_err(|error| {
+                    PyErr::new::<DataError, _>(format!("cannot serialise result block: {error}"))
+                })?;
+                json_to_py(py, &json)
+            }
+        }
+    }
+
+    /// 极化率（各向同性/各向异性）。
+    #[getter]
+    fn polarizability(&self, py: Python<'_>) -> PyResult<PyObject> {
+        match &self.inner.polarizability {
+            None => Ok(py.None()),
+            Some(block) => {
+                let json = serde_json::to_value(block).map_err(|error| {
+                    PyErr::new::<DataError, _>(format!("cannot serialise result block: {error}"))
+                })?;
+                json_to_py(py, &json)
+            }
+        }
+    }
+
+    /// 多极矩。
+    #[getter]
+    fn multipoles(&self, py: Python<'_>) -> PyResult<PyObject> {
+        match &self.inner.multipoles {
+            None => Ok(py.None()),
+            Some(block) => {
+                let json = serde_json::to_value(block).map_err(|error| {
+                    PyErr::new::<DataError, _>(format!("cannot serialise result block: {error}"))
+                })?;
+                json_to_py(py, &json)
+            }
+        }
+    }
+
+    /// 数值路径与精度报告（K10）。
+    #[getter]
+    fn numerics_report(&self, py: Python<'_>) -> PyResult<PyObject> {
+        match &self.inner.numerics_report {
+            None => Ok(py.None()),
+            Some(block) => {
+                let json = serde_json::to_value(block).map_err(|error| {
+                    PyErr::new::<DataError, _>(format!("cannot serialise result block: {error}"))
+                })?;
+                json_to_py(py, &json)
+            }
         }
     }
 
@@ -768,6 +1179,9 @@ fn qwb_engine(m: &Bound<'_, PyModule>) -> PyResult<()> {
     let py = m.py();
     m.add_class::<Atom>()?;
     m.add_class::<Molecule>()?;
+    m.add_class::<Mp2Options>()?;
+    m.add_class::<ExcitedStatesOptions>()?;
+    m.add_class::<NumericsOptions>()?;
     m.add_class::<TaskOptions>()?;
     m.add_class::<JobInput>()?;
     m.add_class::<DataSnapshot>()?;
@@ -800,6 +1214,9 @@ fn qwb_engine(m: &Bound<'_, PyModule>) -> PyResult<()> {
         vec![
             "Atom",
             "Molecule",
+            "Mp2Options",
+            "ExcitedStatesOptions",
+            "NumericsOptions",
             "TaskOptions",
             "JobInput",
             "DataSnapshot",

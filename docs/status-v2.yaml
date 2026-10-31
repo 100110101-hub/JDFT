@@ -379,8 +379,12 @@ PR-01:
 
   note: "CLI：props / ts / irc / scan"
 PR-02:
-  state: pending
-  note: "Python API 暴露新选项与新结果块"
+  state: done
+  ts: "2026-11-08T01:10:00Z"
+  artifact: "qwb-studio/rust/qwb-py/src/lib.rs（新增 pyclass `Mp2Options`/`ExcitedStatesOptions`/`NumericsOptions` + `TaskOptions` 的 5 个新字段 + `JobResult` 的 10 个新块 getter + `json_to_py` 通道）、qwb-contracts/studio/python/qwb_engine.pyi（加性：3 个新类、5 个 Literal 名字表、TaskOptions 5 字段、JobResult 10 块）、qwb-contracts/studio/python/tests/consumer_example.py（typed consumer 用上新选项与新块）、qwb-studio/tests/test_engine_phase2.py（8 条）"
+  verification: "**三条判据都实测达成**。① mypy --strict：`mypy --strict qwb_engine.pyi` 与 `mypy --strict tests/consumer_example.py` 都是 Success（桩加性扩展后仍只允许用桩里声明的东西；consumer 里新增 `build_excited_state_input()` 与 `summarize_excited_states()` 两段真实用法）。② 与 CLI 能量逐位相同：`cargo clippy --all-targets -D warnings` 干净、`maturin build --release -o dist` 出 abi3-py39 wheel 并装进同一 venv；H2O/STO-3G/HF + TDA(5 态) 经 pyo3 跑出 `energy_hartree = -74.963146409187445`，与仓库里**提交的 CLI 产物** `qwb-core/examples/results/h2o_tddft/result.json` 的 `-74.96314640918744` 用 `==` 比较通过；把 `scf_type=rhf` / `solvent_model=vacuum` 显式写成默认值后能量也逐位不变。③ GIL 仍释放：带新选项的 TDA 作业单次 0.172 s，两个并发墙钟 0.187 s vs 串行和 0.344 s（0.54×，判据 0.95×），且两次能量完全相同；`test_engine_binding.py` 原有的三并发用例继续绿。④ 非法取值在入口报错：`Mp2Options(kind=...)` / `ExcitedStatesOptions(n_states=0)` / `NumericsOptions(accuracy_level=9)` / `TaskOptions().scf_type=` / `.solvent_model=` 全部抛 `InvalidInputError`（K5 退出码 1）。⑤ 缺块 = None：阶段一的 sp 作业读 `excited_states`/`uv_vis_spectrum`/`correlation`/`solvation`/`nmr_shieldings`/`polarizability`/`dispersion_energy_hartree` 都是 None。⑥ `qwb-studio` pytest **205 passed**（+8，含上述全部）。"
+  note: "**`options.numerics` 只做到契约层**：桩里有、`TaskOptions.numerics` 能设、`validate()` 会查等级 1..=5，但引擎立刻回 `UnsupportedError`（K5 退出码 4，approximation paths 是 IN-03/IN-04，受 K10 等价性门禁约束）。这条**故意**用测试钉住（`test_numerics_options_are_declared_but_not_wired_yet`），免得「桩里声明了就算做了」。同理，`JobResult` 的 10 个新块用「结构体 → JSON → Python dict」一条通道透出（键名与 result.json 一致），而不是给每个块手写 pyclass：块的结构还在加性演进，一份通道不会因为加字段就漏 getter；代价是桩里类型是 `dict[str, Any] | None` 而不是强类型。另外两个诚实点：① `TaskOptions` 不再 derive Clone —— pyo3 0.22 里 `Py<T>: Clone` 要 `py-clone` feature，而且嵌套选项应当保持「活的引用」（Python 改子对象，父对象下次 to_api 能看到）；② `to_json()`→`from_json()` 不保证逐位（serde_json 默认浮点解析不是 round-trip 精确，要 `float_roundtrip` feature；K2 从未要求文本级 bit-exact），所以往返测试用 1e-13 相对容差并写清原因。"
+  choices: "一百二十九"
 PR-03:
   state: done
   ts: "2026-11-07T12:00:00Z"

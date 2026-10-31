@@ -9,7 +9,7 @@
 - `Reporter` 回调必须由 Rust 侧**批量**推送，禁止逐行跨 GIL 回调。
 """
 
-from typing import Literal, Protocol, Sequence
+from typing import Any, Literal, Protocol, Sequence
 
 import numpy as np
 import numpy.typing as npt
@@ -17,6 +17,9 @@ import numpy.typing as npt
 __all__ = [
     "Atom",
     "Molecule",
+    "Mp2Options",
+    "ExcitedStatesOptions",
+    "NumericsOptions",
     "TaskOptions",
     "JobInput",
     "GridLevel",
@@ -40,6 +43,14 @@ GridLevel = Literal["coarse", "normal", "fine", "veryfine"]
 
 #: 作业类型（小写形态；K2 的 `Sp`/`Opt`/`Freq` 拼写同样被接受）。
 JobType = Literal["sp", "opt", "freq"]
+
+#: 阶段二（KV-05）新增选项的取值词汇表 —— 与 K2 的 serde 拼写逐字一致
+#: （`input.yaml` 里能写的东西，这里也就能写）。
+ScfType = Literal["rhf", "rohf", "uhf", "rks", "uks"]
+Mp2Kind = Literal["mp2", "ri-mp2"]
+ExcitedStateMethod = Literal["cis", "tda", "tddft"]
+SolventModel = Literal["vacuum", "cosmo", "smd", "pbf"]
+NumericsPath = Literal["analytic", "ri", "pseudospectral"]
 
 #: 第一阶段契约声明的 feature 词汇表（`engine-api::SUPPORTED_FEATURES`）。
 BUILTIN_REGISTRY_FEATURES: tuple[str, ...]
@@ -67,6 +78,36 @@ class Molecule:
     def n_atoms(self) -> int: ...
     def validate(self) -> None: ...
 
+class Mp2Options:
+    """MP2 选项（`options.mp2`）。"""
+
+    kind: Mp2Kind
+    aux_basis_name: str | None
+    def __init__(
+        self, kind: Mp2Kind = "mp2", aux_basis_name: str | None = None
+    ) -> None: ...
+    def validate(self) -> None: ...
+
+class ExcitedStatesOptions:
+    """激发态选项（`options.excited_states`）。"""
+
+    n_states: int
+    method: ExcitedStateMethod
+    def __init__(
+        self, n_states: int, method: ExcitedStateMethod = "tda"
+    ) -> None: ...
+    def validate(self) -> None: ...
+
+class NumericsOptions:
+    """数值路径选项（`options.numerics`）。"""
+
+    path: NumericsPath | None
+    accuracy_level: int
+    def __init__(
+        self, accuracy_level: int = 3, path: NumericsPath | None = None
+    ) -> None: ...
+    def validate(self) -> None: ...
+
 class TaskOptions:
     """数值控制参数（全部有默认值，未赋值的字段用默认）。"""
 
@@ -79,6 +120,12 @@ class TaskOptions:
     opt_gradient_threshold_hartree_per_bohr: float
     freq_step_angstrom: float
     ecp_name: str | None
+    # ── 阶段二（KV-05）新增；None = 阶段一行为 ─────────────────────────────
+    scf_type: ScfType | None
+    mp2: Mp2Options | None
+    excited_states: ExcitedStatesOptions | None
+    solvent_model: SolventModel | None
+    numerics: NumericsOptions | None
     def __init__(self) -> None: ...
     def validate(self) -> None: ...
 
@@ -141,6 +188,17 @@ class JobResult:
     data_snapshot: DataSnapshot
     log: str
     env: EnvInfo
+    # ── 阶段二（KV-05）新增结果块：缺块 = `None`；块内键名与 `result.json` 一致 ──
+    dispersion_energy_hartree: float | None
+    spin: dict[str, Any] | None
+    correlation: dict[str, Any] | None
+    solvation: dict[str, Any] | None
+    excited_states: dict[str, Any] | None
+    uv_vis_spectrum: dict[str, Any] | None
+    nmr_shieldings: dict[str, Any] | None
+    polarizability: dict[str, Any] | None
+    multipoles: dict[str, Any] | None
+    numerics_report: dict[str, Any] | None
     def to_json(self) -> str: ...
     @staticmethod
     def from_json(text: str) -> JobResult: ...

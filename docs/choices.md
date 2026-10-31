@@ -5091,3 +5091,61 @@ out root 是相对 CWD 的 `results/`，而那条测试的 CWD 就是 `examples/
   `ΔE` 的参考是**命令行给的第一个目录**，写在 `status_text`/表头 `dE` 里，不猜。
 * CSV 不做字段转义（`task`/`method`/`basis` 都是标识符级字符串）。真出现逗号会多一列，
   那时再上 `csv` 模块转义——现在加一层转义反而与 Rust 侧那份字面量格式不一致。
+
+## 一百二十九、PR-02：新块的 Python 通道走一条通用转换，而不是每个块手写一个 pyclass（2026-11-08）
+
+### 问题
+
+PR-02 要求"Python API 暴露新的 `JobInput` 选项与结果块"。阶段二给 K2 加了 5 个选项字段
+（`scf_type` / `mp2` / `excited_states` / `solvent_model` / `numerics`）和 10 个可选结果块
+（`spin` / `correlation` / `solvation` / `excited_states` / `uv_vis_spectrum` /
+`nmr_shieldings` / `polarizability` / `multipoles` / `numerics_report` / `dispersion_energy_hartree`）。
+按 pyo3 的字面做法，这是 10 个新 `#[pyclass]` + 每个字段一个 getter：约 600 行样板，而且
+K7 的块还在加性演进（KV-01 之后还有 FX-04 / RS-04 的字段要进来），每加一个字段就要同步改
+三处（K7 结构体、pyclass、桩）。
+
+### 决定
+
+**选项**走强类型（3 个 pyclass：`Mp2Options` / `ExcitedStatesOptions` / `NumericsOptions`），
+因为它们是要被**写**的、需要入口校验；**结果块**走一条通用通道
+（`serde_json::to_value` → `json_to_py`），Python 侧拿到的是 `dict`，键名与 `result.json` 逐字一致。
+
+代价写在桩里：`JobResult.excited_states: dict[str, Any] | None`。好处是：
+
+* 一个通道覆盖 10 个块，K7 加字段时 Python 侧自动跟上，不会出现"结果里有、Python 拿不到"；
+* 块内的键名与 `result.json` 相同 —— 用户从 CLI 切到 Python API 时不用换心智模型，
+  而且 `to_json()` 已经是同一份数据，两边不会漂；
+* 出口只有一处转换代码，测试可以钉"缺块 = None"和"往返后结构还在"。
+
+字符串 ↔ 枚举的映射**不写第二张表**：进来用 `serde_json::from_value`（非法名字报 serde 的
+`unknown variant ... expected ...`），出去用 `serde_json::to_value` 取名字。所以 Python 桩里
+写的 `"ri-mp2"` 就是 `input.yaml` 里那个字面量，不存在"Python 侧名字表漏更新"这种漂移。
+
+### 三个踩到的坑（都记在这里，免得下次重踩）
+
+1. **`Py<T>: Clone` 要 `py-clone` feature**。`TaskOptions` 原来 `derive(Clone)`，加了三个
+   `Py<...>` 字段后编译不过。没有去开 `py-clone`（它是"在没持 GIL 时复制引用"的危险工具），
+   而是**去掉 `Clone`**：嵌套选项的语义本来就该是"活的引用"——Python 改了
+   `options.excited_states.n_states`，父对象下次 `to_api` 就该看到。
+2. **`serde` 不是本 crate 的依赖**（只有 `serde_json`），所以泛型助手 `fn f<T: Serialize>`
+   连 trait 名都写不出来。绕法：在每个调用点直接 `serde_json::to_value(value)` /
+   `from_value(value)`，具体类型由上下文推出来；`macro_rules! json_name` 只负责
+   "枚举 → 小写名"这一种重复。
+3. **`to_json()` → `from_json()` 不是逐位的**。一开始把往返写成 `assert again.excited_states ==
+   result.excited_states`，红了；追下去发现是 `serde_json` 默认的浮点解析**不是** round-trip
+   精确的（要 `float_roundtrip` feature）。这不是本轮的 bug，也不是 K2 的要求（K2 从没承诺
+   文本级 bit-exact），所以测试改成 1e-13 相对容差并把原因写在注释里 —— 而不是偷偷开一个
+   影响全仓库数据解析的 feature。
+
+### 与提交产物比较时的两个细节
+
+* H2O/STO-3G/HF+TDA 的 **SCF 能量**与仓库里提交的 CLI 产物**逐位相同**（`==` 通过）；
+  但**跃迁能**差最后两位（相对 4e-15），因为那份产物是 RS-03 收尾之前的一次快照。
+  这条用 1e-12 Ha 容差，注释写明"不能要求历史快照不许有数值演进"。
+* 那份产物里**没有** `uv_vis_spectrum` 块（它是 PR-04 之前的产物），所以比对点数前先看它在不在；
+  今天的 Python 结果有谱（243 点）——这反过来也证明"缺块 = None"那条分支是真的有用。
+
+### 没做的事
+
+`options.numerics` 只到契约层：能设、能校验、传进引擎立刻 `UnsupportedError`（退出码 4）。
+故意留一条测试钉住它，免得"桩里声明了"被当成"做了"。

@@ -6,6 +6,8 @@ P-06 交付真扩展后，同一个文件可以直接改成真跑（去掉 `TYPE
 
 from __future__ import annotations
 
+from typing import Any
+
 import numpy as np
 import numpy.typing as npt
 
@@ -54,6 +56,46 @@ def build_h2_input() -> qwb.JobInput:
         jobtype="sp",
         options=options,
     )
+
+
+def build_excited_state_input() -> qwb.JobInput:
+    """阶段二（KV-05）新增选项的典型用法：TDA + 显式 SCF 类型 + 数值等级。"""
+    molecule = qwb.Molecule(
+        atoms=[
+            qwb.Atom("O", (0.0, 0.0, 0.1173)),
+            qwb.Atom("H", (0.0, 0.7572, -0.4692)),
+            qwb.Atom("H", (0.0, -0.7572, -0.4692)),
+        ],
+        charge=0,
+        multiplicity=1,
+    )
+    options = qwb.TaskOptions()
+    options.scf_type = "rhf"
+    options.excited_states = qwb.ExcitedStatesOptions(n_states=5, method="tda")
+    options.numerics = qwb.NumericsOptions(accuracy_level=3, path="analytic")
+    options.mp2 = None
+    options.solvent_model = "vacuum"
+    options.validate()
+    return qwb.JobInput(
+        molecule=molecule,
+        basis_name="sto-3g",
+        method_name="hf",
+        grid_level="normal",
+        solvent="vacuum",
+        jobtype="sp",
+        options=options,
+    )
+
+
+def summarize_excited_states(result: qwb.JobResult) -> int:
+    """读阶段二的结果块（缺块时是 `None`）。"""
+    block: dict[str, Any] | None = result.excited_states
+    if block is None:
+        return 0
+    transitions = block.get("transitions")
+    if not isinstance(transitions, list):
+        return 0
+    return len(transitions)
 
 
 def run_and_summarize(registry_path: str) -> tuple[float, int]:
