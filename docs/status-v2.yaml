@@ -253,6 +253,7 @@ RS-04:
   title: "NMR GIAO 屏蔽（+ length-gauge 一致性）"
 RS-05:
   state: blocked
+  decision: "**2026-11-07 用户拍板：判据不降级**（拒绝把 20× 改成实测 2×），改走 **2e 导数层重写**（Rys/Hermite 带导数指标）。因此 RS-05 继续 blocked、判据不动；RS-06/RS-07/RP-01..04 继续 blocked-by-dependency。下一步主线：先拆解单次导数遍次 7.188 s 的构成（2e 导数 / 1e 导数 / XC 几何 / Pulay+CPHF），确认 2e 导数占比，再决定重写能拿回多少。"
   ts: "2026-11-01T06:00:00Z"
   artifact: "（本轮只做基线测量与方案，尚未改代码）"
   verification: "**基线实测**（release 构建，`H2O/def2-SVP/HF`，实验几何，`grid-coarse`）：现有数值 Hessian 墙钟 **67.46 s**，dof = 9，18 个位移几何（每个 1 次 SCF + 1 次解析梯度装配），频率 4058.9 / 3972.2 / 1794.6 cm⁻¹。判据要求「比数值快 ≥ 20×」，所以解析 Hessian 必须 < **3.37 s** 才算达成。"
