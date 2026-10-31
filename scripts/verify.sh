@@ -67,6 +67,7 @@ fi
 step "data: DATA_LICENSES.md 与数据一致（D-15）"
 python scripts/gen_data_licenses.py --check
 step "data: 参考集逐行带来源（DA-08）" python scripts/check_reference_sources.py
+step "data: 误差预算逐行可核（VF-05）" python scripts/check_error_budget.py
 step "data: status.yaml 账本可解析（§10.6）"
 python scripts/check_status.py
 step "data: status-v2.yaml 账本可解析（阶段二 §10.6）"

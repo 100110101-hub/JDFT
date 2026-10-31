@@ -438,8 +438,12 @@ VF-04:
   state: pending
   note: "NMR 基准集"
 VF-05:
-  state: pending
-  note: "error-budget.md v2（每条近似的实测量级）"
+  state: done
+  ts: "2026-11-08T05:40:00Z"
+  artifact: "docs/error-budget.md（升到 v2：新增 §0 阶段二近似总表 25 行、§1 RI、§2 网格、§3 TDA、§4 溶剂与 SASA、§5 与 §9.3 的 9 条容差逐条对应、§6 未测项与阻塞者；阶段一原文保留为 §8 并补上 GGA 缺口的真实归因）、scripts/check_error_budget.py（新门禁）、scripts/verify.ps1 + scripts/verify.sh（同步新增 VF-05 步骤）"
+  verification: "**数字全部是 2026-11-08 重跑测试得到的，不是抄旧账本**（抄的时候发现两处旧值已经过时，见 note）。① `check_error_budget.py` 输出 ok: section-0 25 approximation rows, 31 evidence links, section-5 9/9 tolerances mapped —— 每一行的证据都解析到**存在的**测试路径或账本 WP id，`§0` 每行都有数字或显式的「未测/blocked」标记，`§9.3` 的 9 条容差一条不少。② RI：`in01_ri_fit` 实测 E_J(4 中心) 46.8450835264 Ha，E_J^RI(def2-SVP-RI) 46.8389446850（拟合误差 **−6.139e-3 Ha = −3.85 kcal/mol**），与 PySCF 同辅助基差 **1.367e-7 Ha**；辅助基退化为 def2-SVP/STO-3G 时拟合误差 −0.8375/−0.9157 Ha（比实现误差大 4 个量级）。③ RI-MP2：`sc05_rimp2` 实测 E2(canonical) −0.2036434624 vs E2(RI) −0.2035582016，差 **8.526e-5 Ha**（§9.3 容差 1e-4，余量 1.17×），与 PySCF 的 RI-MP2 差 1e-9。④ 网格：`s02_grid_convergence` 实测 H2/SVWN5 normal→fine **4.66e-12 Ha**、coarse→normal 5.49e-10 Ha；H2O/SVWN5 5.3e-6 Ha（保留 v1 表）；求积能力 6e-12 相对（α = 1…300）。⑤ TDA：`rs02_tda_acceptance` 实测 H2O/STO-3G 五态差 **4.18e-7…5.89e-7 eV**、def2-SVP 1.19e-7…2.91e-7 eV；`rs02_tda_benzene` 最差 **3.79e-7 eV**；甲醛/丙酮 7.4e-7 / 5.5e-7 eV；对**实验值**的 5.8 eV 缺口照旧留在表里并标 ❌。⑥ 溶剂：`sv01_cosmo` 实测 Born 球 M=125/250/500 的 ΔG = −0.1256738421 / −0.1333949725 / −0.1349219585 vs 解析 −0.1306059087，相对误差 3.78e-2 / 2.14e-2 / 3.31e-2（= 3.10 / 1.75 / 2.71 kcal/mol），导体极限 4.32%（4.79 kcal/mol）—— 单个球的离散误差已经吃掉 §9.3 的 1.5 kcal/mol 目标。⑦ SASA：`sv01_cavity` 解析球帽路径三个转轴偏差 **0.0**（判据 1e-6），采样路径 4.99e-4 / 2.30e-3 / 3.48e-4 且随点数 500→2000→8000 从 4.17e-4 降到 8.70e-5；采样 vs 解析（水）面积 36.23682864 vs 35.6348949533（相对 **1.69e-2**）、体积 19.28169843 vs 19.1661296467（**6.03e-3**）。⑧ 门禁：新增一步纯标准库检查（bare python 也跑），`verify.ps1` 28 步全绿。"
+  note: "**两处旧值在这一轮被发现已经过时**（所以重跑而不是抄）：① SV-01 的账本记着「采样 36.294312 vs 解析 35.634895（1.85e-2）、体积 19.307060（7.35e-3）」，那是**体积 bug 修好之前**的一组数；今天重跑得到 36.23682864 / 19.28169843（1.69e-2 / 6.03e-3），v2 用后者，旧值只在 §8 的历史里出现。② v1 的 §4b 把 GGA 的缺口写成「未归因」；实际后来定位到两处**公式约定**（PBE 相关项该配 PW92 而不是 VWN5；B88 要用每自旋约化梯度与 X_FACTOR_C），修好后 B3LYP/H2O 从 +19.0 mHa 到 **+0.002 mHa**、BLYP 从 +112.0 mHa 到 **−0.0001 mHa** —— v2 的 §8.5 按 `docs/choices.md` 三十一/三十二/三十三 重写，不再留「未归因」的旧结论。**刻意保留的 ❌ 行**：TDA 对实验值 5.8 eV（方法层级限制）、PS/ECP/D3/SMD/势垒/NMR 顺磁项六项「未测 + 阻塞者」—— 删掉它们的表会更好看，但那样的表在说谎。"
+  choices: "一百三十一"
 VF-06:
   state: pending
   note: "K10 等价性套件（scripts/check_numerics_equivalence.py）"

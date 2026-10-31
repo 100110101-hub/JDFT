@@ -182,6 +182,13 @@ Step -Name 'DA-08: reference CSVs carry source_doi/source_url' -Dir '.' -Body {
     & python scripts/check_reference_sources.py
 }
 
+# ---- VF-05: the error budget must stay measured, not narrated ----
+# 三件事：§0 每行有数字（或显式「未测/blocked」）、每行证据能解析到**存在的**路径或账本 WP、
+# §5 的 9 条 §9.3 容差一条不少。纯标准库。
+Step -Name 'VF-05: docs/error-budget.md rows are measured' -Dir '.' -Body {
+    & python scripts/check_error_budget.py
+}
+
 # ---- 10.6: the project ledger must stay machine-readable ----
 Step -Name '10.6: docs/status.yaml ledger validity' -Dir '.' -Body {
     & $script:ledgerPython scripts/check_status.py
