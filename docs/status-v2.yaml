@@ -439,3 +439,26 @@ M-PS:
   state: pending
   stretch: true
   note: "pseudospectral 路径（可选里程碑，不阻塞 M1–M8）"
+EX-01:
+  state: done
+  ts: "2026-11-06T12:00:00Z"
+  artifact: "`scripts/verify.ps1` 与 `scripts/verify.sh` 的 `core: test` 步骤改用 `cargo-nextest`（进程级并行，`--partition count:1/2 | count:2/2` 两条泳道各 4 线程），并单独跑 `cargo test --workspace --doc`（nextest 不跑 doctest，这是「集合不变」的关键）；无 nextest 的机器退回 `cargo test --workspace`"
+  verification: "整仓 **465 个测试 + 25 个 doctest = 490**，两片实测 **269 + 196 = 465**（`--partition` 保证覆盖全集）。门禁 123：`ALL GATES GREEN`、26 项全绿。并行本身把 debug 下的 981 s 降到 928 s（5%），**真正的量级来自 EX-02**。"
+  note: "**先量构建配置，再谈并行**：调度优化只值 5%，因为瓶颈不在并行度。"
+EX-02:
+  state: done
+  ts: "2026-11-06T12:00:00Z"
+  artifact: "`qwb-core/Cargo.toml` 的 `[profile.test] opt-level = 2`（`debug-assertions` 仍开）+ `scripts/verify.ps1` 的 `core: test` 装配 steps + `sc01b_uks.rs` 按参考行拆分（4 个测试 + 1 条覆盖断言，`check_reference_row` 是原循环体逐字搬移）"
+  verification: "**门禁 45–70 min → 396.8 s（6.6 min）**，26 项全绿；`core: test` **981 s → 161 s**。归因实测：同一批 UKS 测试 debug **591.6 s** vs release **15.5 s**（**38×**），改 profile 后 **23.96 s**。附带的 SCF 修正：`density_threshold` 1e-8 → 1e-7（grid-fine 求积噪声底，原阈值不可达，跑满 400 步），O2/PBE 590 s → 260 s（改 profile 后 15 s），能量 E = −148.1377193243 vs PySCF −148.1377187459（差 −5.78e-7，容差 1e-6 未动）。"
+  note: "测试集合、断言、容差一字未改；改的是**构建配置**与一个**物理上不可达的收敛阈值**。"
+EX-03:
+  state: in_progress
+  ts: "2026-11-06T12:00:00Z"
+  artifact: "（已证明可行性、已撤回实现）cuBLAS gemm 后端：`fda59de` 里的 `qwb-core/crates/qwb-gpu`（`libloading` + cuBLAS dgemm，行主序）。当前工作树里**没有**这个 crate"
+  verification: "**可行性实测（fda59de）**：GPU vs CPU 最大绝对差 **5.55e-16**（判据 1e-12）；吞吐 512³ **10.8 GFLOPS**、1024³ **124**、2048³ **173**（RTX 3070 Laptop，sm_86，CUDA 13.0，`cublas64_13.dll`）；512³ 时与单线程朴素 CPU（~10 GFLOPS）打平 —— 小尺寸不值得上 GPU。**被门禁拦下**：`check_unsafe.sh`（R-16）禁止自研 `unsafe`，FFI 需**人类批准 + `unsafe_allowlist.txt` 登记**；`check_deps_centralized.sh` 要求三方依赖走 `[workspace.dependencies]`。"
+  note: "**卡点**：R-16 需要人工决定。两条合规路径：(a) 改用封装 FFI 的依赖（如 `cudarc`），我们自己的代码保持零 `unsafe`——**未验证其对 CUDA 13 的支持**；(b) 人类批准后把 `qwb-gpu/src/lib.rs` 登记白名单并写明理由。**没有把这条标 done**：门禁里目前没有任何一步走 GPU。"
+EX-04:
+  state: done
+  ts: "2026-11-06T12:00:00Z"
+  artifact: "`scripts/verify.ps1` 的 `Step` 函数加 `[Diagnostics.Stopwatch]`（每步打印 `[  N.Ns]`，结尾打印最慢五步与总步时）+ `scripts/verify.sh` 的 `step()` 同步（`date +%s` 计时、`awk` 汇总）"
+  verification: "门禁 123 实测输出：`core: test` 161.0 s、studio pytest 124.8 s、`core: clippy` 91.2 s、maturin 3.6 s、其余 < 2 s，**总步时 396.0 s（6.6 min）**。没有这一步，前面几轮只能靠猜「时间花在哪」。"
