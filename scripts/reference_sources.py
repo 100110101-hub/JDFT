@@ -94,7 +94,12 @@ def write_csv(path: str, fields, rows) -> None:
     """按给定列序写 CSV（LF、无 CR）。"""
     os.makedirs(os.path.dirname(path), exist_ok=True)
     buffer = io.StringIO()
-    writer = csv.DictWriter(buffer, fieldnames=list(fields) + list(SOURCE_COLUMNS))
+    # `lineterminator="\n"`：csv 模块默认写 CRLF，而仓库的 CSV 走 git 的 LF 归一化 ——
+    # 不显式指定的话，"生成器写出的字节"与"clone 下来的字节"永远不相等，
+    # `--check` 会在干净检出上误报 STALE（这类坑只有在新克隆里才暴露）。
+    writer = csv.DictWriter(
+        buffer, fieldnames=list(fields) + list(SOURCE_COLUMNS), lineterminator="\n"
+    )
     writer.writeheader()
     for row in rows:
         writer.writerow(row)
@@ -107,7 +112,9 @@ def check_csv(path: str, fields, rows) -> int:
     返回进程退出码：0 = 一致；1 = 文件过时（打印第一处差异所在行）。
     """
     buffer = io.StringIO()
-    writer = csv.DictWriter(buffer, fieldnames=list(fields) + list(SOURCE_COLUMNS))
+    writer = csv.DictWriter(
+        buffer, fieldnames=list(fields) + list(SOURCE_COLUMNS), lineterminator="\n"
+    )
     writer.writeheader()
     for row in rows:
         writer.writerow(row)

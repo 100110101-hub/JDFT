@@ -5200,6 +5200,15 @@ DA-08 点名四族：激发能、NMR、ΔG_solv、势垒。前两族交付（激
 顺磁项恒为 0。合并脚本原样保留了"各自缩放"的三重循环写法（`+(λ,μ) −(λ,−μ) −(−λ,μ) +(−λ,−μ)`），
 并在模块文档里再写一遍——这类错误只要有人"简化"一次就会回来。
 
+### 换行符：`--check` 在干净检出上会误报的那个坑
+
+第一版 `write_csv` 用 `csv.DictWriter` 的默认行终止符（`\r\n`），而 `.gitattributes` 是
+`* text=auto eol=lf` —— 于是"生成器写出的字节"（CRLF）与"clone 下来的字节"（LF）永远不相等，
+`--check` 在一个**刚从 git 拿到的仓库**里会报 STALE，而在本机（CRLF 还没被归一化时）却是绿的。
+这类坑在自己机器上永远不会暴露。修法：`DictWriter(..., lineterminator="\n")`，并重生成全部
+家族文件；现在 `grep -c $'\r'` 在 7 个文件上都是 0。门禁的 `check_reference_sources.py` 不查
+行尾（那是 git 的职责），但 `--check` 逐字比对必须查，所以这个修复是必须的。
+
 ### 实测
 
 * `cargo test -p qwb-props --test rs04_diamagnetic` 3 例绿，14 个核（水 3 / 甲烷 5 / 甲醇 6）
