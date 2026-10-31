@@ -1,0 +1,25 @@
+species,basis,functional,nucleus_index,symbol,spin_density_au,note,source_doi,source_url
+CH3,def2-svp,uhf,0,C,0.2811620348,PySCF 2.14.0 scf.UHF 的 P_alpha-P_beta 在核位置的 AO 值缩并,10.1063/5.0006074,https://github.com/pyscf/pyscf
+CH3,def2-svp,uhf,1,H,-0.0264114260,PySCF 2.14.0 scf.UHF 的 P_alpha-P_beta 在核位置的 AO 值缩并,10.1063/5.0006074,https://github.com/pyscf/pyscf
+CH3,def2-svp,uhf,2,H,-0.0264114260,PySCF 2.14.0 scf.UHF 的 P_alpha-P_beta 在核位置的 AO 值缩并,10.1063/5.0006074,https://github.com/pyscf/pyscf
+CH3,def2-svp,uhf,3,H,-0.0264114260,PySCF 2.14.0 scf.UHF 的 P_alpha-P_beta 在核位置的 AO 值缩并,10.1063/5.0006074,https://github.com/pyscf/pyscf
+CH3,def2-svp,pbe,0,C,0.1775343951,PySCF 2.14.0 dft.UKS 的 P_alpha-P_beta 在核位置的 AO 值缩并,10.1063/5.0006074,https://github.com/pyscf/pyscf
+CH3,def2-svp,pbe,1,H,-0.0136802556,PySCF 2.14.0 dft.UKS 的 P_alpha-P_beta 在核位置的 AO 值缩并,10.1063/5.0006074,https://github.com/pyscf/pyscf
+CH3,def2-svp,pbe,2,H,-0.0136803450,PySCF 2.14.0 dft.UKS 的 P_alpha-P_beta 在核位置的 AO 值缩并,10.1063/5.0006074,https://github.com/pyscf/pyscf
+CH3,def2-svp,pbe,3,H,-0.0136803450,PySCF 2.14.0 dft.UKS 的 P_alpha-P_beta 在核位置的 AO 值缩并,10.1063/5.0006074,https://github.com/pyscf/pyscf
+CH3,sto-3g,uhf,0,C,0.2480217025,PySCF 2.14.0 scf.UHF 的 P_alpha-P_beta 在核位置的 AO 值缩并,10.1063/5.0006074,https://github.com/pyscf/pyscf
+CH3,sto-3g,uhf,1,H,-0.0340357378,PySCF 2.14.0 scf.UHF 的 P_alpha-P_beta 在核位置的 AO 值缩并,10.1063/5.0006074,https://github.com/pyscf/pyscf
+CH3,sto-3g,uhf,2,H,-0.0340357378,PySCF 2.14.0 scf.UHF 的 P_alpha-P_beta 在核位置的 AO 值缩并,10.1063/5.0006074,https://github.com/pyscf/pyscf
+CH3,sto-3g,uhf,3,H,-0.0340357378,PySCF 2.14.0 scf.UHF 的 P_alpha-P_beta 在核位置的 AO 值缩并,10.1063/5.0006074,https://github.com/pyscf/pyscf
+CH3,sto-3g,svwn,0,C,0.1061164354,PySCF 2.14.0 dft.UKS 的 P_alpha-P_beta 在核位置的 AO 值缩并,10.1063/5.0006074,https://github.com/pyscf/pyscf
+CH3,sto-3g,svwn,1,H,-0.0157039566,PySCF 2.14.0 dft.UKS 的 P_alpha-P_beta 在核位置的 AO 值缩并,10.1063/5.0006074,https://github.com/pyscf/pyscf
+CH3,sto-3g,svwn,2,H,-0.0157039557,PySCF 2.14.0 dft.UKS 的 P_alpha-P_beta 在核位置的 AO 值缩并,10.1063/5.0006074,https://github.com/pyscf/pyscf
+CH3,sto-3g,svwn,3,H,-0.0157039557,PySCF 2.14.0 dft.UKS 的 P_alpha-P_beta 在核位置的 AO 值缩并,10.1063/5.0006074,https://github.com/pyscf/pyscf
+OH,def2-svp,uhf,0,O,0.4523722079,PySCF 2.14.0 scf.UHF 的 P_alpha-P_beta 在核位置的 AO 值缩并,10.1063/5.0006074,https://github.com/pyscf/pyscf
+OH,def2-svp,uhf,1,H,-0.0226324890,PySCF 2.14.0 scf.UHF 的 P_alpha-P_beta 在核位置的 AO 值缩并,10.1063/5.0006074,https://github.com/pyscf/pyscf
+OH,def2-svp,pbe,0,O,0.2727011974,PySCF 2.14.0 dft.UKS 的 P_alpha-P_beta 在核位置的 AO 值缩并,10.1063/5.0006074,https://github.com/pyscf/pyscf
+OH,def2-svp,pbe,1,H,-0.0125771964,PySCF 2.14.0 dft.UKS 的 P_alpha-P_beta 在核位置的 AO 值缩并,10.1063/5.0006074,https://github.com/pyscf/pyscf
+OH,sto-3g,uhf,0,O,0.0818861143,PySCF 2.14.0 scf.UHF 的 P_alpha-P_beta 在核位置的 AO 值缩并,10.1063/5.0006074,https://github.com/pyscf/pyscf
+OH,sto-3g,uhf,1,H,-0.0262977176,PySCF 2.14.0 scf.UHF 的 P_alpha-P_beta 在核位置的 AO 值缩并,10.1063/5.0006074,https://github.com/pyscf/pyscf
+OH,sto-3g,svwn,0,O,0.0226275311,PySCF 2.14.0 dft.UKS 的 P_alpha-P_beta 在核位置的 AO 值缩并,10.1063/5.0006074,https://github.com/pyscf/pyscf
+OH,sto-3g,svwn,1,H,-0.0148454078,PySCF 2.14.0 dft.UKS 的 P_alpha-P_beta 在核位置的 AO 值缩并,10.1063/5.0006074,https://github.com/pyscf/pyscf
