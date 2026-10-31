@@ -375,13 +375,12 @@ PR-03:
   note: "容器按条目名存字节、内容层不设限（K4 只校验条目名与 meta），所以加性块天然向后兼容 —— 但那必须由测试钉住，不能靠推断。四条测试覆盖旧夹具、新块 roundtrip、旧读者容错与新块缺失。"
   choices: "一百二十"
 PR-04:
-  state: in_progress
-  ts: "2026-11-07T14:00:00Z"
-  artifact: "qwb-data/numerics/numerics.yaml（v1.1.0 的 spectrum_defaults）、qwb-core/crates/qwb-registry/src/numerics.rs（SpectrumDefaults）、qwb-core/crates/qwb-props/src/spectrum.rs、qwb-core/crates/qwb-props/tests/spectrum.rs"
-  verification: "**数据先行**：展宽参数进 `numerics.yaml` 的 `spectrum_defaults`（K10 加性扩展，版本 1.0.0 → 1.1.0），由 `qwb-stamp-data` 盖章、registry 摘要同步，`qwb data verify` 30/30 通过，schema 重新生成。**物理**：`qwb-props::spectrum` 的高斯展宽（HWHM 参数化）由 8 条测试钉住 —— 面积 = Σf·HWHM·√(π/ln2)（相对差 < 1e-9）、重心 = f 加权平均能量（< 1e-9）、孤立跃迁峰位落在能量上（≤ 半步长）、双峰可分辨、非法参数被拒、CSV 可解析、默认值确实来自数据（0.4/0.05/6.0）。"
-  note: "还差三步：①engine 接线（`uv_vis_spectrum` 结果块 + 结果目录 `spectrum.csv`）；②端到端判据（H2O/苯的谱峰与 RS-02 激发能一致）；③GUI 绘图面板（studio 现在只有 DataPanel/Scene3DPanel，需新增 QPainter 面板，不引入 matplotlib）。"
-  gap: "未完成项按上一条 note 的三步执行；本轮实测抓到一个抄错的常数（把 √(π/ln2) 写成 √π），由面积恒等式发现，修法是让常数由常数算。"
-  choices: "一百二十一"
+  state: done
+  ts: "2026-11-07T16:00:00Z"
+  artifact: "qwb-data/numerics/numerics.yaml（v1.1.0 spectrum_defaults）、qwb-core/crates/qwb-props/src/spectrum.rs + tests/spectrum.rs（8 条）、qwb-contracts/engine-api/src/result.rs（K2 加性 uv_vis_spectrum）、qwb-core/crates/qwb-cli/tests/t16_spectrum.rs、qwb-core/examples/benzene_tddft.yaml、qwb-studio/qwb_studio/gui/spectrum_panel.py + tests/test_gui_spectrum.py（4 条）"
+  verification: "**三段全绿**。①数据：`spectrum_defaults`（0.4 eV HWHM / 0.05 eV 步长 / 6 HWHM 边距）进 `qwb-data/numerics` v1.1.0，由 `qwb-stamp-data` 盖章、registry 摘要同步，`qwb data verify` 30/30。②物理：高斯展宽的面积 = Σf·HWHM·√(π/ln2)（相对差 < 1e-9）、重心 = f 加权平均能量（< 1e-9）、孤立跃迁峰位落点、双峰可分辨、非法参数被拒、CSV 可解析、默认值确实来自数据。③端到端（`t16_spectrum.rs`）：H2O 与苯各跑一次 `qwb props`，result.json 的 `uv_vis_spectrum` 块带实际 HWHM/步长（0.4/0.05，来自数据），`artifacts/spectrum.csv` 与块点数一致且能量递增，**每个谱峰都在 RS-02 激发能的 1.5 步长内、每个 f>0.05 的跃迁都有对应峰**；苯的 10.5203/10.5206 eV 近简并态合成一个峰，判据仍成立。④GUI：`SpectrumPanel` 装载/峰位/渲染计时（< 1 s 且 `processEvents` 仍响应）/旧结果目录优雅退化 4 条测试通过，面板已挂进 MainWindow 的 Result 页；`qwb-studio` pytest 186 passed。"
+  note: "展宽参数是**本项目的展示约定**（不是文献值），所以按 K10 的方式版本化 + sha256 钉住，代码里不留未钉住的默认值。GUI 用 QPainter 而不是 matplotlib：产品依赖集保持最小（project.md §2.4）。"
+  choices: "一百二十一、一百二十二"
 PR-05:
   state: pending
   note: "GUI：ESP/溶剂化表面着色"

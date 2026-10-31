@@ -4770,3 +4770,45 @@ Rust 侧 `NumericsDef` 加 `#[serde(default)] spectrum_defaults: Option<Spectrum
    用 `QPainter` 画谱的紧凑面板（不引入 matplotlib，产品依赖保持最小）。
 
 三步都不大，但这一轮先把「数据 + 物理 + 判据」做扎实，比半接线的端到端更有价值。
+
+## 一百二十二、PR-04 收口：谱块 + CSV + H2O/苯端到端 + GUI 面板（2026-11-07）
+
+一百二十一 把数据和物理做完了，剩下的三步（engine 接线、端到端判据、GUI）这一轮全部收掉。
+
+### K2 加性扩展：`uv_vis_spectrum`
+
+`JobResult` 加 `#[serde(default, skip_serializing_if = "Option::is_none")] uv_vis_spectrum:
+Option<UvVisSpectrum>`，块里带**实际用到的** `gaussian_hwhm_ev` / `grid_step_ev` 与采样点
+（`[[eV, I]; N]`），并提供 `peak_energies_ev()`（局部极大值，与 Rust/Python 两侧同义）。
+旧结果目录没有这个块 —— `serde(default)` 保证旧读法不受影响（PR-03 的测试已钉住这一类兼容）。
+
+### engine 与 CLI
+
+engine 在算出 `excited_states` 之后用 `SpectrumOptions::from_registry` 取展宽参数、展宽、
+挂块；**数据缺 `spectrum_defaults` 时只记日志、不让作业失败**（旧数据仍能跑）。
+CLI 把完整曲线写进 `artifacts/spectrum.csv`（K3 允许 `artifacts/**` 自由形态），并打印
+`spectrum … (N points, HWHM = 0.400 eV)`。
+
+### 端到端判据（`crates/qwb-cli/tests/t16_spectrum.rs`）
+
+对 **H2O 与苯各跑一次 `qwb props`**（苯的输入是新增的 `examples/benzene_tddft.yaml`，
+STO-3G，10 秒内跑完），然后：
+
+1. 块存在，且 HWHM/步长 **等于数据里的 0.4 / 0.05**（证明参数来自数据、不是代码常量）；
+2. `artifacts/spectrum.csv` 两列、能量递增、点数与块一致；
+3. **每个谱峰都能在 RS-02 的激发能里找到距离 ≤ 1.5 步长的对应**，且每个 `f > 0.05` 的
+   跃迁都有一个峰 —— 这就是「H2O/苯的谱峰位置与 RS-02 一致」的可执行版本。
+   苯的 4/5 号态几乎简并（10.5203 / 10.5206 eV），展宽后合成一个峰，判据照样成立。
+
+### GUI
+
+`qwb_studio/gui/spectrum_panel.py`：`SpectrumPanel`（`QPainter` 折线 + 峰位刻度 + 轴框），
+**不引入 matplotlib**（产品依赖集保持最小）。四条测试（`tests/test_gui_spectrum.py`）：
+装载真实形状的结果目录、峰位与点集一致、**渲染一帧 < 1 s 且事件循环仍响应**、
+旧结果目录优雅退化（显示「这份结果没有谱」而不是崩）。面板已挂进 `MainWindow` 的
+Result 页（打开结果目录时自动装载并显示「N 个采样点、M 个峰、能量范围」）。
+`qwb-studio` 全套 pytest **186 passed**。
+
+### 记账
+
+PR-04 三条判据全部达成，记 **done**。累计：33→34 done。

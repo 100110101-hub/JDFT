@@ -1031,8 +1031,53 @@ impl RksBackend {
         job = job.with_multipoles(
             qwb_engine_api::Multipoles::new(origin_angstrom).with_quadrupole(quadrupole),
         );
+        // PR-04：把激发态展宽成 UV/Vis 谱。展宽参数来自数据（`numerics.spectrum_defaults`），
+        // 不在这里写常量；数据缺这一块时只记一条日志，不让整个作业失败（旧数据仍可用）。
+        let mut uv_vis_spectrum = None;
+        if let Some(states) = &excited_states {
+            let transitions: Vec<(f64, f64)> = states
+                .transitions
+                .iter()
+                .map(|t| (t.energy_hartree * 27.211_386_245_988, t.oscillator_strength))
+                .collect();
+            match qwb_props::spectrum::SpectrumOptions::from_registry(&self.registry) {
+                Ok(options) => {
+                    match qwb_props::spectrum::broadened_spectrum(&transitions, &options) {
+                        Ok(spectrum) => {
+                            let points = spectrum
+                                .points
+                                .iter()
+                                .map(|(energy, intensity)| [*energy, *intensity])
+                                .collect::<Vec<[f64; 2]>>();
+                            reporter.log(&format!(
+                                "spectrum: {} point(s), HWHM = {:.3} eV, {} local maximum(a)",
+                                points.len(),
+                                spectrum.gaussian_hwhm_ev,
+                                qwb_engine_api::UvVisSpectrum::new(
+                                    spectrum.gaussian_hwhm_ev,
+                                    spectrum.grid_step_ev,
+                                    points.clone(),
+                                )
+                                .peak_energies_ev()
+                                .len()
+                            ));
+                            uv_vis_spectrum = Some(qwb_engine_api::UvVisSpectrum::new(
+                                spectrum.gaussian_hwhm_ev,
+                                spectrum.grid_step_ev,
+                                points,
+                            ));
+                        }
+                        Err(err) => reporter.log(&format!("spectrum: skipped ({err})")),
+                    }
+                }
+                Err(err) => reporter.log(&format!("spectrum: skipped ({err})")),
+            }
+        }
         if let Some(excited_states) = excited_states {
             job = job.with_excited_states(excited_states);
+        }
+        if let Some(spectrum) = uv_vis_spectrum {
+            job = job.with_uv_vis_spectrum(spectrum);
         }
         if let Some(correlation) = correlation {
             job = job

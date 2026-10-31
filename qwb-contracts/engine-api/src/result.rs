@@ -330,6 +330,12 @@ pub struct JobResult {
     /// 激发态（CIS / TDA / TDDFT，phase-2 `RS-02`/`RS-03`）。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub excited_states: Option<ExcitedStates>,
+    /// UV/Vis 谱（PR-04）：把激发态的振子强度按高斯核展宽后的采样曲线。
+    ///
+    /// 展宽参数来自 `qwb-data/numerics` 的 `spectrum_defaults`（**不是**代码里的常量），
+    /// 所以这条块总是带着实际用的 HWHM 与步长，结果可复现。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub uv_vis_spectrum: Option<UvVisSpectrum>,
     /// NMR 屏蔽（GIAO，phase-2 `RS-04`）。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub nmr_shieldings: Option<NmrShieldings>,
@@ -342,6 +348,46 @@ pub struct JobResult {
     /// 数值路径留痕（K10：用了近似必须能看见）。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub numerics_report: Option<NumericsReport>,
+}
+
+/// UV/Vis 谱（PR-04）：`(能量 eV, 强度)` 采样点 + 实际使用的展宽参数。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+#[non_exhaustive]
+pub struct UvVisSpectrum {
+    /// 高斯展宽的半高半宽，单位 eV。
+    pub gaussian_hwhm_ev: f64,
+    /// 能量网格步长，单位 eV。
+    pub grid_step_ev: f64,
+    /// `(能量 eV, 强度)`，能量递增；完整曲线也写进结果目录的 `artifacts/spectrum.csv`。
+    pub points: Vec<[f64; 2]>,
+}
+
+impl UvVisSpectrum {
+    /// 构造。
+    #[must_use]
+    pub fn new(gaussian_hwhm_ev: f64, grid_step_ev: f64, points: Vec<[f64; 2]>) -> Self {
+        Self {
+            gaussian_hwhm_ev,
+            grid_step_ev,
+            points,
+        }
+    }
+
+    /// 局部极大值的能量（eV），按能量递增。展宽谱的「峰」就是这条。
+    #[must_use]
+    pub fn peak_energies_ev(&self) -> Vec<f64> {
+        let mut peaks = Vec::new();
+        for window in self.points.windows(3) {
+            let (_, left) = (window[0][0], window[0][1]);
+            let (energy, middle) = (window[1][0], window[1][1]);
+            let right = window[2][1];
+            if middle > left && middle >= right {
+                peaks.push(energy);
+            }
+        }
+        peaks
+    }
 }
 
 impl JobResult {
@@ -369,6 +415,7 @@ impl JobResult {
             correlation: None,
             solvation: None,
             excited_states: None,
+            uv_vis_spectrum: None,
             nmr_shieldings: None,
             polarizability: None,
             multipoles: None,
@@ -444,6 +491,13 @@ impl JobResult {
     #[must_use]
     pub fn with_excited_states(mut self, excited_states: ExcitedStates) -> Self {
         self.excited_states = Some(excited_states);
+        self
+    }
+
+    /// 挂上 UV/Vis 谱（PR-04）。
+    #[must_use]
+    pub fn with_uv_vis_spectrum(mut self, spectrum: UvVisSpectrum) -> Self {
+        self.uv_vis_spectrum = Some(spectrum);
         self
     }
 

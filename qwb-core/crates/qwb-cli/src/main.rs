@@ -496,6 +496,22 @@ fn execute_job(input: &JobInput, task_id: &str, out_root: &Path) -> CliResult<f6
         );
     }
     write_visual_artifacts(&root, input, &result, &task_dir)?;
+    if let Some(spectrum) = &result.uv_vis_spectrum {
+        // PR-04：完整展宽曲线进 `artifacts/`（K3 允许 `artifacts/**` 自由形态）；
+        // `result.json` 里同时带一份点集，读结果的人不必依赖 CSV 的格式。
+        let mut csv = String::from("energy_ev,intensity\n");
+        for [energy, intensity] in &spectrum.points {
+            csv.push_str(&format!("{energy:.6},{intensity:.8e}\n"));
+        }
+        std::fs::write(task_dir.join("artifacts").join("spectrum.csv"), csv)
+            .map_err(|e| CliError::internal(format!("cannot write spectrum.csv: {e}")))?;
+        println!(
+            "spectrum {} ({} points, HWHM = {:.3} eV)",
+            task_dir.join("artifacts").join("spectrum.csv").display(),
+            spectrum.points.len(),
+            spectrum.gaussian_hwhm_ev
+        );
+    }
     println!("scf     converged = {}", result.scf_converged);
     Ok(result.energy_hartree)
 }

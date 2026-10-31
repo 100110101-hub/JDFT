@@ -47,6 +47,7 @@ from .builder import MoleculeBuilder
 from .datapanel import DataPanel
 from .logview import LogView
 from .scene_panel import Scene3DPanel
+from .spectrum_panel import SpectrumPanel
 from .model import GuiProject
 from .runner import SchedulerBridge
 
@@ -202,7 +203,12 @@ class MainWindow(QMainWindow):
         self.load_result_button = QPushButton("打开结果目录…")
         self.load_result_button.clicked.connect(self.reload_result_dir)
         layout.addWidget(self.load_result_button)
-        layout.addStretch(1)
+        # PR-04：UV/Vis 谱。没有 `uv_vis_spectrum` 块的结果目录会显示「没有谱」，
+        # 不隐藏面板（隐藏会让人以为界面坏了）。
+        self.spectrum_panel = SpectrumPanel()
+        self.spectrum_label = QLabel("UV/Vis：—")
+        layout.addWidget(self.spectrum_label)
+        layout.addWidget(self.spectrum_panel, 1)
         self._result_root: Path | None = None
         return panel
 
@@ -401,6 +407,19 @@ class MainWindow(QMainWindow):
         self.env_label.setText(
             f"env.json：rustc {directory.env.rustc_version}，threads {directory.env.threads}"
         )
+        loaded = self.spectrum_panel.load_task_dir(Path(self._result_root))
+        peaks = self.spectrum_panel.peak_energies_ev()
+        if loaded:
+            self.spectrum_label.setText(
+                "UV/Vis：{} 个采样点，{} 个峰（{:.2f}–{:.2f} eV）".format(
+                    len(self.spectrum_panel.spectrum.points),
+                    len(peaks),
+                    self.spectrum_panel.spectrum.points[0][0],
+                    self.spectrum_panel.spectrum.points[-1][0],
+                )
+            )
+        else:
+            self.spectrum_label.setText("UV/Vis：这份结果没有谱（旧结果目录 / 未算激发态）")
 
     # -- 生命周期 -----------------------------------------------------------
 

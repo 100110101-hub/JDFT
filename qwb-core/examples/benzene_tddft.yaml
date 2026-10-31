@@ -1,0 +1,54 @@
+# M4 / RS-02 / PR-04：苯 / STO-3G 的 TDA（= CIS）激发态 + UV/Vis 谱。
+#
+# 与 `h2o_tddft.yaml` 同一份选项，只换分子与基组：PR-04 的判据要求「H2O/苯的谱峰位置
+# 与 RS-02 一致」，两个体系都要能跑出谱。几何取 D6h 的苯（C–C 1.397 Å、C–H 1.084 Å）。
+#
+# 运行：qwb props examples/benzene_tddft.yaml
+# 结果：results/<名字>/result.json 的 `excited_states` 与 `uv_vis_spectrum` 块，
+#       展宽曲线在 artifacts/spectrum.csv。
+molecule:
+  atoms:
+    - symbol: C
+      position_angstrom: [1.397, 0.0, 0.0]
+    - symbol: C
+      position_angstrom: [0.6985, 1.2100, 0.0]
+    - symbol: C
+      position_angstrom: [-0.6985, 1.2100, 0.0]
+    - symbol: C
+      position_angstrom: [-1.397, 0.0, 0.0]
+    - symbol: C
+      position_angstrom: [-0.6985, -1.2100, 0.0]
+    - symbol: C
+      position_angstrom: [0.6985, -1.2100, 0.0]
+    - symbol: H
+      position_angstrom: [2.481, 0.0, 0.0]
+    - symbol: H
+      position_angstrom: [1.2405, 2.1487, 0.0]
+    - symbol: H
+      position_angstrom: [-1.2405, 2.1487, 0.0]
+    - symbol: H
+      position_angstrom: [-2.481, 0.0, 0.0]
+    - symbol: H
+      position_angstrom: [-1.2405, -2.1487, 0.0]
+    - symbol: H
+      position_angstrom: [1.2405, -2.1487, 0.0]
+  charge: 0
+  multiplicity: 1
+basis_name: sto-3g
+method_name: hf
+grid_level: normal
+solvent: vacuum
+jobtype: sp
+options:
+  scf_max_iter: 200
+  scf_energy_threshold_hartree: 1.0e-11
+  scf_density_threshold: 1.0e-9
+  diis_history: 8
+  threads: 0
+  max_opt_steps: 100
+  opt_gradient_threshold_hartree_per_bohr: 4.5e-4
+  freq_step_angstrom: 0.01
+  ecp_name: null
+  excited_states:
+    n_states: 5
+    method: tda

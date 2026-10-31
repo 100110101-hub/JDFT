@@ -44,5 +44,5 @@ pub use properties::{
 };
 pub use registry::Registry;
 pub use reporter::Reporter;
-pub use result::{DataSnapshot, EnvInfo, JobResult};
+pub use result::{DataSnapshot, EnvInfo, JobResult, UvVisSpectrum};
 pub use solvation::{SolvationResult, SolventModel};
