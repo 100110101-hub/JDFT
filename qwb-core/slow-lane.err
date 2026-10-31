@@ -2,284 +2,285 @@
     Blocking waiting for file lock on package cache
     Blocking waiting for file lock on package cache
     Blocking waiting for file lock on package cache
-    Finished `test` profile [optimized + debuginfo] target(s) in 0.42s
+    Finished `test` profile [optimized + debuginfo] target(s) in 0.43s
 ────────────
- Nextest run ID 038b31ca-4e06-475c-a05c-70d089a2c22a with nextest profile: default
-    Starting 275 tests across 146 binaries (224 tests skipped)
-        PASS [   0.018s] (  1/275) qwb-basis::d01_basis_layer cartesian_component_ordering_is_fixed
-        PASS [   0.024s] (  2/275) qwb-basis spherical::tests::d_transform_has_no_s_component
-        PASS [   0.038s] (  3/275) qwb-basis spherical::tests::low_angular_momentum_is_the_identity
-        PASS [   0.044s] (  4/275) qwb-basis::d01_basis_layer angular_comes_only_from_the_data
-        PASS [   0.038s] (  5/275) qwb-basis::d01_basis_layer every_contraction_is_normalized_to_one
-        PASS [   0.045s] (  6/275) qwb-basis::d01_basis_layer l2_claim_is_checked_not_trusted
-        PASS [   0.031s] (  7/275) qwb-basis::f01_f_transform f_has_the_ten_cubic_components
-        PASS [   0.030s] (  8/275) qwb-basis::f01_f_transform f_subspace_is_the_l3_space
-        PASS [   0.051s] (  9/275) qwb-cli::d02_verify_regression verify_reports_all_files_in_one_run
-        PASS [   0.207s] ( 10/275) qwb-cli::d02_verify_regression six_bad_files_exit_3_with_the_specified_code
-        PASS [   0.394s] ( 11/275) qwb-cli::t07_inspect_env inspect_exits_three_when_env_json_is_missing
-        PASS [   0.023s] ( 12/275) qwb-cli::bin/qwb tests::broken_input_yaml_is_input_error
-        PASS [   0.019s] ( 13/275) qwb-cli::bin/qwb tests::phase2_subcommands_are_declared_but_explicitly_unimplemented
-        PASS [   0.023s] ( 14/275) qwb-cli::bin/qwb tests::valid_input_yaml_loads
-        PASS [   0.017s] ( 15/275) qwb-engine env::tests::iso8601_conversion_is_correct
-        PASS [   0.640s] ( 16/275) qwb-cli::p08_replay replay_rejects_a_tampered_result
-        PASS [   0.745s] ( 17/275) qwb-cli::t07_batch_recovery batch_resumes_queued_tasks_and_reports_interrupted_ones
-        PASS [   0.320s] ( 18/275) qwb-engine::f01_hessian_h2 h2_hessian_has_one_vibrational_mode_and_matches_the_curvature
-        PASS [   0.027s] ( 19/275) qwb-engine::fx01_tau_engine consistent_declarations_are_accepted
-        PASS [   0.030s] ( 20/275) qwb-engine::fx01_tau_engine implementation_reads_tau_but_data_does_not_declare_it_is_rejected
-        PASS [   0.457s] ( 21/275) qwb-engine::f02_thermochemistry h2_thermochemistry_is_the_right_size
-        PASS [   0.586s] ( 22/275) qwb-engine::f02_ir h2_stretch_is_ir_inactive
-        PASS [   2.947s] ( 23/275) qwb-engine::g01_analytic_pbe pbe_analytic_gradient_matches_numerical
-        PASS [   4.110s] ( 24/275) qwb-engine::g01_analytic_water analytic_gradient_matches_numerical_for_water
-        PASS [   0.309s] ( 25/275) qwb-engine::kv_phase2_options both_mp2_kinds_are_wired_now
-        PASS [   0.052s] ( 26/275) qwb-engine::kv_phase2_options numerics_path_selection_is_rejected_with_its_wp
-        PASS [   0.359s] ( 27/275) qwb-engine::kv_phase2_options phase1_equivalent_options_are_not_rejected
-        PASS [   0.027s] ( 28/275) qwb-engine::kv_phase2_options result_blocks_round_trip_through_the_k2_types
-        PASS [   2.035s] ( 29/275) qwb-engine::g01_numeric_gradient gradient_of_h2_vanishes_at_the_minimum_and_points_the_right_way
-        PASS [   0.057s] ( 30/275) qwb-engine::rs02_tda_engine tddft_and_dft_references_are_rejected
-        PASS [   0.267s] ( 31/275) qwb-engine::rs08_multipoles_engine rs08_engine_emits_the_quadrupole
-        PASS [   0.441s] ( 32/275) qwb-engine::rs02_tda_engine cis_and_tda_agree_at_the_engine_level
-        PASS [   5.765s] ( 33/275) qwb-engine::g01_analytic_pbe analytic_gradient_is_closer_than_the_numerical_scatter
-        PASS [   0.045s] ( 34/275) qwb-engine::sc01b_uks_engine uks_is_single_point_only_for_now
-        PASS [   0.041s] ( 35/275) qwb-engine::sc01b_uks_engine uks_rejects_hartree_fock
-        PASS [   0.331s] ( 36/275) qwb-engine::sc01_uhf_engine uhf_single_point_lands_energy_and_spin_in_the_result
-        PASS [   0.452s] ( 37/275) qwb-engine::sc01_uhf_engine closed_shell_uhf_matches_the_closed_shell_path
-        PASS [   5.390s] ( 38/275) qwb-engine::sc02_uhf_optimisation sc02_open_shell_optimisation_runs_and_keeps_the_spin
-        PASS [   0.596s] ( 39/275) qwb-engine::sc04_mp2_engine mp2_correlation_is_attached_to_the_job_result
-        PASS [   0.043s] ( 40/275) qwb-engine::sc04_mp2_engine mp2_with_opt_is_rejected
-        PASS [  13.471s] ( 41/275) qwb-cli::t8_opt_cli opt_job_writes_a_k3_result_directory_with_optimisation_artifacts
-        PASS [   0.028s] ( 42/275) qwb-engine::sc05_rimp2_engine ri_mp2_without_aux_basis_is_an_input_error
-        PASS [   1.195s] ( 43/275) qwb-engine::sc05_rimp2_engine ri_mp2_lands_energy_aux_basis_and_fitting_error
-        PASS [   2.107s] ( 44/275) qwb-engine::sv01_cosmo_scf sv01_engine_emits_the_k8_solvation_block
-        PASS [  11.620s] ( 45/275) qwb-engine::sc02_uks_skeleton_gradient bisect_uks_skeleton
-        PASS [   3.147s] ( 46/275) qwb-engine::sv01_cosmo_scf sv01_solvation_energy_is_stable_against_the_tessera_count
-        PASS [   0.811s] ( 47/275) qwb-engine::sv01_solvation_variational sv01_solvation_operator_is_the_density_derivative
-        PASS [   2.170s] ( 48/275) qwb-engine::sv01_cosmo_scf sv01_water_solvation_energy_against_experiment
-        PASS [   1.097s] ( 49/275) qwb-engine::t03_optimize hf_sto3g_h2_optimises_to_the_experimental_bond
-        PASS [  12.249s] ( 50/275) qwb-engine::sv01_cosmo_scf sv01_methanol_solvation_energy_against_experiment
-        PASS [   0.095s] ( 51/275) qwb-engine::t5_ecp optimisation_with_ecp_is_refused
-        PASS [   5.849s] ( 52/275) qwb-engine::t03_optimize water_takes_a_downhill_step
-        PASS [   0.045s] ( 53/275) qwb-engine::t8_opt_jobtype freq_is_refused_explicitly
-        PASS [  14.902s] ( 54/275) qwb-engine::t5_ecp cuh_lanl2dz_single_point_converges
-        PASS [   0.284s] ( 55/275) qwb-gpu::ex03_gemm availability_probe_never_panics
-        PASS [   0.016s] ( 56/275) qwb-gpu::ex03_gemm gemm_rejects_bad_shapes
-        PASS [   0.300s] ( 57/275) qwb-gpu::ex03_ri_j ri_j_matches_the_naive_contraction
-        PASS [   0.354s] ( 58/275) qwb-gpu::ex03_ri_j ri_j_reports_a_measured_speedup
-        PASS [  10.476s] ( 59/275) qwb-engine::t6_b3lyp_gradient b3lyp_analytic_gradient_matches_finite_differences
-        PASS [   0.015s] ( 60/275) qwb-gpu::ex03_t1 t1_reports_unavailable_instead_of_panicking_on_bad_shapes
-        PASS [   0.319s] ( 61/275) qwb-gpu::ex03_t1 t1_gemm_matches_the_naive_contraction
-        PASS [   0.042s] ( 62/275) qwb-grid::x03_grid atomic_grid_has_radial_times_angular_points
-        PASS [   0.031s] ( 63/275) qwb-grid::x03_grid lebedev_is_refused_instead_of_substituted
-        PASS [   0.341s] ( 64/275) qwb-grid::x03_grid all_grid_coordinates_and_weights_are_finite
-        PASS [   0.060s] ( 65/275) qwb-grid::x03_grid uniform_electron_gas_limit_passes
-        PASS [   0.033s] ( 66/275) qwb-grid::x03_weights atomic_grid_integrates_gaussians_accurately
-        PASS [   0.045s] ( 67/275) qwb-grid::x04_manager a_failed_switch_keeps_the_current_grid
-        PASS [   0.015s] ( 68/275) qwb-integrals boys::tests::branches_agree_around_the_crossover
-        PASS [   0.015s] ( 69/275) qwb-integrals boys::tests::f0_matches_the_erf_closed_form
-        PASS [   0.062s] ( 70/275) qwb-grid::x04_manager switching_level_releases_the_old_grid
-        PASS [   0.015s] ( 71/275) qwb-integrals boys::tests::large_x_f1_matches_its_closed_form
-        PASS [   0.014s] ( 72/275) qwb-integrals boys::tests::zero_argument_is_the_exact_limit
-        PASS [   0.025s] ( 73/275) qwb-integrals::d02_one_electron conversion_factor_is_the_expected_one
-        PASS [   0.034s] ( 74/275) qwb-integrals::d02_one_electron h2_sto3g_one_electron_matches_closed_form
-        PASS [   0.021s] ( 75/275) qwb-integrals::d02_one_electron normalized_same_center_primitives_have_unit_overlap
-        PASS [   0.019s] ( 76/275) qwb-integrals::d02_one_electron pure_components_have_the_kinetic_identity
-        PASS [   0.043s] ( 77/275) qwb-integrals::d02_one_electron water_integrals_are_complete_and_symmetric
-        PASS [   0.036s] ( 78/275) qwb-integrals::d03_two_electron h2_sto3g_two_electron_matches_the_analytic_value
-        PASS [   0.017s] ( 79/275) qwb-integrals::i02_nuclear_limit nuclear_attraction_is_symmetric_in_the_two_centres
-        PASS [   0.020s] ( 80/275) qwb-integrals::i03_general_l d_type_integrals_match
-        PASS [   0.058s] ( 81/275) qwb-integrals::d03_two_electron two_electron_handles_p_shells
-        PASS [   0.017s] ( 82/275) qwb-integrals::i03_general_l p_type_integrals_match
-        PASS [   0.016s] ( 83/275) qwb-integrals::i03_general_l ssss_matches_the_closed_form
-        PASS [   0.017s] ( 84/275) qwb-integrals::i03_oracle odd_components_vanish_for_a_collinear_symmetric_system
-        PASS [   0.017s] ( 85/275) qwb-integrals::i03_oracle oracle_matches_the_closed_form_for_s_functions
-        PASS [   0.015s] ( 86/275) qwb-integrals::i03_oracle oracle_vanishes_under_a_rigid_translation
-        PASS [   0.038s] ( 87/275) qwb-integrals::i04_threads the_default_entry_point_matches_single_thread_too
-        PASS [   0.601s] ( 88/275) qwb-integrals::in01_ri_integrals three_center_is_symmetric_in_the_orbital_pair
-        PASS [   0.019s] ( 89/275) qwb-integrals::numerical_oracle kinetic_agrees_with_the_exact_oracle
-        PASS [   0.015s] ( 90/275) qwb-integrals::numerical_oracle nuclear_s_type_matches_the_textbook_formula_off_center
-        PASS [   0.018s] ( 91/275) qwb-integrals::numerical_oracle overlap_agrees_with_the_exact_oracle
-        PASS [   0.037s] ( 92/275) qwb-integrals::rs04_angmom rs04_angular_momentum_integrals_are_antisymmetric
-        PASS [   0.067s] ( 93/275) qwb-integrals::rs04_hyperfine rs04_hyperfine_integrals_are_antisymmetric
-        PASS [   0.025s] ( 94/275) qwb-io container::tests::corrupt_file_is_rejected
-        PASS [   0.026s] ( 95/275) qwb-io container::tests::export_is_byte_identical
-        PASS [   0.024s] ( 96/275) qwb-io container::tests::meta_is_always_readable_first
-        PASS [   0.018s] ( 97/275) qwb-io container::tests::path_traversal_and_absolute_names_are_rejected
-        PASS [   0.902s] ( 98/275) qwb-integrals::in01_ri_integrals ri_identity_residual_is_the_fit_error
-        PASS [   0.022s] ( 99/275) qwb-io container::tests::task_count_must_match_directories
-        PASS [   0.026s] (100/275) qwb-io layout::tests::complete_result_dir_passes
-        PASS [   0.023s] (101/275) qwb-io layout::tests::missing_directory_is_reported
-        PASS [   0.025s] (102/275) qwb-io layout::tests::missing_other_files_are_reported
-        PASS [   0.025s] (103/275) qwb-io task::tests::record_check_rejects_path_injection
-        PASS [   0.018s] (104/275) qwb-io task::tests::task_state_serde_is_lowercase
-        PASS [   0.030s] (105/275) qwb-io::example_container committed_example_container_opens_and_validates
-        PASS [   0.022s] (106/275) qwb-io::k3_schema_docs result_schema_matches_env_info
-        PASS [   0.017s] (107/275) qwb-io::k3_schema_docs state_machine_doc_matches_rust
-        PASS [   0.020s] (108/275) qwb-io::k3_state_machine every_legal_path_terminates_within_three_steps
-        PASS [   0.017s] (109/275) qwb-io::k3_state_machine serde_spelling_is_lowercase
-        PASS [   0.017s] (110/275) qwb-io::k3_state_machine transition_relation_equals_the_k3_graph
-        PASS [   0.025s] (111/275) qwb-io::p02_interop python_written_container_opens_and_validates
-        PASS [   0.025s] (112/275) qwb-io::p02_interop python_written_data_snapshot_is_valid
-        PASS [   0.018s] (113/275) qwb-linalg tests::backend_name_is_one_of_the_two
-        PASS [   0.032s] (114/275) qwb-io::p02_interop rust_canonical_rewrite_preserves_python_content
-        PASS [   0.015s] (115/275) qwb-linalg tests::row_major_roundtrip
-        PASS [  11.902s] (116/275) qwb-engine::t8_opt_jobtype opt_jobtype_optimises_and_reports_the_final_geometry
-        PASS [   0.019s] (117/275) qwb-linalg tests::vector_ops
-        PASS [   0.017s] (118/275) qwb-linalg::backend_consistency backend_is_reported
-        PASS [   0.021s] (119/275) qwb-linalg::backend_consistency cholesky_rejects_indefinite_matrices
-        PASS [   0.025s] (120/275) qwb-linalg::backend_consistency matmul_matches_hand_computation
-        PASS [   0.020s] (121/275) qwb-linalg::backend_consistency symmetric_eigenvalues_are_analytic
-        PASS [   0.050s] (122/275) qwb-props::rs04_diamagnetic rs04_diamagnetic_shielding_reproduces_the_free_atom_value
-        PASS [   0.279s] (123/275) qwb-props::rs04_diamagnetic rs04_diamagnetic_shielding_is_rotation_invariant
-        PASS [   0.263s] (124/275) qwb-props::rs08_quadrupole rs08_methane_quadrupole_vanishes_by_symmetry
-        PASS [   0.287s] (125/275) qwb-props::rs08_quadrupole rs08_quadrupole_trace_and_symmetry
-        PASS [   0.317s] (126/275) qwb-props::s06_dipole dipole_magnitude_is_physically_reasonable
-        PASS [   0.044s] (127/275) qwb-props::s06_dipole symmetric_molecules_have_zero_dipole
-        PASS [   0.018s] (128/275) qwb-props::sv01_cavity a_single_atom_has_the_closed_form_area_and_volume
-        PASS [   0.017s] (129/275) qwb-props::sv01_cavity analytic_caps_are_exactly_rotation_invariant
-        PASS [   0.590s] (130/275) qwb-props::rs08_quadrupole rs08_quadrupole_is_origin_invariant_for_co2
-        PASS [   0.064s] (131/275) qwb-props::s06_populations populations_are_byte_reproducible
-        PASS [   0.021s] (132/275) qwb-props::sv01_cavity rotation_deviation_shrinks_with_more_tessellation_points
-        PASS [   0.024s] (133/275) qwb-props::sv01_cavity surface_area_and_volume_are_invariant_under_rotation
-        PASS [   0.027s] (134/275) qwb-registry basis::tests::cartesian_and_spherical_differ_for_d_shells
-        PASS [   0.052s] (135/275) qwb-props::sv01_cosmo sv01_cosmo_energy_is_linear_in_the_dielectric_factor
-        PASS [   0.023s] (136/275) qwb-registry basis::tests::general_contraction_shares_exponents
-        PASS [   0.066s] (137/275) qwb-props::sv01_cosmo sv01_cosmo_agrees_with_the_analytic_born_energy
-        PASS [   0.022s] (138/275) qwb-registry common::tests::citation_needs_title_and_locator
-        PASS [   0.032s] (139/275) qwb-registry ecp::tests::check_catches_broken_parts
-        PASS [   0.043s] (140/275) qwb-registry ecp::tests::z_eff_must_equal_z_minus_n_core
-        PASS [   0.038s] (141/275) qwb-registry elements::tests::unknown_symbols_are_rejected
-        PASS [   0.039s] (142/275) qwb-registry functional::tests::kinetic_density_defaults_to_false_for_old_data
-        PASS [   0.040s] (143/275) qwb-registry functional::tests::pbe_is_valid
-        PASS [   0.040s] (144/275) qwb-registry grid::tests::check_catches_broken_grids
-        PASS [   0.039s] (145/275) qwb-registry molecule::tests::check_catches_broken_molecules
-        PASS [   0.040s] (146/275) qwb-registry molecule::tests::water_is_valid
-        PASS [   0.040s] (147/275) qwb-registry numerics::tests::equivalence_tolerance_must_be_tight_and_positive
-        PASS [   0.041s] (148/275) qwb-registry numerics::tests::level_with_zero_collocation_points_is_rejected
-        PASS [   0.040s] (149/275) qwb-registry registry::tests::check_catches_broken_manifests
-        PASS [   0.041s] (150/275) qwb-registry schema::tests::citation_and_license_are_required_by_the_schema
-        PASS [   0.039s] (151/275) qwb-registry schema::tests::deny_unknown_fields_becomes_additional_properties_false
-        PASS [   0.038s] (152/275) qwb-registry schema::tests::required_fields_are_declared
-        PASS [   0.036s] (153/275) qwb-registry sha256::tests::non_mapping_is_rejected
-        PASS [   0.036s] (154/275) qwb-registry sha256::tests::stamp_is_idempotent
-        PASS [   0.035s] (155/275) qwb-registry solvent::tests::phase1_solvent_files_still_load_without_the_new_fields
-        PASS [   0.034s] (156/275) qwb-registry solvent::tests::smd_requires_its_own_radii_and_refractive_index
-        PASS [   0.036s] (157/275) qwb-registry thirdparty::tests::absent_sources_file_is_not_an_error
-        PASS [   0.035s] (158/275) qwb-registry thirdparty::tests::normalize_folds_separators
-        PASS [   0.035s] (159/275) qwb-registry verify::tests::broken_yaml_reports_parse_error
-        PASS [   0.035s] (160/275) qwb-registry verify::tests::good_basis_file_passes
-        PASS [   0.036s] (161/275) qwb-registry verify::tests::missing_citation_is_rejected
-        PASS [   0.043s] (162/275) qwb-registry verify::tests::registry_verification_cross_checks_sha256
-        PASS [   0.035s] (163/275) qwb-registry verify::tests::warnings_do_not_fail_the_file
-        PASS [   0.038s] (164/275) qwb-registry::d01_loader bad_root_and_missing_manifest_are_data_errors
-        PASS [   0.034s] (165/275) qwb-registry::d01_loader empty_registry_opens
-        PASS [   0.044s] (166/275) qwb-registry::d01_loader load_pair_accepts_matching_pair
-        PASS [   0.039s] (167/275) qwb-registry::d01_loader malformed_yaml_is_a_data_error
-        PASS [   0.035s] (168/275) qwb-registry::d01_loader missing_entry_file_is_a_data_error
-        PASS [   0.028s] (169/275) qwb-registry::d01_loader registry_is_send_and_sync
-        PASS [   0.034s] (170/275) qwb-registry::d01_loader unknown_field_is_a_field_level_data_error
-        PASS [   0.031s] (171/275) qwb-registry::d03_sto3g_bse per_element_basis_function_counts
-        PASS [   0.040s] (172/275) qwb-registry::d03_sto3g_bse sto3g_is_registered_under_its_production_name
-        PASS [   0.034s] (173/275) qwb-registry::d04_def2_svp def2_svp_is_registered_under_its_production_name
-        PASS [   0.036s] (174/275) qwb-registry::d04_def2_svp internal_basis_handles_d_shells
-        PASS [   0.023s] (175/275) qwb-registry::d07_lanl2dz ecp_matches_the_bse_export
-        PASS [   0.020s] (176/275) qwb-registry::d07_lanl2dz z_eff_and_n_core_use_the_corrected_t5_numbers
-        PASS [   0.029s] (177/275) qwb-registry::d07_lanl2dz load_pair_is_the_only_pairing_entry_point
-        PASS [   0.026s] (178/275) qwb-registry::d09_svwn5 constants_are_bitwise_the_vwn5_parameterization
-        PASS [   0.029s] (179/275) qwb-registry::d09_svwn5 svwn5_is_registered_under_its_production_name
-        PASS [   0.036s] (180/275) qwb-registry::d13_grids ambiguous_or_missing_levels_are_data_errors
-        PASS [   0.037s] (181/275) qwb-registry::d13_grids four_levels_exist_with_the_frozen_parameters
-        PASS [   0.028s] (182/275) qwb-registry::d16_thirdparty absent_non_third_party_file_is_a_hard_error
-        PASS [   0.031s] (183/275) qwb-registry::d16_thirdparty malformed_sources_json_is_an_error
-        PASS [   0.033s] (184/275) qwb-registry::d16_thirdparty verify_reports_missing_third_party_per_file
-        PASS [   0.034s] (185/275) qwb-registry::kv04_numerics registry_loads_numerics_and_exposes_it
-        PASS [   0.036s] (186/275) qwb-registry::kv04_numerics shipped_numerics_data_is_valid
-        PASS [   0.122s] (187/275) qwb-registry::da04_solvents da04_a_solvent_without_a_license_fails_to_load
-        PASS [   0.098s] (188/275) qwb-response::rs01_hessian_operator orbital_hessian_diagonal_matches_the_energy_second_derivative
-        PASS [   0.109s] (189/275) qwb-response::rs01_polarizability cphf_is_deterministic
-        PASS [   0.148s] (190/275) qwb-response::rs02_tda_acceptance tda_excitations_match_pyscf_for_water_sto3g
-        PASS [   0.206s] (191/275) qwb-response::rs01_polarizability static_polarizability_matches_finite_field_for_sto3g
-        PASS [   0.190s] (192/275) qwb-response::rs02_tda_acceptance cis_and_tda_are_the_same_equations_for_an_hf_reference
-        PASS [   0.933s] (193/275) qwb-response::rs03_tda_formaldehyde formaldehyde_tda_matches_pyscf
-        PASS [   0.972s] (194/275) qwb-scf guess::tests::multiplicities_match_the_periodic_table_ground_states
-        PASS [  37.248s] (195/275) qwb-engine::sc02_uks_gradient_o2 sc02_uks_gradient_matches_numerical_for_o2
-        PASS [   3.133s] (196/275) qwb-scf::d10_pbe_scf pbe_runs_end_to_end_and_lda_is_unchanged
-        PASS [   2.756s] (197/275) qwb-scf::d12_hybrid full_mixing_with_zero_dft_exchange_reproduces_hf
-        PASS [   9.241s] (198/275) qwb-response::vf01_tda_acetone acetone_tda_matches_the_benchmark_reference
-        PASS [   0.537s] (199/275) qwb-scf::fx01_tau_pipeline nonlinear_tau_term_converges_a_real_scf
-        PASS [   0.897s] (200/275) qwb-scf::fx01_tau_pipeline tau_linear_term_reproduces_the_kinetic_matrix
-        PASS [   6.161s] (201/275) qwb-scf::d12_hybrid zero_mixing_reproduces_pbe
-        PASS [   0.017s] (202/275) qwb-scf::g01_2e_primitive diag_d_ssss_slots
-        PASS [   0.300s] (203/275) qwb-scf::g01_analytic analytic_gradient_matches_numerical_for_h2
-        PASS [   0.077s] (204/275) qwb-scf::g01_components diag_gradient_components
-        PASS [   0.016s] (205/275) qwb-scf::g01_nuclear_derivative diag_nuclear_center_derivative
-        PASS [   0.052s] (206/275) qwb-scf::g01_pulay pulay_identity_holds_for_a_finite_displacement
-        PASS [   0.041s] (207/275) qwb-scf::gga_ao_gradient ao_gradients_match_finite_differences
-        PASS [   0.041s] (208/275) qwb-scf::gga_xc_gradient ao_hessian_matches_finite_differences
-        PASS [  10.683s] (209/275) qwb-scf::d12_b3lyp b3lyp_energy_decomposes_and_weights_are_linear
-        PASS [   3.403s] (210/275) qwb-scf::gga_xc_gradient xc_gradient_terms_match_finite_differences_for_b3lyp
-        PASS [   3.975s] (211/275) qwb-scf::i01_basis_ladder hf_energy_is_consistent_across_basis_sets
-        PASS [   1.195s] (212/275) qwb-scf::i05_ecp copper_d_channel_is_nonzero_and_matches_the_analytic_value
-        PASS [   0.034s] (213/275) qwb-scf::i05_ecp zero_ecp_is_the_identity_of_the_operator
-        PASS [  19.366s] (214/275) qwb-response::rs02_tda_benzene benzene_tda_matches_pyscf
-        PASS [   0.060s] (215/275) qwb-scf::laplacian_density ao_laplacian_matches_second_differences
-        PASS [   9.584s] (216/275) qwb-scf::fx02_m06_water m06_functionals_match_pyscf_on_water
-        PASS [   0.037s] (217/275) qwb-scf::s01_fock fock_matches_the_matrix_multiply_reference
-        PASS [   0.031s] (218/275) qwb-scf::s01_fock two_electron_energy_satisfies_the_rf_identity
-        PASS [   1.383s] (219/275) qwb-scf::in01_ri_fit ri_coulomb_energy_matches_pyscf_and_the_basis_error_is_recorded
-        PASS [   0.052s] (220/275) qwb-scf::s02_rks ao_values_are_finite_on_every_grid_point
-        PASS [   0.211s] (221/275) qwb-scf::s02_rks h2_scf_is_stable_against_a_tighter_threshold
-        PASS [   0.039s] (222/275) qwb-scf::s02_rks hf_sto3g_h2_matches_the_external_reference
-        PASS [   0.040s] (223/275) qwb-scf::s02_rks odd_electron_count_is_rejected
-        PASS [   0.021s] (224/275) qwb-scf::s03_diis diis_commutator_vanishes_for_commuting_matrices
-        PASS [   0.087s] (225/275) qwb-scf::s03_diis diis_cuts_the_iteration_count_on_a_stiff_case
-        PASS [   0.020s] (226/275) qwb-scf::s03_diis diis_needs_two_vectors_before_extrapolating
-        PASS [   2.606s] (227/275) qwb-scf::i05_ecp off_centre_contributions_converge_with_the_quadrature
-        PASS [   0.048s] (228/275) qwb-scf::s05_checkpoint checkpoint_round_trips_through_json
-        PASS [   0.249s] (229/275) qwb-scf::sc01_uhf electron_counts_are_consistent_with_the_densities
-        PASS [   0.184s] (230/275) qwb-scf::sc01_uhf o2_triplet_reaches_the_variational_minimum_with_the_atomic_guess
-        PASS [   0.088s] (231/275) qwb-scf::sc01_uhf oh_doublet_matches_the_external_reference_including_contamination
-        PASS [   0.033s] (232/275) qwb-scf::sc01_uhf uhf_reproduces_rhf_for_a_closed_shell_molecule
-        PASS [   0.517s] (233/275) qwb-scf::sc01b_uks closed_shell_uks_matches_rks
-        PASS [   2.948s] (234/275) qwb-scf::s02_grid_convergence adjacent_grid_levels_agree_on_the_energy
-        PASS [   8.477s] (235/275) qwb-scf::lyp_variational lyp_potential_is_the_variational_derivative
-        PASS [   0.131s] (236/275) qwb-scf::sc01b_uks unsupported_functionals_are_rejected_not_silently_wrong
-        PASS [   8.504s] (237/275) qwb-scf::s03_diis_water diis_makes_water_pbe_converge
-        PASS [   2.801s] (238/275) qwb-scf::sc02_uhf_gradient sc02_uhf_gradient_reduces_to_the_closed_shell_formula
-        PASS [   4.432s] (239/275) qwb-scf::sc04_mp2 mp2_correlation_is_monotone_along_the_basis_ladder
-        PASS [  18.346s] (240/275) qwb-scf::sc01b_uks uks_matches_pyscf_for_o2_and_oh_row3
-        PASS [   4.939s] (241/275) qwb-scf::sc04_mp2 mp2_correlation_matches_pyscf_for_water
-        PASS [   1.216s] (242/275) qwb-scf::sc05_rimp2 ri_mp2_matches_canonical_and_pyscf_for_water
-        PASS [   0.206s] (243/275) qwb-scf::t01_reference registered_reference_values_are_reproduced
-        PASS [  15.636s] (244/275) qwb-scf::sc02_uhf_gradient sc02_uhf_gradient_matches_numerical_for_o2
-        PASS [   0.077s] (245/275) qwb-scf::t02_water_hf h2o_sto3g_hf_matches_the_external_reference
-        PASS [   8.428s] (246/275) qwb-scf::t02_h2o_def2svp h2o_def2svp_pbe_single_point
-        PASS [   0.323s] (247/275) qwb-scf::t06_reference cccbdb_sto3g_b3lyp_h2_agrees
-        PASS [   0.017s] (248/275) qwb-xc gga_spin::tests::derivatives_match_central_differences
-        PASS [   0.016s] (249/275) qwb-xc::d10_pbe pbe_derivatives_match_finite_differences
-        PASS [   0.015s] (250/275) qwb-xc::d10_pbe pbe_reduces_to_lda_when_sigma_vanishes
-        PASS [   0.019s] (251/275) qwb-xc::d11_b88 derivatives_match_finite_differences
-        PASS [   0.016s] (252/275) qwb-xc::d11_b88 sigma_to_zero_is_slater
-        PASS [   0.017s] (253/275) qwb-xc::d11_b88_sigma_zero sigma_zero_derivatives_are_finite
-        PASS [   0.017s] (254/275) qwb-xc::d11_lyp three_channel_derivatives_match_finite_differences
-        PASS [   0.018s] (255/275) qwb-xc::d12_weights a_half_weighted_exchange_gives_half_the_exchange_energy
-        PASS [   0.017s] (256/275) qwb-xc::fx01_tau_channel existing_terms_zero_the_tau_channel
-        PASS [   0.015s] (257/275) qwb-xc::fx01_tau_channel missing_tau_is_an_error_not_a_silent_zero
-        PASS [   0.015s] (258/275) qwb-xc::fx01_tau_channel tau_derivatives_match_central_differences
-        PASS [   0.015s] (259/275) qwb-xc::fx01_tau_channel terms_require_tau_helper_is_consistent
-        PASS [   0.018s] (260/275) qwb-xc::fx02_m06_exchange m06_2x_correlation_matches_libxc
-        PASS [   0.015s] (261/275) qwb-xc::fx02_m06_exchange m06_2x_series_is_complementary_to_the_exact_exchange
-        PASS [   0.015s] (262/275) qwb-xc::fx02_m06_exchange m06_l_exchange_matches_libxc
-        PASS [   0.017s] (263/275) qwb-xc::sc01b_spin_lda correlation_energy_increases_with_polarization
-        PASS [   0.014s] (264/275) qwb-xc::sc01b_spin_lda ferromagnetic_limit_uses_the_ferro_parameter_set
-        PASS [   0.015s] (265/275) qwb-xc::sc01b_spin_lda zero_polarization_reduces_to_the_closed_shell_value
-        PASS [   0.018s] (266/275) qwb-xc::sc01b_spin_xc_pointwise pbe_correlation_at_zero_sigma_matches_pw92
-        PASS [   0.016s] (267/275) qwb-xc::sc01b_spin_xc_pointwise pbe_exchange_matches_libxc
-        PASS [   0.015s] (268/275) qwb-xc::sc01b_spin_xc_pointwise unpolarized_spin_matches_the_closed_shell_path
-        PASS [   0.017s] (269/275) qwb-xc::x01_x02_lda batch_interface_handles_many_points_at_once
-        PASS [   0.014s] (270/275) qwb-xc::x01_x02_lda shapes_are_checked
-        PASS [   0.014s] (271/275) qwb-xc::x01_x02_lda svwn5_correlation_reproduces_the_ceperley_alder_point
-        PASS [   0.014s] (272/275) qwb-xc::x01_x02_lda x02_svwn5_derivative_passes_the_finite_difference_gate
-        PASS [  32.766s] (273/275) qwb-scf::sc01b_uks uks_matches_pyscf_for_o2_and_oh_row1
-        PASS [  21.412s] (274/275) qwb-scf::scratch_blypmin blyp_minimises
-        PASS [  29.357s] (275/275) qwb-scf::t06_n2_multistart n2_matches_cccbdb_with_multistart
+ Nextest run ID fb2e331a-33ae-49ce-99ee-5ba9325ff477 with nextest profile: default
+    Starting 276 tests across 147 binaries (225 tests skipped)
+        PASS [   0.019s] (  1/276) qwb-basis::d01_basis_layer cartesian_component_ordering_is_fixed
+        PASS [   0.025s] (  2/276) qwb-basis spherical::tests::low_angular_momentum_is_the_identity
+        PASS [   0.036s] (  3/276) qwb-basis spherical::tests::d_transform_has_no_s_component
+        PASS [   0.043s] (  4/276) qwb-basis::d01_basis_layer angular_comes_only_from_the_data
+        PASS [   0.037s] (  5/276) qwb-basis::d01_basis_layer every_contraction_is_normalized_to_one
+        PASS [   0.030s] (  6/276) qwb-basis::f01_f_transform f_has_the_ten_cubic_components
+        PASS [   0.047s] (  7/276) qwb-basis::d01_basis_layer l2_claim_is_checked_not_trusted
+        PASS [   0.029s] (  8/276) qwb-basis::f01_f_transform f_subspace_is_the_l3_space
+        PASS [   0.059s] (  9/276) qwb-cli::d02_verify_regression verify_reports_all_files_in_one_run
+        PASS [   0.228s] ( 10/276) qwb-cli::d02_verify_regression six_bad_files_exit_3_with_the_specified_code
+        PASS [   0.417s] ( 11/276) qwb-cli::t07_inspect_env inspect_exits_three_when_env_json_is_missing
+        PASS [   0.027s] ( 12/276) qwb-cli::bin/qwb tests::broken_input_yaml_is_input_error
+        PASS [   0.020s] ( 13/276) qwb-cli::bin/qwb tests::phase2_subcommands_are_declared_but_explicitly_unimplemented
+        PASS [   0.025s] ( 14/276) qwb-cli::bin/qwb tests::valid_input_yaml_loads
+        PASS [   0.018s] ( 15/276) qwb-engine env::tests::iso8601_conversion_is_correct
+        PASS [   0.648s] ( 16/276) qwb-cli::p08_replay replay_rejects_a_tampered_result
+        PASS [   0.759s] ( 17/276) qwb-cli::t07_batch_recovery batch_resumes_queued_tasks_and_reports_interrupted_ones
+        PASS [   0.309s] ( 18/276) qwb-engine::f01_hessian_h2 h2_hessian_has_one_vibrational_mode_and_matches_the_curvature
+        PASS [   0.027s] ( 19/276) qwb-engine::fx01_tau_engine consistent_declarations_are_accepted
+        PASS [   0.029s] ( 20/276) qwb-engine::fx01_tau_engine implementation_reads_tau_but_data_does_not_declare_it_is_rejected
+        PASS [   0.564s] ( 21/276) qwb-engine::f02_ir h2_stretch_is_ir_inactive
+        PASS [   0.489s] ( 22/276) qwb-engine::f02_thermochemistry h2_thermochemistry_is_the_right_size
+        PASS [   3.047s] ( 23/276) qwb-engine::g01_analytic_pbe pbe_analytic_gradient_matches_numerical
+        PASS [   4.181s] ( 24/276) qwb-engine::g01_analytic_water analytic_gradient_matches_numerical_for_water
+        PASS [   0.319s] ( 25/276) qwb-engine::kv_phase2_options both_mp2_kinds_are_wired_now
+        PASS [   0.050s] ( 26/276) qwb-engine::kv_phase2_options numerics_path_selection_is_rejected_with_its_wp
+        PASS [   0.354s] ( 27/276) qwb-engine::kv_phase2_options phase1_equivalent_options_are_not_rejected
+        PASS [   0.033s] ( 28/276) qwb-engine::kv_phase2_options result_blocks_round_trip_through_the_k2_types
+        PASS [   2.061s] ( 29/276) qwb-engine::g01_numeric_gradient gradient_of_h2_vanishes_at_the_minimum_and_points_the_right_way
+        PASS [   0.054s] ( 30/276) qwb-engine::rs02_tda_engine tddft_and_dft_references_are_rejected
+        PASS [   0.247s] ( 31/276) qwb-engine::rs08_multipoles_engine rs08_engine_emits_the_quadrupole
+        PASS [   0.435s] ( 32/276) qwb-engine::rs02_tda_engine cis_and_tda_agree_at_the_engine_level
+        PASS [   5.749s] ( 33/276) qwb-engine::g01_analytic_pbe analytic_gradient_is_closer_than_the_numerical_scatter
+        PASS [   0.107s] ( 34/276) qwb-engine::sc01b_uks_engine uks_is_single_point_only_for_now
+        PASS [   0.045s] ( 35/276) qwb-engine::sc01b_uks_engine uks_rejects_hartree_fock
+        PASS [   0.376s] ( 36/276) qwb-engine::sc01_uhf_engine uhf_single_point_lands_energy_and_spin_in_the_result
+        PASS [   0.417s] ( 37/276) qwb-engine::sc01_uhf_engine closed_shell_uhf_matches_the_closed_shell_path
+        PASS [   5.370s] ( 38/276) qwb-engine::sc02_uhf_optimisation sc02_open_shell_optimisation_runs_and_keeps_the_spin
+        PASS [   0.530s] ( 39/276) qwb-engine::sc04_mp2_engine mp2_correlation_is_attached_to_the_job_result
+        PASS [   0.042s] ( 40/276) qwb-engine::sc04_mp2_engine mp2_with_opt_is_rejected
+        PASS [  13.744s] ( 41/276) qwb-cli::t8_opt_cli opt_job_writes_a_k3_result_directory_with_optimisation_artifacts
+        PASS [   1.181s] ( 42/276) qwb-engine::sc05_rimp2_engine ri_mp2_lands_energy_aux_basis_and_fitting_error
+        PASS [   0.026s] ( 43/276) qwb-engine::sc05_rimp2_engine ri_mp2_without_aux_basis_is_an_input_error
+        PASS [   2.102s] ( 44/276) qwb-engine::sv01_cosmo_scf sv01_engine_emits_the_k8_solvation_block
+        PASS [   3.297s] ( 45/276) qwb-engine::sv01_cosmo_scf sv01_solvation_energy_is_stable_against_the_tessera_count
+        PASS [  12.465s] ( 46/276) qwb-engine::sc02_uks_skeleton_gradient bisect_uks_skeleton
+        PASS [   0.977s] ( 47/276) qwb-engine::sv01_solvation_variational sv01_solvation_operator_is_the_density_derivative
+        PASS [   1.140s] ( 48/276) qwb-engine::t03_optimize hf_sto3g_h2_optimises_to_the_experimental_bond
+        PASS [   2.693s] ( 49/276) qwb-engine::sv01_cosmo_scf sv01_water_solvation_energy_against_experiment
+        PASS [  12.278s] ( 50/276) qwb-engine::sv01_cosmo_scf sv01_methanol_solvation_energy_against_experiment
+        PASS [   0.045s] ( 51/276) qwb-engine::t5_ecp optimisation_with_ecp_is_refused
+        PASS [   6.038s] ( 52/276) qwb-engine::t03_optimize water_takes_a_downhill_step
+        PASS [   0.044s] ( 53/276) qwb-engine::t8_opt_jobtype freq_is_refused_explicitly
+        PASS [  11.426s] ( 54/276) qwb-engine::t6_b3lyp_gradient b3lyp_analytic_gradient_matches_finite_differences
+        PASS [  15.785s] ( 55/276) qwb-engine::t5_ecp cuh_lanl2dz_single_point_converges
+        PASS [   0.015s] ( 56/276) qwb-gpu::ex03_gemm gemm_rejects_bad_shapes
+        PASS [   0.289s] ( 57/276) qwb-gpu::ex03_gemm availability_probe_never_panics
+        PASS [   0.300s] ( 58/276) qwb-gpu::ex03_ri_j ri_j_matches_the_naive_contraction
+        PASS [   0.318s] ( 59/276) qwb-gpu::ex03_ri_j ri_j_reports_a_measured_speedup
+        PASS [   0.016s] ( 60/276) qwb-gpu::ex03_t1 t1_reports_unavailable_instead_of_panicking_on_bad_shapes
+        PASS [   0.353s] ( 61/276) qwb-gpu::ex03_t1 t1_gemm_matches_the_naive_contraction
+        PASS [   0.034s] ( 62/276) qwb-grid::x03_grid atomic_grid_has_radial_times_angular_points
+        PASS [   0.033s] ( 63/276) qwb-grid::x03_grid lebedev_is_refused_instead_of_substituted
+        PASS [   0.058s] ( 64/276) qwb-grid::x03_grid uniform_electron_gas_limit_passes
+        PASS [   0.035s] ( 65/276) qwb-grid::x03_weights atomic_grid_integrates_gaussians_accurately
+        PASS [   0.045s] ( 66/276) qwb-grid::x04_manager a_failed_switch_keeps_the_current_grid
+        PASS [   0.404s] ( 67/276) qwb-grid::x03_grid all_grid_coordinates_and_weights_are_finite
+        PASS [   0.020s] ( 68/276) qwb-integrals boys::tests::branches_agree_around_the_crossover
+        PASS [   0.066s] ( 69/276) qwb-grid::x04_manager switching_level_releases_the_old_grid
+        PASS [   0.016s] ( 70/276) qwb-integrals boys::tests::f0_matches_the_erf_closed_form
+        PASS [   0.018s] ( 71/276) qwb-integrals boys::tests::large_x_f1_matches_its_closed_form
+        PASS [   0.015s] ( 72/276) qwb-integrals boys::tests::zero_argument_is_the_exact_limit
+        PASS [   0.023s] ( 73/276) qwb-integrals::d02_one_electron conversion_factor_is_the_expected_one
+        PASS [   0.019s] ( 74/276) qwb-integrals::d02_one_electron normalized_same_center_primitives_have_unit_overlap
+        PASS [   0.033s] ( 75/276) qwb-integrals::d02_one_electron h2_sto3g_one_electron_matches_closed_form
+        PASS [   0.033s] ( 76/276) qwb-integrals::d02_one_electron pure_components_have_the_kinetic_identity
+        PASS [   0.036s] ( 77/276) qwb-integrals::d02_one_electron water_integrals_are_complete_and_symmetric
+        PASS [   0.034s] ( 78/276) qwb-integrals::d03_two_electron h2_sto3g_two_electron_matches_the_analytic_value
+        PASS [   0.025s] ( 79/276) qwb-integrals::i02_nuclear_limit nuclear_attraction_is_symmetric_in_the_two_centres
+        PASS [   0.075s] ( 80/276) qwb-integrals::d03_two_electron two_electron_handles_p_shells
+        PASS [   0.020s] ( 81/276) qwb-integrals::i03_general_l d_type_integrals_match
+        PASS [   0.016s] ( 82/276) qwb-integrals::i03_general_l p_type_integrals_match
+        PASS [   0.019s] ( 83/276) qwb-integrals::i03_general_l ssss_matches_the_closed_form
+        PASS [   0.017s] ( 84/276) qwb-integrals::i03_oracle odd_components_vanish_for_a_collinear_symmetric_system
+        PASS [   0.017s] ( 85/276) qwb-integrals::i03_oracle oracle_matches_the_closed_form_for_s_functions
+        PASS [   0.015s] ( 86/276) qwb-integrals::i03_oracle oracle_vanishes_under_a_rigid_translation
+        PASS [   0.039s] ( 87/276) qwb-integrals::i04_threads the_default_entry_point_matches_single_thread_too
+        PASS [   0.648s] ( 88/276) qwb-integrals::in01_ri_integrals three_center_is_symmetric_in_the_orbital_pair
+        PASS [   0.019s] ( 89/276) qwb-integrals::numerical_oracle kinetic_agrees_with_the_exact_oracle
+        PASS [   0.016s] ( 90/276) qwb-integrals::numerical_oracle nuclear_s_type_matches_the_textbook_formula_off_center
+        PASS [   0.018s] ( 91/276) qwb-integrals::numerical_oracle overlap_agrees_with_the_exact_oracle
+        PASS [   0.042s] ( 92/276) qwb-integrals::rs04_angmom rs04_angular_momentum_integrals_are_antisymmetric
+        PASS [   0.090s] ( 93/276) qwb-integrals::rs04_hyperfine rs04_hyperfine_integrals_are_antisymmetric
+        PASS [   0.025s] ( 94/276) qwb-io container::tests::corrupt_file_is_rejected
+        PASS [   0.026s] ( 95/276) qwb-io container::tests::export_is_byte_identical
+        PASS [   0.023s] ( 96/276) qwb-io container::tests::meta_is_always_readable_first
+        PASS [   0.949s] ( 97/276) qwb-integrals::in01_ri_integrals ri_identity_residual_is_the_fit_error
+        PASS [   0.022s] ( 98/276) qwb-io container::tests::path_traversal_and_absolute_names_are_rejected
+        PASS [   0.031s] ( 99/276) qwb-io container::tests::task_count_must_match_directories
+        PASS [   0.029s] (100/276) qwb-io layout::tests::complete_result_dir_passes
+        PASS [   0.018s] (101/276) qwb-io layout::tests::missing_directory_is_reported
+        PASS [   0.026s] (102/276) qwb-io layout::tests::missing_other_files_are_reported
+        PASS [   0.025s] (103/276) qwb-io task::tests::record_check_rejects_path_injection
+        PASS [   0.019s] (104/276) qwb-io task::tests::task_state_serde_is_lowercase
+        PASS [   0.033s] (105/276) qwb-io::example_container committed_example_container_opens_and_validates
+        PASS [   0.024s] (106/276) qwb-io::k3_schema_docs result_schema_matches_env_info
+        PASS [   0.018s] (107/276) qwb-io::k3_schema_docs state_machine_doc_matches_rust
+        PASS [   0.020s] (108/276) qwb-io::k3_state_machine every_legal_path_terminates_within_three_steps
+        PASS [   0.016s] (109/276) qwb-io::k3_state_machine serde_spelling_is_lowercase
+        PASS [   0.018s] (110/276) qwb-io::k3_state_machine transition_relation_equals_the_k3_graph
+        PASS [   0.027s] (111/276) qwb-io::p02_interop python_written_container_opens_and_validates
+        PASS [   0.031s] (112/276) qwb-io::p02_interop python_written_data_snapshot_is_valid
+        PASS [   0.018s] (113/276) qwb-linalg tests::backend_name_is_one_of_the_two
+        PASS [   0.036s] (114/276) qwb-io::p02_interop rust_canonical_rewrite_preserves_python_content
+        PASS [   0.016s] (115/276) qwb-linalg tests::row_major_roundtrip
+        PASS [   0.021s] (116/276) qwb-linalg tests::vector_ops
+        PASS [   0.019s] (117/276) qwb-linalg::backend_consistency backend_is_reported
+        PASS [   0.018s] (118/276) qwb-linalg::backend_consistency cholesky_rejects_indefinite_matrices
+        PASS [   0.016s] (119/276) qwb-linalg::backend_consistency matmul_matches_hand_computation
+        PASS [   0.018s] (120/276) qwb-linalg::backend_consistency symmetric_eigenvalues_are_analytic
+        PASS [   0.053s] (121/276) qwb-props::rs04_diamagnetic rs04_diamagnetic_shielding_reproduces_the_free_atom_value
+        PASS [   0.170s] (122/276) qwb-props::rs04_diamagnetic rs04_diamagnetic_shielding_is_rotation_invariant
+        PASS [   0.193s] (123/276) qwb-props::rs08_quadrupole rs08_methane_quadrupole_vanishes_by_symmetry
+        PASS [  13.005s] (124/276) qwb-engine::t8_opt_jobtype opt_jobtype_optimises_and_reports_the_final_geometry
+        PASS [   0.321s] (125/276) qwb-props::rs08_quadrupole rs08_quadrupole_trace_and_symmetry
+        PASS [   0.101s] (126/276) qwb-props::s06_dipole dipole_magnitude_is_physically_reasonable
+        PASS [   0.045s] (127/276) qwb-props::s06_dipole symmetric_molecules_have_zero_dipole
+        PASS [   0.017s] (128/276) qwb-props::sv01_cavity a_single_atom_has_the_closed_form_area_and_volume
+        PASS [   0.471s] (129/276) qwb-props::rs08_quadrupole rs08_quadrupole_is_origin_invariant_for_co2
+        PASS [   0.016s] (130/276) qwb-props::sv01_cavity analytic_caps_are_exactly_rotation_invariant
+        PASS [   0.064s] (131/276) qwb-props::s06_populations populations_are_byte_reproducible
+        PASS [   0.027s] (132/276) qwb-props::sv01_cavity rotation_deviation_shrinks_with_more_tessellation_points
+        PASS [   0.018s] (133/276) qwb-props::sv01_cavity surface_area_and_volume_are_invariant_under_rotation
+        PASS [   0.033s] (134/276) qwb-registry basis::tests::cartesian_and_spherical_differ_for_d_shells
+        PASS [   0.061s] (135/276) qwb-props::sv01_cosmo sv01_cosmo_energy_is_linear_in_the_dielectric_factor
+        PASS [   0.025s] (136/276) qwb-registry basis::tests::general_contraction_shares_exponents
+        PASS [   0.070s] (137/276) qwb-props::sv01_cosmo sv01_cosmo_agrees_with_the_analytic_born_energy
+        PASS [   0.023s] (138/276) qwb-registry common::tests::citation_needs_title_and_locator
+        PASS [   0.032s] (139/276) qwb-registry ecp::tests::check_catches_broken_parts
+        PASS [   0.076s] (140/276) qwb-registry ecp::tests::z_eff_must_equal_z_minus_n_core
+        PASS [   0.082s] (141/276) qwb-registry elements::tests::unknown_symbols_are_rejected
+        PASS [   0.075s] (142/276) qwb-registry functional::tests::kinetic_density_defaults_to_false_for_old_data
+        PASS [   0.046s] (143/276) qwb-registry functional::tests::pbe_is_valid
+        PASS [   0.036s] (144/276) qwb-registry grid::tests::check_catches_broken_grids
+        PASS [   0.043s] (145/276) qwb-registry molecule::tests::check_catches_broken_molecules
+        PASS [   0.038s] (146/276) qwb-registry molecule::tests::water_is_valid
+        PASS [   0.039s] (147/276) qwb-registry numerics::tests::equivalence_tolerance_must_be_tight_and_positive
+        PASS [   0.041s] (148/276) qwb-registry numerics::tests::level_with_zero_collocation_points_is_rejected
+        PASS [   0.044s] (149/276) qwb-registry registry::tests::check_catches_broken_manifests
+        PASS [   0.046s] (150/276) qwb-registry schema::tests::citation_and_license_are_required_by_the_schema
+        PASS [   0.044s] (151/276) qwb-registry schema::tests::deny_unknown_fields_becomes_additional_properties_false
+        PASS [   0.041s] (152/276) qwb-registry schema::tests::required_fields_are_declared
+        PASS [   0.039s] (153/276) qwb-registry sha256::tests::non_mapping_is_rejected
+        PASS [   0.039s] (154/276) qwb-registry sha256::tests::stamp_is_idempotent
+        PASS [   0.040s] (155/276) qwb-registry solvent::tests::phase1_solvent_files_still_load_without_the_new_fields
+        PASS [   0.040s] (156/276) qwb-registry solvent::tests::smd_requires_its_own_radii_and_refractive_index
+        PASS [   0.041s] (157/276) qwb-registry thirdparty::tests::absent_sources_file_is_not_an_error
+        PASS [   0.041s] (158/276) qwb-registry thirdparty::tests::normalize_folds_separators
+        PASS [   0.040s] (159/276) qwb-registry verify::tests::broken_yaml_reports_parse_error
+        PASS [   0.041s] (160/276) qwb-registry verify::tests::good_basis_file_passes
+        PASS [   0.041s] (161/276) qwb-registry verify::tests::missing_citation_is_rejected
+        PASS [   0.046s] (162/276) qwb-registry verify::tests::registry_verification_cross_checks_sha256
+        PASS [   0.037s] (163/276) qwb-registry verify::tests::warnings_do_not_fail_the_file
+        PASS [   0.040s] (164/276) qwb-registry::d01_loader bad_root_and_missing_manifest_are_data_errors
+        PASS [   0.034s] (165/276) qwb-registry::d01_loader empty_registry_opens
+        PASS [   0.043s] (166/276) qwb-registry::d01_loader load_pair_accepts_matching_pair
+        PASS [   0.036s] (167/276) qwb-registry::d01_loader malformed_yaml_is_a_data_error
+        PASS [   0.034s] (168/276) qwb-registry::d01_loader missing_entry_file_is_a_data_error
+        PASS [   0.028s] (169/276) qwb-registry::d01_loader registry_is_send_and_sync
+        PASS [   0.035s] (170/276) qwb-registry::d01_loader unknown_field_is_a_field_level_data_error
+        PASS [   0.032s] (171/276) qwb-registry::d03_sto3g_bse per_element_basis_function_counts
+        PASS [   0.041s] (172/276) qwb-registry::d03_sto3g_bse sto3g_is_registered_under_its_production_name
+        PASS [   0.038s] (173/276) qwb-registry::d04_def2_svp def2_svp_is_registered_under_its_production_name
+        PASS [   0.038s] (174/276) qwb-registry::d04_def2_svp internal_basis_handles_d_shells
+        PASS [   0.022s] (175/276) qwb-registry::d07_lanl2dz ecp_matches_the_bse_export
+        PASS [   0.023s] (176/276) qwb-registry::d07_lanl2dz z_eff_and_n_core_use_the_corrected_t5_numbers
+        PASS [   0.030s] (177/276) qwb-registry::d07_lanl2dz load_pair_is_the_only_pairing_entry_point
+        PASS [   0.032s] (178/276) qwb-registry::d09_svwn5 constants_are_bitwise_the_vwn5_parameterization
+        PASS [   0.026s] (179/276) qwb-registry::d13_grids ambiguous_or_missing_levels_are_data_errors
+        PASS [   0.036s] (180/276) qwb-registry::d09_svwn5 svwn5_is_registered_under_its_production_name
+        PASS [   0.035s] (181/276) qwb-registry::d13_grids four_levels_exist_with_the_frozen_parameters
+        PASS [   0.028s] (182/276) qwb-registry::d16_thirdparty absent_non_third_party_file_is_a_hard_error
+        PASS [   0.028s] (183/276) qwb-registry::d16_thirdparty malformed_sources_json_is_an_error
+        PASS [   0.032s] (184/276) qwb-registry::d16_thirdparty verify_reports_missing_third_party_per_file
+        PASS [   0.036s] (185/276) qwb-registry::kv04_numerics registry_loads_numerics_and_exposes_it
+        PASS [   0.038s] (186/276) qwb-registry::kv04_numerics shipped_numerics_data_is_valid
+        PASS [   0.126s] (187/276) qwb-registry::da04_solvents da04_a_solvent_without_a_license_fails_to_load
+        PASS [   0.097s] (188/276) qwb-response::rs01_hessian_operator orbital_hessian_diagonal_matches_the_energy_second_derivative
+        PASS [   0.095s] (189/276) qwb-response::rs01_polarizability cphf_is_deterministic
+        PASS [   0.117s] (190/276) qwb-response::rs02_tda_acceptance tda_excitations_match_pyscf_for_water_sto3g
+        PASS [   0.169s] (191/276) qwb-response::rs02_tda_acceptance cis_and_tda_are_the_same_equations_for_an_hf_reference
+        PASS [   0.420s] (192/276) qwb-response::rs01_polarizability static_polarizability_matches_finite_field_for_sto3g
+        PASS [  35.434s] (193/276) qwb-engine::sc02_uks_gradient_o2 sc02_uks_gradient_matches_numerical_for_o2
+        PASS [   0.562s] (194/276) qwb-scf guess::tests::multiplicities_match_the_periodic_table_ground_states
+        PASS [   1.114s] (195/276) qwb-response::rs03_tda_formaldehyde formaldehyde_tda_matches_pyscf
+        PASS [   3.300s] (196/276) qwb-scf::d10_pbe_scf pbe_runs_end_to_end_and_lda_is_unchanged
+        PASS [   3.935s] (197/276) qwb-scf::d12_hybrid full_mixing_with_zero_dft_exchange_reproduces_hf
+        PASS [  10.094s] (198/276) qwb-response::vf01_tda_acetone acetone_tda_matches_the_benchmark_reference
+        PASS [   0.096s] (199/276) qwb-scf::fx01_tau_pipeline nonlinear_tau_term_converges_a_real_scf
+        PASS [   0.796s] (200/276) qwb-scf::fx01_tau_pipeline tau_linear_term_reproduces_the_kinetic_matrix
+        PASS [   6.348s] (201/276) qwb-scf::d12_hybrid zero_mixing_reproduces_pbe
+        PASS [   0.017s] (202/276) qwb-scf::g01_2e_primitive diag_d_ssss_slots
+        PASS [   0.311s] (203/276) qwb-scf::g01_analytic analytic_gradient_matches_numerical_for_h2
+        PASS [   0.094s] (204/276) qwb-scf::g01_components diag_gradient_components
+        PASS [  14.045s] (205/276) qwb-scf::d12_b3lyp b3lyp_energy_decomposes_and_weights_are_linear
+        PASS [   0.016s] (206/276) qwb-scf::g01_nuclear_derivative diag_nuclear_center_derivative
+        PASS [   0.036s] (207/276) qwb-scf::gga_ao_gradient ao_gradients_match_finite_differences
+        PASS [   0.054s] (208/276) qwb-scf::g01_pulay pulay_identity_holds_for_a_finite_displacement
+        PASS [   0.035s] (209/276) qwb-scf::gga_xc_gradient ao_hessian_matches_finite_differences
+        PASS [   3.249s] (210/276) qwb-scf::gga_xc_gradient xc_gradient_terms_match_finite_differences_for_b3lyp
+        PASS [   3.396s] (211/276) qwb-scf::i01_basis_ladder hf_energy_is_consistent_across_basis_sets
+        PASS [  19.690s] (212/276) qwb-response::rs02_tda_benzene benzene_tda_matches_pyscf
+        PASS [   0.031s] (213/276) qwb-scf::i05_ecp zero_ecp_is_the_identity_of_the_operator
+        PASS [   1.444s] (214/276) qwb-scf::i05_ecp copper_d_channel_is_nonzero_and_matches_the_analytic_value
+        PASS [   0.076s] (215/276) qwb-scf::in05_fock_parallel parallel_fock_is_bit_identical_to_the_serial_reference
+        PASS [   0.039s] (216/276) qwb-scf::laplacian_density ao_laplacian_matches_second_differences
+        PASS [   1.421s] (217/276) qwb-scf::in01_ri_fit ri_coulomb_energy_matches_pyscf_and_the_basis_error_is_recorded
+        PASS [   0.034s] (218/276) qwb-scf::s01_fock fock_matches_the_matrix_multiply_reference
+        PASS [   0.030s] (219/276) qwb-scf::s01_fock two_electron_energy_satisfies_the_rf_identity
+        PASS [  10.014s] (220/276) qwb-scf::fx02_m06_water m06_functionals_match_pyscf_on_water
+        PASS [   0.055s] (221/276) qwb-scf::s02_rks ao_values_are_finite_on_every_grid_point
+        PASS [   2.694s] (222/276) qwb-scf::i05_ecp off_centre_contributions_converge_with_the_quadrature
+        PASS [   0.039s] (223/276) qwb-scf::s02_rks hf_sto3g_h2_matches_the_external_reference
+        PASS [   0.039s] (224/276) qwb-scf::s02_rks odd_electron_count_is_rejected
+        PASS [   0.022s] (225/276) qwb-scf::s03_diis diis_commutator_vanishes_for_commuting_matrices
+        PASS [   0.087s] (226/276) qwb-scf::s03_diis diis_cuts_the_iteration_count_on_a_stiff_case
+        PASS [   0.232s] (227/276) qwb-scf::s02_rks h2_scf_is_stable_against_a_tighter_threshold
+        PASS [   0.023s] (228/276) qwb-scf::s03_diis diis_needs_two_vectors_before_extrapolating
+        PASS [   0.056s] (229/276) qwb-scf::s05_checkpoint checkpoint_round_trips_through_json
+        PASS [   0.273s] (230/276) qwb-scf::sc01_uhf electron_counts_are_consistent_with_the_densities
+        PASS [   0.183s] (231/276) qwb-scf::sc01_uhf o2_triplet_reaches_the_variational_minimum_with_the_atomic_guess
+        PASS [   0.106s] (232/276) qwb-scf::sc01_uhf oh_doublet_matches_the_external_reference_including_contamination
+        PASS [   0.036s] (233/276) qwb-scf::sc01_uhf uhf_reproduces_rhf_for_a_closed_shell_molecule
+        PASS [   0.525s] (234/276) qwb-scf::sc01b_uks closed_shell_uks_matches_rks
+        PASS [   2.948s] (235/276) qwb-scf::s02_grid_convergence adjacent_grid_levels_agree_on_the_energy
+        PASS [   8.852s] (236/276) qwb-scf::lyp_variational lyp_potential_is_the_variational_derivative
+        PASS [   0.126s] (237/276) qwb-scf::sc01b_uks unsupported_functionals_are_rejected_not_silently_wrong
+        PASS [   9.055s] (238/276) qwb-scf::s03_diis_water diis_makes_water_pbe_converge
+        PASS [   2.953s] (239/276) qwb-scf::sc02_uhf_gradient sc02_uhf_gradient_reduces_to_the_closed_shell_formula
+        PASS [   3.717s] (240/276) qwb-scf::sc04_mp2 mp2_correlation_is_monotone_along_the_basis_ladder
+        PASS [   3.760s] (241/276) qwb-scf::sc04_mp2 mp2_correlation_matches_pyscf_for_water
+        PASS [   0.790s] (242/276) qwb-scf::sc05_rimp2 ri_mp2_matches_canonical_and_pyscf_for_water
+        PASS [  20.497s] (243/276) qwb-scf::sc01b_uks uks_matches_pyscf_for_o2_and_oh_row3
+        PASS [   0.249s] (244/276) qwb-scf::t01_reference registered_reference_values_are_reproduced
+        PASS [  16.369s] (245/276) qwb-scf::sc02_uhf_gradient sc02_uhf_gradient_matches_numerical_for_o2
+        PASS [   0.082s] (246/276) qwb-scf::t02_water_hf h2o_sto3g_hf_matches_the_external_reference
+        PASS [   8.923s] (247/276) qwb-scf::t02_h2o_def2svp h2o_def2svp_pbe_single_point
+        PASS [   0.329s] (248/276) qwb-scf::t06_reference cccbdb_sto3g_b3lyp_h2_agrees
+        PASS [   0.017s] (249/276) qwb-xc gga_spin::tests::derivatives_match_central_differences
+        PASS [   0.016s] (250/276) qwb-xc::d10_pbe pbe_derivatives_match_finite_differences
+        PASS [   0.015s] (251/276) qwb-xc::d10_pbe pbe_reduces_to_lda_when_sigma_vanishes
+        PASS [   0.018s] (252/276) qwb-xc::d11_b88 derivatives_match_finite_differences
+        PASS [   0.016s] (253/276) qwb-xc::d11_b88 sigma_to_zero_is_slater
+        PASS [   0.017s] (254/276) qwb-xc::d11_b88_sigma_zero sigma_zero_derivatives_are_finite
+        PASS [   0.017s] (255/276) qwb-xc::d11_lyp three_channel_derivatives_match_finite_differences
+        PASS [   0.017s] (256/276) qwb-xc::d12_weights a_half_weighted_exchange_gives_half_the_exchange_energy
+        PASS [   0.017s] (257/276) qwb-xc::fx01_tau_channel existing_terms_zero_the_tau_channel
+        PASS [   0.015s] (258/276) qwb-xc::fx01_tau_channel missing_tau_is_an_error_not_a_silent_zero
+        PASS [   0.015s] (259/276) qwb-xc::fx01_tau_channel tau_derivatives_match_central_differences
+        PASS [   0.014s] (260/276) qwb-xc::fx01_tau_channel terms_require_tau_helper_is_consistent
+        PASS [   0.017s] (261/276) qwb-xc::fx02_m06_exchange m06_2x_correlation_matches_libxc
+        PASS [   0.015s] (262/276) qwb-xc::fx02_m06_exchange m06_2x_series_is_complementary_to_the_exact_exchange
+        PASS [   0.014s] (263/276) qwb-xc::fx02_m06_exchange m06_l_exchange_matches_libxc
+        PASS [   0.017s] (264/276) qwb-xc::sc01b_spin_lda correlation_energy_increases_with_polarization
+        PASS [   0.015s] (265/276) qwb-xc::sc01b_spin_lda ferromagnetic_limit_uses_the_ferro_parameter_set
+        PASS [   0.015s] (266/276) qwb-xc::sc01b_spin_lda zero_polarization_reduces_to_the_closed_shell_value
+        PASS [   0.018s] (267/276) qwb-xc::sc01b_spin_xc_pointwise pbe_correlation_at_zero_sigma_matches_pw92
+        PASS [   0.015s] (268/276) qwb-xc::sc01b_spin_xc_pointwise pbe_exchange_matches_libxc
+        PASS [   0.014s] (269/276) qwb-xc::sc01b_spin_xc_pointwise unpolarized_spin_matches_the_closed_shell_path
+        PASS [   0.017s] (270/276) qwb-xc::x01_x02_lda batch_interface_handles_many_points_at_once
+        PASS [   0.015s] (271/276) qwb-xc::x01_x02_lda shapes_are_checked
+        PASS [   0.015s] (272/276) qwb-xc::x01_x02_lda svwn5_correlation_reproduces_the_ceperley_alder_point
+        PASS [   0.015s] (273/276) qwb-xc::x01_x02_lda x02_svwn5_derivative_passes_the_finite_difference_gate
+        PASS [  34.691s] (274/276) qwb-scf::sc01b_uks uks_matches_pyscf_for_o2_and_oh_row1
+        PASS [  22.840s] (275/276) qwb-scf::scratch_blypmin blyp_minimises
+        PASS [  29.951s] (276/276) qwb-scf::t06_n2_multistart n2_matches_cccbdb_with_multistart
 ────────────
-     Summary [ 113.393s] 275 tests run: 275 passed, 224 skipped
+     Summary [ 117.432s] 276 tests run: 276 passed, 225 skipped

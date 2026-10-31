@@ -8,6 +8,8 @@ publish.workspace = true
 description = "QWB SCF：Fock 构建（S-01）与 RKS 迭代（S-02/S-03）"
 
 [dependencies]
+# IN-05: Fock 构建的线程并行（逐位确定性见 build_fock 注释）
+rayon.workspace = true
 qwb-basis.workspace = true
 qwb-registry.workspace = true
 qwb-xc.workspace = true

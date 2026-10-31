@@ -116,7 +116,12 @@ IN-04:
   state: pending
   note: "RI-J / RI-JK 的 Fock 构建路径（K10）"
 IN-05:
-  state: pending
+  state: done
+  ts: "2026-11-06T23:00:00Z"
+  artifact: "`qwb-scf/src/lib.rs` 的 `build_fock`（按 i 行并行，经 `qwb_integrals::deterministic::DeterministicReduce::map_ordered`）+ 新增 `build_fock_serial`（并行化前循环的逐字副本，作为逐位对照基准）+ `tests/in05_fock_parallel.rs`（2 例）"
+  verification: "①**逐位确定性**：def2-SVP 水 + 非平凡密度，`build_fock` 与 `build_fock_serial` 的 J/K/F 全部元素用 `to_bits()` 比较，**不一致 0 个**（最大差 0.000e0）——是「位级相同」而不是「容差内」。②**加速比实测**：def2-SVP 水（n=24）重复 40 次，串行 0.075 s → 并行 0.016 s，**4.63×**（4 线程有效；本机 8 物理核）。③门禁 135 `ALL GATES GREEN`（26 项，352 s），含 G7/R-13 的 rayon 确定性检查。"
+  note: "**为什么按行并行而不是累加到同一元素**：每个输出元素仍由同一个线程按同一个 (k,l) 顺序累加，浮点加法序列不变 → 逐位可复现。反例（多线程 `+=` 到同一元素）会让结果随调度漂移，既违反 G7 也破坏 K10 的可复现性。另：门禁的 G7 检查抓到我第一版直接用 `par_iter`——项目要求必须配 `DeterministicReduce`，改用之后通过。**CPU 位级结果没有改变**（0 个不一致），所以这是纯提速。"
+
   note: "2e/Fock 构建的线程并行（确定性归约）"
 
 # ───────────────────────── 泛函轨（FX，4）─────────────────────────

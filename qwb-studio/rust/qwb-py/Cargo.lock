@@ -520,6 +520,7 @@ dependencies = [
  "qwb-linalg",
  "qwb-registry",
  "qwb-xc",
+ "rayon",
  "serde",
  "serde_json",
  "thiserror",

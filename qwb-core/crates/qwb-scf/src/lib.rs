@@ -75,9 +75,92 @@ pub fn build_fock(
         }
     }
 
+    // **IN-05：按 i 行并行，但保持逐位确定性。**
+    //
+    // 为什么这样并行不会改变结果：每个输出元素 `(i,j)` 仍由**同一个线程**按**同一个 k,l
+    // 顺序**累加，所以浮点加法序列完全不变 → 与串行结果逐位相同（不是「容差内」，是 `==`）。
+    // 反例（不能这么做）：多线程往同一个 `coulomb[(i,j)]` 上 `+=`，求和顺序随调度变化，
+    // 结果会随运行漂移 —— 那就违反了确定性约束，也破坏了 K10 的可复现性要求。
+    // 用项目的 `DeterministicReduce::map_ordered`（G7/R-13 认可的姿势）：结果按下标顺序
+    // 返回，所以「谁算哪一行」不影响任何元素的加法顺序。
+    let indices: Vec<usize> = (0..n).collect();
+    let rows: Vec<(Vec<f64>, Vec<f64>)> =
+        qwb_integrals::deterministic::DeterministicReduce::map_ordered(&indices, |&i| {
+            let mut j_row = vec![0.0_f64; n];
+            let mut k_row = vec![0.0_f64; n];
+            for (j, slot) in j_row.iter_mut().enumerate() {
+                let mut j_sum = 0.0_f64;
+                let mut k_sum = 0.0_f64;
+                for k in 0..n {
+                    for l in 0..n {
+                        let p = density[(k, l)];
+                        if p == 0.0 {
+                            continue;
+                        }
+                        j_sum += tensor.get(i, j, k, l) * p;
+                        k_sum += tensor.get(i, k, j, l) * p;
+                    }
+                }
+                *slot = j_sum;
+                k_row[j] = k_sum;
+            }
+            (j_row, k_row)
+        });
+
     let mut coulomb = Matrix::zeros(n, n);
     let mut exchange = Matrix::zeros(n, n);
+    for (i, (j_row, k_row)) in rows.into_iter().enumerate() {
+        for j in 0..n {
+            coulomb[(i, j)] = j_row[j];
+            exchange[(i, j)] = k_row[j];
+        }
+    }
 
+    let mut fock = Matrix::zeros(n, n);
+    for i in 0..n {
+        for j in 0..n {
+            fock[(i, j)] = hcore[(i, j)] + coulomb[(i, j)] - 0.5 * exchange[(i, j)];
+        }
+    }
+
+    Ok(FockMatrices {
+        coulomb,
+        exchange,
+        fock,
+    })
+}
+
+/// **串行参考实现**：与并行版逐位相同的对照基准（IN-05）。
+///
+/// 它就是并行化之前那段循环的逐字副本，保留在源码里是为了让「逐位确定性」成为
+/// **可执行的性质**而不是口头承诺：测试对同一输入分别调用两者，要求所有元素 `==`。
+///
+/// # Errors
+///
+/// 维度不匹配 → [`LinalgError::Dimension`]。
+pub fn build_fock_serial(
+    hcore: &Matrix,
+    tensor: &TwoElectronIntegrals,
+    density: &Matrix,
+) -> Result<FockMatrices, LinalgError> {
+    let n = tensor.n_functions;
+    for (label, matrix) in [("hcore", hcore), ("density", density)] {
+        if matrix.nrows() != n || matrix.ncols() != n {
+            return Err(LinalgError::Dimension {
+                context: if label == "hcore" {
+                    "build_fock_serial: hcore"
+                } else {
+                    "build_fock_serial: density"
+                },
+                left_rows: matrix.nrows(),
+                left_cols: matrix.ncols(),
+                right_rows: n,
+                right_cols: n,
+            });
+        }
+    }
+    let mut coulomb = Matrix::zeros(n, n);
+    let mut exchange = Matrix::zeros(n, n);
     for i in 0..n {
         for j in 0..n {
             let mut j_sum = 0.0;
@@ -96,14 +179,12 @@ pub fn build_fock(
             exchange[(i, j)] = k_sum;
         }
     }
-
     let mut fock = Matrix::zeros(n, n);
     for i in 0..n {
         for j in 0..n {
             fock[(i, j)] = hcore[(i, j)] + coulomb[(i, j)] - 0.5 * exchange[(i, j)];
         }
     }
-
     Ok(FockMatrices {
         coulomb,
         exchange,
