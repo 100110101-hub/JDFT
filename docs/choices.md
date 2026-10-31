@@ -3485,3 +3485,49 @@ opt-level = 2
 `fda59de`），先让门禁回绿、把 6.6 min 这个真收益落地。**GPU 的两条合规重进路径**：
 (a) 用把 FFI 封装好的依赖（`cudarc` 等），我们自己的代码保持零 `unsafe`；
 (b) 走 R-16 的批准流程，由人批准后登记白名单并写明理由。
+
+## 八十七、D0-02 摸底：SMD 参数全找到了，但它进不来——K1 schema 是严格的（2026-11-06）
+
+### 找到的东西（可复现）
+
+Minnesota 溶剂化数据库表（Marenich–Cramer–Truhlar 2009, `doi:10.1021/jp810292n`，Table 1；
+本机 PySCF 的 `pyscf/solvent/smd.py` 带一份 180 条的表）里，我们 8 个溶剂的
+`n, n25, alpha, beta, gamma, epsilon, phi², psi²` 全部齐了：
+
+| 溶剂 | 键名 | γ | φ² | ψ² | Abraham α | Abraham β | ε |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| water | `water` | **-1** | **-1** | **-1** | 0.82 | 0.35 | 78.355 |
+| methanol | `methanol` | 31.77 | 0 | 0 | 0.43 | 0.47 | 32.613 |
+| ethanol | `ethanol` | 31.62 | 0 | 0 | 0.37 | 0.48 | 24.852 |
+| acetonitrile | `acetonitrile` | 41.25 | 0 | 0 | 0.07 | 0.32 | 35.688 |
+| dmso | **`dimethylsulfoxide`** | 61.78 | 0 | 0 | 0.0 | 0.88 | 46.826 |
+| chloroform | `chloroform` | 38.39 | 0 | 0.75 | 0.15 | 0.02 | 4.7113 |
+| toluene | `toluene` | 40.2 | 0.857 | 0 | 0.0 | 0.14 | 2.3741 |
+| thf | `tetrahydrofuran` | 39.44 | 0 | 0 | 0.0 | 0.48 | 7.4257 |
+
+（之前没找到的 dmso 键名就是 `dimethylsulfoxide` 连写；不是 `dimethyl sulfoxide`。）
+另外：**water 的 γ/φ²/ψ² 在表里是 -1 占位**，SMD 对水走单独的 CDS 处理 —— 这三个量
+不能当 0 用，也不该编造。
+
+### 进不去的真原因
+
+我把 `smd:` 块写进 8 个溶剂 YAML 之后，`qwb data verify` 变成 **22 通过 / 8 失败**：
+
+```text
+schema violation: unknown field `smd`, expected one of `name`, `version`, `citation`,
+`license`, ..., `surface_tension_cal_per_mol_angstrom2`, `ionic_strength_molar`
+```
+
+K1 的溶剂 schema 是**严格**的（未知字段即错）。所以这不是「改几个 YAML」的活，而是
+**先做 K1 的加性扩展**（新增可选的 `smd` 块：`gamma_mn_per_m`、`phi_sq`、`psi_sq`、
+`abraham_alpha`、`abraham_beta`、`refractive_index_20c/25c`、`nonpolar_terms_available`
+与 `source`），再重签 sha256、更新 `registry.yaml`、重生成 `DATA_LICENSES.md`、跑数据校验。
+
+**本轮的处理**：把 8 个 YAML 回滚（`git checkout`），数据校验恢复 **30/30 通过**，
+不留半坏的数据在树里。这块工作（K1 扩展 + 数据落地）是下一轮的第一件事，也正好是
+「每个 WP 先落/扩契约」那条规矩的标准流程。
+
+### 记账
+
+没有动任何计算路径；本轮只做了数据摸底与一次回滚。上面那张表本身就是 D0-02 的输入，
+下一轮直接照它写 schema 与数据，不需要再去查一遍。
