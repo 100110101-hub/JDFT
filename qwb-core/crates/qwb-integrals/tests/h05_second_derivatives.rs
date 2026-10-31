@@ -14,6 +14,7 @@
 
 use qwb_integrals::hermite2e::{
     primitive_component, primitive_component_derivatives, primitive_component_second_derivatives,
+    primitive_component_second_derivatives_factored,
 };
 
 type Center = [f64; 3];
@@ -370,4 +371,64 @@ fn cost_ratio_second_over_first_derivative() {
         quartets.len()
     );
     assert!(per_call.is_finite() && per_call > 0.0);
+}
+
+/// 分解式实现与朴素实现**逐项一致**（同一套展开、只换求和次序）。
+///
+/// 朴素版已经过「中心差分 / 平动不变性 / 交换对称」三根桩，所以这条对照把分解式
+/// 也钉在同一把尺子上；容差 1e-12 相对（两者数学上恒等，差异只来自求和次序）。
+#[test]
+fn factored_second_derivatives_match_the_plain_implementation() {
+    let mut worst = 0.0_f64;
+    for (name, centers, exponents) in geometries() {
+        for (powers, label) in power_cases() {
+            let plain = primitive_component_second_derivatives(
+                powers[0],
+                centers[0],
+                exponents[0],
+                powers[1],
+                centers[1],
+                exponents[1],
+                powers[2],
+                centers[2],
+                exponents[2],
+                powers[3],
+                centers[3],
+                exponents[3],
+            );
+            let factored = primitive_component_second_derivatives_factored(
+                powers[0],
+                centers[0],
+                exponents[0],
+                powers[1],
+                centers[1],
+                exponents[1],
+                powers[2],
+                centers[2],
+                exponents[2],
+                powers[3],
+                centers[3],
+                exponents[3],
+            );
+            for s in 0..4 {
+                for t in 0..4 {
+                    for i in 0..3 {
+                        for j in 0..3 {
+                            let scale = plain[s][t][i][j].abs().max(1.0e-30);
+                            let relative = (factored[s][t][i][j] - plain[s][t][i][j]).abs() / scale;
+                            assert!(
+                                relative < 1.0e-12
+                                    || (factored[s][t][i][j] - plain[s][t][i][j]).abs() < 1.0e-16,
+                                "{name}/{label} [{s}][{t}][{i}][{j}]: 分解式 {:.10e} vs 朴素 {:.10e}（相对差 {relative:.2e}）",
+                                factored[s][t][i][j],
+                                plain[s][t][i][j]
+                            );
+                            worst = worst.max(relative);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    println!("分解式 vs 朴素的最大相对差：{worst:.2e}");
 }

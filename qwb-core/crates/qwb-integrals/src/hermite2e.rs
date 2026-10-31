@@ -249,6 +249,19 @@ impl PrimitiveContext {
         }
     }
 
+    /// 取 Hermite–Coulomb 核 `R_{lmn}`（懒缓存，跨 shift 复用）。
+    fn kernel_value(&mut self, l: u32, m: u32, n: u32) -> f64 {
+        let stride_y = (self.lz + 1) as usize;
+        let stride_x = ((self.ly + 1) * (self.lz + 1)) as usize;
+        let index = (l as usize) * stride_x + (m as usize) * stride_y + n as usize;
+        let mut value = self.kernel[index];
+        if value.is_nan() {
+            value = derivative_boys(l, m, n, self.rho, self.r);
+            self.kernel[index] = value;
+        }
+        value
+    }
+
     /// 给定的四个幂次三元组的原函数积分（未归一化、未收缩）。
     ///
     /// E 系数用调用方给的栈上缓冲（[`hermite_1d_into`]），不再每次分配 `Vec`：
@@ -559,6 +572,236 @@ pub fn primitive_component_second_derivatives(
                 let column: f64 = (0..3).map(|s| out[s][t][i][j]).sum();
                 out[3][t][i][j] = -column;
                 // ∂²/∂A_t,i ∂A_3,j = −Σ_{b<3} ∂²/∂A_t,i ∂A_b,j
+                let row: f64 = (0..3).map(|b| out[t][b][i][j]).sum();
+                out[t][3][i][j] = -row;
+            }
+        }
+    }
+    for i in 0..3 {
+        for j in 0..3 {
+            let sum: f64 = (0..3)
+                .map(|s| (0..3).map(|t| out[s][t][i][j]).sum::<f64>())
+                .sum();
+            out[3][3][i][j] = sum;
+        }
+    }
+    out
+}
+
+/// 一次二阶导目标里的一项：`coefficient · (bra|ket)` 的移位幂次组。
+#[derive(Debug, Clone, Copy)]
+struct SecondTerm {
+    target: usize,
+    bra: [[u32; 3]; 2],
+    ket: [[u32; 3]; 2],
+    coefficient: f64,
+}
+
+/// 二阶导数的**分解式**实现（RS-05 的性能版）：把 ket 一侧先收缩成 `G_{tuv}`。
+///
+/// # 为什么快
+///
+/// 朴素实现把 144 个分量各自展开成「移位幂次的积分」，每个都要做一次完整的
+/// `L⁶` 双重求和（`Σ_{tuv}Σ_{τυφ}`）—— 一条原函数四元组累计 ~300 次。
+///
+/// 但积分对两侧是**双线性**的：`I(bra|ket) = Σ_{tuv} E^{bra}_{tuv}·G^{ket}_{tuv}`，
+/// 其中 `G^{ket}_{tuv} = Σ_{τυφ} E^{ket}_{τυφ}(−1)^{τ+υ+φ} R_{t+τ,u+υ,v+φ}`。于是：
+///
+/// * 每个**不同的 ket 幂次组**只做一次 `L⁶`（实测约 58 个）；
+/// * 每个 (bra, ket) 组合只剩 `L³` 的加权和。
+///
+/// 量级 `300·L⁶ → 58·L⁶ + 576·L³`；`L = 4` 时约 4.7×。这条优化**只对 Hessian 有利**
+/// （梯度根本不需要二阶导数），所以它才可能改善 RS-05 的比值
+/// （见 `docs/choices.md` 一百一十六 的方法论）。
+///
+/// 数值上与 [`primitive_component_second_derivatives`] 逐项一致（同一套移位幂次展开，
+/// 只把求和次序换掉），由 `tests/h05_second_derivatives.rs` 的对照测试钉住。
+#[allow(clippy::too_many_arguments)]
+// 四个中心 × 三个轴的 4 重下标循环是这段数学最直白的写法（144 个分量一一对应），
+// 改成迭代器只会把人绕晕。
+#[allow(clippy::needless_range_loop)]
+#[must_use]
+pub fn primitive_component_second_derivatives_factored(
+    pa: [u32; 3],
+    a: [f64; 3],
+    alpha: f64,
+    pb: [u32; 3],
+    b: [f64; 3],
+    beta: f64,
+    pc: [u32; 3],
+    c: [f64; 3],
+    gamma: f64,
+    pd: [u32; 3],
+    d: [f64; 3],
+    delta: f64,
+) -> [[[[f64; 3]; 3]; 4]; 4] {
+    // 分解式里 R 的指标最高到 (bra 的最高 E 指标 + ket 的最高 E 指标)，比朴素版多两阶。
+    let max_powers = [
+        pa[0] + pb[0] + pc[0] + pd[0] + 4,
+        pa[1] + pb[1] + pc[1] + pd[1] + 4,
+        pa[2] + pb[2] + pc[2] + pd[2] + 4,
+    ];
+    let mut context = PrimitiveContext::new(a, alpha, b, beta, c, gamma, d, delta, max_powers);
+    let base: Power4 = [pa, pb, pc, pd];
+    let exponents = [alpha, beta, gamma, delta];
+    let mut scratch = [0.0_f64; 16 * 16 * 16];
+
+    // ── 1. 把 9 个中心对 × 9 个轴对展开成「(bra, ket, 系数)」项 ────────────────
+    let mut terms: Vec<SecondTerm> = Vec::new();
+    for s in 0..3 {
+        for t in 0..3 {
+            for i in 0..3 {
+                for j in 0..3 {
+                    let target = ((s * 4 + t) * 3 + i) * 3 + j;
+                    let mut expansion: Vec<(Power4, f64)> = vec![(base, 1.0)];
+                    apply_shifting_operator(&mut expansion, t, j, exponents[t]);
+                    apply_shifting_operator(&mut expansion, s, i, exponents[s]);
+                    for (powers, coefficient) in expansion {
+                        terms.push(SecondTerm {
+                            target,
+                            bra: [powers[0], powers[1]],
+                            ket: [powers[2], powers[3]],
+                            coefficient,
+                        });
+                    }
+                }
+            }
+        }
+    }
+
+    // ── 2. bra 侧的最大 E 指标（决定 G 的尺寸）──────────────────────────────
+    let mut bra_extent = [0_u32; 3];
+    for term in &terms {
+        for axis in 0..3 {
+            bra_extent[axis] = bra_extent[axis].max(term.bra[0][axis] + term.bra[1][axis]);
+        }
+    }
+    let extent = [
+        bra_extent[0] as usize + 1,
+        bra_extent[1] as usize + 1,
+        bra_extent[2] as usize + 1,
+    ];
+    let g_len = extent[0] * extent[1] * extent[2];
+
+    // ── 3. 每个不同的 ket 幂次组算一次 `G_{tuv}`（`L⁶`），其余都是 `L³` 加权和 ──
+    let mut groups: Vec<([[u32; 3]; 2], Vec<f64>)> = Vec::new();
+    let mut out = [[[[0.0_f64; 3]; 3]; 4]; 4];
+    for term in &terms {
+        let group = match groups.iter().position(|(ket, _)| *ket == term.ket) {
+            Some(index) => index,
+            None => {
+                let mut g = vec![0.0_f64; g_len];
+                let mut e_c = [[0.0_f64; 16]; 3];
+                for axis in 0..3 {
+                    let u_max = (term.ket[0][axis] + term.ket[1][axis]) as usize;
+                    hermite_1d_into(
+                        term.ket[0][axis],
+                        term.ket[1][axis],
+                        context.q,
+                        context.q_center[axis] - context.c[axis],
+                        context.q_center[axis] - context.d[axis],
+                        &mut e_c[axis][..=u_max],
+                        &mut scratch,
+                    );
+                }
+                let (uc, vc, wc) = (
+                    (term.ket[0][0] + term.ket[1][0]) as usize,
+                    (term.ket[0][1] + term.ket[1][1]) as usize,
+                    (term.ket[0][2] + term.ket[1][2]) as usize,
+                );
+                for tx in 0..=bra_extent[0] {
+                    for ty in 0..=bra_extent[1] {
+                        for tz in 0..=bra_extent[2] {
+                            let mut total = 0.0;
+                            for ux in 0..=uc {
+                                let ket_x = e_c[0][ux];
+                                if ket_x == 0.0 {
+                                    continue;
+                                }
+                                for uy in 0..=vc {
+                                    let ket_y = e_c[1][uy];
+                                    if ket_y == 0.0 {
+                                        continue;
+                                    }
+                                    for uz in 0..=wc {
+                                        let ket_z = e_c[2][uz];
+                                        if ket_z == 0.0 {
+                                            continue;
+                                        }
+                                        let sign = if (ux + uy + uz) % 2 == 0 { 1.0 } else { -1.0 };
+                                        total += ket_x
+                                            * ket_y
+                                            * ket_z
+                                            * sign
+                                            * context.kernel_value(
+                                                tx + ux as u32,
+                                                ty + uy as u32,
+                                                tz + uz as u32,
+                                            );
+                                    }
+                                }
+                            }
+                            g[(tx as usize * extent[1] + ty as usize) * extent[2] + tz as usize] =
+                                total;
+                        }
+                    }
+                }
+                groups.push((term.ket, g));
+                groups.len() - 1
+            }
+        };
+        let g = &groups[group].1;
+        let mut e_a = [[0.0_f64; 16]; 3];
+        for axis in 0..3 {
+            let t_max = (term.bra[0][axis] + term.bra[1][axis]) as usize;
+            hermite_1d_into(
+                term.bra[0][axis],
+                term.bra[1][axis],
+                context.p,
+                context.p_center[axis] - context.a[axis],
+                context.p_center[axis] - context.b[axis],
+                &mut e_a[axis][..=t_max],
+                &mut scratch,
+            );
+        }
+        let mut value = 0.0;
+        for tx in 0..=term.bra[0][0] + term.bra[1][0] {
+            let bra_x = e_a[0][tx as usize];
+            if bra_x == 0.0 {
+                continue;
+            }
+            for ty in 0..=term.bra[0][1] + term.bra[1][1] {
+                let bra_y = e_a[1][ty as usize];
+                if bra_y == 0.0 {
+                    continue;
+                }
+                for tz in 0..=term.bra[0][2] + term.bra[1][2] {
+                    let bra_z = e_a[2][tz as usize];
+                    if bra_z == 0.0 {
+                        continue;
+                    }
+                    value += bra_x
+                        * bra_y
+                        * bra_z
+                        * g[(tx as usize * extent[1] + ty as usize) * extent[2] + tz as usize];
+                }
+            }
+        }
+        value *= context.prefactor;
+        let target = term.target;
+        let s = target / 36;
+        let t = (target / 9) % 4;
+        let i = (target / 3) % 3;
+        let j = target % 3;
+        out[s][t][i][j] += term.coefficient * value;
+    }
+
+    // ── 4. 第四个中心由平动不变性补齐（与朴素版同一套公式）──────────────────
+    for t in 0..3 {
+        for i in 0..3 {
+            for j in 0..3 {
+                let column: f64 = (0..3).map(|s| out[s][t][i][j]).sum();
+                out[3][t][i][j] = -column;
                 let row: f64 = (0..3).map(|b| out[t][b][i][j]).sum();
                 out[t][3][i][j] = -row;
             }
