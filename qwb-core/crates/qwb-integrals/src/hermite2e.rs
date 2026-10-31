@@ -406,6 +406,9 @@ fn apply_shifting_operator(terms: &mut Vec<(Power4, f64)>, slot: usize, axis: us
 }
 
 /// 查出（或算出并缓存）某个幂次组的原函数积分。
+///
+/// 缓存是线性扫描（幂次组只有几百个）；实测把它换成 `HashMap` 没有改善，说明
+/// 真正的成本在 `PrimitiveContext::integral` 本身（每次要重建 Hermite 系数表）。
 fn cached_integral(
     context: &mut PrimitiveContext,
     cache: &mut Vec<(Power4, f64)>,

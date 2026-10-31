@@ -426,6 +426,208 @@ fn two_electron_blocks(cartesian: &[CartAo], density: &Matrix, blocks: &mut [Dir
     }
 }
 
+/// 一个原函数四元组的 4 个中心两两二阶导数（4 槽 × 4 槽 × 3 轴 × 3 轴）。
+type SlotSecond = [[[[f64; 3]; 3]; 4]; 4];
+
+/// 2e 项的**显式**二阶导数：`E^{xy}_2e = ½Σ_{μνλσ}P P(μν|λσ)^{xy} − ¼Σ P P(μλ|νσ)^{xy}`。
+///
+/// 返回 `3N × 3N`（下标 `3·atom + axis`，与 `DirectionBlock` 同序）。
+///
+/// # 结构：把梯度公式里的一阶导数换成二阶导数
+///
+/// 规范 quartet + 8 重置换 + 库仑 ½ / 交换 −¼ 的权重，与
+/// `analytic_gradient::two_electron_all` **逐字一致**；区别只有两点：换用
+/// [`qwb_integrals::hermite2e::primitive_component_second_derivatives`]，以及把值散到
+/// `(方向, 方向)` 而不是原子向量上。于是它有一条独立的判据：
+///
+/// ```text
+/// E^{xy}_2e = ∂/∂y [ ½Σ_{μν}P_{μν}G^x_{μν} ]        （密度冻结）
+/// ```
+///
+/// 右边是「2e 梯度对几何的中心差分」，用的是已经钉住的 `G^x` 块。
+///
+/// # Errors
+///
+/// 维度不匹配（密度的行列数必须等于直角分量数）。
+pub fn two_electron_hessian_contracted(
+    cartesian: &[CartAo],
+    density: &Matrix,
+) -> Result<Matrix, EngineError> {
+    let n = cartesian.len();
+    if density.nrows() != n || density.ncols() != n {
+        return Err(EngineError::Internal(format!(
+            "2e Hessian: density is {}x{}, expected {n}x{n}",
+            density.nrows(),
+            density.ncols()
+        )));
+    }
+    let natoms = cartesian
+        .iter()
+        .map(|orbital| orbital.center_index)
+        .max()
+        .map_or(0, |index| index + 1);
+    let dof = 3 * natoms;
+    let mut out = Matrix::zeros(dof, dof);
+    // 诊断计时（默认静默）：RS-05 的 k 值必须知道时间花在基元上还是花在累加上。
+    let trace = std::env::var_os("QWB_HESS_TRACE").is_some();
+    let mut primitive_calls = 0usize;
+    let mut primitive_seconds = 0.0_f64;
+    let overall = std::time::Instant::now();
+    let atom_of: Vec<usize> = cartesian
+        .iter()
+        .map(|orbital| orbital.center_index)
+        .collect();
+    let weighted: Vec<Vec<f64>> = cartesian
+        .iter()
+        .map(|orbital| {
+            let powers = powers_tuple(orbital.powers);
+            orbital
+                .exponents
+                .iter()
+                .zip(orbital.coefficients.iter())
+                .map(|(alpha, coefficient)| coefficient * primitive_norm(powers, *alpha))
+                .collect()
+        })
+        .collect();
+
+    const PERMS: [[usize; 4]; 8] = [
+        [0, 1, 2, 3],
+        [1, 0, 2, 3],
+        [0, 1, 3, 2],
+        [1, 0, 3, 2],
+        [2, 3, 0, 1],
+        [3, 2, 0, 1],
+        [2, 3, 1, 0],
+        [3, 2, 1, 0],
+    ];
+
+    for a in 0..n {
+        for b in a..n {
+            for c in 0..n {
+                for d in c..n {
+                    if (a, b) > (c, d) {
+                        continue;
+                    }
+                    let mut any = false;
+                    for perm in PERMS.iter() {
+                        let indices = [a, b, c, d];
+                        let (i0, i1, i2, i3) = (
+                            indices[perm[0]],
+                            indices[perm[1]],
+                            indices[perm[2]],
+                            indices[perm[3]],
+                        );
+                        if density[(i0, i1)] != 0.0 && density[(i2, i3)] != 0.0 {
+                            any = true;
+                            break;
+                        }
+                        if density[(i0, i2)] != 0.0 && density[(i1, i3)] != 0.0 {
+                            any = true;
+                            break;
+                        }
+                    }
+                    if !any {
+                        continue;
+                    }
+
+                    // 先把**收缩后**的二阶导数累出来（每个四元组只算一次 144 个分量）。
+                    let mut slot: SlotSecond = [[[[0.0_f64; 3]; 3]; 4]; 4];
+                    for (ia, &alpha) in cartesian[a].exponents.iter().enumerate() {
+                        for (ib, &beta) in cartesian[b].exponents.iter().enumerate() {
+                            for (ic, &gamma) in cartesian[c].exponents.iter().enumerate() {
+                                for (id, &delta) in cartesian[d].exponents.iter().enumerate() {
+                                    let weight = weighted[a][ia]
+                                        * weighted[b][ib]
+                                        * weighted[c][ic]
+                                        * weighted[d][id];
+                                    if weight == 0.0 {
+                                        continue;
+                                    }
+                                    let clock = std::time::Instant::now();
+                                    let local =
+                                        qwb_integrals::hermite2e::primitive_component_second_derivatives(
+                                            cartesian[a].powers,
+                                            cartesian[a].center,
+                                            alpha,
+                                            cartesian[b].powers,
+                                            cartesian[b].center,
+                                            beta,
+                                            cartesian[c].powers,
+                                            cartesian[c].center,
+                                            gamma,
+                                            cartesian[d].powers,
+                                            cartesian[d].center,
+                                            delta,
+                                        );
+                                    primitive_seconds += clock.elapsed().as_secs_f64();
+                                    primitive_calls += 1;
+                                    for s in 0..4 {
+                                        for t in 0..4 {
+                                            for i in 0..3 {
+                                                for j in 0..3 {
+                                                    slot[s][t][i][j] += weight * local[s][t][i][j];
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    let mut seen: [[usize; 4]; 8] = [[usize::MAX; 4]; 8];
+                    let mut count = 0;
+                    for perm in PERMS.iter() {
+                        let base = [a, b, c, d];
+                        let member = [base[perm[0]], base[perm[1]], base[perm[2]], base[perm[3]]];
+                        if seen[..count].contains(&member) {
+                            continue;
+                        }
+                        seen[count] = member;
+                        count += 1;
+                        let coulomb =
+                            0.5 * density[(member[0], member[1])] * density[(member[2], member[3])];
+                        let exchange = -0.25
+                            * density[(member[0], member[2])]
+                            * density[(member[1], member[3])];
+                        let weight = coulomb + exchange;
+                        if weight == 0.0 {
+                            continue;
+                        }
+                        for s in 0..4 {
+                            let first = 3 * atom_of[member[s]];
+                            // 成员第 `s` 个位置上的函数是规范 quartet 的第 `perm[s]` 个槽位 ——
+                            // 二阶导数的下标必须跟着置换走（第一版直接用 `slot[s][t]`，
+                            // 库仑部分因此差了 4 倍、交换部分全错；见 choices 一百一十四）。
+                            let canonical_s = perm[s];
+                            for t in 0..4 {
+                                let second = 3 * atom_of[member[t]];
+                                let canonical_t = perm[t];
+                                for i in 0..3 {
+                                    for j in 0..3 {
+                                        out[(first + i, second + j)] +=
+                                            weight * slot[canonical_s][canonical_t][i][j];
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    if trace {
+        let total = overall.elapsed().as_secs_f64();
+        eprintln!(
+            "hess 2e trace: {n} cart, {primitive_calls} 次基元调用 {primitive_seconds:.3} s ({:.1}%), 累加 {:.3} s, 合计 {total:.3} s",
+            primitive_seconds / total * 100.0,
+            total - primitive_seconds
+        );
+    }
+    Ok(out)
+}
+
+///
 /// CPHF 的右端骨架：`F^x_{pq}`、`S^x_{pq}` 与 `B^x_{ai} = F^x_{ai} − ε_i S^x_{ai}`。
 ///
 /// `right_hand_sides[d]` 里 `p = i·n_vir + a`，与 `qwb_response::cphf` 的展平约定一致。
@@ -828,5 +1030,196 @@ mod tests {
             }
         }
         println!("骨架 Fock 导数的最大相对差：{worst:.2e}");
+    }
+
+    /// 2e 显式二阶导项的独立判据：`E^{xy}_2e = ∂/∂y[½Σ_{μν}P_{μν}G^x_{μν}]`（密度冻结）。
+    ///
+    /// 右边用已经钉住的 `G^x` 块：在 `R±δ` 上重建几何、用**参考密度**重算 `G^x`、
+    /// 与密度缩成标量，再中心差分。左边是新的二阶导数收缩。两者只在「二阶导数基元」
+    /// 这一处不同，所以这条测试抓的是 AO 层组装（置换映射、中心归属、权重）。
+    #[test]
+    fn two_electron_hessian_matches_frozen_density_difference() {
+        const ANGSTROM_PER_BOHR: f64 = 0.529_177_210_903;
+        let delta = 1.0e-3_f64;
+        let registry = Registry::open(data_root()).expect("registry");
+        let molecule = water();
+        let basis = InternalBasis::build(registry.get_basis("sto-3g").expect("basis"), &molecule)
+            .expect("build basis");
+        let grid =
+            qwb_grid::molecular_grid(registry.get_grid("grid-coarse").expect("grid"), &molecule)
+                .expect("grid");
+        let tensor = two_electron(&basis, &molecule).expect("2e");
+        let options = RksOptions {
+            max_iter: 400,
+            energy_threshold: 1.0e-12,
+            density_threshold: 1.0e-10,
+            ..RksOptions::default()
+        };
+        let result = rks_scf(&basis, &molecule, &tensor, &grid, &[], options).expect("scf");
+        let (cartesian, expansion) = cartesian_orbitals(&basis, &molecule).expect("cartesian");
+        let n = cartesian.len();
+        let density_cart = cartesian_density(&result.density, &expansion, n);
+        let analytic =
+            crate::cphf_hessian::two_electron_hessian_contracted(&cartesian, &density_cart)
+                .expect("hessian");
+        let dof = 3 * molecule.atoms.len();
+        assert_eq!(analytic.nrows(), dof);
+
+        // 冻结密度下的 2e 梯度标量：½Σ P G^x。
+        let scalar = |moved: &Molecule| -> Vec<f64> {
+            let moved_basis =
+                InternalBasis::build(registry.get_basis("sto-3g").expect("basis"), moved)
+                    .expect("basis");
+            let moved_tensor = two_electron(&moved_basis, moved).expect("2e");
+            let one = one_electron(&moved_basis, moved).expect("1e");
+            let fock = crate::build_fock(&one.core_hamiltonian, &moved_tensor, &result.density)
+                .expect("fock");
+            let components = gradient_components(&moved_basis, moved, &result.density, &fock.fock)
+                .expect("components");
+            let (moved_cartesian, moved_expansion) =
+                cartesian_orbitals(&moved_basis, moved).expect("cartesian");
+            let moved_n = moved_cartesian.len();
+            let _ = moved_n;
+            let _ = moved_expansion;
+            let mut out = vec![0.0_f64; dof];
+            for atom in 0..molecule.atoms.len() {
+                for axis in 0..3 {
+                    out[3 * atom + axis] = components.two_electron[atom][axis];
+                }
+            }
+            out
+        };
+        let displaced = |atom: usize, axis: usize, amount: f64| {
+            let mut moved = molecule.clone();
+            moved.atoms[atom].position_angstrom[axis] += amount * ANGSTROM_PER_BOHR;
+            moved
+        };
+        let mut worst = 0.0_f64;
+        for atom in 0..molecule.atoms.len() {
+            for axis in 0..3 {
+                let second_column = 3 * atom + axis;
+                // Richardson：把 `O(δ²)` 的截断项外推掉，否则判据只能停在 1e-6 量级。
+                let coarse = {
+                    let plus = scalar(&displaced(atom, axis, delta));
+                    let minus = scalar(&displaced(atom, axis, -delta));
+                    (0..dof)
+                        .map(|row| (plus[row] - minus[row]) / (2.0 * delta))
+                        .collect::<Vec<f64>>()
+                };
+                let fine = {
+                    let plus = scalar(&displaced(atom, axis, 0.5 * delta));
+                    let minus = scalar(&displaced(atom, axis, -0.5 * delta));
+                    (0..dof)
+                        .map(|row| (plus[row] - minus[row]) / delta)
+                        .collect::<Vec<f64>>()
+                };
+                for first_row in 0..dof {
+                    // 差分给的是 ∂/∂y[E_2e 梯度_x]，因此它是 H[x][y]。
+                    let numeric = (4.0 * fine[first_row] - coarse[first_row]) / 3.0;
+                    let value = analytic[(first_row, second_column)];
+                    let scale = numeric.abs().max(value.abs()).max(1.0e-3);
+                    let difference = (numeric - value).abs() / scale;
+                    assert!(
+                        difference < 1.0e-7,
+                        "E_2e[{first_row}][{second_column}]: 解析 {value:.10e} vs 差分 {numeric:.10e}（相对差 {difference:.2e}）"
+                    );
+                    worst = worst.max(difference);
+                }
+            }
+        }
+        // 对称性：二阶导必须对称（与差分无关的一条独立性质）。
+        for i in 0..dof {
+            for j in 0..dof {
+                // 噪声地板 1e-6：二阶导的量级是 1–20，纯零元的差分噪声在 1e-15 量级。
+                let scale = analytic[(i, j)]
+                    .abs()
+                    .max(analytic[(j, i)].abs())
+                    .max(1.0e-6);
+                assert!(
+                    (analytic[(i, j)] - analytic[(j, i)]).abs() < 1.0e-9 * scale,
+                    "2e 二阶导不对称：({i},{j}) = {:.6e} vs {:.6e}",
+                    analytic[(i, j)],
+                    analytic[(j, i)]
+                );
+            }
+        }
+        println!("2e 显式二阶导的最大相对差：{worst:.2e}");
+    }
+
+    /// 成本测量：AO 层 2e 二阶导收缩 + 全部 3N 个方向的块（水/def2-SVP）。
+    ///
+    /// 这是 RS-05 的 20× 能不能达成的**真实**输入数字（`docs/choices.md` 一百一十
+    /// 承诺过「到 AO 层再量一次」）。默认 `#[ignore]`，不进主门禁。
+    #[test]
+    #[ignore = "成本测量，不进主门禁"]
+    fn cost_measurement_def2svp() {
+        use std::time::Instant;
+        let registry = Registry::open(data_root()).expect("registry");
+        let molecule = water();
+        let basis = InternalBasis::build(registry.get_basis("def2-svp").expect("basis"), &molecule)
+            .expect("build basis");
+        let grid =
+            qwb_grid::molecular_grid(registry.get_grid("grid-coarse").expect("grid"), &molecule)
+                .expect("grid");
+        let tensor = two_electron(&basis, &molecule).expect("2e");
+        let options = RksOptions {
+            max_iter: 400,
+            energy_threshold: 1.0e-12,
+            density_threshold: 1.0e-10,
+            ..RksOptions::default()
+        };
+        let result = rks_scf(&basis, &molecule, &tensor, &grid, &[], options).expect("scf");
+        let (cartesian, expansion) = cartesian_orbitals(&basis, &molecule).expect("cartesian");
+        let n = cartesian.len();
+        let density = cartesian_density(&result.density, &expansion, n);
+        let dof = 3 * molecule.atoms.len();
+
+        // 预热（缓存/分支预测）。
+        let _ = crate::cphf_hessian::two_electron_hessian_contracted(&cartesian, &density)
+            .expect("warmup");
+        let started = Instant::now();
+        let hessian = crate::cphf_hessian::two_electron_hessian_contracted(&cartesian, &density)
+            .expect("hessian");
+        let second = started.elapsed().as_secs_f64();
+
+        let started = Instant::now();
+        let blocks =
+            crate::cphf_hessian::cartesian_direction_blocks(&basis, &molecule, &result.density)
+                .expect("blocks");
+        let first = started.elapsed().as_secs_f64();
+
+        let started = Instant::now();
+        let _rhs = crate::cphf_hessian::cphf_right_hand_sides(
+            &basis,
+            &molecule,
+            &result.density,
+            &result.coefficients,
+            &(0..basis.n_functions())
+                .map(|index| result.mo_energies_hartree.get(index))
+                .collect::<Vec<f64>>(),
+            (molecule
+                .atoms
+                .iter()
+                .map(|atom| qwb_registry::elements::atomic_number(&atom.symbol).unwrap_or(0))
+                .sum::<u32>() as usize
+                - molecule.charge as usize)
+                / 2,
+        )
+        .expect("rhs");
+        let rhs_seconds = started.elapsed().as_secs_f64();
+
+        let mut max_offdiag = 0.0_f64;
+        for i in 0..dof {
+            for j in 0..dof {
+                if i != j {
+                    max_offdiag = max_offdiag.max(hessian[(i, j)].abs());
+                }
+            }
+        }
+        println!(
+            "水/def2-SVP（n_cart={n}, dof={dof}）：2e 二阶导 {second:.3} s、3N 个块 {first:.3} s（{} 个方向）、右端 {rhs_seconds:.3} s；max|offdiag| {max_offdiag:.3e}；块数 {}",
+            blocks.len(),
+            blocks.len()
+        );
     }
 }

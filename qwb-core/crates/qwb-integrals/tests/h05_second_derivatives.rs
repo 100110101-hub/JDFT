@@ -298,11 +298,15 @@ fn first_derivative_still_satisfies_translation_invariance() {
 fn cost_ratio_second_over_first_derivative() {
     use std::time::Instant;
     // 水/def2-SVP 的真实角动量组合：O 有 s,s,s,p,p,d；H 有 s,s,p。
-    let quartets: [[[u32; 3]; 4]; 4] = [
+    let quartets: [[[u32; 3]; 4]; 6] = [
         [[0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0]],
         [[1, 0, 0], [0, 1, 0], [0, 0, 0], [1, 0, 0]],
         [[2, 0, 0], [1, 1, 0], [0, 0, 1], [0, 1, 0]],
         [[2, 0, 0], [0, 0, 2], [1, 1, 0], [0, 0, 0]],
+        // 高角动量的极端：`L⁶` 的求和规模在这里显形（真实基组里 d·d|d·d 才会把
+        // 二阶导数的成本拉到一阶的 20 倍以上，见 choices 一百一十四）。
+        [[2, 0, 0], [2, 0, 0], [2, 0, 0], [2, 0, 0]],
+        [[2, 0, 0], [1, 1, 0], [2, 0, 0], [1, 1, 0]],
     ];
     let centers: [Center; 4] = [
         [0.0, 0.0, 0.0],
@@ -360,7 +364,9 @@ fn cost_ratio_second_over_first_derivative() {
     let per_component = (second_time / 144.0) / (first_time / 12.0);
     let per_call = second_time / first_time;
     println!(
-        "二阶/一阶：每次调用 {per_call:.2}×、每个分量 {per_component:.2}×（{repeats} 次 × {} 个四元组，sink {sink:.3e}）",
+        "二阶/一阶：每次调用 {per_call:.2}×、每个分量 {per_component:.2}×；绝对：一阶 {:.2} µs/次、二阶 {:.2} µs/次（{repeats} 次 × {} 个四元组，sink {sink:.3e}）",
+        first_time / (repeats as f64 * quartets.len() as f64) * 1.0e6,
+        second_time / (repeats as f64 * quartets.len() as f64) * 1.0e6,
         quartets.len()
     );
     assert!(per_call.is_finite() && per_call > 0.0);
