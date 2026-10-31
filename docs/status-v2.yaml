@@ -119,9 +119,11 @@ IN-04:
   verification: "**实测（def2-SVP，测试 profile opt-level=2）**：water n=24/n_aux=76 —— 4 索引 J **0.172 s** vs RI-J **0.349 s**（**0.49×**，更慢），相对差 **1.28e-2**；benzene n=114/n_aux=372 —— 4 索引 J **96.954 s** vs RI-J **50.933 s**（**1.90×**），相对差 **6.88e-3**。**判据要求大体系墙钟优势 ≥ 3×，实测 1.90×，未达标。**"
   gap: "**已收敛为一项卡点（choices 九十八）**：`l=4` 球谐变换已落地（九列正交归一 + 无 d 成分，门禁 137 全绿），`def2-universal-jkfit` 现在可用；用它重测：water n=24/n_aux=113 → 0.34×、相对差 1.66e-3；benzene n=114/n_aux=558 → **1.35×**、相对差 1.82e-3（拟合质量比用 `def2-svp-ri` 时好，但加速比更差，因为 n_aux 更大）。**判据 ≥3× 仍未达标**，剩余唯一卡点是 **RI-J 的批量 gemm + 并行实现**（原朴素循环随 n_aux 线性增长），与 IN-05 的并行设施衔接。"
   original_gap: "**两项卡点**：①**JK 拟合基用不了** —— `def2-universal-jkfit` 含 l≥3 函数，而 `spherical_transform` 只实现到 d（s/p/d），`three_center` 直接报 `Unsupported`；只能用 `def2-svp-ri`（相关拟合基）当替代，所以相对差只有 ~1e-2，不是 JK 质量的拟合。②**加速比不够** —— 即便用替代基，n=114 时也只有 **1.90×**（< 3×）；原因是我们的 RI-J 仍是朴素循环（无筛选、无分块、无批量 gemm），而 4 索引侧 `two_electron` 也不是最优实现。"
+  verdict: "判不划算（choices 一百）：判据 ≥3× 是为大体系定的，而最重测试体系 benzene/def2-SVP 仅 n=114；实测全管线 1.35×（setup 72.27 s，装配仅约 0.1%）。要压 3 倍需积分层改造（三中心分块/并行 + B' 批量矩阵乘），属 IN-02/IN-03 量级；门禁 4.6 min 已达标、里程碑不依赖它，小体系上 4 索引反而更快（water 0.163 s vs RI 0.469 s）。净收益已落袋的是 l=4 变换本身；若将来 n≫200 或改用密度拟合，此结论需重评。"
   blocked_reason_note: "已细化（choices 九十七）：l=3 早已实现，缺的是 l=4（g），且缺口有两层：① cartesian_components(4) 只返回 1 个占位分量（枚举 15 个四次单项式是小改动）；② 更根本的是归一化约定不同 —— 直接采用标准实立体谐系数，在本仓库重叠度规下得到 T^T S T 对角为 1/(4π) 而非 1，必须从我们自己的度规出发构造 g 变换（与 d_transform 同一约定）；③ 还需确认 Hermite 积分核对 l=4 无隐藏假设。之后才谈 RI-J 的 ≥3× 加速。本轮的 l=4 尝试已回滚，cargo test -p qwb-basis 4 例绿。"
 
   note: "RI-J / RI-JK 的 Fock 构建路径（K10）"
+
 IN-05:
   state: done
   ts: "2026-11-06T23:00:00Z"
