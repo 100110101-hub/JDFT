@@ -3393,3 +3393,48 @@ uks step 65..70: E = -148.137719324  dE = 5.9e-13 .. 2.3e-13  max|dP| = 1.5e-5 .
 对用户的目标（「加快门禁验证速度」）本轮已交付：**45–70 min → 17.9 min**（2.5–4×），
 且 26 项全绿、测试集合未变。但**附录 A 里写的 ≤15 min 我自己还没达到**，按规矩交实测差距：
 差 2.9 min，瓶颈是 `core: test` 的 7.4k CPU·秒，不是并行度。
+
+## 八十五、EX-03 第一块：cuBLAS 后端（gemm）落地，CPU 基准一位没动（2026-11-06）
+
+### 环境事实（先查再写代码）
+
+| 项 | 实测 |
+| --- | --- |
+| CUDA Toolkit | **13.0**（`nvcc V13.0.88`），`CUDA_PATH` 已设 |
+| 关键库 | `bin\\x64\\cublas64_13.dll`（51 MB）、`cublasLt64_13.dll`、`cudart64_13.dll`（470 KB） |
+| cublas 的依赖 | 只有 `cublasLt64_13.dll` + `KERNEL32.dll` —— **不依赖 cudart**（用 `dumpbin /dependents` 查的） |
+| 算力 | RTX 3070 Laptop，**sm_86**，8 GiB |
+
+（一开始我把 `cudart64_13.dll` 读成 1 字节，那是两条 `Get-ChildItem` 输出错位，不是坏文件；
+后面按依赖图重新核了一遍，免得基于错误前提做决定。）
+
+### 为什么不用 `cudarc`
+
+CUDA 13 把库名改成了 `cublas64_13`，而 `cudarc` 的版本探测是按编译期 CUDA 版本选名的；
+赌它对 13 的支持不如**自己 `libloading` 取三个符号**（`cublasCreate_v2`、`cublasDgemm_v2`、
+`cublasDestroy_v2` + `cudaMalloc/Free/Memcpy`）。这样还顺带满足附录 A.3 的硬要求：
+**链期不依赖 cuBLAS**，所以没有 GPU 的机器上「构建不会失败」，运行时拿到
+`GpuError::Unavailable` 后由调用方退回 CPU。
+
+新 crate `qwb-core/crates/qwb-gpu`：`available()` 探测、`gemm_f64(m,k,n,a,b)` 行主序
+`C = A·B`。列主序换算用标准技巧（行主序 `A` 在列主序里就是 `Aᵀ`，所以
+`Cᵀ = Bᵀ·Aᵀ`，用 `(n,m,k)` 调一次 dgemm 并交换指针），**不做转置拷贝**。
+
+### 实测
+
+| 检查 | 结果 |
+| --- | --- |
+| GPU vs CPU 逐元素（64×48×40） | 最大绝对差 **5.55e-16**（相对 2.5e-16，判据 1e-12）✅ |
+| 坏形状 | 返回 `GpuError::Dimension`（不是 panic）✅ |
+| 探测 | `available()` → CUDA 可用；**不设** `QWB_CUDA_LIB_DIR` 也能自动找到（走 `CUDA_PATH`）✅ |
+| 吞吐（`--release`） | 512³ **10.8 GFLOPS**、1024³ **124 GFLOPS**、2048³ **173 GFLOPS** |
+
+512³ 那行 GPU 与 CPU 朴素单线程打平（各 ~10 GFLOPS）—— 小尺寸被拷贝/启动开销吃掉，
+这正好说明**要不要上 GPU 必须按尺寸实测**，不能按「有 GPU 就快」推。
+
+### 边界（别把这块当成了「SCF 已用上 GPU」）
+
+- 本轮只交付**gemm 原语**；还没接进 J 构建 / AO→MO / XC。门禁里目前**没有任何一步**走 GPU，
+  CPU 路径的位模式一个 bit 都没动（改动只在新增 crate 与 workspace 成员列表）。
+- 验收下一步：接到真实核（J 构建）上，跑「GPU vs CPU 同一输入」的 1e-10 Ha 对照 + 实测加速比，
+  并验证显存不足时自动退回 CPU。
