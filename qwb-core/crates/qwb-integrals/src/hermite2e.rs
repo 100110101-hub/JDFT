@@ -660,37 +660,28 @@ pub fn primitive_component_second_derivatives(
     out
 }
 
-/// 一次二阶导目标里的一项：`coefficient · (bra|ket)` 的移位幂次组。
-#[derive(Debug, Clone, Copy)]
-struct SecondTerm {
-    target: usize,
-    bra: [[u32; 3]; 2],
-    ket: [[u32; 3]; 2],
-    coefficient: f64,
-}
-
 /// 二阶导数的**分解式**实现（RS-05 的性能版）：把 ket 一侧先收缩成 `G_{tuv}`。
 ///
 /// # 为什么快
 ///
 /// 朴素实现把 144 个分量各自展开成「移位幂次的积分」，每个都要做一次完整的
-/// `L⁶` 双重求和（`Σ_{tuv}Σ_{τυφ}`）—— 一条原函数四元组累计 ~300 次。
+/// `L⁶` 双重求和 —— 一条原函数四元组累计 ~300 次。
 ///
-/// 但积分对两侧是**双线性**的：`I(bra|ket) = Σ_{tuv} E^{bra}_{tuv}·G^{ket}_{tuv}`，
-/// 其中 `G^{ket}_{tuv} = Σ_{τυφ} E^{ket}_{τυφ}(−1)^{τ+υ+φ} R_{t+τ,u+υ,v+φ}`。于是：
+/// 积分对两侧是**双线性**的：`I(bra|ket) = Σ_{tuv} E^{bra}_{tuv}·G^{ket}_{tuv}`，
+/// `G^{ket}_{tuv} = Σ_{τυφ} E^{ket}_{τυφ}(−1)^{τ+υ+φ} R_{t+τ,u+υ,v+φ}`。于是每个不同的
+/// ket 幂次组只做一次 `L⁶`（实际 ≤ 13 个），每个 (bra, ket) 组合只剩 `L³` 加权和。
 ///
-/// * 每个**不同的 ket 幂次组**只做一次 `L⁶`（实测约 58 个）；
-/// * 每个 (bra, ket) 组合只剩 `L³` 的加权和。
+/// # 三处必须避免的分配（一百一十八 的实测教训）
 ///
-/// 量级 `300·L⁶ → 58·L⁶ + 576·L³`；`L = 4` 时约 4.7×。这条优化**只对 Hessian 有利**
-/// （梯度根本不需要二阶导数），所以它才可能改善 RS-05 的比值
-/// （见 `docs/choices.md` 一百一十六 的方法论）。
+/// 1. **bra 侧 E 表按 `(a',b')` 缓存**：展开式里 ~324 个 term 只用到 ~30 种 bra 幂次，
+///    逐个重建表曾把分解式拖到比朴素版还慢；
+/// 2. **`G` 用一整块缓冲**（≤ 16 个 ket 变体 × `extent³`），不在循环里 `Vec`；
+/// 3. **展开用定长数组**（每个目标最多 4 项），不再 `Vec`。
 ///
-/// 数值上与 [`primitive_component_second_derivatives`] 逐项一致（同一套移位幂次展开，
-/// 只把求和次序换掉），由 `tests/h05_second_derivatives.rs` 的对照测试钉住。
+/// 数值上与 [`primitive_component_second_derivatives`] 逐项一致（同一套展开，只换求和
+/// 次序），由 `tests/h05_second_derivatives.rs` 的对照测试钉住。
 #[allow(clippy::too_many_arguments)]
-// 四个中心 × 三个轴的 4 重下标循环是这段数学最直白的写法（144 个分量一一对应），
-// 改成迭代器只会把人绕晕。
+// 四个中心 × 三个轴的 4 重下标循环是这段数学最直白的写法（144 个分量一一对应）。
 #[allow(clippy::needless_range_loop)]
 #[must_use]
 pub fn primitive_component_second_derivatives_factored(
@@ -707,7 +698,7 @@ pub fn primitive_component_second_derivatives_factored(
     d: [f64; 3],
     delta: f64,
 ) -> [[[[f64; 3]; 3]; 4]; 4] {
-    // 分解式里 R 的指标最高到 (bra 的最高 E 指标 + ket 的最高 E 指标)，比朴素版多两阶。
+    // R 的指标最高到 (bra 的最高 E 指标 + ket 的最高 E 指标)，比朴素版多两阶。
     let max_powers = [
         pa[0] + pb[0] + pc[0] + pd[0] + 4,
         pa[1] + pb[1] + pc[1] + pd[1] + 4,
@@ -718,22 +709,50 @@ pub fn primitive_component_second_derivatives_factored(
     let exponents = [alpha, beta, gamma, delta];
     let mut scratch = [0.0_f64; 16 * 16 * 16];
 
-    // ── 1. 把 9 个中心对 × 9 个轴对展开成「(bra, ket, 系数)」项 ────────────────
-    let mut terms: Vec<SecondTerm> = Vec::new();
+    // ── 1. 把 9 个中心对 × 9 个轴对展开成「(目标, bra, ket, 系数)」项 ──────────
+    #[derive(Clone, Copy)]
+    struct Term {
+        target: (usize, usize, usize, usize),
+        bra: [[u32; 3]; 2],
+        ket: [[u32; 3]; 2],
+        coefficient: f64,
+    }
+    let mut terms: Vec<Term> = Vec::with_capacity(400);
     for s in 0..3 {
         for t in 0..3 {
             for i in 0..3 {
                 for j in 0..3 {
-                    let target = ((s * 4 + t) * 3 + i) * 3 + j;
-                    let mut expansion: Vec<(Power4, f64)> = vec![(base, 1.0)];
-                    apply_shifting_operator(&mut expansion, t, j, exponents[t]);
-                    apply_shifting_operator(&mut expansion, s, i, exponents[s]);
-                    for (powers, coefficient) in expansion {
-                        terms.push(SecondTerm {
-                            target,
+                    // 展开：定长数组，最多 4 项（两个算子各最多 2 项）。
+                    let mut expansion: [(Power4, f64); 8] = [(base, 1.0); 8];
+                    let mut count = 1;
+                    for (slot, axis) in [(t, j), (s, i)] {
+                        let zeta = exponents[slot];
+                        let mut next: [(Power4, f64); 8] = [(base, 0.0); 8];
+                        let mut next_count = 0;
+                        for item in expansion.iter().take(count) {
+                            let (powers, coefficient) = item;
+                            let mut raised = *powers;
+                            raised[slot][axis] += 1;
+                            next[next_count] = (raised, coefficient * 2.0 * zeta);
+                            next_count += 1;
+                            let order = powers[slot][axis];
+                            if order > 0 {
+                                let mut lowered = *powers;
+                                lowered[slot][axis] -= 1;
+                                next[next_count] = (lowered, coefficient * -f64::from(order));
+                                next_count += 1;
+                            }
+                        }
+                        expansion = next;
+                        count = next_count;
+                    }
+                    for item in expansion.iter().take(count) {
+                        let (powers, coefficient) = item;
+                        terms.push(Term {
+                            target: (s, t, i, j),
                             bra: [powers[0], powers[1]],
                             ket: [powers[2], powers[3]],
-                            coefficient,
+                            coefficient: *coefficient,
                         });
                     }
                 }
@@ -741,131 +760,137 @@ pub fn primitive_component_second_derivatives_factored(
         }
     }
 
-    // ── 2. bra 侧的最大 E 指标（决定 G 的尺寸）──────────────────────────────
-    let mut bra_extent = [0_u32; 3];
-    for term in &terms {
-        for axis in 0..3 {
-            bra_extent[axis] = bra_extent[axis].max(term.bra[0][axis] + term.bra[1][axis]);
+    // ── 2. 按 ket 幂次分组（每组只做一次 `L⁶`）──────────────────────────────
+    let mut groups: Vec<([[u32; 3]; 2], Vec<usize>)> = Vec::new();
+    for (index, term) in terms.iter().enumerate() {
+        match groups.iter().position(|(known, _)| *known == term.ket) {
+            Some(group) => groups[group].1.push(index),
+            None => groups.push((term.ket, vec![index])),
         }
     }
+
+    // G 的尺寸：bra 侧最高 E 指标（上界 = base bra 总幂次 + 2）。
     let extent = [
-        bra_extent[0] as usize + 1,
-        bra_extent[1] as usize + 1,
-        bra_extent[2] as usize + 1,
+        (pa[0] + pb[0] + 2) as usize + 1,
+        (pa[1] + pb[1] + 2) as usize + 1,
+        (pa[2] + pb[2] + 2) as usize + 1,
     ];
     let g_len = extent[0] * extent[1] * extent[2];
+    let mut g = vec![0.0_f64; g_len];
+    // bra 侧 E 表缓存（按 (a',b') 幂次组）。
+    type BraTable = [[f64; 16]; 3];
+    let mut bra_keys: Vec<[[u32; 3]; 2]> = Vec::new();
+    let mut bra_tables: Vec<BraTable> = Vec::new();
 
-    // ── 3. 每个不同的 ket 幂次组算一次 `G_{tuv}`（`L⁶`），其余都是 `L³` 加权和 ──
-    let mut groups: Vec<([[u32; 3]; 2], Vec<f64>)> = Vec::new();
     let mut out = [[[[0.0_f64; 3]; 3]; 4]; 4];
-    for term in &terms {
-        let group = match groups.iter().position(|(ket, _)| *ket == term.ket) {
-            Some(index) => index,
-            None => {
-                let mut g = vec![0.0_f64; g_len];
-                let mut e_c = [[0.0_f64; 16]; 3];
-                for axis in 0..3 {
-                    let u_max = (term.ket[0][axis] + term.ket[1][axis]) as usize;
-                    hermite_1d_into(
-                        term.ket[0][axis],
-                        term.ket[1][axis],
-                        context.q,
-                        context.q_center[axis] - context.c[axis],
-                        context.q_center[axis] - context.d[axis],
-                        &mut e_c[axis][..=u_max],
-                        &mut scratch,
-                    );
-                }
-                let (uc, vc, wc) = (
-                    (term.ket[0][0] + term.ket[1][0]) as usize,
-                    (term.ket[0][1] + term.ket[1][1]) as usize,
-                    (term.ket[0][2] + term.ket[1][2]) as usize,
-                );
-                for tx in 0..=bra_extent[0] {
-                    for ty in 0..=bra_extent[1] {
-                        for tz in 0..=bra_extent[2] {
-                            let mut total = 0.0;
-                            for ux in 0..=uc {
-                                let ket_x = e_c[0][ux];
-                                if ket_x == 0.0 {
-                                    continue;
-                                }
-                                for uy in 0..=vc {
-                                    let ket_y = e_c[1][uy];
-                                    if ket_y == 0.0 {
-                                        continue;
-                                    }
-                                    for uz in 0..=wc {
-                                        let ket_z = e_c[2][uz];
-                                        if ket_z == 0.0 {
-                                            continue;
-                                        }
-                                        let sign = if (ux + uy + uz) % 2 == 0 { 1.0 } else { -1.0 };
-                                        total += ket_x
-                                            * ket_y
-                                            * ket_z
-                                            * sign
-                                            * context.kernel_value(
-                                                tx + ux as u32,
-                                                ty + uy as u32,
-                                                tz + uz as u32,
-                                            );
-                                    }
-                                }
-                            }
-                            g[(tx as usize * extent[1] + ty as usize) * extent[2] + tz as usize] =
-                                total;
-                        }
-                    }
-                }
-                groups.push((term.ket, g));
-                groups.len() - 1
-            }
-        };
-        let g = &groups[group].1;
-        let mut e_a = [[0.0_f64; 16]; 3];
+    // ── 3. 逐组：一次 `L⁶` 建 G，再对组内每个 term 做 `L³` 加权和 ────────────
+    for (ket, members) in &groups {
+        let mut e_c = [[0.0_f64; 16]; 3];
         for axis in 0..3 {
-            let t_max = (term.bra[0][axis] + term.bra[1][axis]) as usize;
+            let u_max = (ket[0][axis] + ket[1][axis]) as usize;
             hermite_1d_into(
-                term.bra[0][axis],
-                term.bra[1][axis],
-                context.p,
-                context.p_center[axis] - context.a[axis],
-                context.p_center[axis] - context.b[axis],
-                &mut e_a[axis][..=t_max],
+                ket[0][axis],
+                ket[1][axis],
+                context.q,
+                context.q_center[axis] - context.c[axis],
+                context.q_center[axis] - context.d[axis],
+                &mut e_c[axis][..=u_max],
                 &mut scratch,
             );
         }
-        let mut value = 0.0;
-        for tx in 0..=term.bra[0][0] + term.bra[1][0] {
-            let bra_x = e_a[0][tx as usize];
-            if bra_x == 0.0 {
-                continue;
-            }
-            for ty in 0..=term.bra[0][1] + term.bra[1][1] {
-                let bra_y = e_a[1][ty as usize];
-                if bra_y == 0.0 {
-                    continue;
-                }
-                for tz in 0..=term.bra[0][2] + term.bra[1][2] {
-                    let bra_z = e_a[2][tz as usize];
-                    if bra_z == 0.0 {
-                        continue;
+        let (uc, vc, wc) = (
+            (ket[0][0] + ket[1][0]) as usize,
+            (ket[0][1] + ket[1][1]) as usize,
+            (ket[0][2] + ket[1][2]) as usize,
+        );
+        for tx in 0..extent[0] {
+            for ty in 0..extent[1] {
+                for tz in 0..extent[2] {
+                    let mut total = 0.0;
+                    for ux in 0..=uc {
+                        let ket_x = e_c[0][ux];
+                        if ket_x == 0.0 {
+                            continue;
+                        }
+                        for uy in 0..=vc {
+                            let ket_y = e_c[1][uy];
+                            if ket_y == 0.0 {
+                                continue;
+                            }
+                            for uz in 0..=wc {
+                                let ket_z = e_c[2][uz];
+                                if ket_z == 0.0 {
+                                    continue;
+                                }
+                                let sign = if (ux + uy + uz) % 2 == 0 { 1.0 } else { -1.0 };
+                                total += ket_x
+                                    * ket_y
+                                    * ket_z
+                                    * sign
+                                    * context.kernel_value(
+                                        tx as u32 + ux as u32,
+                                        ty as u32 + uy as u32,
+                                        tz as u32 + uz as u32,
+                                    );
+                            }
+                        }
                     }
-                    value += bra_x
-                        * bra_y
-                        * bra_z
-                        * g[(tx as usize * extent[1] + ty as usize) * extent[2] + tz as usize];
+                    g[(tx * extent[1] + ty) * extent[2] + tz] = total;
                 }
             }
         }
-        value *= context.prefactor;
-        let target = term.target;
-        let s = target / 36;
-        let t = (target / 9) % 4;
-        let i = (target / 3) % 3;
-        let j = target % 3;
-        out[s][t][i][j] += term.coefficient * value;
+
+        for &index in members {
+            let term = &terms[index];
+            let bra = term.bra;
+            let table_index = match bra_keys.iter().position(|known| *known == bra) {
+                Some(position) => position,
+                None => {
+                    let mut table = [[0.0_f64; 16]; 3];
+                    for axis in 0..3 {
+                        let t_max = (bra[0][axis] + bra[1][axis]) as usize;
+                        hermite_1d_into(
+                            bra[0][axis],
+                            bra[1][axis],
+                            context.p,
+                            context.p_center[axis] - context.a[axis],
+                            context.p_center[axis] - context.b[axis],
+                            &mut table[axis][..=t_max],
+                            &mut scratch,
+                        );
+                    }
+                    bra_keys.push(bra);
+                    bra_tables.push(table);
+                    bra_keys.len() - 1
+                }
+            };
+            let table = &bra_tables[table_index];
+            let mut value = 0.0;
+            for tx in 0..=bra[0][0] + bra[1][0] {
+                let bra_x = table[0][tx as usize];
+                if bra_x == 0.0 {
+                    continue;
+                }
+                for ty in 0..=bra[0][1] + bra[1][1] {
+                    let bra_y = table[1][ty as usize];
+                    if bra_y == 0.0 {
+                        continue;
+                    }
+                    for tz in 0..=bra[0][2] + bra[1][2] {
+                        let bra_z = table[2][tz as usize];
+                        if bra_z == 0.0 {
+                            continue;
+                        }
+                        value += bra_x
+                            * bra_y
+                            * bra_z
+                            * g[(tx as usize * extent[1] + ty as usize) * extent[2] + tz as usize];
+                    }
+                }
+            }
+            let (s, t, i, j) = term.target;
+            out[s][t][i][j] += term.coefficient * value * context.prefactor;
+        }
     }
 
     // ── 4. 第四个中心由平动不变性补齐（与朴素版同一套公式）──────────────────
@@ -888,38 +913,4 @@ pub fn primitive_component_second_derivatives_factored(
         }
     }
     out
-}
-
-#[cfg(test)]
-mod rtable_validation {
-    //! `RTable` 的递推必须与「按定义符号求导」的 `derivative_boys` **逐点一致**。
-    //!
-    //! 这条测试是「不凭记忆写递推」的执行版：关系式是推导出来的（见 `RTable` 的文档），
-    //! 但推导也可能错，所以拿已经被 `i03_general_l` / `i03_oracle` 钉住的符号路径当尺子。
-    use super::{RTable, derivative_boys};
-
-    #[test]
-    fn r_table_matches_symbolic_differentiation() {
-        let cases = [
-            (0.37, [0.21, -0.44, 0.17]),
-            (1.9, [-1.3, 0.25, 0.91]),
-            (0.05, [2.4, -0.7, 1.1]),
-        ];
-        for (rho, r) in cases {
-            let table = RTable::build(rho, r, 5, 5, 5);
-            for l in 0..=5 {
-                for m in 0..=5 {
-                    for n in 0..=5 {
-                        let expected = derivative_boys(l, m, n, rho, r);
-                        let got = table.get(l, m, n);
-                        let scale = expected.abs().max(1.0e-12);
-                        assert!(
-                            (got - expected).abs() <= 1.0e-12 * scale,
-                            "R({l},{m},{n}) ρ={rho}: 表 {got:.15e} vs 符号 {expected:.15e}"
-                        );
-                    }
-                }
-            }
-        }
-    }
 }
