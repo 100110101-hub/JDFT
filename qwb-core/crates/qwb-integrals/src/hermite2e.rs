@@ -377,3 +377,144 @@ pub fn primitive_component_derivatives(
     }
     out
 }
+
+/// 四中心的幂次组（每个中心一个 `(x, y, z)`）。
+pub type Power4 = [[u32; 3]; 4];
+
+/// 把「抬/降幂」线性算子作用在展开表的每一项上（RS-05 的二阶导数基元）。
+///
+/// ```text
+/// ∂/∂A_{s,i} f[幂次] = 2·ζ_s·f[+e_i] − 幂次_i·f[−e_i]
+/// ```
+///
+/// `系数`乘的是**降幂项**里的「当前幂次」——注意它可能已经被更早的算子抬过一次，
+/// 所以必须在**逐项**的幂次上取，不能在外层预先取原幂次。
+fn apply_shifting_operator(terms: &mut Vec<(Power4, f64)>, slot: usize, axis: usize, zeta: f64) {
+    let mut next = Vec::with_capacity(terms.len() * 2);
+    for (powers, coefficient) in terms.iter() {
+        let mut raised = *powers;
+        raised[slot][axis] += 1;
+        next.push((raised, coefficient * 2.0 * zeta));
+        let order = powers[slot][axis];
+        if order > 0 {
+            let mut lowered = *powers;
+            lowered[slot][axis] -= 1;
+            next.push((lowered, coefficient * -f64::from(order)));
+        }
+    }
+    *terms = next;
+}
+
+/// 查出（或算出并缓存）某个幂次组的原函数积分。
+fn cached_integral(
+    context: &mut PrimitiveContext,
+    cache: &mut Vec<(Power4, f64)>,
+    powers: Power4,
+) -> f64 {
+    if let Some((_, value)) = cache.iter().find(|(key, _)| *key == powers) {
+        return *value;
+    }
+    let value = context.integral(powers[0], powers[1], powers[2], powers[3]);
+    cache.push((powers, value));
+    value
+}
+
+/// 一个 primitive 四元组对**四个中心两两**的二阶导数。
+///
+/// `out[s][t][i][j] = ∂²/∂A_{s,i}∂A_{t,j}(ab|cd)`（`s,t` ∈ `0..4`，`i,j` ∈ `0..3` 是 x/y/z）。
+///
+/// # 为什么复用一阶导数的恒等式
+///
+/// 二阶导数的传统写法是「把 Hermite 展开推进到 L+2 阶」——那要再写一套递推，而本项目
+/// 在 2e 积分上已经因为「凭记忆写递推」出过错。这里换一条等价的路：把一阶导数已经
+/// 用了很多轮、并被独立数值路径验证过的抬/降幂恒等式
+///
+/// ```text
+/// ∂/∂A_{s,i} f = 2·ζ_s·f[+e_i] − 幂次_i·f[−e_i]
+/// ```
+///
+/// 当成**线性算子连续作用两次**，得到「若干移位幂次的积分 × 系数」的展开，再用同一份
+/// [`PrimitiveContext`]（预因子、指数、Hermite–Coulomb 核缓存）把展开里出现的所有移位
+/// 幂次各算一次。于是二阶导数没有引入任何新的求积公式，只有代数展开。
+///
+/// # 成本
+///
+/// 一次一阶导数要 12 个分量、约 24 次移位积分；一次二阶导数要 144 个分量，展开里出现的
+/// **不同**幂次组大约 200–300 个。所以单位原函数四元组的成本大约是 8–12 倍——这个倍数是
+/// RS-05 判「CPHF Hessian 能不能同时满足 20×」的输入，实测数字记在 `docs/choices.md`。
+///
+/// # Panics
+///
+/// 不 panic（幂次是 `u32`，抬升两次后仍在按 `max_powers + 2` 开的缓存范围内）。
+#[allow(clippy::too_many_arguments)]
+// 四个中心 × 三个轴的 4 重下标循环是这段数学最直白的写法（144 个分量一一对应），
+// 改成迭代器只会把人绕晕。
+#[allow(clippy::needless_range_loop)]
+#[must_use]
+pub fn primitive_component_second_derivatives(
+    pa: [u32; 3],
+    a: [f64; 3],
+    alpha: f64,
+    pb: [u32; 3],
+    b: [f64; 3],
+    beta: f64,
+    pc: [u32; 3],
+    c: [f64; 3],
+    gamma: f64,
+    pd: [u32; 3],
+    d: [f64; 3],
+    delta: f64,
+) -> [[[[f64; 3]; 3]; 4]; 4] {
+    // 连续两次抬幂 → 每个方向最多 +2。
+    let max_powers = [
+        pa[0] + pb[0] + pc[0] + pd[0] + 2,
+        pa[1] + pb[1] + pc[1] + pd[1] + 2,
+        pa[2] + pb[2] + pc[2] + pd[2] + 2,
+    ];
+    let mut context = PrimitiveContext::new(a, alpha, b, beta, c, gamma, d, delta, max_powers);
+    let base: Power4 = [pa, pb, pc, pd];
+    let exponents = [alpha, beta, gamma, delta];
+    // 展开表按 (s,t,i,j) 现场构造——表很小（≤ 8 项），比预先存 144 份更省内存。
+    let mut cache: Vec<(Power4, f64)> = Vec::new();
+    let mut out = [[[[0.0_f64; 3]; 3]; 4]; 4];
+    // 只算前三个中心的两两导数（9 个中心对），第四个中心由**平动不变性**
+    // `∂²/∂A_3∂A_t = −Σ_{s<3} ∂²/∂A_s∂A_t` 得到 —— 省掉 7/16 的展开量。
+    for s in 0..3 {
+        for t in 0..3 {
+            for i in 0..3 {
+                for j in 0..3 {
+                    let mut terms: Vec<(Power4, f64)> = vec![(base, 1.0)];
+                    // 先作用在 t（外侧），再作用在 s —— 同一中心两次作用时顺序也不能乱。
+                    apply_shifting_operator(&mut terms, t, j, exponents[t]);
+                    apply_shifting_operator(&mut terms, s, i, exponents[s]);
+                    let mut total = 0.0;
+                    for (powers, coefficient) in terms {
+                        total += coefficient * cached_integral(&mut context, &mut cache, powers);
+                    }
+                    out[s][t][i][j] = total;
+                }
+            }
+        }
+    }
+    for t in 0..3 {
+        for i in 0..3 {
+            for j in 0..3 {
+                // ∂²/∂A_3,i ∂A_t,j = −Σ_{s<3} ∂²/∂A_s,i ∂A_t,j
+                let column: f64 = (0..3).map(|s| out[s][t][i][j]).sum();
+                out[3][t][i][j] = -column;
+                // ∂²/∂A_t,i ∂A_3,j = −Σ_{b<3} ∂²/∂A_t,i ∂A_b,j
+                let row: f64 = (0..3).map(|b| out[t][b][i][j]).sum();
+                out[t][3][i][j] = -row;
+            }
+        }
+    }
+    for i in 0..3 {
+        for j in 0..3 {
+            let sum: f64 = (0..3)
+                .map(|s| (0..3).map(|t| out[s][t][i][j]).sum::<f64>())
+                .sum();
+            out[3][3][i][j] = sum;
+        }
+    }
+    out
+}
