@@ -16,6 +16,18 @@ $ErrorActionPreference = 'Continue'
 $root = Split-Path -Parent $PSScriptRoot
 Set-Location $root
 
+# 台账校验用的 Python：**必须**带 PyYAML。系统 python 若没有，check_status.py 会静默退化成
+# 「只做结构检查」，跳过严格 YAML 解析 —— 2026-11-07 就因为这一点让一个解析不了的
+# docs/status-v2.yaml 通过了门禁（142 全绿而文件是坏的）。这里先探测，缺失就直接中止。
+$script:ledgerPython = Join-Path $root '.venv\Scripts\python.exe'
+if (-not (Test-Path $script:ledgerPython)) { $script:ledgerPython = 'python' }
+$script:yamlProbe = & $script:ledgerPython -c "import yaml" 2>&1
+if ($LASTEXITCODE -ne 0) {
+    Write-Host '!! 台账校验需要带 PyYAML 的 Python（.venv\Scripts\python.exe）' -ForegroundColor Red
+    Write-Host "   probe: $script:yamlProbe"
+    exit 1
+}
+
 $script:pass = 0
 $script:fail = 0
 $script:failedNames = @()
@@ -165,14 +177,14 @@ Step -Name 'D-15: DATA_LICENSES.md matches the data' -Dir '.' -Body {
 
 # ---- 10.6: the project ledger must stay machine-readable ----
 Step -Name '10.6: docs/status.yaml ledger validity' -Dir '.' -Body {
-    & python scripts/check_status.py
+    & $script:ledgerPython scripts/check_status.py
 }
 
 # ---- phase 2 (project-phase2.md): the v2 ledger must stay machine-readable ----
 # Same checker, different file: the phase-2 ledger starts all-pending, so this step is
 # green from day one and catches corruption as WPs get marked done.
 Step -Name '10.6: docs/status-v2.yaml ledger validity' -Dir '.' -Body {
-    & python scripts/check_status.py docs/status-v2.yaml
+    & $script:ledgerPython scripts/check_status.py docs/status-v2.yaml
 }
 
 # ---- Python gates (repo .venv): K6 stubs + P-01 model layer ----
