@@ -3,7 +3,8 @@
 //! 三条：
 //! 1. `method: tda`（hf 参考）跑通，`excited_states` 块带 `transitions` 与 `sum_rules`；
 //! 2. `method: cis` 与 `tda` 在同一参考下给同样的数（RS-03 的 1e-6 a.u. 判据）；
-//! 3. `method: tddft` 与非 `hf` 参考显式拒绝（K5 退出码 4），不静默降级。
+//! 3. 非 `hf` 参考显式拒绝（K5 退出码 4），不静默降级；`method: tddft` 自 ST-01 起**能跑**，
+//!    所以这里改成断言它跑通并且逐态低于 `tda`（引擎级的那条 ST-01 验收）。
 use std::path::PathBuf;
 
 use qwb_engine::RksBackend;
@@ -129,19 +130,47 @@ fn cis_and_tda_agree_at_the_engine_level() {
 }
 
 #[test]
-fn tddft_and_dft_references_are_rejected() {
-    let options = TaskOptions::default()
-        .with_excited_states(ExcitedStatesOptions::new(3, ExcitedStateMethod::Tddft));
-    let error = backend()
-        .run(&water_input("hf", options), &NullReporter)
-        .expect_err("full TDDFT must be rejected with its WP");
-    match error {
-        EngineError::Unsupported(message) => {
-            assert!(message.contains("ST-01"), "{message}");
-        }
-        other => panic!("expected Unsupported (exit code 4), got {other:?}"),
+fn tddft_runs_and_sits_below_tda() {
+    // ST-01 之前这里是"tddft 被拒并点名 ST-01"；现在 ST-01 已交付，断言反过来：
+    // tddft 跑通、报告自己的 method、且每个态都低于 tda（B 块的物理方向）。
+    let mut energies = Vec::new();
+    for method in [ExcitedStateMethod::Tda, ExcitedStateMethod::Tddft] {
+        let options =
+            TaskOptions::default().with_excited_states(ExcitedStatesOptions::new(3, method));
+        let result = backend()
+            .run(&water_input("hf", options), &NullReporter)
+            .expect("tda/tddft should run");
+        let block = result.excited_states.as_ref().expect("block");
+        assert_eq!(block.method, method);
+        energies.push(
+            block
+                .transitions
+                .iter()
+                .map(|t| t.energy_hartree)
+                .collect::<Vec<_>>(),
+        );
+        let json = serde_json::to_string(&result).expect("serialize");
+        assert!(
+            json.contains(&format!("\"method\":\"{}\"", method.as_str())),
+            "method must be reported as itself: {json}"
+        );
     }
+    for (index, (full, tda)) in energies[1].iter().zip(energies[0].iter()).enumerate() {
+        println!(
+            "state {}: tddft {:.6} Ha vs tda {:.6} Ha",
+            index + 1,
+            full,
+            tda
+        );
+        assert!(
+            full < tda,
+            "state {index}: tddft {full} should be below tda {tda}"
+        );
+    }
+}
 
+#[test]
+fn a_dft_reference_is_rejected_and_names_the_xc_kernel() {
     let options = TaskOptions::default()
         .with_excited_states(ExcitedStatesOptions::new(3, ExcitedStateMethod::Tda));
     let error = backend()
@@ -150,10 +179,8 @@ fn tddft_and_dft_references_are_rejected() {
     match error {
         EngineError::Unsupported(message) => {
             assert!(
-                message.contains("closed-shell")
-                    || message.contains("XC kernel")
-                    || message.contains("hf"),
-                "{message}"
+                message.contains("XC kernel") && message.contains("FX-03"),
+                "a DFT reference lacks the XC kernel, and the message must say so: {message}"
             );
         }
         other => panic!("expected Unsupported (exit code 4), got {other:?}"),

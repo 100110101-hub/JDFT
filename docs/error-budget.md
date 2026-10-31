@@ -33,6 +33,7 @@
 | COSMO 导体极限（ε = 1e12） | 相对 4.32% = 4.79 kcal/mol | 同上 | ⚠️ | `qwb-core/crates/qwb-props/tests/sv01_cosmo.rs` |
 | SASA（采样路径，水，2000 点）转动不变性 | 面积 4.99e-4 / 2.30e-3 / 3.48e-4 | SV-01 判据 < 1e-6 | ❌ 采样路径未达（解析路径 0.0） | `qwb-core/crates/qwb-props/tests/sv01_cavity.rs` |
 | SASA（解析球帽 vs 采样，水） | 面积相对 1.69e-2、体积 6.03e-3 | SV-01 判据：解析路径为准 | ⚠️ 已知近似（三重交叠重复扣除） | `qwb-core/crates/qwb-props/tests/sv01_cavity.rs` |
+| 完整 TDDFT（RPA/TDHF，ST-01）vs PySCF `tdscf.rhf.TDHF` | 4.6e-7…5.9e-7 eV（H2O/STO-3G）、1.2e-7…2.9e-7 eV（def2-SVP） | `§9.3` 无专门行；ST-01 判据 0.15 eV | ✅（小 5 个量级；相对 TDA 系统性下降 0.014–0.110 eV） | `qwb-core/crates/qwb-response/tests/st01_tddft.rs` |
 | 短程 2e 积分（IN-02，ω ∈ {0, 0.1, 0.3, 0.6, 1.0}） | 相对 1.41e-14（与 u 空间独立闭式） | K10 判据 1e-9 | ✅ | `qwb-core/crates/qwb-integrals/tests/in02_short_range.rs` |
 | 解析梯度 vs 数值（UHF：OH/O2） | 3.63e-7 / 7.29e-7 Ha/Bohr | `§9.3:梯度` < 1e-5 Ha/Bohr | ✅ | `qwb-core/crates/qwb-scf/tests/sc02_uhf_gradient.rs` |
 | 2e Hessian 收缩 vs 冻结密度数值 | 1.87e-8 Ha/Bohr² | `§9.3:解析 Hessian` 5% | ✅ | `qwb-core/crates/qwb-scf/src/cphf_hessian.rs` |
@@ -80,6 +81,11 @@ RI 路径更慢，按 §2.5 不宣称性能优势（见 `docs/status-v2.yaml` �
   `docs/choices.md` 六十里记账，判据按"方法匹配的参考库"读法执行。
   把这条留在表里（而不是删掉）是刻意的：它是"容差写的是方法精度、而实现只能保证一致性"的
   活样本。
+* **完整 TDDFT（ST-01）**：加回 B 块后，H2O 上每个态比 TDA 低 0.014–0.110 eV（RPA 的典型
+  方向），与 PySCF 的 `tdscf.rhf.TDHF` 差 4.6e-7…5.9e-7 eV（STO-3G）——**同方法参考**仍然
+  是 1e-7 级，而**对实验值**的 5.8 eV 缺口一点没变（B 块只有几十 meV）。这正是"实现精度"
+  与"方法精度"必须分开记账的最清楚例子。DFT 参考下的 TDDFT 还需要 XC kernel（FX-03），
+  所以那一格仍是空的。
 * 振子强度：与 PySCF 相对差 < 1e-5；`f-sum` 的缺口落在 `sum_rules.deficit`（H2O/STO-3G 为
   7.705945，即 Σf = 2.294 vs 10 个电子）—— 这是 TDA 缺多电子激发与非占据空间的必然结果，
   不是数值误差。

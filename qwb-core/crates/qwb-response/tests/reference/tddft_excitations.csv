@@ -1,0 +1,11 @@
+species,basis,method,n_states,index,energy_hartree,energy_ev,oscillator_strength,note,source_doi,source_url
+H2O,sto-3g,tddft,5,0,0.4835473475,13.157994,0.00323925,PySCF 2.14.0 RHF + tdscf.rhf.TDHF（完整 RPA，含 B 块；单重态）,10.1063/5.0006074,https://github.com/pyscf/pyscf
+H2O,sto-3g,tddft,5,1,0.5552783746,15.109894,0.00000000,PySCF 2.14.0 RHF + tdscf.rhf.TDHF（完整 RPA，含 B 块；单重态）,10.1063/5.0006074,https://github.com/pyscf/pyscf
+H2O,sto-3g,tddft,5,2,0.6135432371,16.695362,0.06709062,PySCF 2.14.0 RHF + tdscf.rhf.TDHF（完整 RPA，含 B 块；单重态）,10.1063/5.0006074,https://github.com/pyscf/pyscf
+H2O,sto-3g,tddft,5,3,0.7022956469,19.110438,0.05497286,PySCF 2.14.0 RHF + tdscf.rhf.TDHF（完整 RPA，含 B 块；单重态）,10.1063/5.0006074,https://github.com/pyscf/pyscf
+H2O,sto-3g,tddft,5,4,0.8064125963,21.943605,1.04805923,PySCF 2.14.0 RHF + tdscf.rhf.TDHF（完整 RPA，含 B 块；单重态）,10.1063/5.0006074,https://github.com/pyscf/pyscf
+H2O,def2-svp,tddft,5,0,0.3394938958,9.238100,0.02361111,PySCF 2.14.0 RHF + tdscf.rhf.TDHF（完整 RPA，含 B 块；单重态）,10.1063/5.0006074,https://github.com/pyscf/pyscf
+H2O,def2-svp,tddft,5,1,0.4043307899,11.002401,0.00000000,PySCF 2.14.0 RHF + tdscf.rhf.TDHF（完整 RPA，含 B 块；单重态）,10.1063/5.0006074,https://github.com/pyscf/pyscf
+H2O,def2-svp,tddft,5,2,0.4337489865,11.802911,0.09833663,PySCF 2.14.0 RHF + tdscf.rhf.TDHF（完整 RPA，含 B 块；单重态）,10.1063/5.0006074,https://github.com/pyscf/pyscf
+H2O,def2-svp,tddft,5,3,0.4985198764,13.565417,0.08653309,PySCF 2.14.0 RHF + tdscf.rhf.TDHF（完整 RPA，含 B 块；单重态）,10.1063/5.0006074,https://github.com/pyscf/pyscf
+H2O,def2-svp,tddft,5,4,0.5518001094,15.015246,0.29143418,PySCF 2.14.0 RHF + tdscf.rhf.TDHF（完整 RPA，含 B 块；单重态）,10.1063/5.0006074,https://github.com/pyscf/pyscf

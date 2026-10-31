@@ -61,6 +61,8 @@ GENERATORS = {
         "scripts/pyscf_tda_formaldehyde_reference.py",
     "qwb-core/crates/qwb-response/tests/reference/tda_acetone.csv":
         "scripts/pyscf_tda_acetone_reference.py",
+    "qwb-core/crates/qwb-response/tests/reference/tddft_excitations.csv":
+        "scripts/pyscf_tdh_reference.py",
     "qwb-core/crates/qwb-props/tests/reference/nmr_molecules.csv":
         "scripts/pyscf_nmr_shieldings_reference.py",
     "qwb-core/crates/qwb-props/tests/reference/nmr_diamagnetic.csv":

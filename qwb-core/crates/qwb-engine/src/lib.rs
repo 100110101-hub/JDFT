@@ -931,13 +931,28 @@ impl RksBackend {
                     &dipole_ao,
                     n_occupied,
                 )?;
-                let tda = qwb_response::tda::tda_singlet(
-                    &cphf_input,
-                    &orbital_energies,
-                    request.n_states as usize,
-                )?;
-                let transitions: Vec<qwb_engine_api::Transition> = tda
-                    .excitations
+                // ST-01：`method: tddft` 走完整 RPA（含 B 块），`cis`/`tda` 走 TDA。
+                // 两条路都返回同一形状的涨落，报告里只靠 `method` 区分 —— 不允许
+                // 把 TDA 的数标成 tddft 交出去（validate 已经把非 hf 参考挡在门外）。
+                let (excitations, oscillator_sum, dimension, label) = match request.method {
+                    qwb_engine_api::ExcitedStateMethod::Tddft => {
+                        let out = qwb_response::tddft_singlet(
+                            &cphf_input,
+                            &orbital_energies,
+                            request.n_states as usize,
+                        )?;
+                        (out.excitations, out.oscillator_sum, out.dimension, "tddft")
+                    }
+                    _ => {
+                        let out = qwb_response::tda_singlet(
+                            &cphf_input,
+                            &orbital_energies,
+                            request.n_states as usize,
+                        )?;
+                        (out.excitations, out.oscillator_sum, out.dimension, "tda")
+                    }
+                };
+                let transitions: Vec<qwb_engine_api::Transition> = excitations
                     .iter()
                     .enumerate()
                     .map(|(index, state)| {
@@ -951,25 +966,21 @@ impl RksBackend {
                     .collect();
                 let n_electrons = f64::from(u32::try_from(n_occupied * 2).unwrap_or(u32::MAX));
                 reporter.log(&format!(
-                    "tda: {} state(s) from a {}x{} problem; first = {:.6} Ha ({:.3} eV), \
-                     f = {:.5}; sum of f = {:.6} (N_elec = {n_electrons})",
+                    "{label}: {} state(s) from a {dimension}x{dimension} problem; \
+                     first = {:.6} Ha ({:.3} eV), f = {:.5}; sum of f = {oscillator_sum:.6} \
+                     (N_elec = {n_electrons})",
                     transitions.len(),
-                    tda.dimension,
-                    tda.dimension,
-                    tda.excitations.first().map_or(0.0, |s| s.energy_hartree),
-                    tda.excitations
+                    excitations.first().map_or(0.0, |s| s.energy_hartree),
+                    excitations
                         .first()
                         .map_or(0.0, |s| s.energy_hartree * 27.211_386_245_988),
-                    tda.excitations
-                        .first()
-                        .map_or(0.0, |s| s.oscillator_strength),
-                    tda.oscillator_sum
+                    excitations.first().map_or(0.0, |s| s.oscillator_strength),
                 ));
                 Some(qwb_engine_api::ExcitedStates::new(
                     request.method,
                     transitions.len(),
                     transitions,
-                    qwb_engine_api::SumRules::new(tda.oscillator_sum, n_electrons),
+                    qwb_engine_api::SumRules::new(oscillator_sum, n_electrons),
                 ))
             }
             None => None,
@@ -1407,13 +1418,15 @@ fn reject_unimplemented_options(input: &JobInput) -> Result<(), EngineError> {
         }
     }
     if let Some(excited) = &options.excited_states {
-        // M4 / RS-02..03：cis 与 tda 都接（hf 参考下同一套方程），tddft 还没做。
+        // M4 / RS-02..03 + ST-01：cis / tda / tddft 三条都接（hf 参考下 cis == tda == TDA，
+        // tddft 是含 B 块的完整 RPA）。TDDFT 的 XC kernel（DFT 参考）仍属 FX-03。
         match excited.method {
-            qwb_engine_api::ExcitedStateMethod::Cis | qwb_engine_api::ExcitedStateMethod::Tda => {}
+            qwb_engine_api::ExcitedStateMethod::Cis
+            | qwb_engine_api::ExcitedStateMethod::Tda
+            | qwb_engine_api::ExcitedStateMethod::Tddft => {}
             _ => {
                 return Err(EngineError::Unsupported(format!(
-                    "options.excited_states.method = `{}` is not wired yet (full TDDFT with the \
-                     B block and the XC kernel is ST-01; cis/tda are available)",
+                    "options.excited_states.method = `{}` is not wired yet",
                     excited.method.as_str()
                 )));
             }
@@ -1439,7 +1452,8 @@ fn reject_unimplemented_options(input: &JobInput) -> Result<(), EngineError> {
             // 所以显式拒绝，指向 ST-01 / FX-03。
             return Err(EngineError::Unsupported(format!(
                 "options.excited_states needs an `hf` reference for now (method_name = `{}`): \
-                 the XC kernel needed for a DFT reference is ST-01 / FX-03",
+                 a DFT reference needs the XC kernel f_xc in the response matrix, which is FX-03 \
+                 (ST-01 delivered the B block / RPA coupling itself)",
                 input.method_name
             )));
         }

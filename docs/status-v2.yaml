@@ -258,7 +258,7 @@ RS-03:
   ts: "2026-10-28T15:40:00Z"
   artifact: "（与 RS-02 同一份实现）qwb-response/src/tda.rs：`hf` 参考下的 TDA **就是 CIS** —— 闭壳层单重态 A 矩阵 `δ(ε_a−ε_i) + 2(ia|jb) − (ij|ab)` 不加任何 XC kernel，所以 RS-03 复用 RS-02 的求解器，没有第二套公式；甲醛的参考由 scripts/pyscf_tda_formaldehyde_reference.py 生成（tests/reference/tda_formaldehyde.csv），测试在 qwb-response/tests/rs03_tda_formaldehyde.rs"
   verification: "① **与 RS-02 的 HF 极限一致**：`cargo test -p qwb-response --test rs02_tda_acceptance` 里的 `cis_and_tda_are_the_same_equations_for_an_hf_reference` 绿 —— 两次独立调用的激发能逐位相同（判据 1e-6 a.u.，实测 0）。② **H2O 的跃迁能与 PySCF 一致到 5e-7 eV**（见 RS-02 的 verification，判据 0.5 eV）。**引擎接线已过（第 22 轮）**：`cargo test -p qwb-engine --test rs02_tda_engine` 的 `cis_and_tda_agree_at_the_engine_level` 绿 —— 两种 `method` 走同一套方程、逐态差实测 0；`qwb props examples/h2o_tddft.yaml` 端到端跑通。③ **甲醛（判据 0.5 eV）**：cargo test -p qwb-response --test rs03_tda_formaldehyde 绿 —— CH2O/STO-3G（12 个基函数、8 占据 × 4 虚 = 32 维）前 4 个单重态 3.9508 / 9.0741 / 12.6681 / 15.1408 eV，与 PySCF 差 **1.1e-7…7.4e-7 eV**；振子强度 0 / 0.0083395 / 0.3702469 / 0 vs PySCF 0 / 0.00833949 / 0.37024703 / 0。"
-  note: "**为什么 CIS 与 TDA 在这份实现里是同一件事**：CIS 是「HF 参考 + 单激发 + TDA」，TDA 是「丢掉 RPA 的 B 块」；两者在无 XC kernel 时是同一个本征问题。等 ST-01（完整 TDDFT，含 B 块）或 FX-03（RS-hybrid）落地后，`method: cis` / `tda` / `tddft` 才会分开，那时这条测试要改成「三者差多少」的实测记录。现在把「逐位相同」写进测试，是为了钉住「我们没有偷偷用两套公式」。"
+  note: "**为什么 CIS 与 TDA 在这份实现里是同一件事**：CIS 是「HF 参考 + 单激发 + TDA」，TDA 是「丢掉 RPA 的 B 块」；两者在无 XC kernel 时是同一个本征问题。等 ST-01（完整 TDDFT，含 B 块）或 FX-03（RS-hybrid）落地后，`method: cis` / `tda` / `tddft` 才会分开，那时这条测试要改成「三者差多少」的实测记录。现在把「逐位相同」写进测试，是为了钉住「我们没有偷偷用两套公式」。**ST-01 落地后（第 310 轮）**：`method: tddft` 不再被拒，上面那句「tddft → 退出码 4 且消息带 ST-01」已经过时；`rs02_tda_engine.rs` 的该用例改成了 `tddft_runs_and_sits_below_tda`（两种 method 各自报告、逐态 tddft < tda），三者的定量关系记在 ST-01 条目里。"
 RS-04:
   state: in_progress
   ts: "2026-11-02T18:00:00Z"
@@ -451,9 +451,13 @@ VF-06:
 # ───────────────────── stretch 备选池（ST，5）─────────────────────
 
 ST-01:
-  state: pending
+  state: done
   stretch: true
-  note: "完整 TDDFT（含 B 矩阵耦合项）"
+  ts: "2026-11-08T07:30:00Z"
+  artifact: "qwb-core/crates/qwb-response/src/tddft.rs（新：RPA/TDHF 求解器，A/B 矩阵 + (A−B)^(1/2) 对称化 + Z·W 归一化自检）、qwb-response/src/lib.rs（导出 `tddft_singlet`/`TddftResult`）、qwb-core/crates/qwb-response/tests/st01_tddft.rs（2 例）、qwb-core/crates/qwb-engine/src/lib.rs（`method: tddft` 分派 + 非 hf 参考的拒绝理由改为只缺 XC kernel）、qwb-engine/tests/rs02_tda_engine.rs（把「tddft 被拒」改成「tddft 跑通且逐态低于 tda」）、qwb-core/crates/qwb-response/tests/reference/tddft_excitations.csv + scripts/pyscf_tdh_reference.py（DA-08 家族：逐行来源 + --check）、qwb-core/examples/h2o_tddft_tdhf.yaml"
+  verification: "**§6.7 的三条判据都实测达成**（「与文献差 0.15 eV」按 VF-01 的处置读作「与**方法匹配**的参考」，即 PySCF 2.14 的 `tdscf.rhf.TDHF` 完整 RPA）。① **与 TDHF 参考一致**：`cargo test -p qwb-response --test st01_tddft` 2 例绿（0.34 s）。H2O/STO-3G 前 5 态本实现 13.157994 / 15.109895 / 16.695362 / 19.110439 / 21.943605 eV，PySCF TDHF 同值，逐态差 **4.6e-7…5.9e-7 eV**（判据 0.15 eV）；H2O/def2-SVP 9.238100 / 11.002401 / 11.802911 / 13.565417 / 15.015246 eV，差 **1.2e-7…2.9e-7 eV**；振子强度逐位一致（0.003239 / 0 / 0.067091 / 0.054973 / 1.048059）。② **系统性下降**：同输入下每个态都低于 TDA —— STO-3G 降 0.0418 / 0.0145 / 0.1099 / 0.0759 / 0.1023 eV，def2-SVP 降 0.0591 / 0.0692 / 0.0689 / 0.0946 / 0.0435 eV（TDA 13.1998/15.1244/16.8053/19.1863/22.0459 eV 对比 tddft 13.1580/15.1099/16.6954/19.1104/21.9436 eV）。③ **报告分列**：`cargo test -p qwb-engine --test rs02_tda_engine` 4 例绿，`tddft_runs_and_sits_below_tda` 断言两种 method 各自出现在 `result.json` 的 `excited_states.method` 里且 tddft < tda（0.483547 vs 0.485084 / 0.555278 vs 0.555811 / 0.613543 vs 0.617584 Ha）；端到端 `qwb props examples/h2o_tddft_tdhf.yaml` 打出 `state 1 0.483547 Ha 13.1580 eV`…`state 5 0.806413 Ha 21.9436 eV`，`result.json` 的 `method` = `tddft`、`sum_rules.trk_oscillator` = 1.945972。④ **稳定性自检**：`(A−B)` 最小本征值 **0.4465**（STO-3G）/ **0.3252**（def2-SVP）为正（否则报错而不是取绝对值硬算），最小 ω² 0.2338 / 0.1153；每个态的 `Z·W = 1` 在库内部被真的算一遍（不满足就 Internal 报错）。⑤ DA-08 家族扩到 **8 个文件 79 行**（`tddft_excitations.csv` 10 行、`--check` 绿、每行带 PySCF 的 `10.1063/5.0006074`），门禁 `check_reference_sources.py` 覆盖。"
+  note: "**`B` 块不是新积分**：`B_pq = 2T1[p][q] − T1[(j,a)][(i,b)]`，第二项只是把两侧的占/虚角色对调（八重对称），所以这一轮一个新积分路径都没写 —— 这让 B 的实现可以只靠一个置换 + 一个外部参考钉住。**没做的**：① DFT 参考下的 TDDFT 还需要 XC kernel `f_xc` 进响应矩阵（FX-03），非 `hf` 参考仍以 Unsupported(4) 拒绝、消息明说缺的是 FX-03（`a_dft_reference_is_rejected_and_names_the_xc_kernel` 钉住）；② 只做闭壳层单重态；③ 三重态（`2(ia|jb)` 去掉）没有单独接口。**判据读法**：与「实验值」比仍是 TDA 那一侧已经记账的 5.8 eV 缺口（方法层级限制），本条按方法匹配参考执行，两个读法都写在 docs/error-budget.md 的 §0/§3。"
+  choices: "一百三十二"
 ST-02:
   state: pending
   stretch: true

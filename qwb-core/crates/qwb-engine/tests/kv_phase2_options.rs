@@ -108,13 +108,14 @@ fn both_mp2_kinds_are_wired_now() {
 }
 
 #[test]
-fn full_tddft_is_rejected_with_its_wp() {
-    // M4 让 cis/tda（hf 参考、闭壳层）可算，所以只剩完整 TDDFT（含 B 块与 XC kernel）被拒。
+fn a_dft_reference_for_excited_states_is_rejected_with_fx03() {
+    // ST-01 交付后 cis/tda/tddft 三条都能算（hf 参考、闭壳层），所以"还没做"的只剩下
+    // DFT 参考需要的 XC kernel —— 这一条必须显式拒绝，且点名 FX-03。
     let options = TaskOptions::default()
         .with_excited_states(ExcitedStatesOptions::new(5, ExcitedStateMethod::Tddft));
-    let message = unsupported(&input("hf", 1, options));
-    assert!(message.contains("ST-01"), "{message}");
-    assert!(message.contains("cis/tda"), "{message}");
+    let message = unsupported(&input("svwn5", 1, options));
+    assert!(message.contains("FX-03"), "{message}");
+    assert!(message.contains("XC kernel"), "{message}");
 }
 
 #[test]
@@ -161,13 +162,13 @@ fn phase1_equivalent_options_are_not_rejected() {
 
 #[test]
 fn rejection_happens_before_any_numerics() {
-    // MP2 与 cis/tda 都已接线，所以这里用**还没做**的路径（完整 TDDFT / ST-01）钉"立刻拒绝"。
-    let options = TaskOptions::default()
-        .with_excited_states(ExcitedStatesOptions::new(5, ExcitedStateMethod::Tddft));
+    // MP2、cis/tda/tddft（ST-01）都已接线，所以这里用**还没做**的近似路径
+    // （`options.numerics` = IN-03/IN-04，受 K10 门禁约束）钉"立刻拒绝"。
+    let options = TaskOptions::default().with_numerics(NumericsOptions::new(NumericsPath::Ri, 3));
     let started = Instant::now();
     let message = unsupported(&input("hf", 1, options));
     let elapsed = started.elapsed();
-    assert!(message.contains("ST-01"), "{message}");
+    assert!(message.contains("IN-03"), "{message}");
     // 一次 STO-3G/H2 的 SCF 在本机也要几十毫秒；"立刻拒绝"应当在毫秒级。
     // 判据取 1 s 而不是 50 ms：`cargo test --workspace` 会**并行**跑几十个测试，
     // 这个用例在满负载下实测偶尔超过 50 ms（2026-10-30 第 102 轮门禁），而 1 s 仍然
