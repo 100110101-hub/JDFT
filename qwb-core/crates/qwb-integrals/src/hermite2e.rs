@@ -170,6 +170,112 @@ pub(crate) fn derivative_boys(l: u32, m: u32, n: u32, scale: f64, r: [f64; 3]) -
     total
 }
 
+/// Hermite–Coulomb 核的**整块表**：`S^{(s)}(l,m,n) = ∂^l_x∂^m_y∂^n_z F_s(T)`。
+///
+/// # 递推（推导出来的，不是背下来的）
+///
+/// 记 `T = ρ|R|²`、`R = P − Q`、`∂_x = 2ρR_x·∂_T`、`∂_T F_s = −F_{s+1}`。对 `x` 求一次导
+/// 会同时打到两处：
+///
+/// * `F_s` 那一半：`−2ρR_x·S^{(s+1)}(l,m,n)`；
+/// * `R` 的多项式因子那一半（`∂_x R_x = 1`）：合计 `−2ρ·l·S^{(s+1)}(l−1,m,n)`。
+///
+/// 于是
+///
+/// ```text
+/// S^{(s)}(l+1,m,n) = −2ρR_x·S^{(s+1)}(l,m,n) − 2ρ·l·S^{(s+1)}(l−1,m,n)
+/// ```
+///
+/// `y`、`z` 同理。手验两阶：`l=0` 退化成 `∂_x F_s = −2ρR_xF_{s+1}`；`l=1` 给出
+/// `S^{(s)}(2,0,0) = −2ρF_{s+1} + 4ρ²R_x²F_{s+2}`，与直接求导逐项一致（`l=2→3` 也验过）。
+/// 实现另由 `tests/h05_second_derivatives.rs` 对 `derivative_boys`（按定义符号求导）
+/// 逐点比对钉住。
+///
+/// # 代价
+///
+/// `(L+1)³` 个格点、每个几次乘加，且**只需一次 Boys 数组**。原来的做法是每个三元组
+/// 各做一次符号求导（成本 `2^(l+m+n)`）——分解式一旦要用整块 `R`，那种做法就慢到不可用
+/// （见 `docs/choices.md` 一百一十七）。
+#[derive(Debug, Clone)]
+struct RTable {
+    values: Vec<f64>,
+    lx: usize,
+    ly: usize,
+    lz: usize,
+}
+
+impl RTable {
+    /// 建表：`lx/ly/lz` 是每个方向需要的最高导数阶。
+    fn build(rho: f64, r: [f64; 3], lx: usize, ly: usize, lz: usize) -> Self {
+        let t = rho * (r[0] * r[0] + r[1] * r[1] + r[2] * r[2]);
+        let max_order = lx + ly + lz;
+        let mut boys = [0.0_f64; 65];
+        assert!(max_order < boys.len(), "R 表的阶数 {max_order} 超出栈缓冲");
+        boys_functions_into(max_order, t, &mut boys[..=max_order]);
+        let size = (lx + 1) * (ly + 1) * (lz + 1);
+        let mut values = vec![0.0_f64; size * (max_order + 1)];
+        let index =
+            |s: usize, l: usize, m: usize, n: usize| s * size + (l * (ly + 1) + m) * (lz + 1) + n;
+        let two_rho = 2.0 * rho;
+        // `s` 从高到低：`S^{(s)}` 只依赖 `S^{(s+1)}`。
+        for s in (0..=max_order).rev() {
+            for order in 0..=max_order {
+                for l in 0..=lx.min(order) {
+                    for m in 0..=ly.min(order - l) {
+                        let n = order - l - m;
+                        if n > lz {
+                            continue;
+                        }
+                        if order == 0 {
+                            values[index(s, l, m, n)] = boys[s];
+                            continue;
+                        }
+                        // 最高一层只有 `order = 0` 有用：目标都在 `s = 0`，每升一层 `s`
+                        // 阶数至少要降一阶，所以 `s = max_order` 的高阶项永远是死数据。
+                        if s + 1 > max_order {
+                            continue;
+                        }
+                        // 统一沿「最后一个非零方向」上一步，保证可复现。
+                        let value = if n > 0 {
+                            let mut v = -two_rho * r[2] * values[index(s + 1, l, m, n - 1)];
+                            if n >= 2 {
+                                v -= two_rho * (n as f64 - 1.0) * values[index(s + 1, l, m, n - 2)];
+                            }
+                            v
+                        } else if m > 0 {
+                            let mut v = -two_rho * r[1] * values[index(s + 1, l, m - 1, n)];
+                            if m >= 2 {
+                                v -= two_rho * (m as f64 - 1.0) * values[index(s + 1, l, m - 2, n)];
+                            }
+                            v
+                        } else {
+                            let mut v = -two_rho * r[0] * values[index(s + 1, l - 1, m, n)];
+                            if l >= 2 {
+                                v -= two_rho * (l as f64 - 1.0) * values[index(s + 1, l - 2, m, n)];
+                            }
+                            v
+                        };
+                        values[index(s, l, m, n)] = value;
+                    }
+                }
+            }
+        }
+        Self { values, lx, ly, lz }
+    }
+
+    /// `S^{(0)}(l,m,n)`，即真正的 `R_{lmn}`。
+    fn get(&self, l: u32, m: u32, n: u32) -> f64 {
+        debug_assert!(
+            (l as usize) <= self.lx && (m as usize) <= self.ly && (n as usize) <= self.lz,
+            "({l},{m},{n}) 超出 R 表范围 ({},{},{})",
+            self.lx,
+            self.ly,
+            self.lz
+        );
+        self.values[(l as usize * (self.ly + 1) + m as usize) * (self.lz + 1) + n as usize]
+    }
+}
+
 /// 一个笛卡尔分量 `(a b|c d)` 的原函数积分（未归一化、未收缩）。
 ///
 /// `pa`…`pd` 是四个笛卡尔高斯的幂次 `(x, y, z)`。
@@ -184,14 +290,10 @@ struct PrimitiveContext {
     q: f64,
     p_center: [f64; 3],
     q_center: [f64; 3],
-    rho: f64,
-    r: [f64; 3],
     prefactor: f64,
-    /// 懒缓存：`derivative_boys(l,m,n)` 只依赖三元组，跨 12 次调用复用。
-    kernel: Vec<f64>,
-    /// 每个方向的最高 Hermite 指标（缓存的长宽高）。
-    ly: u32,
-    lz: u32,
+    /// Hermite–Coulomb 核的**整块表**：`S^{(s)}(l,m,n) = ∂^l_x∂^m_y∂^n_z F_s(T)`，
+    /// 按 `(s, l, m, n)` 平铺。一次 `O(L³)` 递推填满，取代「每个三元组一次符号求值」。
+    kernel: RTable,
 }
 
 impl PrimitiveContext {
@@ -240,26 +342,14 @@ impl PrimitiveContext {
             q,
             p_center,
             q_center,
-            rho,
-            r,
             prefactor,
-            kernel: vec![f64::NAN; ((lx + 1) * (ly + 1) * (lz + 1)) as usize],
-            ly,
-            lz,
+            kernel: RTable::build(rho, r, lx as usize, ly as usize, lz as usize),
         }
     }
 
-    /// 取 Hermite–Coulomb 核 `R_{lmn}`（懒缓存，跨 shift 复用）。
+    /// 取 Hermite–Coulomb 核 `R_{lmn} = ∂^l_x∂^m_y∂^n_z F_0(T)`（查表）。
     fn kernel_value(&mut self, l: u32, m: u32, n: u32) -> f64 {
-        let stride_y = (self.lz + 1) as usize;
-        let stride_x = ((self.ly + 1) * (self.lz + 1)) as usize;
-        let index = (l as usize) * stride_x + (m as usize) * stride_y + n as usize;
-        let mut value = self.kernel[index];
-        if value.is_nan() {
-            value = derivative_boys(l, m, n, self.rho, self.r);
-            self.kernel[index] = value;
-        }
-        value
+        self.kernel.get(l, m, n)
     }
 
     /// 给定的四个幂次三元组的原函数积分（未归一化、未收缩）。
@@ -298,8 +388,6 @@ impl PrimitiveContext {
                 scratch,
             );
         }
-        let stride_y = (self.lz + 1) as usize;
-        let stride_x = ((self.ly + 1) * (self.lz + 1)) as usize;
         let mut total = 0.0;
         for tx in 0..=pa[0] + pb[0] {
             for ty in 0..=pa[1] + pb[1] {
@@ -317,23 +405,7 @@ impl PrimitiveContext {
                                     continue;
                                 }
                                 let sign = if (ux + uy + uz) % 2 == 0 { 1.0 } else { -1.0 };
-                                let index = ((tx + ux) * stride_x as u32
-                                    + (ty + uy) * stride_y as u32
-                                    + (tz + uz))
-                                    as usize;
-                                let value = if self.kernel[index].is_nan() {
-                                    let computed = derivative_boys(
-                                        tx + ux,
-                                        ty + uy,
-                                        tz + uz,
-                                        self.rho,
-                                        self.r,
-                                    );
-                                    self.kernel[index] = computed;
-                                    computed
-                                } else {
-                                    self.kernel[index]
-                                };
+                                let value = self.kernel.get(tx + ux, ty + uy, tz + uz);
                                 total += bra * ket * sign * value;
                             }
                         }
@@ -816,4 +888,38 @@ pub fn primitive_component_second_derivatives_factored(
         }
     }
     out
+}
+
+#[cfg(test)]
+mod rtable_validation {
+    //! `RTable` 的递推必须与「按定义符号求导」的 `derivative_boys` **逐点一致**。
+    //!
+    //! 这条测试是「不凭记忆写递推」的执行版：关系式是推导出来的（见 `RTable` 的文档），
+    //! 但推导也可能错，所以拿已经被 `i03_general_l` / `i03_oracle` 钉住的符号路径当尺子。
+    use super::{RTable, derivative_boys};
+
+    #[test]
+    fn r_table_matches_symbolic_differentiation() {
+        let cases = [
+            (0.37, [0.21, -0.44, 0.17]),
+            (1.9, [-1.3, 0.25, 0.91]),
+            (0.05, [2.4, -0.7, 1.1]),
+        ];
+        for (rho, r) in cases {
+            let table = RTable::build(rho, r, 5, 5, 5);
+            for l in 0..=5 {
+                for m in 0..=5 {
+                    for n in 0..=5 {
+                        let expected = derivative_boys(l, m, n, rho, r);
+                        let got = table.get(l, m, n);
+                        let scale = expected.abs().max(1.0e-12);
+                        assert!(
+                            (got - expected).abs() <= 1.0e-12 * scale,
+                            "R({l},{m},{n}) ρ={rho}: 表 {got:.15e} vs 符号 {expected:.15e}"
+                        );
+                    }
+                }
+            }
+        }
+    }
 }
