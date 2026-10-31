@@ -113,7 +113,13 @@ IN-03:
   stretch: true
   note: "pseudospectral Coulomb/exchange（K10 门禁；失败不阻塞）"
 IN-04:
-  state: pending
+  state: blocked
+  ts: "2026-11-07T01:00:00Z"
+  artifact: "`qwb-scf/tests/in04_ri_j_measurement.rs`（`#[ignore]` 的测量关：4 索引 J vs RI-J 的同值与墙钟对照；门禁不跑它）"
+  verification: "**实测（def2-SVP，测试 profile opt-level=2）**：water n=24/n_aux=76 —— 4 索引 J **0.172 s** vs RI-J **0.349 s**（**0.49×**，更慢），相对差 **1.28e-2**；benzene n=114/n_aux=372 —— 4 索引 J **96.954 s** vs RI-J **50.933 s**（**1.90×**），相对差 **6.88e-3**。**判据要求大体系墙钟优势 ≥ 3×，实测 1.90×，未达标。**"
+  gap: "**两项卡点**：①**JK 拟合基用不了** —— `def2-universal-jkfit` 含 l≥3 函数，而 `spherical_transform` 只实现到 d（s/p/d），`three_center` 直接报 `Unsupported`；只能用 `def2-svp-ri`（相关拟合基）当替代，所以相对差只有 ~1e-2，不是 JK 质量的拟合。②**加速比不够** —— 即便用替代基，n=114 时也只有 **1.90×**（< 3×）；原因是我们的 RI-J 仍是朴素循环（无筛选、无分块、无批量 gemm），而 4 索引侧 `two_electron` 也不是最优实现。"
+  blocked_reason_note: "要继续需要：①球谐变换支持 l=3/4（`spherical_transform` 的 g/f 情形），才能用真正的 JK 拟合基；②RI-J 的批量 gemm 实现（把 `(μν)`×`P` 的两次收缩做成矩阵乘，配合 IN-05 的并行与确定性）。这两件都不在本轮预算内。**没有把 IN-04 标 done**：它的两条判据都没满足。"
+
   note: "RI-J / RI-JK 的 Fock 构建路径（K10）"
 IN-05:
   state: done
