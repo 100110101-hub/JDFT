@@ -170,6 +170,15 @@ pub(crate) fn derivative_boys(l: u32, m: u32, n: u32, scale: f64, r: [f64; 3]) -
     total
 }
 
+/// 核的两种模式：全库仑，或 `erfc(ωr12)/r12` 分域的**短程**部分（IN-02）。
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum KernelMode {
+    /// `1/r12`（普通 Boys）。
+    Coulomb,
+    /// `erfc(ωr12)/r12`，`alpha = ω/√(p+q)`。
+    ShortRange { alpha: f64 },
+}
+
 /// Hermite–Coulomb 核的**整块表**：`S^{(s)}(l,m,n) = ∂^l_x∂^m_y∂^n_z F_s(T)`。
 ///
 /// # 递推（推导出来的，不是背下来的）
@@ -206,7 +215,17 @@ struct RTable {
 
 impl RTable {
     /// 建表：`lx/ly/lz` 是每个方向需要的最高导数阶。
-    fn build(rho: f64, r: [f64; 3], lx: usize, ly: usize, lz: usize) -> Self {
+    /// 与 [`RTable::build`] 相同，但可以换种子：短程（erfc 分域）核的
+    /// `S^{(s)}(0,0,0) = F_s^{SR}(T, α)`，递推关系与 Coulomb 完全一样
+    /// （`∂_T F_s^{SR} = −F_{s+1}^{SR}` 仍成立，因为 `erfc(αt)` 不含 `T`）。
+    fn build_with(
+        rho: f64,
+        r: [f64; 3],
+        lx: usize,
+        ly: usize,
+        lz: usize,
+        mode: KernelMode,
+    ) -> Self {
         let t = rho * (r[0] * r[0] + r[1] * r[1] + r[2] * r[2]);
         let max_order = lx + ly + lz;
         let mut boys = [0.0_f64; 65];
@@ -227,7 +246,12 @@ impl RTable {
                             continue;
                         }
                         if order == 0 {
-                            values[index(s, l, m, n)] = boys[s];
+                            values[index(s, l, m, n)] = match mode {
+                                KernelMode::Coulomb => boys[s],
+                                KernelMode::ShortRange { alpha } => {
+                                    crate::attenuated::erfc_boys(s, t, alpha)
+                                }
+                            };
                             continue;
                         }
                         // 最高一层只有 `order = 0` 有用：目标都在 `s = 0`，每升一层 `s`
@@ -308,6 +332,33 @@ impl PrimitiveContext {
         delta: f64,
         max_powers: [u32; 3],
     ) -> Self {
+        Self::new_with_mode(
+            a,
+            alpha,
+            b,
+            beta,
+            c,
+            gamma,
+            d,
+            delta,
+            max_powers,
+            KernelMode::Coulomb,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn new_with_mode(
+        a: [f64; 3],
+        alpha: f64,
+        b: [f64; 3],
+        beta: f64,
+        c: [f64; 3],
+        gamma: f64,
+        d: [f64; 3],
+        delta: f64,
+        max_powers: [u32; 3],
+        mode: KernelMode,
+    ) -> Self {
         let p = alpha + beta;
         let q = gamma + delta;
         let p_center = [
@@ -343,7 +394,7 @@ impl PrimitiveContext {
             p_center,
             q_center,
             prefactor,
-            kernel: RTable::build(rho, r, lx as usize, ly as usize, lz as usize),
+            kernel: RTable::build_with(rho, r, lx as usize, ly as usize, lz as usize, mode),
         }
     }
 
@@ -442,6 +493,57 @@ pub fn primitive_component(
         pa[2] + pb[2] + pc[2] + pd[2],
     ];
     let mut context = PrimitiveContext::new(a, alpha, b, beta, c, gamma, d, delta, max_powers);
+    let mut scratch = [0.0_f64; 16 * 16 * 16];
+    context.integral(pa, pb, pc, pd, &mut scratch)
+}
+
+/// 短程（`erfc(ωr12)/r12`）原函数积分：与 [`primitive_component`] 同一个四元组、同一个
+/// MD 展开，只把核换成 erfc 分域版本（IN-02）。
+///
+/// `omega` 是分域参数，单位 Bohr⁻¹；`α = ω/√(p+q)` 在内部算。
+/// `omega = 0` 时**逐位退回** [`primitive_component`]（`erfc(0) = 1`），这是第一条判据。
+///
+/// # Panics
+///
+/// `omega` 为非有限值或负数。
+#[allow(clippy::too_many_arguments)]
+#[must_use]
+pub fn primitive_component_sr(
+    pa: [u32; 3],
+    a: [f64; 3],
+    alpha: f64,
+    pb: [u32; 3],
+    b: [f64; 3],
+    beta: f64,
+    pc: [u32; 3],
+    c: [f64; 3],
+    gamma: f64,
+    pd: [u32; 3],
+    d: [f64; 3],
+    delta: f64,
+    omega: f64,
+) -> f64 {
+    assert!(omega.is_finite() && omega >= 0.0, "ω 非法：{omega}");
+    let max_powers = [
+        pa[0] + pb[0] + pc[0] + pd[0],
+        pa[1] + pb[1] + pc[1] + pd[1],
+        pa[2] + pb[2] + pc[2] + pd[2],
+    ];
+    let p = alpha + beta;
+    let q = gamma + delta;
+    let short_alpha = omega / (p + q).sqrt();
+    let mut context = PrimitiveContext::new_with_mode(
+        a,
+        alpha,
+        b,
+        beta,
+        c,
+        gamma,
+        d,
+        delta,
+        max_powers,
+        KernelMode::ShortRange { alpha: short_alpha },
+    );
     let mut scratch = [0.0_f64; 16 * 16 * 16];
     context.integral(pa, pb, pc, pd, &mut scratch)
 }
