@@ -93,7 +93,7 @@ grids:
 numerics:
   - name: numerics
     path: numerics/numerics.yaml
-    sha256: fea96fd0bd356da0acba2bf2c2b3de28596e1914b0668c114bbecaeae2096def
+    sha256: 7013e40da43be893d5966217321ca2aab8d055f100a2ac35f51ed9c5712be6fa
 
 # DA-04：溶剂数据（K1 `solvent`）。`radii_set` 必须显式声明 —— 混用半径集会静默错数，
 # 所以 K1 里它是必填的声明字段而不是默认值。

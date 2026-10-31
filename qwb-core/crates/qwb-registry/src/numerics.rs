@@ -103,6 +103,35 @@ impl EquivalenceTolerance {
     }
 }
 
+/// UV/Vis 谱的**展示**默认（PR-04）：高斯展宽（半高半宽 = HWHM）、能量网格步长、
+/// 绘图窗口按 HWHM 计的边距。
+///
+/// 这些是**本项目的展示约定**（不是文献值），所以放进 `qwb-data/numerics` 与其余数值数据
+/// 一起版本化、一起用 sha256 钉住 —— 「数据先行」的边界是「代码里不留未钉住的默认值」。
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+#[non_exhaustive]
+pub struct SpectrumDefaults {
+    /// 高斯展宽的半高半宽，单位 eV。
+    pub gaussian_hwhm_ev: f64,
+    /// 能量网格步长，单位 eV。
+    pub grid_step_ev: f64,
+    /// 绘图窗口在两侧各留多少个 HWHM。
+    pub padding_hwhm: f64,
+}
+
+impl SpectrumDefaults {
+    /// 构造。
+    #[must_use]
+    pub fn new(gaussian_hwhm_ev: f64, grid_step_ev: f64, padding_hwhm: f64) -> Self {
+        Self {
+            gaussian_hwhm_ev,
+            grid_step_ev,
+            padding_hwhm,
+        }
+    }
+}
+
 /// 数值路径的精度等级与等价容差（`qwb-data/numerics/<name>.yaml` 的形态）。
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
@@ -128,6 +157,10 @@ pub struct NumericsDef {
     pub levels: Vec<AccuracyLevel>,
     /// 等价容差。
     pub equivalence_tolerance: EquivalenceTolerance,
+    /// UV/Vis 谱的展示默认（PR-04）。`#[serde(default)]`：旧 numerics 文件没有这个块，
+    /// 缺省 `None` 才能原样解析 —— 加性契约扩展的唯一可行写法。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub spectrum_defaults: Option<SpectrumDefaults>,
 }
 
 impl_data_common!(NumericsDef);
@@ -190,6 +223,34 @@ impl NumericsDef {
                 issues.push(format!(
                     "equivalence_tolerance.{label} = {tolerance} is too loose \
                      (must be < 1e-3 Ha, phase-2 §4.5)"
+                ));
+            }
+        }
+
+        if let Some(spectrum) = &self.spectrum_defaults {
+            if !(spectrum.gaussian_hwhm_ev.is_finite() && spectrum.gaussian_hwhm_ev > 0.0) {
+                issues.push(format!(
+                    "spectrum_defaults.gaussian_hwhm_ev must be finite and > 0 (got {})",
+                    spectrum.gaussian_hwhm_ev
+                ));
+            }
+            if !(spectrum.grid_step_ev.is_finite() && spectrum.grid_step_ev > 0.0) {
+                issues.push(format!(
+                    "spectrum_defaults.grid_step_ev must be finite and > 0 (got {})",
+                    spectrum.grid_step_ev
+                ));
+            }
+            if spectrum.grid_step_ev > spectrum.gaussian_hwhm_ev {
+                issues.push(format!(
+                    "spectrum_defaults.grid_step_ev ({}) must not exceed gaussian_hwhm_ev ({}): \
+                     the grid would miss the peak",
+                    spectrum.grid_step_ev, spectrum.gaussian_hwhm_ev
+                ));
+            }
+            if !(spectrum.padding_hwhm.is_finite() && spectrum.padding_hwhm > 0.0) {
+                issues.push(format!(
+                    "spectrum_defaults.padding_hwhm must be finite and > 0 (got {})",
+                    spectrum.padding_hwhm
                 ));
             }
         }
@@ -288,6 +349,7 @@ mod tests {
                 AccuracyLevel::new(5, "grid-veryfine").with_ps(PsSettings::new(180, true)),
             ],
             equivalence_tolerance: EquivalenceTolerance::new(1.0e-6, 5.0e-5),
+            spectrum_defaults: None,
         }
     }
 

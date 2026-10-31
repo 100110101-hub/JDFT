@@ -48,6 +48,17 @@
         "null"
       ]
     },
+    "spectrum_defaults": {
+      "description": "UV/Vis 谱的展示默认（PR-04）。`#[serde(default)]`：旧 numerics 文件没有这个块，\n缺省 `None` 才能原样解析 —— 加性契约扩展的唯一可行写法。",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/SpectrumDefaults"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
     "version": {
       "description": "数据版本（独立 semver；§8.6 要求变更即 bump）。",
       "type": "string"
@@ -196,6 +207,33 @@
       "required": [
         "collocation_points_per_atom",
         "de_aliasing"
+      ]
+    },
+    "SpectrumDefaults": {
+      "description": "UV/Vis 谱的**展示**默认（PR-04）：高斯展宽（半高半宽 = HWHM）、能量网格步长、\n绘图窗口按 HWHM 计的边距。\n\n这些是**本项目的展示约定**（不是文献值），所以放进 `qwb-data/numerics` 与其余数值数据\n一起版本化、一起用 sha256 钉住 —— 「数据先行」的边界是「代码里不留未钉住的默认值」。",
+      "type": "object",
+      "properties": {
+        "gaussian_hwhm_ev": {
+          "description": "高斯展宽的半高半宽，单位 eV。",
+          "type": "number",
+          "format": "double"
+        },
+        "grid_step_ev": {
+          "description": "能量网格步长，单位 eV。",
+          "type": "number",
+          "format": "double"
+        },
+        "padding_hwhm": {
+          "description": "绘图窗口在两侧各留多少个 HWHM。",
+          "type": "number",
+          "format": "double"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "gaussian_hwhm_ev",
+        "grid_step_ev",
+        "padding_hwhm"
       ]
     }
   }

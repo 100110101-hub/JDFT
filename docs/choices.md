@@ -4723,3 +4723,50 @@ RS-05 的位置已经很清楚：判据要 20×、实测 1.50×，剩下的那�
 
 队首换成 **PR-04**（UV/Vis 谱：振子强度 + 高斯展宽 → `spectrum.csv`），依赖 RS-02/RS-03
 都已 done；展宽参数按"数据先行"要进 `qwb-data`。
+
+## 一百二十一、PR-04 第一步：展宽参数进数据 + 展宽谱的三条恒等式（2026-11-07）
+
+PR-04（UV/Vis 谱）依赖的 RS-02/RS-03 都已 done，所以它是队首。按「数据先行」，先把展宽参数
+**钉进数据**，再把物理做实、用恒等式钉住；GUI 出图留在下一步。
+
+### 数据（K10 加性扩展）
+
+`qwb-data/numerics/numerics.yaml` 加 `spectrum_defaults`（版本 1.0.0 → 1.1.0）：
+
+```yaml
+spectrum_defaults:
+  gaussian_hwhm_ev: 0.4
+  grid_step_ev: 0.05
+  padding_hwhm: 6.0
+```
+
+`notes` 里写明这是**本项目的展示约定**（不是文献值）——和 K10 的容差同一处理方式：
+「项目自己的决定」也要被版本化、被 sha256 钉住，代码里不留未钉住的默认值。
+Rust 侧 `NumericsDef` 加 `#[serde(default)] spectrum_defaults: Option<SpectrumDefaults>`
+（加性、旧数据原样解析），`check_structure` 校验正值与「步长不得大于 HWHM」。
+数据用 `qwb-stamp-data` 重新盖章、`registry.yaml` 的摘要同步，`data verify` **30/30 通过**，
+`qwb-gen-schemas` 重新生成两份 schema。
+
+### 物理（`qwb-props::spectrum`）
+
+高斯核按**半高半宽**参数化：`g(E) = exp(−ln2·(E/HWHM)²)`。它的两条一阶性质是
+恒等式级别的判据，正好抓「核写错 / 网格写错 / 忘了乘 f」：
+
+* **面积**：`Σ ε·ΔE = Σf·HWHM·√(π/ln2)`；
+* **重心**：`Σ E·ε / Σ ε = Σ f·E / Σ f`（对称核的一阶矩精确等于中心）。
+
+外加孤立跃迁的峰位落在它的能量上（半步长以内）、双峰可分辨、CSV 可解析——共 8 条测试，
+全绿（面积与重心都在 1e-9 内）。
+
+**实测抓到一个抄错常数**：我把单位面积写成 `1.7724538509...`，那是 `√π`；正确值是
+`√(π/ln2) = 2.1289340388...`。面积判据立刻报 20% 偏差。修法不是改判据，而是**让常数由
+常数算**（`(PI/LN_2).sqrt()`）——手抄的常数就不该进代码。
+
+### 还缺什么（PR-04 未完成，记 in_progress）
+
+1. **engine 接线**：`uv_vis_spectrum` 结果块（K2 加性）与结果目录里的 `spectrum.csv`；
+2. **端到端判据**：H2O/苯的谱峰位置与 RS-02 的激发能一致（需要接上 engine 的 TDA 路径）；
+3. **GUI**：qwb-studio 目前没有绘图面板（只有 `DataPanel` / `Scene3DPanel`），要新增一个
+   用 `QPainter` 画谱的紧凑面板（不引入 matplotlib，产品依赖保持最小）。
+
+三步都不大，但这一轮先把「数据 + 物理 + 判据」做扎实，比半接线的端到端更有价值。

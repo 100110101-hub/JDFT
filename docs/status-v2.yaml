@@ -375,8 +375,13 @@ PR-03:
   note: "容器按条目名存字节、内容层不设限（K4 只校验条目名与 meta），所以加性块天然向后兼容 —— 但那必须由测试钉住，不能靠推断。四条测试覆盖旧夹具、新块 roundtrip、旧读者容错与新块缺失。"
   choices: "一百二十"
 PR-04:
-  state: pending
-  note: "UV/Vis 谱（振子强度 + 展宽 + spectrum.csv）"
+  state: in_progress
+  ts: "2026-11-07T14:00:00Z"
+  artifact: "qwb-data/numerics/numerics.yaml（v1.1.0 的 spectrum_defaults）、qwb-core/crates/qwb-registry/src/numerics.rs（SpectrumDefaults）、qwb-core/crates/qwb-props/src/spectrum.rs、qwb-core/crates/qwb-props/tests/spectrum.rs"
+  verification: "**数据先行**：展宽参数进 `numerics.yaml` 的 `spectrum_defaults`（K10 加性扩展，版本 1.0.0 → 1.1.0），由 `qwb-stamp-data` 盖章、registry 摘要同步，`qwb data verify` 30/30 通过，schema 重新生成。**物理**：`qwb-props::spectrum` 的高斯展宽（HWHM 参数化）由 8 条测试钉住 —— 面积 = Σf·HWHM·√(π/ln2)（相对差 < 1e-9）、重心 = f 加权平均能量（< 1e-9）、孤立跃迁峰位落在能量上（≤ 半步长）、双峰可分辨、非法参数被拒、CSV 可解析、默认值确实来自数据（0.4/0.05/6.0）。"
+  note: "还差三步：①engine 接线（`uv_vis_spectrum` 结果块 + 结果目录 `spectrum.csv`）；②端到端判据（H2O/苯的谱峰与 RS-02 激发能一致）；③GUI 绘图面板（studio 现在只有 DataPanel/Scene3DPanel，需新增 QPainter 面板，不引入 matplotlib）。"
+  gap: "未完成项按上一条 note 的三步执行；本轮实测抓到一个抄错的常数（把 √(π/ln2) 写成 √π），由面积恒等式发现，修法是让常数由常数算。"
+  choices: "一百二十一"
 PR-05:
   state: pending
   note: "GUI：ESP/溶剂化表面着色"

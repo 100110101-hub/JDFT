@@ -17,6 +17,7 @@
 
 pub mod cavity;
 pub mod cosmo;
+pub mod spectrum;
 
 use qwb_basis::InternalBasis;
 use qwb_engine_api::Molecule;

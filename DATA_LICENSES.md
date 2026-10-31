@@ -34,7 +34,7 @@
 | `qwb-data/grid/grid-fine.yaml` | 1.0.0 | Apache-2.0 | true | true | `25080b62b80416b1` |
 | `qwb-data/grid/grid-normal.yaml` | 1.0.0 | Apache-2.0 | true | true | `a792b362b1fdb278` |
 | `qwb-data/grid/grid-veryfine.yaml` | 1.0.0 | Apache-2.0 | true | true | `5c630f5a1ec0688d` |
-| `qwb-data/numerics/numerics.yaml` | 1.0.0 | Apache-2.0 | true | true | `fea96fd0bd356da0` |
+| `qwb-data/numerics/numerics.yaml` | 1.1.0 | Apache-2.0 | true | true | `7013e40da43be893` |
 | `qwb-data/registry.yaml` | 0.11.1 | ? | ? | ? | `—（manifest，条目各自带` |
 | `qwb-data/solvent/acetonitrile.yaml` | 2.1.0 | Apache-2.0 | true | true | `641eb80227e75fb8` |
 | `qwb-data/solvent/chloroform.yaml` | 2.1.0 | Apache-2.0 | true | true | `01ae69f7167f95c8` |
@@ -138,7 +138,7 @@
 - A multicenter numerical integration scheme for polyatomic molecules (Becke partitioning)
 - Quadratures on a sphere (Lebedev angular grids)
 
-### `qwb-data/numerics/numerics.yaml`（numerics 1.0.0）
+### `qwb-data/numerics/numerics.yaml`（numerics 1.1.0）
 
 - A multicenter numerical integration scheme for polyatomic molecules (Becke partitioning)
 - New Methods For Electronic Structure Calculations on Large Molecules (pseudospectral approach)
