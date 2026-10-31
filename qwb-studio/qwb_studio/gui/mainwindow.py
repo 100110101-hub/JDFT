@@ -48,6 +48,7 @@ from .datapanel import DataPanel
 from .logview import LogView
 from .scene_panel import Scene3DPanel
 from .spectrum_panel import SpectrumPanel
+from .comparison_panel import ComparisonPanel
 from .model import GuiProject
 from .runner import SchedulerBridge
 
@@ -125,6 +126,10 @@ class MainWindow(QMainWindow):
         tabs.addTab(self._build_task_panel(), "Task")
         tabs.addTab(self._build_monitor(), "Job Monitor")
         tabs.addTab(self._build_result_panel(), "Result")
+        # PR-07：多任务对比表（能量 / ΔE / 谱峰 + 导出 CSV）。数值来自
+        # `qwb_studio.comparison`，与 `qwb compare` 同一列序。
+        self.comparison_panel = ComparisonPanel()
+        tabs.addTab(self.comparison_panel, "Compare")
         self.log_view = LogView()
         tabs.addTab(self.log_view, "Log")
         self.scene_panel = Scene3DPanel()

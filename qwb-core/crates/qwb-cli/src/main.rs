@@ -10,6 +10,7 @@
 //! qwb ts     input.yaml [--out DIR]               # 阶段二 KV-05（未实现 → 退出码 4）
 //! qwb irc    input.yaml [--out DIR]               # 阶段二 KV-05（未实现 → 退出码 4）
 //! qwb scan   input.yaml [--out DIR]               # 阶段二 KV-05（未实现 → 退出码 4）
+//! qwb compare DIR DIR... [--csv FILE]            # 阶段二 PR-07：多任务结果对比表
 //! ```
 //!
 //! 退出码（K5 冻结）：`0` 成功 / `1` 输入错误 / `2` 收敛失败 / `3` 数据校验失败 / `4` 内部错误。
@@ -69,6 +70,8 @@ enum Command {
     Data(DataArgs),
     /// 性质与响应（激发态/NMR/极化率/多极）；阶段二 KV-05 只落签名，未实现
     Props(PropsArgs),
+    /// 多任务结果对比表（能量 / ΔE / 谱峰 + CSV 导出）
+    Compare(CompareArgs),
     /// 过渡态搜索；阶段二 KV-05 只落签名，未实现
     Ts(PathArgs),
     /// 内禀反应坐标；阶段二 KV-05 只落签名，未实现
@@ -111,6 +114,17 @@ struct PropsArgs {
     /// 激发态个数（覆盖 `options.excited_states.n_states`）
     #[arg(long)]
     states: Option<u32>,
+}
+
+/// `compare` 的参数：两个或更多结果目录（K3 的 `tasks/<id>/`）。
+#[derive(Debug, Args)]
+struct CompareArgs {
+    /// 结果目录（至少两个；顺序即 CSV 的行序）
+    #[arg(required = true)]
+    dirs: Vec<PathBuf>,
+    /// 导出 CSV 的路径（可选；不写就只打印表格）
+    #[arg(long)]
+    csv: Option<PathBuf>,
 }
 
 /// `ts` / `irc` / `scan` 的共同参数（三者都只是"带一条反应路径的 input.yaml"）。
@@ -259,6 +273,7 @@ fn dispatch(cli: &Cli) -> CliResult<()> {
         // M4 / RS-02：激发态（TDA/CIS）已经接通，`props` 走与 `run` 同一条执行路径；
         // 输入里没写 `options.excited_states` 时给一条明确的提示（而不是退出 4）。
         Command::Props(args) => cmd_props(args),
+        Command::Compare(args) => cmd_compare(args),
         Command::Ts(args) => cmd_not_implemented(
             "ts",
             "transition-state search lands with M6 (RP-01)",
@@ -363,6 +378,172 @@ fn cmd_run(args: &RunArgs) -> CliResult<()> {
 /// 与 `run` 共用 [`execute_job`] —— 一次 `props` 作业就是"同一份输入 + 结果目录"，
 /// 区别只在**输入里必须有 `options.excited_states`**，否则会跑完 SCF 却什么都不报。
 /// 所以先检查这一条，缺了就以退出码 1 说明（输入错误，不是"没实现"）。
+/// 一个结果目录的对比用摘要。
+struct TaskSummary {
+    /// 目录名（K3 的 task id）。
+    task: String,
+    /// 总能量，Hartree。
+    energy_hartree: f64,
+    /// SCF 是否收敛。
+    converged: bool,
+    /// 方法名（来自 `input.yaml`；读不到就 `?`）。
+    method: String,
+    /// 基组名（同上）。
+    basis: String,
+    /// 展宽谱的局部极大值（eV）；没有 `uv_vis_spectrum` 时为空。
+    spectrum_peaks_ev: Vec<f64>,
+}
+
+fn read_task_summary(dir: &Path) -> CliResult<TaskSummary> {
+    let result_path = dir.join("result.json");
+    let text = std::fs::read_to_string(&result_path).map_err(|e| {
+        CliError::input(format!(
+            "cannot read {}: {e}（compare 要的是结果目录）",
+            result_path.display()
+        ))
+    })?;
+    let value: serde_json::Value = serde_json::from_str(&text).map_err(|e| {
+        CliError::input(format!("{} is not valid JSON: {e}", result_path.display()))
+    })?;
+    let energy_hartree = value
+        .get("energy_hartree")
+        .and_then(serde_json::Value::as_f64)
+        .ok_or_else(|| {
+            CliError::input(format!("{}: missing energy_hartree", result_path.display()))
+        })?;
+    let converged = value
+        .get("scf_converged")
+        .and_then(serde_json::Value::as_bool)
+        .unwrap_or(false);
+    // 谱峰：从 `uv_vis_spectrum.points` 里取局部极大值（与 `UvVisSpectrum::peak_energies_ev` 同义）。
+    let mut spectrum_peaks_ev = Vec::new();
+    if let Some(points) = value
+        .get("uv_vis_spectrum")
+        .and_then(|block| block.get("points"))
+        .and_then(serde_json::Value::as_array)
+    {
+        let energies: Vec<(f64, f64)> = points
+            .iter()
+            .filter_map(|point| {
+                let pair = point.as_array()?;
+                Some((pair.first()?.as_f64()?, pair.get(1)?.as_f64()?))
+            })
+            .collect();
+        for window in energies.windows(3) {
+            let (_, left) = window[0];
+            let (energy, middle) = window[1];
+            let (_, right) = window[2];
+            if middle > left && middle >= right {
+                spectrum_peaks_ev.push(energy);
+            }
+        }
+    }
+    // 方法 / 基组来自 input.yaml（读不到就给 `?`，不让对比表因为缺文件整体失败）。
+    let (mut method, mut basis) = ("?".to_string(), "?".to_string());
+    if let Ok(input_text) = std::fs::read_to_string(dir.join("input.yaml"))
+        && let Ok(input) = serde_yaml::from_str::<serde_yaml::Value>(&input_text)
+    {
+        for (key, slot) in [("method_name", &mut method), ("basis_name", &mut basis)] {
+            if let Some(value) = input.get(key).and_then(serde_yaml::Value::as_str) {
+                *slot = value.to_string();
+            }
+        }
+    }
+    let task = dir
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("?")
+        .to_string();
+    Ok(TaskSummary {
+        task,
+        energy_hartree,
+        converged,
+        method,
+        basis,
+        spectrum_peaks_ev,
+    })
+}
+
+/// 对比表 CSV 的列序（**冻结**）：Python 侧
+/// `qwb_studio.comparison.COMPARISON_COLUMNS` 必须逐字相同，两侧各有测试钉住。
+pub const COMPARISON_COLUMNS: &str =
+    "task,method,basis,energy_hartree,delta_e_kcal_per_mol,converged,spectrum_peaks_ev";
+
+/// CRLF-free、可被 pandas/csv 直接读的对比表（表头 + 每任务一行）。
+fn comparison_csv(summaries: &[TaskSummary], reference: f64) -> String {
+    let mut csv = String::from(COMPARISON_COLUMNS);
+    csv.push('\n');
+    for summary in summaries {
+        let delta = (summary.energy_hartree - reference) * 627.509_474_063_459_3;
+        let peaks: Vec<String> = summary
+            .spectrum_peaks_ev
+            .iter()
+            .map(|peak| format!("{peak:.4}"))
+            .collect();
+        csv.push_str(&format!(
+            "{},{},{},{:.10},{:.8},{},{}\n",
+            summary.task,
+            summary.method,
+            summary.basis,
+            summary.energy_hartree,
+            delta,
+            summary.converged,
+            peaks.join(";")
+        ));
+    }
+    csv
+}
+
+/// `qwb compare`：多任务结果对比表（PR-07）。
+///
+/// 判据：表里的数值必须与「单看一个结果目录」一致（1e-10）—— 所以这里**只读**
+/// `result.json`/`input.yaml`，不做任何重算或再舍入；能量按 10 位小数打印，CSV 用 10 位。
+fn cmd_compare(args: &CompareArgs) -> CliResult<()> {
+    if args.dirs.len() < 2 {
+        return Err(CliError::input(
+            "compare needs at least two result directories".to_string(),
+        ));
+    }
+    let summaries: Vec<TaskSummary> = args
+        .dirs
+        .iter()
+        .map(|dir| read_task_summary(dir))
+        .collect::<CliResult<Vec<_>>>()?;
+    let reference = summaries[0].energy_hartree;
+    println!(
+        "{:<20} {:>10} {:>10} {:>18} {:>12} {:>6}  peaks(eV)",
+        "task", "method", "basis", "energy/Ha", "dE/(kcal/mol)", "conv"
+    );
+    for summary in &summaries {
+        let delta = (summary.energy_hartree - reference) * 627.509_474_063_459_3;
+        let peaks: Vec<String> = summary
+            .spectrum_peaks_ev
+            .iter()
+            .map(|peak| format!("{peak:.2}"))
+            .collect();
+        println!(
+            "{:<20} {:>10} {:>10} {:>18.10} {:>12.4} {:>6}  {}",
+            summary.task,
+            summary.method,
+            summary.basis,
+            summary.energy_hartree,
+            delta,
+            summary.converged,
+            if peaks.is_empty() {
+                "-".to_string()
+            } else {
+                peaks.join(", ")
+            }
+        );
+    }
+    if let Some(path) = &args.csv {
+        std::fs::write(path, comparison_csv(&summaries, reference))
+            .map_err(|e| CliError::internal(format!("cannot write {}: {e}", path.display())))?;
+        println!("csv     {}", path.display());
+    }
+    Ok(())
+}
+
 fn cmd_props(args: &PropsArgs) -> CliResult<()> {
     if !args.input_yaml.is_file() {
         return Err(CliError::input(format!(

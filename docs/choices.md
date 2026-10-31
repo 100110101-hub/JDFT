@@ -5017,3 +5017,77 @@ PySCF 的元组约定是 `(ω, 长程精确交换, −(长程−短程))`，于�
 DA-03 记 **blocked**（不是 done）：参数已取回/交叉验证，卡在「两个泛函的 DFT 半边不在范围内」。
 FX-03 因此也记 blocked-by-dependency，但它需要的**数据面**已经齐了 —— 一旦有人补上 B97 或
 LYP 的参数表与实现，DA-03 与 FX-03 就能直接接上，不必再碰数据。
+
+## 一百二十八、PR-07：对比表的列序在两边各钉一次；pandas 是测试工具不是产品依赖（2026-11-07）
+
+### 问题
+
+PR-07 的判据是两条：「两任务对比值与单看一致（1e-10）」和「导出 CSV 可被 `pandas` 读
+（仅测试用 pandas，不进产品依赖）」。第二句自带一个矛盾：本仓库的 `.venv` 声明工具链
+（`scripts/verify.ps1` 的报错文本）是 `mypy numpy pydantic pytest`，**没有 pandas**。
+所以「用 pandas 验收」这条要么把 pandas 塞进产品/工具链，要么让测试在某处静默跳过——两者
+都不该悄悄发生。
+
+### 三个决定
+
+1. **两处实现、一个冻结字面量**。GUI 要能在没有 `qwb` 可执行文件的环境里打开一批结果目录，
+   所以 Python 侧不能只"读 Rust 写出的 CSV"，得自己从 `result.json` 建表。代价是同一个格式
+   有两份实现，于是把**列序**抽成两侧同名的冻结常量
+   （Rust `qwb_cli::COMPARISON_COLUMNS` / Python `comparison.COMPARISON_COLUMNS`），
+   并在 `t17_compare.rs` 与 `test_comparison.py` 里各钉一次**同一串字面量**。任何一侧改了
+   列序或小数位，那一侧的测试先红。
+2. **pandas 用 `importorskip`，同时保留一条永不跳过的 stdlib 断言**。缺 pandas 时
+   `test_csv_round_trips_through_pandas` 记 skip（gate 在任何 venv 上都绿），但
+   `test_csv_round_trips_through_the_stdlib` 用 `csv.DictReader` 把列序、行数、数值可解析性
+   全测一遍——"最基本的可读性"不依赖 pandas。本轮为了**真的**跑过那条 pandas 断言，在本地
+   `.venv` 装了 pandas 3.1.0（Python 3.12.10）；它不在 `qwb-studio/pyproject.toml` 里，
+   也不在 gate 声明工具链里，属于"可选测试工具"。这一点记在这里，免得下次有人以为
+   `191 passed`（含 pandas 那条）是默认环境下的结果。
+3. **`qwb compare` 是只读命令**。它只读 `result.json`/`input.yaml`，不重算、不写回结果目录，
+   也不改 `state`。所以「与单看一致」不是靠再算一遍对齐，而是靠**同源**：表里的数字就是文件里的
+   数字（能量 10 位小数原样打印）。`t17_compare.rs` 里有一条断言把这件事钉住——跑完 `compare`
+   后两个结果目录的文件列表必须与跑之前逐项相同。
+
+### 实测
+
+`qwb compare` 对真实结果目录（HF/STO-3G 与 SVWN5/STO-3G 的水，两者都在本仓库跑出来）：
+
+```text
+task                     method      basis          energy/Ha dE/(kcal/mol)   conv  peaks(eV)
+h2o_tddft                    hf     sto-3g     -74.9631464092       0.0000   true  -
+h2o_sto3g_svwn5           svwn5     sto-3g     -74.9281445308      21.9640   true  -
+```
+
+`-74.9631464092` 与 `qwb run` 打出的 `energy -74.9631464092 Ha` 逐位相同（差 0.0）。
+两个都带展宽谱的任务（H2O / 苯，`qwb props` 现跑）：
+
+```text
+h2o_tddft        hf  sto-3g  -74.9631464092       0.0000  true  13.20, 16.80, 19.20, 22.05
+benzene_tddft    hf  sto-3g  -227.8905872881  -95963.4180  true  8.21, 10.51
+```
+
+CSV（`--csv`）的峰列是 `13.1998;16.7998;19.1998;22.0498` / `8.2060;10.5060`，与各任务
+`result.json` 点集的局部极大值一致（苯的 10.5203/10.5206 eV 近简并态在 0.05 eV 网格上合成
+10.5060 的峰，与 PR-04 的结论同一个原因）。提交在仓库里的 `examples/results/h2o_tddft` 是
+PR-04 之前的产物，没有 `uv_vis_spectrum` 块，所以第一张表的峰列是 `-`——旧结果目录必须能进
+对比表，只是没有峰。CI 里 `t17` 是现跑，两个任务都有峰。
+
+### 顺手修掉一个脏 diff 的根
+
+本轮跑完门禁后 `git status` 突然多出 `qwb-core/examples/results/h2o_tddft/` 的六个文件改动，
+diff 里只有一个新增块（`uv_vis_spectrum`）和一堆最后一位的浮点噪声。根因是
+`qwb-core/crates/qwb-cli/tests/t15_paths_props.rs` 的 `props` 测试**没给 `--out`**：默认
+out root 是相对 CWD 的 `results/`，而那条测试的 CWD 就是 `examples/`，于是它每次都把仓库里
+**提交的**示例结果目录整份重写一遍。PR-04 之后每跑一次门禁就会把 PR-04 的谱块写进去，工作区
+因此一直带着一份"不是这次改的"脏 diff（这次在提交前发现并丢弃了，没有混进 PR-07 的提交）。
+
+修法：测试改成 `--out` 临时目录，并加一条 before/after 断言 —— 跑完 `qwb props` 后
+`examples/results/h2o_tddft/result.json` 的字节必须与跑之前相同。这样"测试不许改仓库里的
+示例结果"从口头约定变成断言，复发会红而不是变成噪声。
+
+### 没做的事
+
+* 表格没有"归一化到最低能量"或"按能量排序"的选项——判据只说对比，加了就得解释参考系；
+  `ΔE` 的参考是**命令行给的第一个目录**，写在 `status_text`/表头 `dE` 里，不猜。
+* CSV 不做字段转义（`task`/`method`/`basis` 都是标识符级字符串）。真出现逗号会多一列，
+  那时再上 `csv` 模块转义——现在加一层转义反而与 Rust 侧那份字面量格式不一致。

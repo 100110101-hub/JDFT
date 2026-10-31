@@ -402,8 +402,12 @@ PR-06:
   state: pending
   note: "GUI：PES 扫描可视化"
 PR-07:
-  state: pending
-  note: "结果对比表（多任务 + CSV 导出）"
+  state: done
+  ts: "2026-11-07T23:40:00Z"
+  artifact: "qwb-core/crates/qwb-cli/src/main.rs（新子命令 `compare` + 冻结常量 `COMPARISON_COLUMNS`）、qwb-core/crates/qwb-cli/tests/t17_compare.rs（3 条）、qwb-studio/qwb_studio/comparison.py（纯数据层：读 result.json/input.yaml → 行 → CSV）、qwb-studio/qwb_studio/gui/comparison_panel.py（QTableWidget 表 + 导出按钮，挂在 MainWindow 的 Compare 页）、qwb-studio/tests/test_comparison.py（7 条）、qwb-studio/tests/test_gui_comparison.py（4 条）"
+  verification: "**两条判据都实测达成**。①「对比值与单看一致（1e-10）」：`cargo test -p qwb-cli --test t17_compare` 3 例绿（2.45 s）—— 现跑 3 个任务（H2O/HF 跑两遍 + H2O/SVWN5），CSV 的能量列与各任务 result.json 的 `energy_hartree` 差 < 1e-10；同一输入跑两遍的两行**逐位相同**；ΔE 列与 (E−E_ref)×627.5094740634593 差 < 1e-8（8 位小数打印精度）；stdout 表格里能找回同样的 10 位小数；跑完 compare 后两个结果目录的文件列表与跑前逐项相同（只读）。手工核对：`qwb run` 打出的 `energy -74.9631464092 Ha` 与表里 `-74.9631464092` 相同，ΔE 21.9640 kcal/mol（HF/STO-3G vs SVWN5/STO-3G，水）。②「导出 CSV 可被 pandas 读」：`test_csv_round_trips_through_pandas` 在本机（pandas 3.1.0 / Python 3.12.10）实测 7 列、行数=任务数、`energy_hartree` 与 `delta_e_kcal_per_mol` 是 float dtype 且与表内值差 ≤ 1e-10 / 1e-8；`test_csv_round_trips_through_the_stdlib` 不等 pandas，永远用 `csv.DictReader` 验列序/行数/数值可解析/布尔字面量/峰列分隔。③列序冻结：两侧各钉同一串字面量（Rust `t17_compare.rs` 的 `COLUMNS`、Python `test_csv_columns_are_frozen`）。④GUI：面板装载 3 个目录后行数=3、能量单元格 10 位小数且与文件差 ≤ 1e-10、参考行 ΔE 显示 `+0.0000`、`export_csv` 与数据层逐字节相同；0 个/1 个目录、缺 result.json 的目录都不抛异常只在状态行说明。⑤`qwb-studio` pytest **197 passed**（含 11 条新增；其中 pandas 那条在本机实跑，不 skip）。"
+  note: "**pandas 只在测试里用，不进产品依赖**：`qwb-studio/pyproject.toml` 的 dependencies 仍是 `pydantic>=2`，gate 声明工具链仍是 `mypy numpy pydantic pytest`；pandas 那条用 `pytest.importorskip`，缺了就 skip，不会让 gate 变红。本轮为了真跑那条断言在本地 .venv 装了 pandas 3.1.0（3.12.10 解释器），这是「197 passed」的前提，也记在 docs/choices.md 一百二十八。Rust 与 Python 各有一份 CSV 写出实现（GUI 要能在没有 qwb 二进制时用），一致性靠**冻结的列序常量 + 两侧同一串字面量**保证，不是靠互相调用。`qwb compare` 是只读命令：不重算、不写回结果目录、不改 state。没做「按能量排序 / 归一化到最低能量」这类参考系花样：ΔE 的参考就是命令行给的第一个目录，写在表头与状态行里。另：本轮发现 `t15_paths_props.rs` 的 props 测试没给 `--out`，默认 out root（相对 CWD 的 `results/`）让它每次门禁都把仓库里提交的 `examples/results/h2o_tddft/` 整份重写 —— 已改成临时目录并加before/after 字节断言，那六个文件的脏 diff 也已丢弃，没有混进本提交（见 choices 一百二十八）。"
+  choices: "一百二十八"
 PR-08:
   state: pending
   note: "文档更新：USAGE 新章节 + 诚实清单与账本一致"
