@@ -67,9 +67,10 @@ fn pseudo_density(n: usize) -> qwb_linalg::Matrix {
 fn ri_j_versus_exact_j() {
     let registry = Registry::open(data_root()).expect("qwb-data");
     for (label, molecule) in [("water", water()), ("benzene", benzene())] {
-        let basis = InternalBasis::build(registry.get_basis("def2-svp").unwrap(), &molecule).unwrap();
+        let basis =
+            InternalBasis::build(registry.get_basis("def2-svp").unwrap(), &molecule).unwrap();
         let aux = InternalBasis::build(
-            registry.get_basis("def2-svp-ri").unwrap(),
+            registry.get_basis("def2-universal-jkfit").unwrap(),
             &molecule,
         )
         .unwrap();

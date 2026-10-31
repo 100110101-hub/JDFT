@@ -68,11 +68,30 @@ pub fn cartesian_components(l: u32) -> Vec<CartesianPowers> {
         (0, 1, 2),
         (0, 0, 3),
     ];
+    // l = 4: the fifteen quartic monomials, lexicographic like P2/P3
+    const P4: [CartesianPowers; 15] = [
+        (4, 0, 0),
+        (3, 1, 0),
+        (3, 0, 1),
+        (2, 2, 0),
+        (2, 1, 1),
+        (2, 0, 2),
+        (1, 3, 0),
+        (1, 2, 1),
+        (1, 1, 2),
+        (1, 0, 3),
+        (0, 4, 0),
+        (0, 3, 1),
+        (0, 2, 2),
+        (0, 1, 3),
+        (0, 0, 4),
+    ];
     match l {
         0 => vec![(0, 0, 0)],
         1 => P1.to_vec(),
         2 => P2.to_vec(),
         3 => P3.to_vec(),
+        4 => P4.to_vec(),
         // l >= 4：本构建没有球谐变换，也**没有**对应的数据（R-06 第一阶段到 f 为止）。
         // 这里返回空表会让调用方在别处崩，所以保留一个显式的单分量占位并在
         // `spherical_transform` 里返回 None（那里才是唯一应该报错的地方）。

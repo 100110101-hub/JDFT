@@ -94,6 +94,7 @@ pub fn spherical_transform(l: u32, angular: Angular) -> Option<Transform> {
         Angular::Spherical if l <= 1 => Some(Transform::identity(n_cart)),
         Angular::Spherical if l == 2 => Some(d_transform()),
         Angular::Spherical if l == 3 => Some(f_transform()),
+        Angular::Spherical if l == 4 => Some(g_transform()),
         // l >= 4：系数不猜，显式不支持。
         _ => None,
     }
@@ -180,6 +181,125 @@ fn f_overlap_metric_value(left: (u32, u32, u32), right: (u32, u32, u32)) -> f64 
         product *= numerator / denominator;
     }
     product
+}
+
+/// `l = 4` 的 15×9 变换（列主序，行序见 [`crate::cartesian_components`]）。
+///
+/// 与 [`f_transform`] 同一套构造（不手推归一化常数）：四次单项式空间分解为
+/// `g(9) ⊕ r²·d(6)`，所以取九个实 g 谐波的多项式形式，在重叠度规下对六个
+/// `r²·(二次单项式)` 方向做 Gram–Schmidt（打掉 d 成分），再正交归一化。
+/// `Tᵀ S T = I₉` 与「与 r²·d 正交」都是构造保证的。
+fn g_transform() -> Transform {
+    use crate::cartesian_components;
+    let components = cartesian_components(4);
+    debug_assert_eq!(components.len(), 15, "l=4 应有 15 个直角分量");
+
+    let mut component_scale = [0.0_f64; 15];
+    for (i, powers) in components.iter().enumerate() {
+        component_scale[i] = (double_factorial(i64::from(powers.0) * 2 - 1)
+            * double_factorial(i64::from(powers.1) * 2 - 1)
+            * double_factorial(i64::from(powers.2) * 2 - 1))
+        .sqrt();
+    }
+
+    let mut metric = [[0.0_f64; 15]; 15];
+    for i in 0..15 {
+        for j in 0..15 {
+            metric[i][j] = f_overlap_metric_value(components[i], components[j]);
+        }
+    }
+
+    #[rustfmt::skip]
+    let mut candidates: [[f64; 15]; 9] = [
+        [3.000000000000, 0.000000000000, 0.000000000000, 6.000000000000, 0.000000000000, -24.000000000000, 0.000000000000, 0.000000000000, 0.000000000000, 0.000000000000, 3.000000000000, 0.000000000000, -24.000000000000, 0.000000000000, 8.000000000000],
+        [0.000000000000, 0.000000000000, -3.000000000000, 0.000000000000, 0.000000000000, 0.000000000000, 0.000000000000, -3.000000000000, 0.000000000000, 4.000000000000, 0.000000000000, 0.000000000000, 0.000000000000, 0.000000000000, 0.000000000000],
+        [0.000000000000, 0.000000000000, 0.000000000000, 0.000000000000, -3.000000000000, 0.000000000000, 0.000000000000, 0.000000000000, 0.000000000000, 0.000000000000, 0.000000000000, -3.000000000000, 0.000000000000, 4.000000000000, 0.000000000000],
+        [-1.000000000000, 0.000000000000, 0.000000000000, 0.000000000000, 0.000000000000, 6.000000000000, 0.000000000000, 0.000000000000, 0.000000000000, 0.000000000000, 1.000000000000, 0.000000000000, -6.000000000000, 0.000000000000, 0.000000000000],
+        [0.000000000000, -1.000000000000, 0.000000000000, 0.000000000000, 0.000000000000, 0.000000000000, -1.000000000000, 0.000000000000, 6.000000000000, 0.000000000000, 0.000000000000, 0.000000000000, 0.000000000000, 0.000000000000, 0.000000000000],
+        [0.000000000000, 0.000000000000, 1.000000000000, 0.000000000000, 0.000000000000, 0.000000000000, 0.000000000000, -3.000000000000, 0.000000000000, 0.000000000000, 0.000000000000, 0.000000000000, 0.000000000000, 0.000000000000, 0.000000000000],
+        [0.000000000000, 0.000000000000, 0.000000000000, 0.000000000000, 3.000000000000, 0.000000000000, 0.000000000000, 0.000000000000, 0.000000000000, 0.000000000000, 0.000000000000, -1.000000000000, 0.000000000000, 0.000000000000, 0.000000000000],
+        [1.000000000000, 0.000000000000, 0.000000000000, -6.000000000000, 0.000000000000, 0.000000000000, 0.000000000000, 0.000000000000, 0.000000000000, 0.000000000000, 1.000000000000, 0.000000000000, 0.000000000000, 0.000000000000, 0.000000000000],
+        [0.000000000000, 1.000000000000, 0.000000000000, 0.000000000000, 0.000000000000, 0.000000000000, -1.000000000000, 0.000000000000, 0.000000000000, 0.000000000000, 0.000000000000, 0.000000000000, 0.000000000000, 0.000000000000, 0.000000000000],
+    ];
+
+    #[rustfmt::skip]
+    let mut radial: [[f64; 15]; 6] = [
+        [1.000000000000, 0.000000000000, 0.000000000000, 1.000000000000, 0.000000000000, 1.000000000000, 0.000000000000, 0.000000000000, 0.000000000000, 0.000000000000, 0.000000000000, 0.000000000000, 0.000000000000, 0.000000000000, 0.000000000000],
+        [0.000000000000, 1.000000000000, 0.000000000000, 0.000000000000, 0.000000000000, 0.000000000000, 1.000000000000, 0.000000000000, 1.000000000000, 0.000000000000, 0.000000000000, 0.000000000000, 0.000000000000, 0.000000000000, 0.000000000000],
+        [0.000000000000, 0.000000000000, 1.000000000000, 0.000000000000, 0.000000000000, 0.000000000000, 0.000000000000, 1.000000000000, 0.000000000000, 1.000000000000, 0.000000000000, 0.000000000000, 0.000000000000, 0.000000000000, 0.000000000000],
+        [0.000000000000, 0.000000000000, 0.000000000000, 1.000000000000, 0.000000000000, 0.000000000000, 0.000000000000, 0.000000000000, 0.000000000000, 0.000000000000, 1.000000000000, 0.000000000000, 1.000000000000, 0.000000000000, 0.000000000000],
+        [0.000000000000, 0.000000000000, 0.000000000000, 0.000000000000, 1.000000000000, 0.000000000000, 0.000000000000, 0.000000000000, 0.000000000000, 0.000000000000, 0.000000000000, 1.000000000000, 0.000000000000, 1.000000000000, 0.000000000000],
+        [0.000000000000, 0.000000000000, 0.000000000000, 0.000000000000, 0.000000000000, 1.000000000000, 0.000000000000, 0.000000000000, 0.000000000000, 0.000000000000, 0.000000000000, 0.000000000000, 1.000000000000, 0.000000000000, 1.000000000000],
+    ];
+
+    for vector in &mut candidates {
+        for (index, value) in vector.iter_mut().enumerate() {
+            *value *= component_scale[index];
+        }
+    }
+    for vector in &mut radial {
+        for (index, value) in vector.iter_mut().enumerate() {
+            *value *= component_scale[index];
+        }
+    }
+
+    let inner = |a: &[f64; 15], b: &[f64; 15]| -> f64 {
+        let mut total = 0.0;
+        for i in 0..15 {
+            for j in 0..15 {
+                total += a[i] * metric[i][j] * b[j];
+            }
+        }
+        total
+    };
+
+    let mut radial_basis: Vec<[f64; 15]> = Vec::new();
+    for vector in &radial {
+        let mut current = *vector;
+        for b in &radial_basis {
+            let projection = inner(&current, b);
+            for k in 0..15 {
+                current[k] -= projection * b[k];
+            }
+        }
+        let norm = inner(&current, &current).sqrt();
+        if norm > 1.0e-8 {
+            for value in &mut current {
+                *value /= norm;
+            }
+            radial_basis.push(current);
+        }
+    }
+    debug_assert_eq!(radial_basis.len(), 6, "r²·d 应是 6 维");
+
+    let mut basis: Vec<[f64; 15]> = Vec::new();
+    for vector in &candidates {
+        let mut current = *vector;
+        for b in radial_basis.iter().chain(basis.iter()) {
+            let projection = inner(&current, b);
+            for k in 0..15 {
+                current[k] -= projection * b[k];
+            }
+        }
+        let norm = inner(&current, &current).sqrt();
+        assert!(norm > 1.0e-10, "g 候选向量退化（构造错误）");
+        for value in &mut current {
+            *value /= norm;
+        }
+        basis.push(current);
+    }
+
+    let mut data = vec![0.0; 9 * 15];
+    for (col, vector) in basis.iter().enumerate() {
+        for (row, value) in vector.iter().enumerate() {
+            data[col * 15 + row] = *value;
+        }
+    }
+    Transform {
+        n_cartesian: 15,
+        n_spherical: 9,
+        data,
+    }
 }
 
 /// `l = 3` 的 10×7 变换（列主序，行序见 [`crate::cartesian_components`]）。
@@ -463,7 +583,7 @@ mod tests {
     #[test]
     fn unknown_higher_angular_momentum_is_rejected_not_guessed() {
         assert!(spherical_transform(3, Angular::Spherical).is_some());
-        assert!(spherical_transform(4, Angular::Spherical).is_none());
+        assert!(spherical_transform(5, Angular::Spherical).is_none());
         assert!(spherical_transform(5, Angular::Spherical).is_none());
         assert!(spherical_transform(3, Angular::Cartesian).is_some());
         assert_eq!(crate::cartesian_components(3).len(), 10);
@@ -473,5 +593,81 @@ mod tests {
                 .n_spherical,
             7
         );
+    }
+    #[test]
+    fn g_transform_is_orthonormal_and_free_of_d() {
+        use crate::cartesian_components;
+        let components = cartesian_components(4);
+        assert_eq!(components.len(), 15);
+        let metric = |i: usize, j: usize| {
+            crate::spherical::f_overlap_metric_value(components[i], components[j])
+        };
+        let t = crate::spherical::g_transform();
+        assert_eq!(t.n_cartesian, 15);
+        assert_eq!(t.n_spherical, 9);
+        // Tᵀ S T = I₉
+        for a in 0..9 {
+            for b in 0..9 {
+                let mut value = 0.0_f64;
+                for i in 0..15 {
+                    for j in 0..15 {
+                        value += t.data[a * 15 + i] * metric(i, j) * t.data[b * 15 + j];
+                    }
+                }
+                let expected = if a == b { 1.0 } else { 0.0 };
+                assert!((value - expected).abs() < 1.0e-10, "({a},{b}) = {value}");
+            }
+        }
+        // 与 r²·(六个二次单项式) 正交 —— 这是「g 里没有 d 成分」的判据。
+        // r² = x²+y²+z²，所以在单项式基下：r²·q 的系数是把 q 沿 x/y/z 各升两阶。
+        for (quadratic, name) in [
+            ((2_u32, 0, 0), "x²"),
+            ((1, 1, 0), "xy"),
+            ((1, 0, 1), "xz"),
+            ((0, 2, 0), "y²"),
+            ((0, 1, 1), "yz"),
+            ((0, 0, 2), "z²"),
+        ] {
+            let mut vector = [0.0_f64; 15];
+            for shift in [(2_u32, 0_u32, 0_u32), (0, 2, 0), (0, 0, 2)] {
+                let target = (
+                    quadratic.0 + shift.0,
+                    quadratic.1 + shift.1,
+                    quadratic.2 + shift.2,
+                );
+                let position = components
+                    .iter()
+                    .position(|c| *c == target)
+                    .unwrap_or_else(|| panic!("找不到单项式 {target:?}"));
+                vector[position] += 1.0;
+            }
+            // polynomial coefficients -> normalised Cartesian components (same conversion
+            // g_transform does internally).
+            let scale: Vec<f64> = components
+                .iter()
+                .map(|p| {
+                    (crate::spherical::double_factorial(p.0 as i64 * 2 - 1)
+                        * crate::spherical::double_factorial(p.1 as i64 * 2 - 1)
+                        * crate::spherical::double_factorial(p.2 as i64 * 2 - 1))
+                    .sqrt()
+                })
+                .collect();
+            for (j, value) in vector.iter_mut().enumerate() {
+                *value *= scale[j];
+            }
+            for a in 0..9 {
+                let mut overlap = 0.0_f64;
+                for i in 0..15 {
+                    let t_i = t.data[a * 15 + i];
+                    for (j, value) in vector.iter().enumerate() {
+                        overlap += t_i * metric(i, j) * value;
+                    }
+                }
+                assert!(
+                    overlap.abs() < 1.0e-9,
+                    "第 {a} 列与 r²·{name} 的重叠 = {overlap}"
+                );
+            }
+        }
     }
 }
