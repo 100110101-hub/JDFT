@@ -574,7 +574,12 @@ pub fn gradient_components(
     // 2e 导数是整条梯度里最贵的一段：一次遍历 quartet、把四个中心分别累加，
     // 不要按 3N 个坐标各扫一遍 n^4（旧实现就是那样，实测 5–7 倍浪费）。
     // 库仑与交换分开返回：纯泛函没有交换项，杂化泛函要按 α_hf 缩放。
+    // QWB_GRAD_TRACE：把梯度遍次拆开计时（默认静默）。重写 2e 导数层之前必须先知道
+    // 它到底占多少比例 —— 占比不够时，重写 Hermite 也到不了 RS-05 的 20×（choices 一百零七）。
+    let trace = std::env::var_os("QWB_GRAD_TRACE").is_some();
+    let started = std::time::Instant::now();
     let (two_electron_coulomb, two_electron_exchange) = two_electron_all(&cartesian, &density_cart);
+    let two_electron_seconds = started.elapsed().as_secs_f64();
 
     let mut components = GradientComponents {
         kinetic: vec![[0.0; 3]; natoms],
@@ -670,6 +675,14 @@ pub fn gradient_components(
                 two_electron_coulomb[atom][axis] + two_electron_exchange[atom][axis];
             components.nuclear_repulsion[atom][axis] = nuclear_repulsion_axis(&nuclei, atom, axis);
         }
+    }
+    if trace {
+        let total = started.elapsed().as_secs_f64();
+        eprintln!(
+            "grad trace: total {total:.4} s, 2e {two_electron_seconds:.4} s ({:.1}%), 其余 {:.4} s",
+            two_electron_seconds / total * 100.0,
+            total - two_electron_seconds
+        );
     }
     Ok(components)
 }
