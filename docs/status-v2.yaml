@@ -331,7 +331,12 @@ RP-04:
 # ───────────────────────── 产品面轨（PR，8）─────────────────────────
 
 PR-01:
-  state: pending
+  state: done
+  ts: "2026-11-07T03:00:00Z"
+  artifact: "`qwb-core/crates/qwb-cli/tests/t15_paths_props.rs`（4 例，真进程跑 `CARGO_BIN_EXE_qwb`，钉退出码契约 K5）；`props` 走真实现（TDA 激发态），`ts`/`irc`/`scan` 按规矩拒绝"
+  verification: "①`qwb props examples/h2o_tddft.yaml` **退出 0**，输出 5 个激发态（state 1 0.485084 Ha = 13.1998 eV、f = 0.003519 …），并写出 `results/h2o_tddft`；②`qwb props h2_sto3g_svwn5.yaml`（无 `options.excited_states`）**退出 1** 且提示点名该字段；③`qwb ts|irc|scan` 在存在的输入上**退出 4** 并分别点名 **RP-01 / RP-02 / RP-03**；④输入文件不存在时**退出 1**（与「未实装」的 4 区分开，避免让人以为功能坏了）。`cargo test -p qwb-cli --test t15_paths_props` **4 例绿**；门禁 140 `ALL GATES GREEN`（26 项，279.8 s）。"
+  note: "**这条 WP 的实现其实早就在位**（M4/RS-02 时 `props` 已接通 TDA，三条路径命令也已按 WP id 拒绝），缺的是**可执行的验收**。本轮补的正是那个缺口：把退出码契约写成测试，于是「未实装」与「实现坏了」在将来任何改动后都不会混淆。**没有新增功能**的说法要写清楚——PR-01 是把手上的能力钉住，不是把它做出来。"
+
   note: "CLI：props / ts / irc / scan"
 PR-02:
   state: pending

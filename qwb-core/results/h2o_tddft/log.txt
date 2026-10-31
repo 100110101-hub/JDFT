@@ -1,0 +1,10 @@
+[  0.0%] load
+basis = sto-3g (5 elements), method = hf, grid = grid-normal, jobtype = sp, 3 atoms
+[ 25.0%] integrals
+[ 40.0%] scf
+grid points = 72900
+scf converged in 23 iterations: E = -74.9631464092 Ha, E_xc = 0.0000000000 Ha
+[100.0%] done
+[ 92.0%] tda
+tda: 5 state(s) from a 10x10 problem; first = 0.485084 Ha (13.200 eV), f = 0.00352; sum of f = 2.294055 (N_elec = 10)
+method = hf, basis = sto-3g, grid = grid-normal, iterations = 23, E_elec = -84.1523687034, E_xc = 0.0000000000, dipole = [-0.0000, 0.0000, -1.7275] D

@@ -1,0 +1,225 @@
+{
+  "energy_hartree": -74.96314640918744,
+  "dipole_debye": [
+    -1.6157984631864822e-15,
+    1.1852003661306367e-14,
+    -1.7274837198724589
+  ],
+  "mo_energies_hartree": [
+    -20.242376786115916,
+    -1.2685362549836217,
+    -0.6169125207082106,
+    -0.45387525511570576,
+    -0.3915025991401587,
+    0.6056970040504878,
+    0.740407239418353
+  ],
+  "mo_coeffs": [
+    [
+      0.9941321403511194,
+      -0.23278043832827153,
+      6.354731751674893e-16,
+      -0.10339765161862724,
+      -3.0333725309072056e-16,
+      0.13211314062182242,
+      -1.4562869796620415e-15
+    ],
+    [
+      0.026542162344659247,
+      0.833657697741841,
+      -2.8101769848579108e-15,
+      0.5378530250425658,
+      1.6122917038010244e-15,
+      -0.882625940695903,
+      9.615531224501107e-15
+    ],
+    [
+      -1.1124043397101344e-18,
+      5.620993843115474e-16,
+      -2.1274080695134408e-15,
+      -3.9846228970210284e-15,
+      1.0000000000099751,
+      7.142805628885324e-17,
+      2.519433789665362e-16
+    ],
+    [
+      1.996698199961758e-17,
+      9.016735863684112e-16,
+      0.6069902843891284,
+      1.3695636476486597e-15,
+      7.024892520926335e-16,
+      1.0408402388026698e-14,
+      0.9890359538470913
+    ],
+    [
+      -0.004352398993988607,
+      -0.1297839204900961,
+      -4.627868190957484e-15,
+      0.775335326080066,
+      3.1324137851421e-15,
+      0.7444688946207474,
+      -7.361891195430796e-15
+    ],
+    [
+      -0.00596118761652611,
+      0.1586040391391973,
+      0.445280158135044,
+      -0.2785519693951473,
+      2.8090571394983035e-16,
+      0.7962114263625598,
+      -0.8383601773477776
+    ],
+    [
+      -0.005961187616526122,
+      0.15860403913919624,
+      -0.44528015813504296,
+      -0.2785519693951535,
+      -2.0228635275921717e-15,
+      0.7962114263625762,
+      0.8383601773477609
+    ]
+  ],
+  "scf_converged": true,
+  "data_snapshot": {
+    "basis/6-311g-dp.yaml": "cfda92e209fe870532c32df9680cba1c8a3f087bf09ac768a3525ad9f8dd6cb9",
+    "basis/def2-svp-ri.yaml": "dd7c72e050bc4240a5ee1b9b0a1f08eb5ed32ad122b8b6d6f277de0f312bd9ad",
+    "basis/def2-svp.yaml": "177675559ef883e087c3ead49936369dfc74357d4795ed92b02aa49bbe310021",
+    "basis/def2-tzvp-ri.yaml": "ba72aea87b0198f3dc54398bc4101d269dec75f0ff99bfbf8a7f72041e974d2d",
+    "basis/def2-tzvp.yaml": "263b684f8c936200116743732e6dc0af32de781818a4f0808732d720193db702",
+    "basis/def2-universal-jkfit.yaml": "5ae042247930034949f51fcd965556113c50924b8d0ab3b9591ee4acc004c811",
+    "basis/lanl2dz.yaml": "bc14a7e191563cb1cb3433e5722901f737cc4995b57758a497a2159c312cb5d7",
+    "basis/sto-3g.yaml": "fce3af14b8b3ea121844756117a2489b5f7859be452be02b54509dc20b8ff249",
+    "ecp/lanl2dz-cu.yaml": "a44df71fd56eea385eec3b7f3dbce2a04ae633e1aa0ee685096f682c9912f299",
+    "ecp/lanl2dz-zn.yaml": "55b3391680aaad1d6adaa1f4ed9475533776ba9eb5a11d7318e0de08b7b46692",
+    "functional/b88.yaml": "efa0fa7b9f8aa98d5b4ca8fb0573a7d8d1384f6efc0a7c96b90ec7c3aa47ae76",
+    "functional/m06-2x.yaml": "e277f61ab597f848051a3b8bab1418b91a9a9fce1e5d7c1392e5b9f544491a52",
+    "functional/m06-l.yaml": "6894c5ebbee3b9608cba388ecc7f7bad0e91ac5881a53e89f6ee03f44487009d",
+    "functional/pbe.yaml": "b8b322f96b0e22fe795477e09b7955b58b6a32b38b19f813c7bd55383c5c272b",
+    "functional/pbe0.yaml": "e741078195d85f7848d034487a6359c3e94164c2d11fe7efed2b082d18455f5a",
+    "functional/svwn5.yaml": "e62bd0014d27c73d38e1475a261c47cb273eafa320f337217179b42910b4ebd8",
+    "grid/grid-coarse.yaml": "48eaeaa2d73acd4520e7020c3ae09c6912ef640da7b7a2fbb947f1bf41cc7027",
+    "grid/grid-fine.yaml": "25080b62b80416b17bd90990d1a9c050fc0fda9b1b5d6afe7864fe48cab6f142",
+    "grid/grid-normal.yaml": "a792b362b1fdb27823ed131fb7abeae43eef4f3aa569184d5c9cff755310b7b4",
+    "grid/grid-veryfine.yaml": "5c630f5a1ec0688de0682e38f6baeed11c475439bd122edaa4196c8c60fabff2",
+    "numerics/numerics.yaml": "fea96fd0bd356da0acba2bf2c2b3de28596e1914b0668c114bbecaeae2096def",
+    "solvent/acetonitrile.yaml": "641eb80227e75fb8151ba823bce866b21ead69f0f5305c0be7ae4806582c32f7",
+    "solvent/chloroform.yaml": "01ae69f7167f95c81c9e0a9c2a9384ca7e2e1355703083ae684ee83677e4aded",
+    "solvent/dmso.yaml": "00714c4363b488b620dce915db14f4b17f3e9f81a1977adc57b14dcab2971098",
+    "solvent/ethanol.yaml": "02929d534e28a5951ef0f435e2b123a09857c58d9dc4317ea4b9a5f7d7748389",
+    "solvent/methanol.yaml": "b52e4908be7b167c0cfda1f5f3053a87de893be139b2da3700c9ab4da723e6d1",
+    "solvent/thf.yaml": "3845409494ef95d979c404004e7e2b37a39f7b412368fe7f21083ac94766cec9",
+    "solvent/toluene.yaml": "820497a4ffcbca4b375bc818c288f816a4f3ad168953e7af20003838b19f6139",
+    "solvent/water.yaml": "69b4d37ed71958f745b2744c98c2a12d75ff414ea5d24dc6be17f915d017540a"
+  },
+  "log": "method = hf, basis = sto-3g, grid = grid-normal, iterations = 23, E_elec = -84.1523687034, E_xc = 0.0000000000, dipole = [-0.0000, 0.0000, -1.7275] D",
+  "env": {
+    "engine_version": "0.1.0",
+    "rustc_version": "rustc 1.97.1 (8bab26f4f 2026-07-14)",
+    "cargo_lock_sha256": "b3a3dc5e56972b1e7662a09d1be42211341be4ee351116fc9270b55b2505b49d",
+    "data_snapshot": {
+      "basis/6-311g-dp.yaml": "cfda92e209fe870532c32df9680cba1c8a3f087bf09ac768a3525ad9f8dd6cb9",
+      "basis/def2-svp-ri.yaml": "dd7c72e050bc4240a5ee1b9b0a1f08eb5ed32ad122b8b6d6f277de0f312bd9ad",
+      "basis/def2-svp.yaml": "177675559ef883e087c3ead49936369dfc74357d4795ed92b02aa49bbe310021",
+      "basis/def2-tzvp-ri.yaml": "ba72aea87b0198f3dc54398bc4101d269dec75f0ff99bfbf8a7f72041e974d2d",
+      "basis/def2-tzvp.yaml": "263b684f8c936200116743732e6dc0af32de781818a4f0808732d720193db702",
+      "basis/def2-universal-jkfit.yaml": "5ae042247930034949f51fcd965556113c50924b8d0ab3b9591ee4acc004c811",
+      "basis/lanl2dz.yaml": "bc14a7e191563cb1cb3433e5722901f737cc4995b57758a497a2159c312cb5d7",
+      "basis/sto-3g.yaml": "fce3af14b8b3ea121844756117a2489b5f7859be452be02b54509dc20b8ff249",
+      "ecp/lanl2dz-cu.yaml": "a44df71fd56eea385eec3b7f3dbce2a04ae633e1aa0ee685096f682c9912f299",
+      "ecp/lanl2dz-zn.yaml": "55b3391680aaad1d6adaa1f4ed9475533776ba9eb5a11d7318e0de08b7b46692",
+      "functional/b88.yaml": "efa0fa7b9f8aa98d5b4ca8fb0573a7d8d1384f6efc0a7c96b90ec7c3aa47ae76",
+      "functional/m06-2x.yaml": "e277f61ab597f848051a3b8bab1418b91a9a9fce1e5d7c1392e5b9f544491a52",
+      "functional/m06-l.yaml": "6894c5ebbee3b9608cba388ecc7f7bad0e91ac5881a53e89f6ee03f44487009d",
+      "functional/pbe.yaml": "b8b322f96b0e22fe795477e09b7955b58b6a32b38b19f813c7bd55383c5c272b",
+      "functional/pbe0.yaml": "e741078195d85f7848d034487a6359c3e94164c2d11fe7efed2b082d18455f5a",
+      "functional/svwn5.yaml": "e62bd0014d27c73d38e1475a261c47cb273eafa320f337217179b42910b4ebd8",
+      "grid/grid-coarse.yaml": "48eaeaa2d73acd4520e7020c3ae09c6912ef640da7b7a2fbb947f1bf41cc7027",
+      "grid/grid-fine.yaml": "25080b62b80416b17bd90990d1a9c050fc0fda9b1b5d6afe7864fe48cab6f142",
+      "grid/grid-normal.yaml": "a792b362b1fdb27823ed131fb7abeae43eef4f3aa569184d5c9cff755310b7b4",
+      "grid/grid-veryfine.yaml": "5c630f5a1ec0688de0682e38f6baeed11c475439bd122edaa4196c8c60fabff2",
+      "numerics/numerics.yaml": "fea96fd0bd356da0acba2bf2c2b3de28596e1914b0668c114bbecaeae2096def",
+      "solvent/acetonitrile.yaml": "641eb80227e75fb8151ba823bce866b21ead69f0f5305c0be7ae4806582c32f7",
+      "solvent/chloroform.yaml": "01ae69f7167f95c81c9e0a9c2a9384ca7e2e1355703083ae684ee83677e4aded",
+      "solvent/dmso.yaml": "00714c4363b488b620dce915db14f4b17f3e9f81a1977adc57b14dcab2971098",
+      "solvent/ethanol.yaml": "02929d534e28a5951ef0f435e2b123a09857c58d9dc4317ea4b9a5f7d7748389",
+      "solvent/methanol.yaml": "b52e4908be7b167c0cfda1f5f3053a87de893be139b2da3700c9ab4da723e6d1",
+      "solvent/thf.yaml": "3845409494ef95d979c404004e7e2b37a39f7b412368fe7f21083ac94766cec9",
+      "solvent/toluene.yaml": "820497a4ffcbca4b375bc818c288f816a4f3ad168953e7af20003838b19f6139",
+      "solvent/water.yaml": "69b4d37ed71958f745b2744c98c2a12d75ff414ea5d24dc6be17f915d017540a"
+    },
+    "threads": 1,
+    "os": "windows x86_64",
+    "created_at_utc": "2026-10-31T09:44:03Z",
+    "toolchain_channel": "1.97.1",
+    "crate_versions": {}
+  },
+  "excited_states": {
+    "method": "tda",
+    "n_states": 5,
+    "transitions": [
+      {
+        "index": 1,
+        "energy_hartree": 0.4850836142097748,
+        "wavelength_nm": 93.92886335924628,
+        "oscillator_strength": 0.003519098015240901,
+        "dominant": []
+      },
+      {
+        "index": 2,
+        "energy_hartree": 0.5558108937920045,
+        "wavelength_nm": 81.97635747306886,
+        "oscillator_strength": 2.256248667613507e-30,
+        "dominant": []
+      },
+      {
+        "index": 3,
+        "energy_hartree": 0.6175838345471258,
+        "wavelength_nm": 73.77678943026558,
+        "oscillator_strength": 0.07787974025594312,
+        "dominant": []
+      },
+      {
+        "index": 4,
+        "energy_hartree": 0.705084764134466,
+        "wavelength_nm": 64.62109924166498,
+        "oscillator_strength": 0.05918567349428301,
+        "dominant": []
+      },
+      {
+        "index": 5,
+        "energy_hartree": 0.8101714252403447,
+        "wavelength_nm": 56.239150255641874,
+        "oscillator_strength": 1.1620828956895675,
+        "dominant": []
+      }
+    ],
+    "sum_rules": {
+      "trk_oscillator": 2.2940551887736946,
+      "n_electrons": 10.0
+    }
+  },
+  "multipoles": {
+    "quadrupole_traceless_debye_angstrom": [
+      [
+        -1.2161862633195188,
+        9.400466812356242e-16,
+        3.7608270026489855e-16
+      ],
+      [
+        9.400466812356242e-16,
+        1.3719199539013398,
+        -5.375837349516211e-15
+      ],
+      [
+        3.7608270026489855e-16,
+        -5.375837349516211e-15,
+        -0.15573369058182082
+      ]
+    ],
+    "origin_angstrom": [
+      0.0,
+      0.0,
+      0.0
+    ]
+  }
+}
