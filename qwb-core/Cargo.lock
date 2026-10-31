@@ -1455,6 +1455,7 @@ version = "0.1.0"
 dependencies = [
  "qwb-basis",
  "qwb-engine-api",
+ "qwb-gpu",
  "qwb-grid",
  "qwb-integrals",
  "qwb-linalg",

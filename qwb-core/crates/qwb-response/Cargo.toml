@@ -14,6 +14,8 @@ qwb-integrals.workspace = true
 qwb-scf.workspace = true
 qwb-engine-api.workspace = true
 thiserror.workspace = true
+# EX-03: optional GPU kernel (off by default: the CPU bit pattern must not move).
+qwb-gpu = { workspace = true, optional = true }
 
 [dev-dependencies]
 qwb-registry.workspace = true
@@ -22,3 +24,6 @@ qwb-props.workspace = true
 
 [lints]
 workspace = true
+
+[features]
+gpu-kernel = ["dep:qwb-gpu"]

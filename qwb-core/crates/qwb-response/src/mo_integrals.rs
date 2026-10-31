@@ -66,6 +66,53 @@ impl CphfIntegrals {
     }
 }
 
+/// 用 GPU 核算 `T1` 再塞回 [`CphfIntegrals`]（EX-03，需 `--features gpu-kernel`）。
+///
+/// 默认构建仍走原来的四重循环，所以 CPU 位模式不变；打开 feature 后 `T1` 由
+/// `qwb_gpu::t1` 计算（有 CUDA 走 cuBLAS，否则 CPU gemm），测试断言两者 1e-12 内一致。
+/// `T2` 仍走原路径 —— 只换一块，便于定位问题。
+///
+/// # Errors
+///
+/// 维度不匹配、GPU 内核报错 → [`EngineError::Internal`]。
+#[cfg(feature = "gpu-kernel")]
+pub fn build_cphf_integrals_with_gpu_t1(
+    tensor: &TwoElectronIntegrals,
+    coefficients: &Matrix,
+    dipole_ao: &[Matrix; 3],
+    n_occupied: usize,
+) -> Result<CphfIntegrals, EngineError> {
+    let mut integrals = build_cphf_integrals(tensor, coefficients, dipole_ao, n_occupied)?;
+    let n = tensor.n_functions;
+    let n_vir = n - n_occupied;
+    let n_pairs = n_occupied * n_vir;
+    let mut c = vec![0.0_f64; n * n];
+    for mu in 0..n {
+        for p in 0..n {
+            c[mu * n + p] = coefficients[(mu, p)];
+        }
+    }
+    let mut eri = vec![0.0_f64; n * n * n * n];
+    for mu in 0..n {
+        for nu in 0..n {
+            for lambda in 0..n {
+                for sigma in 0..n {
+                    eri[((mu * n + nu) * n + lambda) * n + sigma] =
+                        tensor.get(mu, nu, lambda, sigma);
+                }
+            }
+        }
+    }
+    let kernel = qwb_gpu::t1::t1_gemm(n, n_occupied, &c, &eri)
+        .map_err(|err| EngineError::Internal(format!("GPU T1 kernel: {err}")))?;
+    for p in 0..n_pairs {
+        for q in 0..n_pairs {
+            integrals.t1[p * n_pairs + q] = kernel.values[p * n_pairs + q];
+        }
+    }
+    Ok(integrals)
+}
+
 /// 由 AO 2e 张量、MO 系数、偶极积分构造 [`CphfIntegrals`]。
 ///
 /// # Errors

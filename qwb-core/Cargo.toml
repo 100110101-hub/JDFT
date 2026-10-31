@@ -24,6 +24,9 @@ clap = { version = "4", features = ["derive"] }
 zip = { version = "9", default-features = false, features = ["deflate"] }
 nalgebra = "0.35"
 libloading = "0.8"
+# 内部 crate 也集中声明：check_deps_centralized.sh 要求 qwb-core/crates/*
+# 的依赖一律 `workspace = true` 形式。
+qwb-gpu = { path = "crates/qwb-gpu" }
 # R-11：faer 是 qwb-linalg 的可选后端（`--no-default-features --features faer`）。
 faer = "0.24"
 proptest = "1"
