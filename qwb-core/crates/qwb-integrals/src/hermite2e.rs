@@ -41,131 +41,133 @@ use crate::one_electron::hermite_1d_into;
 
 const PI: f64 = std::f64::consts::PI;
 
-/// 展开式里的一项：`coef · R_x^px R_y^py R_z^pz · F_s(T)`。
+/// 展开式里的一项，存成**与 ρ 无关的模板**：`sign · (−2ρ)^rho_power · R^p · F_s(T)`。
+///
+/// `sign_factor` 只由「降幂的整数倍率 × 负号」累积而来 —— 都是精确的整数乘积。
 #[derive(Debug, Clone, Copy)]
-struct Term {
+struct TermTemplate {
     powers: [u32; 3],
     boys_index: u32,
-    coefficient: f64,
+    rho_power: u32,
+    sign_factor: f64,
 }
 
-/// `C_0` 的某个导数，按「R 的多项式 × Boys 指标」存表。
+/// `C_0` 的某个导数展开成「R 的多项式 × Boys 指标」的项表。
+///
+/// **只依赖 `(l,m,n)`**：与 `ρ`、与几何都无关。RS-05 的成本归因发现每次调用都重做
+/// 一遍「符号求导」占掉了可观的时间，所以按 `(l,m,n)` 缓存（见 [`kernel_template`]）。
 #[derive(Debug, Clone)]
-struct Kernel {
-    terms: Vec<Term>,
+struct KernelTemplate {
+    terms: Vec<TermTemplate>,
+    max_boys: u32,
 }
 
-impl Kernel {
+impl KernelTemplate {
     fn fundamental() -> Self {
         Self {
-            terms: vec![Term {
+            terms: vec![TermTemplate {
                 powers: [0, 0, 0],
                 boys_index: 0,
-                coefficient: 1.0,
+                rho_power: 0,
+                sign_factor: 1.0,
             }],
+            max_boys: 0,
         }
     }
 
-    /// 对 `R_axis` 求一次导（`rho` = ρ，出现在 `∂F_s/∂R = −2ρR F_{s+1}` 里）。
-    fn differentiate(&self, axis: usize, rho: f64) -> Self {
+    /// 对 `R_axis` 求一次导（`∂F_s/∂R = −2ρR F_{s+1}` ⇒ 记一个 ρ 幂与一个负号）。
+    fn differentiate(&self, axis: usize) -> Self {
         let mut terms = Vec::with_capacity(self.terms.len() * 2);
+        let mut max_boys = 0_u32;
         for term in &self.terms {
-            // 多项式部分求导。
+            // 多项式部分求导：系数乘上「降幂前的幂次」（整数，精确）。
             if term.powers[axis] > 0 {
                 let mut powers = term.powers;
                 powers[axis] -= 1;
-                terms.push(Term {
+                terms.push(TermTemplate {
                     powers,
                     boys_index: term.boys_index,
-                    coefficient: term.coefficient * f64::from(term.powers[axis]),
+                    rho_power: term.rho_power,
+                    sign_factor: term.sign_factor * f64::from(term.powers[axis]),
                 });
             }
-            // F_s 部分求导：多一个 R_axis，Boys 指标 +1，系数乘 −2ρ。
+            // F_s 部分求导：多一个 R_axis，Boys 指标 +1，系数乘 −2ρ（记成 ρ 的一次幂）。
             let mut powers = term.powers;
             powers[axis] += 1;
-            terms.push(Term {
+            terms.push(TermTemplate {
                 powers,
                 boys_index: term.boys_index + 1,
-                coefficient: term.coefficient * (-2.0 * rho),
+                rho_power: term.rho_power + 1,
+                sign_factor: -term.sign_factor,
             });
+            max_boys = max_boys.max(term.boys_index + 1);
         }
-        Self { terms }
+        Self { terms, max_boys }
     }
+}
 
-    /// 最高用到的 Boys 指标（调用方据此准备 `F_0..F_M`）。
-    fn max_boys_index(&self) -> u32 {
-        self.terms
-            .iter()
-            .map(|term| term.boys_index)
-            .max()
-            .unwrap_or(0)
+/// 每个线程一份的 `(l,m,n) → 模板` 缓存（下标 `l·16² + m·16 + n`，上限 16）。
+///
+/// 纯函数缓存：只影响速度，不影响任何数值，也不引入跨线程共享状态。
+fn kernel_template(l: u32, m: u32, n: u32) -> std::rc::Rc<KernelTemplate> {
+    thread_local! {
+        static CACHE: std::cell::RefCell<Vec<Option<std::rc::Rc<KernelTemplate>>>> =
+            const { std::cell::RefCell::new(Vec::new()) };
     }
-
-    /// 代入 `R = P − Q` 求值（`boys[s]` = `F_s(T)`）。
-    fn evaluate(&self, r: [f64; 3], boys: &[f64]) -> f64 {
-        let mut total = 0.0;
-        for term in &self.terms {
-            let mut value = term.coefficient * boys[term.boys_index as usize];
-            for (axis, component) in r.iter().enumerate() {
-                value *= component.powi(term.powers[axis] as i32);
-            }
-            total += value;
+    CACHE.with(|cache| {
+        let mut cache = cache.borrow_mut();
+        if cache.is_empty() {
+            cache.resize(16 * 16 * 16, None);
         }
-        total
-    }
+        let index = ((l as usize) * 16 + m as usize) * 16 + n as usize;
+        if let Some(template) = &cache[index] {
+            return std::rc::Rc::clone(template);
+        }
+        let mut kernel = KernelTemplate::fundamental();
+        for _ in 0..l {
+            kernel = kernel.differentiate(0);
+        }
+        for _ in 0..m {
+            kernel = kernel.differentiate(1);
+        }
+        for _ in 0..n {
+            kernel = kernel.differentiate(2);
+        }
+        let template = std::rc::Rc::new(kernel);
+        cache[index] = Some(std::rc::Rc::clone(&template));
+        template
+    })
 }
 
 /// `∂^l_x∂^m_y∂^n_z F_0(scale·|R|²)`——核吸引与 2e 积分共用的「Hermite Coulomb」导数核。
 ///
 /// 一电子核吸引用的是 `scale = p`、`R = P − C`；两电子积分用的是 `scale = ρ`、
-/// `R = P − Q`。两条路径共享这份**按定义求导**的实现，避免再出现「凭记忆写递推」
-/// 的风险。
-/// 诊断：derivative_boys 被真正计算了多少次（默认不开启统计）。
-static KERNEL_COMPUTATIONS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
-/// 诊断：derivative_boys 累计纳秒。
-static KERNEL_NANOS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-
-/// 读诊断计数器（RS-05 的成本归因用）。
-#[must_use]
-pub fn kernel_computations() -> usize {
-    KERNEL_COMPUTATIONS.load(std::sync::atomic::Ordering::Relaxed)
-}
-
-/// 诊断：derivative_boys 的累计秒数（RS-05 的成本归因用）。
-#[must_use]
-pub fn kernel_seconds() -> f64 {
-    KERNEL_NANOS.load(std::sync::atomic::Ordering::Relaxed) as f64 * 1.0e-9
-}
-
+/// `R = P − Q`。两条路径共享这份**按定义求导**的实现（模板按 `(l,m,n)` 缓存），
+/// 避免再出现「凭记忆写递推」的风险。
 pub(crate) fn derivative_boys(l: u32, m: u32, n: u32, scale: f64, r: [f64; 3]) -> f64 {
-    let clock = std::time::Instant::now();
-    let value = derivative_boys_inner(l, m, n, scale, r);
-    KERNEL_NANOS.fetch_add(
-        clock.elapsed().as_nanos() as u64,
-        std::sync::atomic::Ordering::Relaxed,
-    );
-    value
-}
-
-fn derivative_boys_inner(l: u32, m: u32, n: u32, scale: f64, r: [f64; 3]) -> f64 {
-    let mut kernel = Kernel::fundamental();
-    for _ in 0..l {
-        kernel = kernel.differentiate(0, scale);
-    }
-    for _ in 0..m {
-        kernel = kernel.differentiate(1, scale);
-    }
-    for _ in 0..n {
-        kernel = kernel.differentiate(2, scale);
-    }
-    KERNEL_COMPUTATIONS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let kernel = kernel_template(l, m, n);
     let t = scale * (0..3).map(|axis| r[axis] * r[axis]).sum::<f64>();
     // 热路径：栈上缓冲。原函数级 2e 导数每个四元组都要调一次 Boys，
     // 每次分配一个 Vec 在 debug 构建里能占掉一半以上的时间。
-    let m_max = kernel.max_boys_index() as usize;
-    let mut boys = [0.0_f64; 20];
+    let m_max = kernel.max_boys as usize;
+    let mut boys = [0.0_f64; 32];
+    assert!(m_max < boys.len(), "Boys 指标 {m_max} 超出栈缓冲");
     boys_functions_into(m_max, t, &mut boys[..=m_max]);
-    kernel.evaluate(r, &boys[..=m_max])
+    // 模板里已经记了一个负号（每次 F 求导乘 −2ρ），所以这里只乘 2ρ。
+    let two_rho = 2.0 * scale;
+    let mut total = 0.0;
+    for term in kernel.terms.iter() {
+        let mut coefficient = term.sign_factor;
+        for _ in 0..term.rho_power {
+            coefficient *= two_rho;
+        }
+        let mut value = coefficient * boys[term.boys_index as usize];
+        for (axis, component) in r.iter().enumerate() {
+            value *= component.powi(term.powers[axis] as i32);
+        }
+        total += value;
+    }
+    total
 }
 
 /// 一个笛卡尔分量 `(a b|c d)` 的原函数积分（未归一化、未收缩）。

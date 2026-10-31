@@ -667,6 +667,33 @@ pub fn cphf_right_hand_sides(
     mo_energies: &[f64],
     n_occupied: usize,
 ) -> Result<CphfRhs, EngineError> {
+    let blocks = cartesian_direction_blocks(basis, molecule, density)?;
+    cphf_right_hand_sides_from_blocks(
+        basis,
+        molecule,
+        &blocks,
+        coefficients,
+        mo_energies,
+        n_occupied,
+    )
+}
+
+/// 与 [`cphf_right_hand_sides`] 相同，但**复用已经算好的导数块**。
+///
+/// 存在的理由（RS-05 的成本归因）：块本身要 ~2.6 s（水/def2-SVP），而方便入口会把它
+/// 重算一遍。组装 Hessian 时块和右端都要用，所以调用方应当先算块、再走这个入口。
+///
+/// # Errors
+///
+/// 维度不匹配、`blocks` 与基组不一致。
+pub fn cphf_right_hand_sides_from_blocks(
+    basis: &InternalBasis,
+    molecule: &Molecule,
+    blocks: &[DirectionBlock],
+    coefficients: &Matrix,
+    mo_energies: &[f64],
+    n_occupied: usize,
+) -> Result<CphfRhs, EngineError> {
     let n_mo = basis.n_functions();
     if coefficients.nrows() != n_mo || coefficients.ncols() != n_mo {
         return Err(EngineError::Internal(format!(
@@ -689,13 +716,12 @@ pub fn cphf_right_hand_sides(
     let (cartesian, expansion) = cartesian_orbitals(basis, molecule)?;
     let n_cart = cartesian.len();
     let coefficients_cartesian = cartesian_mo_coefficients(coefficients, &expansion, n_cart);
-    let blocks = cartesian_direction_blocks(basis, molecule, density)?;
     let n_virtual = n_mo - n_occupied;
 
     let mut fock_mo = Vec::with_capacity(blocks.len());
     let mut overlap_mo = Vec::with_capacity(blocks.len());
     let mut right_hand_sides = Vec::with_capacity(blocks.len());
-    for block in &blocks {
+    for block in blocks {
         let mut fock = Matrix::zeros(n_mo, n_mo);
         let mut overlap = Matrix::zeros(n_mo, n_mo);
         for p in 0..n_mo {
@@ -1189,10 +1215,10 @@ mod tests {
         let first = started.elapsed().as_secs_f64();
 
         let started = Instant::now();
-        let _rhs = crate::cphf_hessian::cphf_right_hand_sides(
+        let _rhs = crate::cphf_hessian::cphf_right_hand_sides_from_blocks(
             &basis,
             &molecule,
-            &result.density,
+            &blocks,
             &result.coefficients,
             &(0..basis.n_functions())
                 .map(|index| result.mo_energies_hartree.get(index))
