@@ -4689,3 +4689,37 @@ RS-05 的 20× 需要 2e 显式二阶导再快 **12 倍**。经过一百一十�
 
 处置：RS-05 **维持 blocked**，判据不动（用户 一百零七 的决定），把上面的实测与
 「已排除路线清单」写进账本，作为下一次谈判或下一次重写的依据。
+
+## 一百二十、RS-05 停在这里；转到 PR-03（容器/结果目录的加性兼容）（2026-11-07）
+
+RS-05 的位置已经很清楚：判据要 20×、实测 1.50×，剩下的那条路线是重写整套导数积分引擎
+（一百一十四～一百一十九 五轮实测把其它路线都排除了）。**继续在它上面磨时间，产出会比
+转去推进其它 WP 低得多**，所以这一轮按 §10.5 换队首：**PR-03**。
+
+### PR-03 做了什么
+
+`qwb` 容器按**条目名存字节**、不解释内容，所以阶段二新增的结果块
+（`excited_states` / `nmr` / `multipoles` / `uv_vis_spectrum` / `vibrational_frequencies` /
+`dispersion` / `solvation`）理论上不会影响旧读法。但「理论上」不算证据，K4 的安全性靠**条目名
+校验**（拒绝绝对路径、`..`、盘符），内容层完全不设限 —— 那就必须用测试把三条行为钉住：
+
+1. `tests/pr03_new_blocks.rs::committed_legacy_container_still_opens`：
+   仓库里提交的 `example.qwb` 仍能 `open` + `validate()`；
+2. `new_result_blocks_roundtrip_byte_identically`：把带**全部新块**的 `result.json`
+   写进容器，读回**逐字节一致**；再导出一次内容不变（导出幂等）；
+3. `legacy_reader_tolerates_blocks_it_does_not_know` / `old_shape_container_and_new_shape_container_coexist`：
+   只认识 `energy_hartree`/`converged` 的旧读者能从**带新块**的 JSON 里取到旧字段
+   （serde 忽略未知键），阶段一形状的容器也照常打开。
+
+配套：`scripts/gen_p02_fixture.py --check` 仍然绿（`ok: fixture matches the current writer`）。
+
+### 为什么这批测试值得写
+
+阶段二有 7 个加性结果块，任何一个若不小心让容器/结果目录变成"新块=新格式"，旧项目就
+打不开了 —— 而那类破坏在单元测试里最容易被漏掉。这四条测试用的是**真实形状**的 JSON
+（嵌套对象、数组、多块共存），不是占位字符串。
+
+### 下一步
+
+队首换成 **PR-04**（UV/Vis 谱：振子强度 + 高斯展宽 → `spectrum.csv`），依赖 RS-02/RS-03
+都已 done；展宽参数按"数据先行"要进 `qwb-data`。

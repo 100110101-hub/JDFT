@@ -368,8 +368,12 @@ PR-02:
   state: pending
   note: "Python API 暴露新选项与新结果块"
 PR-03:
-  state: pending
-  note: ".qwb / K3 结果目录向后兼容新块"
+  state: done
+  ts: "2026-11-07T12:00:00Z"
+  artifact: "qwb-core/crates/qwb-io/tests/pr03_new_blocks.rs（4 条测试）"
+  verification: "**旧夹具仍可读**：`qwb-contracts/studio/examples/example.qwb` open + validate 通过；**新块 roundtrip**：带 7 个阶段二加性块（excited_states/nmr/multipoles/uv_vis_spectrum/vibrational_frequencies/dispersion/solvation）的 `tasks/t1/result.json` 写进容器后读回**逐字节一致**，再导出一次内容不变（导出幂等）；**旧读法不炸**：只含 `energy_hartree`/`converged` 的读者能从带新块的 JSON 取到旧字段，阶段一形状的容器也照常打开；`scripts/gen_p02_fixture.py --check` 输出 `ok: fixture matches the current writer`。`cargo test -p qwb-io` 全绿（20 + 2 + 4）。"
+  note: "容器按条目名存字节、内容层不设限（K4 只校验条目名与 meta），所以加性块天然向后兼容 —— 但那必须由测试钉住，不能靠推断。四条测试覆盖旧夹具、新块 roundtrip、旧读者容错与新块缺失。"
+  choices: "一百二十"
 PR-04:
   state: pending
   note: "UV/Vis 谱（振子强度 + 展宽 + spectrum.csv）"
