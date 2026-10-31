@@ -1,6 +1,6 @@
-sha256: e570c568d7ec55a0bd779ab78607c16e9248a6b5206756eb8584d86e2a6363db
+sha256: 69b4d37ed71958f745b2744c98c2a12d75ff414ea5d24dc6be17f915d017540a
 name: water
-version: 2.0.0
+version: 2.1.0
 notes: "DA-04 v1: dielectric constant, refractive index and temperature are the SMD/Truhlar
   values (Marenich-Cramer-Truhlar 2009, Table 1); atomic_radii are the Bondi (1964) van der
   Waals radii, declared explicitly through radii_set=bondi so no two radius conventions can be

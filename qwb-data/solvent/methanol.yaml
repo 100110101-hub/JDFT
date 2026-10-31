@@ -1,6 +1,6 @@
-sha256: 0757210ef3ec107424f3b8df7efcf63a982b70dea945638430939206fd7d844b
+sha256: b52e4908be7b167c0cfda1f5f3053a87de893be139b2da3700c9ab4da723e6d1
 name: methanol
-version: 2.0.0
+version: 2.1.0
 notes: "DA-04 v1: dielectric constant and refractive index are the SMD solvent-table
   values (Marenich-Cramer-Truhlar 2009, Table 1, 298.15 K); atomic_radii are the Bondi
   (1964) van der Waals radii, declared through radii_set=bondi so no two radius
@@ -21,7 +21,7 @@ license:
   commercial_ok: true
   redistribute_ok: true
 created: 2026-11-01T08:00:00Z
-epsilon: 32.7
+epsilon: 32.613
 temperature_K: 298.15
 refractive_index: 1.3288
 radii_set: bondi

@@ -3,7 +3,7 @@
 # （否则 grid 的 normal 等级会有两个定义、get_grid_by_level 歧义）。
 schema_version: 1.0.0
 name: qwb-data
-version: 0.11.0
+version: 0.11.1
 created: 2026-10-22T22:53:00Z
 features:
   - "jobtype:sp"
@@ -100,25 +100,25 @@ numerics:
 solvents:
   - name: water
     path: solvent/water.yaml
-    sha256: e570c568d7ec55a0bd779ab78607c16e9248a6b5206756eb8584d86e2a6363db
+    sha256: 69b4d37ed71958f745b2744c98c2a12d75ff414ea5d24dc6be17f915d017540a
   - name: methanol
     path: solvent/methanol.yaml
-    sha256: 0757210ef3ec107424f3b8df7efcf63a982b70dea945638430939206fd7d844b
+    sha256: b52e4908be7b167c0cfda1f5f3053a87de893be139b2da3700c9ab4da723e6d1
   - name: ethanol
     path: solvent/ethanol.yaml
-    sha256: 6e98e823ece22dc0b8867939ff34aa6cb74661ce6351261749fb156f3c427395
+    sha256: 02929d534e28a5951ef0f435e2b123a09857c58d9dc4317ea4b9a5f7d7748389
   - name: acetonitrile
     path: solvent/acetonitrile.yaml
-    sha256: 3dc910310906bc497bb9ed05913e43c1033159b006c944f59fddebbb5468730c
+    sha256: 641eb80227e75fb8151ba823bce866b21ead69f0f5305c0be7ae4806582c32f7
   - name: dmso
     path: solvent/dmso.yaml
-    sha256: 12d639be2d13225343dc07782a2e1a94ae97767e3887bf650883c8865a10bd8b
+    sha256: 00714c4363b488b620dce915db14f4b17f3e9f81a1977adc57b14dcab2971098
   - name: chloroform
     path: solvent/chloroform.yaml
-    sha256: 48988bc16c38396afe07c7bbbed28abdf3f2a5f808d3da782e74e37fae520f03
+    sha256: 01ae69f7167f95c81c9e0a9c2a9384ca7e2e1355703083ae684ee83677e4aded
   - name: toluene
     path: solvent/toluene.yaml
-    sha256: 38b89c6f3bde206a23f6650884ee250914be58522927d117340bcdfd7345b44b
+    sha256: 820497a4ffcbca4b375bc818c288f816a4f3ad168953e7af20003838b19f6139
   - name: thf
     path: solvent/thf.yaml
-    sha256: f08dcbf5bdfdab382f750824db1d19ff192fd96977ff957a3cb08b02ffb512f3
+    sha256: 3845409494ef95d979c404004e7e2b37a39f7b412368fe7f21083ac94766cec9

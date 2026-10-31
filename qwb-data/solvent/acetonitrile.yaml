@@ -1,6 +1,6 @@
-sha256: 3dc910310906bc497bb9ed05913e43c1033159b006c944f59fddebbb5468730c
+sha256: 641eb80227e75fb8151ba823bce866b21ead69f0f5305c0be7ae4806582c32f7
 name: acetonitrile
-version: 2.0.0
+version: 2.1.0
 notes: "DA-04 v1: dielectric constant and refractive index are the SMD solvent-table
   values (Marenich-Cramer-Truhlar 2009, Table 1, 298.15 K); atomic_radii are the Bondi
   (1964) van der Waals radii, declared through radii_set=bondi so no two radius
@@ -21,7 +21,7 @@ license:
   commercial_ok: true
   redistribute_ok: true
 created: 2026-11-01T08:00:00Z
-epsilon: 35.69
+epsilon: 35.688
 temperature_K: 298.15
 refractive_index: 1.3442
 radii_set: bondi

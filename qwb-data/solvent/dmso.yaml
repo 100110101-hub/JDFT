@@ -1,6 +1,6 @@
-sha256: 12d639be2d13225343dc07782a2e1a94ae97767e3887bf650883c8865a10bd8b
+sha256: 00714c4363b488b620dce915db14f4b17f3e9f81a1977adc57b14dcab2971098
 name: dmso
-version: 2.0.0
+version: 2.1.0
 notes: "DA-04 v1: dielectric constant and refractive index are the SMD solvent-table
   values (Marenich-Cramer-Truhlar 2009, Table 1, 298.15 K); atomic_radii are the Bondi
   (1964) van der Waals radii, declared through radii_set=bondi so no two radius
@@ -21,9 +21,9 @@ license:
   commercial_ok: true
   redistribute_ok: true
 created: 2026-11-01T08:00:00Z
-epsilon: 46.83
+epsilon: 46.826
 temperature_K: 298.15
-refractive_index: 1.4793
+refractive_index: 1.4783
 radii_set: bondi
 cavity_model: pcm
 smd:

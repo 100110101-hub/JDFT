@@ -1,6 +1,6 @@
-sha256: 38b89c6f3bde206a23f6650884ee250914be58522927d117340bcdfd7345b44b
+sha256: 820497a4ffcbca4b375bc818c288f816a4f3ad168953e7af20003838b19f6139
 name: toluene
-version: 2.0.0
+version: 2.1.0
 notes: "DA-04 v1: dielectric constant and refractive index are the SMD solvent-table
   values (Marenich-Cramer-Truhlar 2009, Table 1, 298.15 K); atomic_radii are the Bondi
   (1964) van der Waals radii, declared through radii_set=bondi so no two radius
@@ -21,9 +21,9 @@ license:
   commercial_ok: true
   redistribute_ok: true
 created: 2026-11-01T08:00:00Z
-epsilon: 2.374
+epsilon: 2.3741
 temperature_K: 298.15
-refractive_index: 1.4969
+refractive_index: 1.4961
 radii_set: bondi
 cavity_model: pcm
 smd:

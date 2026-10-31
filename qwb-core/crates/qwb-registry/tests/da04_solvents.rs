@@ -19,13 +19,13 @@ fn data_root() -> PathBuf {
 fn expected() -> BTreeMap<&'static str, (f64, f64)> {
     BTreeMap::from([
         ("water", (78.355, 1.3328)),
-        ("methanol", (32.70, 1.3288)),
-        ("ethanol", (24.55, 1.3614)),
-        ("acetonitrile", (35.69, 1.3442)),
-        ("dmso", (46.83, 1.4793)),
-        ("chloroform", (4.81, 1.4459)),
-        ("toluene", (2.374, 1.4969)),
-        ("thf", (7.43, 1.4072)),
+        ("methanol", (32.613, 1.3288)),
+        ("ethanol", (24.852, 1.3611)),
+        ("acetonitrile", (35.688, 1.3442)),
+        ("dmso", (46.826, 1.4783)),
+        ("chloroform", (4.7113, 1.4459)),
+        ("toluene", (2.3741, 1.4961)),
+        ("thf", (7.4257, 1.405)),
     ])
 }
 

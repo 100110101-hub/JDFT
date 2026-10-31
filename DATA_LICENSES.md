@@ -35,15 +35,15 @@
 | `qwb-data/grid/grid-normal.yaml` | 1.0.0 | Apache-2.0 | true | true | `a792b362b1fdb278` |
 | `qwb-data/grid/grid-veryfine.yaml` | 1.0.0 | Apache-2.0 | true | true | `5c630f5a1ec0688d` |
 | `qwb-data/numerics/numerics.yaml` | 1.0.0 | Apache-2.0 | true | true | `fea96fd0bd356da0` |
-| `qwb-data/registry.yaml` | 0.11.0 | ? | ? | ? | `—（manifest，条目各自带` |
-| `qwb-data/solvent/acetonitrile.yaml` | 2.0.0 | Apache-2.0 | true | true | `3dc910310906bc49` |
-| `qwb-data/solvent/chloroform.yaml` | 2.0.0 | Apache-2.0 | true | true | `48988bc16c38396a` |
-| `qwb-data/solvent/dmso.yaml` | 2.0.0 | Apache-2.0 | true | true | `12d639be2d132253` |
-| `qwb-data/solvent/ethanol.yaml` | 2.0.0 | Apache-2.0 | true | true | `6e98e823ece22dc0` |
-| `qwb-data/solvent/methanol.yaml` | 2.0.0 | Apache-2.0 | true | true | `0757210ef3ec1074` |
-| `qwb-data/solvent/thf.yaml` | 2.0.0 | Apache-2.0 | true | true | `f08dcbf5bdfdab38` |
-| `qwb-data/solvent/toluene.yaml` | 2.0.0 | Apache-2.0 | true | true | `38b89c6f3bde206a` |
-| `qwb-data/solvent/water.yaml` | 2.0.0 | Apache-2.0 | true | true | `e570c568d7ec55a0` |
+| `qwb-data/registry.yaml` | 0.11.1 | ? | ? | ? | `—（manifest，条目各自带` |
+| `qwb-data/solvent/acetonitrile.yaml` | 2.1.0 | Apache-2.0 | true | true | `641eb80227e75fb8` |
+| `qwb-data/solvent/chloroform.yaml` | 2.1.0 | Apache-2.0 | true | true | `01ae69f7167f95c8` |
+| `qwb-data/solvent/dmso.yaml` | 2.1.0 | Apache-2.0 | true | true | `00714c4363b488b6` |
+| `qwb-data/solvent/ethanol.yaml` | 2.1.0 | Apache-2.0 | true | true | `02929d534e28a595` |
+| `qwb-data/solvent/methanol.yaml` | 2.1.0 | Apache-2.0 | true | true | `b52e4908be7b167c` |
+| `qwb-data/solvent/thf.yaml` | 2.1.0 | Apache-2.0 | true | true | `3845409494ef95d9` |
+| `qwb-data/solvent/toluene.yaml` | 2.1.0 | Apache-2.0 | true | true | `820497a4ffcbca4b` |
+| `qwb-data/solvent/water.yaml` | 2.1.0 | Apache-2.0 | true | true | `69b4d37ed71958f7` |
 
 ## 引用
 
@@ -143,45 +143,45 @@
 - A multicenter numerical integration scheme for polyatomic molecules (Becke partitioning)
 - New Methods For Electronic Structure Calculations on Large Molecules (pseudospectral approach)
 
-### `qwb-data/registry.yaml`（qwb-data 0.11.0）
+### `qwb-data/registry.yaml`（qwb-data 0.11.1）
 
 
-### `qwb-data/solvent/acetonitrile.yaml`（acetonitrile 2.0.0）
-
-- Universal solvation model based on solute electron density and on a continuum model of the solvent defined by the bulk dielectric constant and atomic surface tensions (SMD)
-- van der Waals volumes and radii (Bondi)
-
-### `qwb-data/solvent/chloroform.yaml`（chloroform 2.0.0）
+### `qwb-data/solvent/acetonitrile.yaml`（acetonitrile 2.1.0）
 
 - Universal solvation model based on solute electron density and on a continuum model of the solvent defined by the bulk dielectric constant and atomic surface tensions (SMD)
 - van der Waals volumes and radii (Bondi)
 
-### `qwb-data/solvent/dmso.yaml`（dmso 2.0.0）
+### `qwb-data/solvent/chloroform.yaml`（chloroform 2.1.0）
 
 - Universal solvation model based on solute electron density and on a continuum model of the solvent defined by the bulk dielectric constant and atomic surface tensions (SMD)
 - van der Waals volumes and radii (Bondi)
 
-### `qwb-data/solvent/ethanol.yaml`（ethanol 2.0.0）
+### `qwb-data/solvent/dmso.yaml`（dmso 2.1.0）
 
 - Universal solvation model based on solute electron density and on a continuum model of the solvent defined by the bulk dielectric constant and atomic surface tensions (SMD)
 - van der Waals volumes and radii (Bondi)
 
-### `qwb-data/solvent/methanol.yaml`（methanol 2.0.0）
+### `qwb-data/solvent/ethanol.yaml`（ethanol 2.1.0）
 
 - Universal solvation model based on solute electron density and on a continuum model of the solvent defined by the bulk dielectric constant and atomic surface tensions (SMD)
 - van der Waals volumes and radii (Bondi)
 
-### `qwb-data/solvent/thf.yaml`（thf 2.0.0）
+### `qwb-data/solvent/methanol.yaml`（methanol 2.1.0）
 
 - Universal solvation model based on solute electron density and on a continuum model of the solvent defined by the bulk dielectric constant and atomic surface tensions (SMD)
 - van der Waals volumes and radii (Bondi)
 
-### `qwb-data/solvent/toluene.yaml`（toluene 2.0.0）
+### `qwb-data/solvent/thf.yaml`（thf 2.1.0）
 
 - Universal solvation model based on solute electron density and on a continuum model of the solvent defined by the bulk dielectric constant and atomic surface tensions (SMD)
 - van der Waals volumes and radii (Bondi)
 
-### `qwb-data/solvent/water.yaml`（water 2.0.0）
+### `qwb-data/solvent/toluene.yaml`（toluene 2.1.0）
+
+- Universal solvation model based on solute electron density and on a continuum model of the solvent defined by the bulk dielectric constant and atomic surface tensions (SMD)
+- van der Waals volumes and radii (Bondi)
+
+### `qwb-data/solvent/water.yaml`（water 2.1.0）
 
 - Universal solvation model based on solute electron density and on a continuum model of the solvent defined by the bulk dielectric constant and atomic surface tensions (SMD)
 - van der Waals volumes and radii (Bondi)

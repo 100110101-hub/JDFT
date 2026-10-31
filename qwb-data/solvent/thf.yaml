@@ -1,6 +1,6 @@
-sha256: f08dcbf5bdfdab382f750824db1d19ff192fd96977ff957a3cb08b02ffb512f3
+sha256: 3845409494ef95d979c404004e7e2b37a39f7b412368fe7f21083ac94766cec9
 name: thf
-version: 2.0.0
+version: 2.1.0
 notes: "DA-04 v1: dielectric constant and refractive index are the SMD solvent-table
   values (Marenich-Cramer-Truhlar 2009, Table 1, 298.15 K); atomic_radii are the Bondi
   (1964) van der Waals radii, declared through radii_set=bondi so no two radius
@@ -21,9 +21,9 @@ license:
   commercial_ok: true
   redistribute_ok: true
 created: 2026-11-01T08:00:00Z
-epsilon: 7.43
+epsilon: 7.4257
 temperature_K: 298.15
-refractive_index: 1.4072
+refractive_index: 1.405
 radii_set: bondi
 cavity_model: pcm
 smd:
