@@ -65,8 +65,13 @@ DA-02:
   verification: "① 与 DA-01 同一套校验：`qwb data verify` 19/19；参数与 libxc `par_m06l`/`m06l_values` 一致。② **与 M06-2X 共用同一个数学形式**（`M06Exchange` 的 `has_vs98` 分支 + 同一个 `M06Correlation`），没有复制公式：M06-L 的交换在均匀电子气处逐位退回 Slater（< 1e-10）。③ 逐点 < 1e-9（同上测试文件）。④ 端到端 H2O/STO-3G = −75.30551 Ha vs PySCF −75.3055076948；def2-SVP/grid-coarse −76.3499177 vs −76.3499458（差 **2.8e-5**）。"
   note: "DA-02 的判据要求「与 DA-01 共用同一 MetaGga 组件（不复制数学形式）」——落地方式是 `M06ExchangeParameters.has_vs98` 与共用的 `M06Correlation`：M06-L 打开 VS98/gtv4 项、M06-2X 关掉，其余（pbe_f·动能级数、Stoll 分解、b97/gtv4、Fermi 因子）只有一份实现。"
 DA-03:
-  state: pending
-  note: "RS-hybrid 数据：ωB97X-D / CAM-B3LYP（omega_bohr_inv + 混合系数）"
+  state: blocked
+  ts: "2026-11-08T02:00:00Z"
+  artifact: "qwb-core/crates/qwb-registry/src/functional.rs（`RangeSeparation` 加性扩展 + 1 条测试）；参数见 choices 一百二十七"
+  verification: "**参数已取回并交叉验证**（PySCF 2.14 → libxc `rsh_coeff`，元组约定 `(ω, 长程HF, −(长程−短程))`）：CAM-B3LYP ω=0.33、短程 0.19、长程 0.65；ωB97X-D ω=0.20、短程 0.222036（libxc 的 `1−0.777964`，论文正文写 0.2223）、长程 1.0。`ω` 与论文一致（0.33 / 0.20）。K1 加性扩展 `Functional.range_separated` 落地并由测试钉住（含四条拒绝路径：ω=0、长程<短程、负比例、非有限值），`cargo test -p qwb-registry` 56 绿。"
+  note: "**卡点不是数据，是这两个泛函的 DFT 半边不在范围内**：ωB97X-D 的 B97 参数化（30+ 参数）与其 D2 型色散项（归 DA-06 色散数据轨，仍 blocked）、CAM-B3LYP 需要的 LYP（`∇²ρ`）—— 而 K1 的 `check_structure` 目前明确拒绝 `requires.laplacian = true`，B88/VWN5 有数据、LYP 没有。写一个 `components` 指向不存在组件的 YAML 等于把未实装写进数据，不做。"
+  gap: "要么补 B97 参数表（论文表，或多方实现逐项 diff）或补 LYP 数据 + 放开 `laplacian` 门禁，两条都是独立的数据/实现工作；参数面已经齐，接上即可。"
+  choices: "一百二十七"
 DA-04:
   state: done
   ts: "2026-11-01T09:00:00Z"
@@ -152,8 +157,13 @@ FX-02:
   verification: "① **逐点**（`cargo test -p qwb-xc --test fx02_m06_exchange`，6 例绿）：M06-L 与 M06-2X 的**交换与相关**在 10 个非极化点上，每体积能量密度与 ∂e/∂ρ、∂e/∂σ、∂e/∂τ 与 libxc 差全部 **< 1e-9**；均匀电子气处 M06-L 逐位退回 Slater（< 1e-10）；`a1+0.54=1`、`a1+d1=1` 两条自检；两族都只声明 `meta_gga()`（不要 ∇²ρ）。② **端到端**（`cargo test -p qwb-scf --test fx02_m06_water`）：H2O/STO-3G 的 M06-2X 与 M06-L 都在 0.5 mHa 判据内（−75.31297 / −75.30551 vs PySCF −75.3129666765 / −75.3055076948）。③ def2-SVP/grid-coarse 实测：M06-2X −76.3231912（PySCF −76.3231686，差 **2.3e-5 Ha**）、M06-L −76.3499177（差 **2.8e-5 Ha**），远小于 0.5 mHa。"
   note: "**两处踩坑（已记进 choices 五十四）**：① libxc 的 M06 代码用**每自旋**缩减变量，对非极化体系是 `x² = 2^{2/3}σ/ρ^{8/3}`、`t = 2^{2/3}τ/ρ^{5/3}`，而且动能级数的分母是 **`K′ = 2^{2/3}K`** —— 把 t 换成每自旋量却仍用总密度的 K，均匀气处 `w(t) ≠ 0`、增强因子偏 4%，M06-L 就不再退回 Slater（上一轮对不上的根因）。② libxc 的 `vrho/vsigma/vtau` 是**每体积** e 的偏导，我们的 `potential_derivatives_full` 给**每电子** ε 的偏导，比较时要换成 `ε+ρ∂ε/∂ρ`、`ρ∂ε/∂σ`、`ρ∂ε/∂τ`（换算前 σ/τ 通道恰好差 ρ 倍，这个「恰好差常数倍」就是线索）。"
 FX-03:
-  state: pending
-  note: "ωB97X-D / CAM-B3LYP（短程交换 + ω 来自数据）"
+  state: blocked
+  ts: "2026-11-08T02:00:00Z"
+  artifact: "（未开始：依赖 DA-03）"
+  verification: "**依赖未满足**：IN-02 已 done（短程/长程库仑积分都有，判据 1.41e-14），但 DA-03 因为两个泛函的 DFT 半边不在范围内而 blocked。"
+  note: "FX-03 的验收是「ω→0 时与 B3LYP 的差 < 1e-6 Ha；激发能用例进 M4；data verify 通过」。`ω→0 ⇒ t_min→0 ⇒ 短程核 = 全库仑`，所以它的强约束测试在 IN-02 的 ①（ω=0 逐位退回全库仑 < 1e-10）里已经具备基础；真正缺的是被比较的 B3LYP 本身与 B97/LYP 的实现。"
+  gap: "等 DA-03；数据面（ω、混合系数）已取回并验证。"
+  choices: "一百二十七"
 FX-04:
   state: blocked
   ts: "2026-11-07T08:40:00Z"

@@ -80,6 +80,37 @@ $defs:
     - commercial_ok
     - redistribute_ok
     type: object
+  RangeSeparation:
+    additionalProperties: false
+    description: |-
+      距离分离（RSH）参数（K1 加性扩展，DA-03）。
+
+      长程校正的交换算符是
+
+      ```text
+      E_x^{HF} = c_sr·E_x^{AHF}(ω) + (c_lr − c_sr)·E_x^{LR,HF}(ω)
+      ```
+
+      即短程用 `c_sr`、长程用 `c_lr`，`ω` 是分域参数（Bohr⁻¹）。`c_sr = c_lr` 时退化成
+      普通全局杂化（`ω` 不起作用），所以它是**加性**的：全局杂化不需要这个块。
+    properties:
+      long_range_hf:
+        description: 长程精确交换的比例（`≥ short_range_hf`）。
+        format: double
+        type: number
+      omega_bohr_inv:
+        description: 分域参数 `ω`，单位 Bohr⁻¹。
+        format: double
+        type: number
+      short_range_hf:
+        description: 短程精确交换的比例。
+        format: double
+        type: number
+    required:
+    - omega_bohr_inv
+    - short_range_hf
+    - long_range_hf
+    type: object
   StabilityRules:
     additionalProperties: false
     description: 数值稳定性的截断规则（§8.3 第三道门禁）。
@@ -138,6 +169,13 @@ properties:
       type: number
     description: 参数字典（如 PBE 的 `kappa = 0.804`、`mu = 0.21951`）。
     type: object
+  range_separated:
+    anyOf:
+    - $ref: '#/$defs/RangeSeparation'
+    - type: 'null'
+    description: |-
+      距离分离参数（RSH；全局杂化没有这个块）。`#[serde(default)]`：阶段一的泛函文件
+      没有这个键，缺省 `None` 才能原样解析 —— 加性契约扩展的唯一可行写法。
   requires:
     $ref: '#/$defs/FunctionalRequires'
     description: 需要的密度量。

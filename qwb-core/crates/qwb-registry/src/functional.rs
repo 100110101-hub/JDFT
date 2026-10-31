@@ -21,6 +21,40 @@ pub struct FunctionalComponent {
     pub weight: f64,
 }
 
+/// 距离分离（RSH）参数（K1 加性扩展，DA-03）。
+///
+/// 长程校正的交换算符是
+///
+/// ```text
+/// E_x^{HF} = c_sr·E_x^{AHF}(ω) + (c_lr − c_sr)·E_x^{LR,HF}(ω)
+/// ```
+///
+/// 即短程用 `c_sr`、长程用 `c_lr`，`ω` 是分域参数（Bohr⁻¹）。`c_sr = c_lr` 时退化成
+/// 普通全局杂化（`ω` 不起作用），所以它是**加性**的：全局杂化不需要这个块。
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+#[non_exhaustive]
+pub struct RangeSeparation {
+    /// 分域参数 `ω`，单位 Bohr⁻¹。
+    pub omega_bohr_inv: f64,
+    /// 短程精确交换的比例。
+    pub short_range_hf: f64,
+    /// 长程精确交换的比例（`≥ short_range_hf`）。
+    pub long_range_hf: f64,
+}
+
+impl RangeSeparation {
+    /// 构造。
+    #[must_use]
+    pub fn new(omega_bohr_inv: f64, short_range_hf: f64, long_range_hf: f64) -> Self {
+        Self {
+            omega_bohr_inv,
+            short_range_hf,
+            long_range_hf,
+        }
+    }
+}
+
 /// 该泛函需要哪些密度量（决定网格与数据结构，不允许运行时猜）。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
@@ -85,6 +119,10 @@ pub struct Functional {
     pub parameter_sources: BTreeMap<String, String>,
     /// 稳定性截断规则。
     pub stability: StabilityRules,
+    /// 距离分离参数（RSH；全局杂化没有这个块）。`#[serde(default)]`：阶段一的泛函文件
+    /// 没有这个键，缺省 `None` 才能原样解析 —— 加性契约扩展的唯一可行写法。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub range_separated: Option<RangeSeparation>,
 }
 
 impl_data_common!(Functional);
@@ -138,6 +176,31 @@ impl Functional {
             }
             if !value.is_finite() {
                 issues.push(format!("parameters.{key} must be finite"));
+            }
+        }
+
+        if let Some(rsh) = &self.range_separated {
+            if !(rsh.omega_bohr_inv.is_finite() && rsh.omega_bohr_inv > 0.0) {
+                issues.push(format!(
+                    "range_separated.omega_bohr_inv must be finite and > 0 (got {})",
+                    rsh.omega_bohr_inv
+                ));
+            }
+            for (label, value) in [
+                ("short_range_hf", rsh.short_range_hf),
+                ("long_range_hf", rsh.long_range_hf),
+            ] {
+                if !(value.is_finite() && (0.0..=1.0).contains(&value)) {
+                    issues.push(format!(
+                        "range_separated.{label} must lie in [0, 1] (got {value})"
+                    ));
+                }
+            }
+            if rsh.long_range_hf < rsh.short_range_hf {
+                issues.push(format!(
+                    "range_separated.long_range_hf ({}) must not be smaller than short_range_hf ({})",
+                    rsh.long_range_hf, rsh.short_range_hf
+                ));
             }
         }
 
@@ -203,7 +266,30 @@ mod tests {
                 density_floor: 1.0e-12,
                 sigma_ceiling: 1.0e8,
             },
+            range_separated: None,
         }
+    }
+
+    #[test]
+    fn range_separated_block_is_validated() {
+        use super::RangeSeparation;
+        // DA-03 的实测参数（PySCF/libxc 的 rsh_coeff 交叉核对；原论文见 choices 一百二十七）：
+        // CAM-B3LYP ω=0.33、短程 0.19、长程 0.65；ωB97X-D ω=0.20、短程 0.222036、长程 1.0。
+        let mut f = pbe();
+        f.range_separated = Some(RangeSeparation::new(0.33, 0.19, 0.65));
+        assert!(f.check().is_empty(), "{:?}", f.check());
+        f.range_separated = Some(RangeSeparation::new(0.2, 0.222_036, 1.0));
+        assert!(f.check().is_empty(), "{:?}", f.check());
+
+        // ω 必须为正。
+        f.range_separated = Some(RangeSeparation::new(0.0, 0.2, 1.0));
+        assert!(!f.check().is_empty(), "ω = 0 必须被拒");
+        // 长程不得小于短程（长程总会补上更多精确交换）。
+        f.range_separated = Some(RangeSeparation::new(0.33, 0.65, 0.19));
+        assert!(!f.check().is_empty(), "长程 < 短程必须被拒");
+        // 比例必须落在 [0,1]。
+        f.range_separated = Some(RangeSeparation::new(0.33, -0.1, 1.0));
+        assert!(!f.check().is_empty(), "负比例必须被拒");
     }
 
     #[test]
