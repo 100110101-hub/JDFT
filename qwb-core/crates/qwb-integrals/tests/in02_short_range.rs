@@ -20,7 +20,7 @@ const S: [u32; 3] = [0, 0, 0];
 fn simpson(intervals: usize, low: f64, high: f64, f: impl Fn(f64) -> f64) -> f64 {
     assert!(intervals.is_multiple_of(2));
     let h = (high - low) / intervals as f64;
-    let mut total = f(0.0);
+    let mut total = f(low);
     let mut nan_seen = false;
     for i in 1..intervals {
         let x = low + i as f64 * h;
@@ -43,16 +43,25 @@ fn simpson(intervals: usize, low: f64, high: f64, f: impl Fn(f64) -> f64) -> f64
     total * h / 3.0
 }
 
-/// `(ss|ss)` 的**独立一维参照**：先对 `r1` 解析积掉，再对角向解析积掉。
+/// `(ss|ss)` 的**独立一维参照**：换两次变量把六维积分化成一次一维积分。
+///
+/// 记 `e_ab = e^{−αβ/p|A−B|²}`、`e_cd = e^{−γδ/q|C−D|²}`、`ρ = pq/(p+q)`、`d = |P−Q|`，
+/// 先把 `r1, r2` 换到相对坐标 `w = (r1−P) − (r2−Q)`：
 ///
 /// ```text
-/// (ss|ss)_SR = 4π N/(A·d) ∫_0^∞ r e^{−A(r²+d²)} sinh(2Ard) erfc(ωr) dr
-/// N = e^{−αβ/p|AB|²} e^{−γδ/q|CD|²} (π/(p+q))^{3/2},  A = pq/(p+q),  d = |P − Q|
+/// ∫∫ e^{−p|r1−P|²−q|r2−Q|²} K(|r12|) = (π/(p+q))^{3/2} ∫ d³w e^{−ρ|w|²} K(|d + w|)
 /// ```
 ///
-/// 这条路径与生产路径没有共享代码：不用 Hermite 系数、不用 `F_m`、不用 `erfc_boys`
-/// （用的是独立的 `reference_erfc`）。
-#[allow(clippy::too_many_arguments)] // 四个中心 + 四个指数 + ω，正是这条积分自己的参数
+/// 再把 `w` 的角向积掉：令 `u = |d + w|`，则 `sinθ dθ = −u du/(d w)`，`u ∈ [|d−w|, d+w]`，
+///
+/// ```text
+/// (ss|ss)_SR = (2π e_ab e_cd (π/(p+q))^{3/2} / d) ∫_0^∞ w dw e^{−ρw²} [G(d+w) − G(|d−w|)]
+/// G(y) = ∫_0^y erfc(ωu) du = y·erfc(ωy) − e^{−ω²y²}/(ω√π)      （ω = 0 时 G(y) = y）
+/// ```
+///
+/// 这条路径与生产路径不共享代码：不用 Hermite 系数、不用 R 块表、不用 `erfc_boys`
+/// （用的是独立的 `reference_erfc`）。在 `w = d` 处 `|d−w|` 有折点，所以积分按 `d` 分成两段。
+#[allow(clippy::too_many_arguments)] // 四个中心 + 四个指数 + omega，正是这条积分自己的参数
 fn reference_ssss(
     a: Center,
     alpha: f64,
@@ -78,32 +87,42 @@ fn reference_ssss(
     ];
     let ab2 = (0..3).map(|i| (a[i] - b[i]).powi(2)).sum::<f64>();
     let cd2 = (0..3).map(|i| (c[i] - d[i]).powi(2)).sum::<f64>();
-    let pq = p * q / (p + q);
+    let rho = p * q / (p + q);
     let dd = (0..3)
         .map(|i| (p_center[i] - q_center[i]).powi(2))
         .sum::<f64>()
         .sqrt();
-    let n = (-alpha * beta / p * ab2).exp()
-        * (-gamma * delta / q * cd2).exp()
-        * (std::f64::consts::PI / (p + q)).powf(1.5);
-    if dd < 1e-12 {
-        // d → 0：sinh(2Ard)/(Ad) → 2r，公式退化（没有 1/d 奇异）。
+    let e_ab = (-alpha * beta / p * ab2).exp();
+    let e_cd = (-gamma * delta / q * cd2).exp();
+    // G(y) = ∫_0^y erfc(ωu)du
+    let g = |y: f64| -> f64 {
+        if omega == 0.0 {
+            return y;
+        }
+        y * reference_erfc(omega * y)
+            - (-omega * omega * y * y).exp() / (omega * std::f64::consts::PI.sqrt())
+    };
+    // 被积函数（不含常数因子）
+    let integrand = |w: f64| -> f64 { w * (-rho * w * w).exp() * (g(dd + w) - g((dd - w).abs())) };
+    // 上限：超过它之后 e^{−ρw²} 已把被积函数压到 1e-30 以下。
+    let upper = (dd + 20.0 / rho.sqrt()).max(10.0);
+    // 在 w = d 处分成两段（`|d−w|` 的折点）。
+    let left = simpson(20000, 0.0, dd, integrand);
+    let right = simpson(20000, dd, upper, integrand);
+    let prefactor = if dd < 1.0e-12 {
+        // d → 0：角向积给出 4π/w 的极限，换成直接式。
         return 4.0
             * std::f64::consts::PI
-            * n
-            * simpson(40000, 0.0, 40.0, |r| {
-                r * (-pq * r * r).exp() * reference_erfc(omega * r)
+            * e_ab
+            * e_cd
+            * (std::f64::consts::PI / (p + q)).powf(1.5)
+            * simpson(40000, 0.0, upper, |w| {
+                w * w * (-rho * w * w).exp() * reference_erfc(omega * w)
             });
-    }
-    // 角向积掉后是 2π（不是 4π）：∫d³r = ∫r²dr·∫2π sinθ dθ。
-    let prefactor = 2.0 * std::f64::consts::PI * n / (pq * dd);
-    // 用 [e^{−A(r−d)²} − e^{−A(r+d)²}]/2 代替 ^{−A(r²+d²)}sinh(2Ard)：后者在 r 大时
-    // 先算出巨大的 sinh 再乘极小的指数，容易出现 inf·0 = NaN（被 simpson 静默丢掉）。
-    simpson(40000, 0.0, 40.0, |r| {
-        r * 0.5
-            * ((-pq * (r - dd) * (r - dd)).exp() - (-pq * (r + dd) * (r + dd)).exp())
-            * reference_erfc(omega * r)
-    }) * prefactor
+    } else {
+        2.0 * std::f64::consts::PI * e_ab * e_cd * (std::f64::consts::PI / (p + q)).powf(1.5) / dd
+    };
+    prefactor * (left + right)
 }
 
 /// 与生产路径无关的 `erfc`（`erf` 的幂级数，|x| ≤ 6 足够）。
@@ -159,7 +178,6 @@ fn geometries() -> Vec<(&'static str, [Center; 4], [f64; 4])> {
 }
 
 #[test]
-#[ignore = "参照的一维归约与经典闭式差 ~1%，未取信（IN-02 第四项待重做）"]
 fn reference_matches_the_analytic_coulomb_value_at_zero_omega() {
     // 参照路径自己的校准：ω=0 时它必须等于已知的 `(ss|ss)`（生产路径已由 I-03 钉住）。
     for (name, centers, exponents) in geometries() {
@@ -237,7 +255,7 @@ fn zero_omega_reduces_to_the_full_coulomb_integral() {
 }
 
 #[test]
-#[ignore = "参照的一维归约未取信：它给出 1.0101，经典闭式给 0.9986（差 1.1%）。"]
+#[ignore = "ω>0 时参考答案与生产差 9.8%（ω=0 完全一致）：或是生产的 α=ω/√(p+q) 约定错，或是参照的 erfc 用错，未定。下一轮用「高斯阻尼核的闭式 + u 空间积分」判定。"]
 fn short_range_integral_matches_the_one_dimensional_reference() {
     let mut worst = 0.0_f64;
     for (name, centers, exponents) in geometries() {

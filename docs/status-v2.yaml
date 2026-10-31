@@ -107,12 +107,12 @@ IN-01:
   note: "**判据改了一处，并如实记账（记进 docs/choices.md 五十七）**：原文写「拟合误差对 H2O/def2-SVP < 1e-6 Ha（能量）」。实测（我们的实现与 PySCF **两边逐位一致**）表明这个 1e-6 把两件事混在了一起：`E_J^RI − E_J`（精确 4 中心）在 `def2-SVP`/`def2-SVP-RI` 配对下是 **6.14e-3 Ha**（占 46.845 Ha 的 0.013%），RI-J 的 **SCF 总能量**偏 **2.27e-3 Ha** —— 这是**辅助基不完备**的性质，不是实现错误；要求 < 1e-6 等于要求 76 个辅助函数把 Coulomb 能量拟合到 2e-8 的相对精度，任何实现都做不到。所以判据拆成两条：**实现正确性**用「与 PySCF 同配对的 `E_J^RI` 差 < 1e-6 Ha」（实测 1.4e-7，且三种辅助基给出同一个偏移，指向几何常数而不是积分），**辅助基质量**如实落盘（6.14e-3，并断言它落在 2e-2 的宽上界内、对照组 STO-3G 的误差 9.2e-1 远大于它）。对照组是必要的：没有它，这条断言在积分真的坏掉时也可能「通过」。"
 IN-02:
   state: in_progress
-  ts: "2026-11-07T20:00:00Z"
-  artifact: "qwb-core/crates/qwb-integrals/src/attenuated.rs（erfc_boys/odd_moment）、crates/qwb-integrals/src/hermite2e.rs（KernelMode + primitive_component_sr）、tests/in02_erfc_boys.rs（5 条）、tests/in02_short_range.rs（3 过 2 ignore）"
-  verification: "**辅助函数**：`F_m^{SR}(T,α)` 与独立复合 Simpson 对照 —— 物理范围（α ≤ 2.2）< 1e-10；α=0 与 `boys_functions` 一致 < 1e-14；α=30 时 F_0 归零、F_1 按 α^{−3} 衰减。**短程 2e 积分**（`primitive_component_sr`，复用 MD 展开 + R 块表、只换核种子）：①ω=0 逐位退回全库仑（相对差 < 1e-10）；②ω=40 时积分 < 1e-100；③通式 vs MD 闭式 `2π^{5/2}/(pq√(p+q))·F_0^{SR}` 相对差 < 1e-12。"
-  note: "第四条判据（与独立数值积分对照 < 1e-9）**未达成，卡在我自己的参照**：把 (ss|ss) 角向解析积掉的一维归约在 ω=0 处给 1.0101，经典闭式给 0.9986（差 1.1%），d→0 分支还差 √(π/A)/2 因子。没有放宽判据：两条依赖它的测试标 `#[ignore]` 并写明「参照未取信」。"
-  gap: "下一轮二选一：①用 Gauss–Laplace 表示 erfc(ωr)/r = (2/√π)∫_ω^∞ e^{−r²u²}du 在 u 空间积（被积函数初等）；②在 t 空间对 (ss|ss) 直接高精度积分。之后还剩通用角动量的短程导数积分（FX-03 需要）与 ω→∞ 的积分级判据。"
-  choices: "一百二十三、一百二十四"
+  ts: "2026-11-07T22:00:00Z"
+  artifact: "qwb-core/crates/qwb-integrals/src/attenuated.rs（erfc_boys/odd_moment）、crates/qwb-integrals/src/hermite2e.rs（KernelMode + primitive_component_sr）、tests/in02_erfc_boys.rs（5 条）、tests/in02_short_range.rs（4 过 1 ignore）"
+  verification: "**辅助函数**：`F_m^{SR}` 与独立 Simpson 对照 —— 物理范围（α ≤ 2.2）< 1e-10；α=0 与 Boys 一致 < 1e-14；α=30 时 F_0 归零、F_1 按 α^{−3} 衰减。**短程 2e 积分**（复用 MD 展开 + R 块表、只换核种子）：①ω=0 逐位退回全库仑（< 1e-10）；②ω=40 时 < 1e-100；③通式 vs MD 闭式 < 1e-12；④**独立一维参照（两次换元）在 ω=0 处与经典闭式一致 < 1e-9** —— 归约、换元、积分器都被钉住。"
+  note: "ω>0 时参考答案与生产路径差 **9.8%**（ω=0.1：生产 0.9724 vs 参照 0.8854），ω=0 处完全一致 ⇒ 分叉在**核**上。两个候选原因：①生产的 `α = ω/√(p+q)` 约定（该式是推导来的，未对照独立实现）；②参照路径的独立 erfc 在 ω·y 上不准。测试里把 ω>0 的对照标 `#[ignore]` 并写明两种可能，不假装通过。"
+  gap: "下一轮的判定实验已写死：用高斯阻尼核 `e^{−μ r12²}` 的闭式在 u 空间做 `∫_ω^∞` 积分（核是纯高斯、被积函数初等），把「α 约定」与「参照 erfc」分开判定；判定后再补 FX-03 需要的通用角动量短程导数积分。"
+  choices: "一百二十三、一百二十四、一百二十五"
 IN-03:
   state: pending
   stretch: true
