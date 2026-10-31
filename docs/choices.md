@@ -3611,3 +3611,45 @@ tessera 收敛性仍是 0.993 kcal/mol 散布（100/150/250 points per atom）�
 
 `cargo test -p qwb-engine --test sv01_cosmo_scf` 7 例绿（5.57 s）。台账 SV-01 加了 `epsilon_basis`
 字段把基准写死，避免以后又分不清这批数字是用哪套 ε 算的。
+
+## 九十、SV-03（SMD）卡点精确定位：半径规则有了，CDS 的 σ 表没有（2026-11-06）
+
+数据侧上一轮已经齐了（8 个溶剂的 `γ, φ², ψ², α, β, ε, n`），但 SMD 不止这些。本轮把缺的东西问到具体：
+
+### (a) SMD 半径规则：**有**（论文 eq.16，可从 PySCF 的 `smd_radii` 读出）
+
+```text
+H 1.20   C 1.85   N 1.89   F 1.73   Si 2.47   P 2.12   S 2.49   Cl 2.38
+Br 2.60（SMD18 值；SMD 原文是 3.06）      I 2.74      其余元素用 Bondi，再否则 2.0
+
+O 的半径**依赖溶剂的 Abraham α**：
+    α ≥ 0.43 -> 1.52
+    α < 0.43 -> 1.52 + 1.8·(0.43 − α)
+```
+
+最后一条很关键：它说明「SMD 半径」不是一张对全部溶剂通用的表（氧的半径随溶剂变），
+这也正是 DA-04 当初在 `notes` 里写「切到 SMD 需要 SMD 专用参数化半径」的原因。
+
+### (b) CDS 项的 σ 表：**没有**
+
+PySCF 的 `get_cds_legacy()` 直接调编译好的 C 库：
+
+```python
+mnsol_interface = libsolvent.mnsol_interface_
+...
+gcds  = ctypes.c_double()
+areacds = ctypes.c_double()
+mnsol_interface(..., ctypes.byref(gcds), ctypes.byref(areacds), dcds)
+```
+
+也就是 **CDS 的原子表面张力 σ_k 与表面积分解算法都不在可读源码里**；它们在 SMD 论文的
+eq.14–20 与补充材料里，而本环境 `web_fetch` 不支持 PDF。**不能**用 -1 占位、不能自算冒充。
+
+### 处理
+
+- `docs/status-v2.yaml` 把 SV-03 从 `pending` 改成 **blocked**，并写明「需要什么数据才能继续」
+  （σ 表 + CDS 面积分解），不是「做不了」。
+- 半径规则本轮已确认并记在上表里，拿到 σ 表后**不需要再查一遍**。
+- SV-02（COSMO 梯度）与 SV-03 无依赖关系，可以单独推进。
+
+一句话：**数据先行这条规矩在这里救了一次** —— 如果先写非极性项、再发现 σ 表缺失，那批数字只能作废。

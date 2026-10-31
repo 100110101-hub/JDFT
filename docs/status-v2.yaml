@@ -285,8 +285,12 @@ SV-02:
   state: pending
   note: "COSMO 解析梯度 + opt 接线。**按 §10.5 的选取规则当前不可做**：它依赖 SV-01，而 SV-01 是 blocked（判据卡在缺 SMD 非极性项），所以溶剂化轨整条要等 SV-03 解 block。下一轮的队列头是 SC-02（依赖 SC-01 done、ID 最小），见 choices 六十五。"
 SV-03:
-  state: pending
+  state: blocked
   note: "SMD（COSMO + 4 项非极性 + 参数化半径）"
+  ts: "2026-11-06T20:00:00Z"
+  gap: "**数据/实现缺口已定位到两项**：(a) SMD 半径规则**已有**（SMD 论文 eq.16，见 choices 九十）——H 1.20、C 1.85、N 1.89、F 1.73、Si 2.47、P 2.12、S 2.49、Cl 2.38、Br 2.60(SMD18)、I 2.74；**O 的半径依赖溶剂的 Abraham α**：α ≥ 0.43 时 1.52，否则 1.52 + 1.8·(0.43 − α)。(b) **CDS 项的原子表面张力表没有**：PySCF 的 SMD 把 CDS 交给编译好的 `libsolvent.mnsol_interface_`（`ctypes` 取 `gcds/areacds`），σ_k 与表面积分解不在可读源码里；原文在 PDF 里，本环境 `web_fetch` 不支持 PDF。所以 SV-03 现在**不能**按判据实现，也不允许拿 -1 占位或自算值凑。"
+  blocked_reason_note: "需要的下一样数据：SMD 的 per-element 原子表面张力 σ 与 CDS 表面积分解算法（原文 eq.14–20 或 `libsolvent` 源码）。拿到之后即可实现非极性项；半径规则本轮已确认，届时不需再查。"
+  artifact: "（本轮只做缺口定位，未改代码）"
 SV-04:
   state: pending
   stretch: true
