@@ -55,7 +55,7 @@ use qwb_registry::elements::atomic_number;
 use crate::pulay::pulay_w;
 
 /// [u32; 3] → 积分库要的 Powers 元组。
-fn powers_tuple(powers: [u32; 3]) -> (u32, u32, u32) {
+pub(crate) fn powers_tuple(powers: [u32; 3]) -> (u32, u32, u32) {
     (powers[0], powers[1], powers[2])
 }
 
@@ -161,7 +161,7 @@ pub fn cartesian_orbitals(
 }
 
 /// 把球谐密度展开到直角分量基：`ρ̃_{cd} = Σ_{μν} P_{μν} t_{μc} t_{νd}`。
-fn cartesian_density(
+pub(crate) fn cartesian_density(
     density: &Matrix,
     expansion: &[Vec<(usize, f64)>], // Expansion 的借用形式
     n_cartesian: usize,
@@ -183,7 +183,7 @@ fn cartesian_density(
     out
 }
 
-fn nuclei_of(molecule: &Molecule) -> Result<Vec<([f64; 3], f64)>, EngineError> {
+pub(crate) fn nuclei_of(molecule: &Molecule) -> Result<Vec<([f64; 3], f64)>, EngineError> {
     molecule
         .atoms
         .iter()
@@ -233,13 +233,13 @@ impl GradientComponents {
 }
 
 /// 一对直角 AO 在「`first` 这一侧中心移动」时的导数贡献（未乘密度）。
-enum PairKind {
+pub(crate) enum PairKind {
     Kinetic,
     Nuclear,
     Overlap,
 }
 
-fn pair_derivative(
+pub(crate) fn pair_derivative(
     first: &CartAo,
     second: &CartAo,
     nuclei: &[([f64; 3], f64)],

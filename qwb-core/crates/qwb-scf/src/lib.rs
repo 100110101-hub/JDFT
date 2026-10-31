@@ -23,6 +23,7 @@
 
 pub mod analytic_gradient;
 pub mod checkpoint;
+pub mod cphf_hessian;
 pub mod diis;
 pub mod ecp;
 pub mod guess;
