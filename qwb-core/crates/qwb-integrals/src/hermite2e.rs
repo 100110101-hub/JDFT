@@ -37,7 +37,7 @@
 //! 会差整体符号，因此这条约定由测试对照独立路径来确定，不靠记忆。
 
 use crate::boys::boys_functions_into;
-use crate::one_electron::hermite_1d;
+use crate::one_electron::hermite_1d_into;
 
 const PI: f64 = std::f64::consts::PI;
 
@@ -120,7 +120,34 @@ impl Kernel {
 /// 一电子核吸引用的是 `scale = p`、`R = P − C`；两电子积分用的是 `scale = ρ`、
 /// `R = P − Q`。两条路径共享这份**按定义求导**的实现，避免再出现「凭记忆写递推」
 /// 的风险。
+/// 诊断：derivative_boys 被真正计算了多少次（默认不开启统计）。
+static KERNEL_COMPUTATIONS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+/// 诊断：derivative_boys 累计纳秒。
+static KERNEL_NANOS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// 读诊断计数器（RS-05 的成本归因用）。
+#[must_use]
+pub fn kernel_computations() -> usize {
+    KERNEL_COMPUTATIONS.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+/// 诊断：derivative_boys 的累计秒数（RS-05 的成本归因用）。
+#[must_use]
+pub fn kernel_seconds() -> f64 {
+    KERNEL_NANOS.load(std::sync::atomic::Ordering::Relaxed) as f64 * 1.0e-9
+}
+
 pub(crate) fn derivative_boys(l: u32, m: u32, n: u32, scale: f64, r: [f64; 3]) -> f64 {
+    let clock = std::time::Instant::now();
+    let value = derivative_boys_inner(l, m, n, scale, r);
+    KERNEL_NANOS.fetch_add(
+        clock.elapsed().as_nanos() as u64,
+        std::sync::atomic::Ordering::Relaxed,
+    );
+    value
+}
+
+fn derivative_boys_inner(l: u32, m: u32, n: u32, scale: f64, r: [f64; 3]) -> f64 {
     let mut kernel = Kernel::fundamental();
     for _ in 0..l {
         kernel = kernel.differentiate(0, scale);
@@ -131,6 +158,7 @@ pub(crate) fn derivative_boys(l: u32, m: u32, n: u32, scale: f64, r: [f64; 3]) -
     for _ in 0..n {
         kernel = kernel.differentiate(2, scale);
     }
+    KERNEL_COMPUTATIONS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     let t = scale * (0..3).map(|axis| r[axis] * r[axis]).sum::<f64>();
     // 热路径：栈上缓冲。原函数级 2e 导数每个四元组都要调一次 Boys，
     // 每次分配一个 Vec 在 debug 构建里能占掉一半以上的时间。
@@ -220,29 +248,41 @@ impl PrimitiveContext {
     }
 
     /// 给定的四个幂次三元组的原函数积分（未归一化、未收缩）。
-    fn integral(&mut self, pa: [u32; 3], pb: [u32; 3], pc: [u32; 3], pd: [u32; 3]) -> f64 {
-        let e_a: Vec<Vec<f64>> = (0..3)
-            .map(|axis| {
-                hermite_1d(
-                    pa[axis],
-                    pb[axis],
-                    self.p,
-                    self.p_center[axis] - self.a[axis],
-                    self.p_center[axis] - self.b[axis],
-                )
-            })
-            .collect();
-        let e_c: Vec<Vec<f64>> = (0..3)
-            .map(|axis| {
-                hermite_1d(
-                    pc[axis],
-                    pd[axis],
-                    self.q,
-                    self.q_center[axis] - self.c[axis],
-                    self.q_center[axis] - self.d[axis],
-                )
-            })
-            .collect();
+    ///
+    /// E 系数用调用方给的栈上缓冲（[`hermite_1d_into`]），不再每次分配 `Vec`：
+    /// 二阶导数的一条积分要调几百次，分配开销是它最主要的浪费。
+    fn integral(
+        &mut self,
+        pa: [u32; 3],
+        pb: [u32; 3],
+        pc: [u32; 3],
+        pd: [u32; 3],
+        scratch: &mut [f64],
+    ) -> f64 {
+        let mut e_a = [[0.0_f64; 16]; 3];
+        let mut e_c = [[0.0_f64; 16]; 3];
+        for axis in 0..3 {
+            let t_max = (pa[axis] + pb[axis]) as usize;
+            hermite_1d_into(
+                pa[axis],
+                pb[axis],
+                self.p,
+                self.p_center[axis] - self.a[axis],
+                self.p_center[axis] - self.b[axis],
+                &mut e_a[axis][..=t_max],
+                scratch,
+            );
+            let u_max = (pc[axis] + pd[axis]) as usize;
+            hermite_1d_into(
+                pc[axis],
+                pd[axis],
+                self.q,
+                self.q_center[axis] - self.c[axis],
+                self.q_center[axis] - self.d[axis],
+                &mut e_c[axis][..=u_max],
+                scratch,
+            );
+        }
         let stride_y = (self.lz + 1) as usize;
         let stride_x = ((self.ly + 1) * (self.lz + 1)) as usize;
         let mut total = 0.0;
@@ -315,7 +355,8 @@ pub fn primitive_component(
         pa[2] + pb[2] + pc[2] + pd[2],
     ];
     let mut context = PrimitiveContext::new(a, alpha, b, beta, c, gamma, d, delta, max_powers);
-    context.integral(pa, pb, pc, pd)
+    let mut scratch = [0.0_f64; 16 * 16 * 16];
+    context.integral(pa, pb, pc, pd, &mut scratch)
 }
 
 /// 一个 primitive 四元组对**四个中心**的导数 `[[∂/∂A_i]; [∂/∂B_i]; [∂/∂C_i]; [∂/∂D_i]]`。
@@ -352,6 +393,7 @@ pub fn primitive_component_derivatives(
         pa[2] + pb[2] + pc[2] + pd[2] + 1,
     ];
     let mut context = PrimitiveContext::new(a, alpha, b, beta, c, gamma, d, delta, max_powers);
+    let mut scratch = [0.0_f64; 16 * 16 * 16];
     let mut out = [[0.0_f64; 3]; 4];
     let centers = [pa, pb, pc, pd];
     let exponents = [alpha, beta, gamma, delta];
@@ -361,12 +403,18 @@ pub fn primitive_component_derivatives(
             raised[slot][axis] += 1;
             let mut value = 2.0
                 * exponents[slot]
-                * context.integral(raised[0], raised[1], raised[2], raised[3]);
+                * context.integral(raised[0], raised[1], raised[2], raised[3], &mut scratch);
             if centers[slot][axis] > 0 {
                 let mut lowered = centers;
                 lowered[slot][axis] -= 1;
                 value -= f64::from(centers[slot][axis])
-                    * context.integral(lowered[0], lowered[1], lowered[2], lowered[3]);
+                    * context.integral(
+                        lowered[0],
+                        lowered[1],
+                        lowered[2],
+                        lowered[3],
+                        &mut scratch,
+                    );
             }
             out[slot][axis] = value;
         }
@@ -413,11 +461,12 @@ fn cached_integral(
     context: &mut PrimitiveContext,
     cache: &mut Vec<(Power4, f64)>,
     powers: Power4,
+    scratch: &mut [f64],
 ) -> f64 {
     if let Some((_, value)) = cache.iter().find(|(key, _)| *key == powers) {
         return *value;
     }
-    let value = context.integral(powers[0], powers[1], powers[2], powers[3]);
+    let value = context.integral(powers[0], powers[1], powers[2], powers[3], scratch);
     cache.push((powers, value));
     value
 }
@@ -479,6 +528,7 @@ pub fn primitive_component_second_derivatives(
     let exponents = [alpha, beta, gamma, delta];
     // 展开表按 (s,t,i,j) 现场构造——表很小（≤ 8 项），比预先存 144 份更省内存。
     let mut cache: Vec<(Power4, f64)> = Vec::new();
+    let mut scratch = [0.0_f64; 16 * 16 * 16];
     let mut out = [[[[0.0_f64; 3]; 3]; 4]; 4];
     // 只算前三个中心的两两导数（9 个中心对），第四个中心由**平动不变性**
     // `∂²/∂A_3∂A_t = −Σ_{s<3} ∂²/∂A_s∂A_t` 得到 —— 省掉 7/16 的展开量。
@@ -492,7 +542,8 @@ pub fn primitive_component_second_derivatives(
                     apply_shifting_operator(&mut terms, s, i, exponents[s]);
                     let mut total = 0.0;
                     for (powers, coefficient) in terms {
-                        total += coefficient * cached_integral(&mut context, &mut cache, powers);
+                        total += coefficient
+                            * cached_integral(&mut context, &mut cache, powers, &mut scratch);
                     }
                     out[s][t][i][j] = total;
                 }

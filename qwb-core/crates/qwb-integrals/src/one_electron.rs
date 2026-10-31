@@ -83,6 +83,84 @@ pub(crate) fn hermite_1d(i: u32, j: u32, p: f64, pa: f64, pb: f64) -> Vec<f64> {
     table[i_max][j_max].clone()
 }
 
+/// 与 [`hermite_1d`] 相同的递推，但**不分配**：把 `t = 0..=i+j` 的系数写进 `out`。
+///
+/// 存在的理由（RS-05 的成本归因）：二阶导数的一条积分要求 ~300 次移位幂次的积分，
+/// 每次调用 `hermite_1d` 都要为 `(i+1)(j+1)` 个 `Vec` 分别分配 —— 一个原函数四元组
+/// 累计上万次分配。改成调用方提供的栈上缓冲后，这条开销整段消失。
+///
+/// `scratch` 由调用方给（一个原函数四元组一份、反复复用），长度至少
+/// `STRIDE³`；函数只清「这次真的用到」的那一小块，不做整块清零（整块清零曾经让
+/// 二阶导数慢了 20%，见 `docs/choices.md` 一百一十五）。
+///
+/// `out` 至少要 `i + j + 1` 长；返回 `t_max + 1`。
+///
+/// # Panics
+///
+/// `i + j ≥ 16`（单方向 Hermite 指标）或缓冲太小时 panic —— 现有基组 `l ≤ 4`，
+/// 二阶导数最多再抬 2 阶，离上限很远。
+pub(crate) fn hermite_1d_into(
+    i: u32,
+    j: u32,
+    p: f64,
+    pa: f64,
+    pb: f64,
+    out: &mut [f64],
+    scratch: &mut [f64],
+) -> usize {
+    const STRIDE: usize = 16;
+    let i_max = i as usize;
+    let j_max = j as usize;
+    let t_max = i_max + j_max;
+    assert!(t_max < STRIDE, "Hermite 指标 {t_max} 超出 {STRIDE}");
+    assert!(out.len() > t_max, "输出缓冲太小");
+    assert!(scratch.len() >= STRIDE * STRIDE * STRIDE, "scratch 太小");
+    let index = |ii: usize, jj: usize, t: usize| (ii * STRIDE + jj) * STRIDE + t;
+    // 只清这次会用到的区域。
+    for ii in 0..=i_max {
+        for jj in 0..=j_max {
+            for t in 0..=t_max {
+                scratch[index(ii, jj, t)] = 0.0;
+            }
+        }
+    }
+    scratch[index(0, 0, 0)] = 1.0;
+    let inv_2p = 0.5 / p;
+    for ii in 0..=i_max {
+        for jj in 0..=j_max {
+            if ii == 0 && jj == 0 {
+                continue;
+            }
+            for t in 0..=t_max {
+                let mut value = 0.0;
+                if ii > 0 {
+                    let base = (ii - 1) * STRIDE * STRIDE + jj * STRIDE;
+                    if t > 0 {
+                        value += inv_2p * scratch[base + t - 1];
+                    }
+                    value += pa * scratch[base + t];
+                    if t < t_max {
+                        value += f64::from(t as u32 + 1) * scratch[base + t + 1];
+                    }
+                } else {
+                    let base = ii * STRIDE * STRIDE + (jj - 1) * STRIDE;
+                    if t > 0 {
+                        value += inv_2p * scratch[base + t - 1];
+                    }
+                    value += pb * scratch[base + t];
+                    if t < t_max {
+                        value += f64::from(t as u32 + 1) * scratch[base + t + 1];
+                    }
+                }
+                scratch[index(ii, jj, t)] = value;
+            }
+        }
+    }
+    let start = index(i_max, j_max, 0);
+    out[..=t_max].copy_from_slice(&scratch[start..=start + t_max]);
+    t_max + 1
+}
+
 /// 高斯积：`p, P, E_AB` 与三个方向的 Hermite 系数。
 fn gaussian_product(
     alpha: f64,

@@ -1208,6 +1208,31 @@ mod tests {
         .expect("rhs");
         let rhs_seconds = started.elapsed().as_secs_f64();
 
+        // 数值 Hessian 的基线：6N 个位移、每个位移 1 次 SCF + 1 次解析梯度。
+        let fock = crate::build_fock(
+            &one_electron(&basis, &molecule)
+                .expect("1e")
+                .core_hamiltonian,
+            &tensor,
+            &result.density,
+        )
+        .expect("fock")
+        .fock;
+        let _ =
+            crate::analytic_gradient::analytic_gradient(&basis, &molecule, &result.density, &fock)
+                .expect("warmup gradient");
+        let started = std::time::Instant::now();
+        let _gradient =
+            crate::analytic_gradient::analytic_gradient(&basis, &molecule, &result.density, &fock)
+                .expect("gradient");
+        let gradient_seconds = started.elapsed().as_secs_f64();
+        let baseline = 6.0 * molecule.atoms.len() as f64 * gradient_seconds;
+        println!(
+            "一次解析梯度 {gradient_seconds:.3} s ⇒ 数值 Hessian 基线 ≈ {baseline:.1} s（6N = {} 个位移）；解析路径（2e 二阶导 + 块 + 右端）≈ {:.1} s ⇒ {:.2}×",
+            6 * molecule.atoms.len(),
+            second + first + rhs_seconds,
+            baseline / (second + first + rhs_seconds)
+        );
         let mut max_offdiag = 0.0_f64;
         for i in 0..dof {
             for j in 0..dof {
