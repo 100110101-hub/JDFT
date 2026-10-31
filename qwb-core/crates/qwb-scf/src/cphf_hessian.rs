@@ -32,7 +32,7 @@ use qwb_linalg::Matrix;
 
 use crate::analytic_gradient::{
     CartAo, PairKind, cartesian_density, cartesian_orbitals, nuclei_of, pair_derivative,
-    powers_tuple,
+    powers_tuple, raise_lower,
 };
 
 /// 一个核位移方向的 AO 基导数块（直角分量基，`n_cart × n_cart`）。
@@ -47,6 +47,12 @@ pub struct DirectionBlock {
     pub overlap: Matrix,
     /// `h^x_{μν} = T^x_{μν} + V^x_{μν}`（AO 中心移动的那一半）。
     pub one_electron: Matrix,
+    /// 核位置移动给 `V` 的那一半（`V^x_nucleus`）：`d/dR_A[−Z_A/|r−R_A|]`。
+    ///
+    /// **两个一电子块必须相加**才是「位移一个原子」的一电子骨架导数 —— 原子一动，
+    /// 它的基函数和它的核一起动。平动不变性把它们连起来：
+    /// `V^x_nucleus = −(∂V^{(A)}/∂A + ∂V^{(A)}/∂B)`（单核项，按 AO 中心的降幂求导）。
+    pub nuclear_center: Matrix,
     /// `G^x_{μν}`（见模块文档的系数约定）。
     pub two_electron: Matrix,
 }
@@ -82,13 +88,90 @@ pub fn cartesian_direction_blocks(
             axis: index % 3,
             overlap: Matrix::zeros(n, n),
             one_electron: Matrix::zeros(n, n),
+            nuclear_center: Matrix::zeros(n, n),
             two_electron: Matrix::zeros(n, n),
         })
         .collect();
 
     one_electron_blocks(&cartesian, &nuclei, &mut blocks);
+    nuclear_center_blocks(&cartesian, &nuclei, &mut blocks);
     two_electron_blocks(&cartesian, &density_cart, &mut blocks);
     Ok(blocks)
+}
+
+/// 核位置那一半：`V^x_nucleus = −(d_a + d_b)`，其中 `d_a`、`d_b` 是**单核项**对两侧
+/// AO 中心的降幂导数（与 `analytic_gradient::nuclear_center_axis` 同一个式子，
+/// 只是这里保留矩阵结构）。
+fn nuclear_center_blocks(
+    cartesian: &[CartAo],
+    nuclei: &[([f64; 3], f64)],
+    blocks: &mut [DirectionBlock],
+) {
+    use qwb_integrals::one_electron::primitive_nuclear;
+
+    let n = cartesian.len();
+    for (atom, (position, charge)) in nuclei.iter().enumerate() {
+        for mu in 0..n {
+            for nu in mu..n {
+                let mut values = [[0.0_f64; 3]; 2];
+                for (alpha, ca) in cartesian[mu]
+                    .exponents
+                    .iter()
+                    .zip(&cartesian[mu].coefficients)
+                {
+                    let na = primitive_norm(powers_tuple(cartesian[mu].powers), *alpha);
+                    for (beta, cb) in cartesian[nu]
+                        .exponents
+                        .iter()
+                        .zip(&cartesian[nu].coefficients)
+                    {
+                        let nb = primitive_norm(powers_tuple(cartesian[nu].powers), *beta);
+                        let weight = ca * cb * na * nb;
+                        if weight == 0.0 {
+                            continue;
+                        }
+                        #[allow(clippy::needless_range_loop)]
+                        // axis 同时给 raise_lower 和 values 用
+                        for axis in 0..3 {
+                            let d_a = raise_lower(*alpha, cartesian[mu].powers, axis, |powers| {
+                                primitive_nuclear(
+                                    *alpha,
+                                    (powers[0], powers[1], powers[2]),
+                                    cartesian[mu].center,
+                                    *beta,
+                                    powers_tuple(cartesian[nu].powers),
+                                    cartesian[nu].center,
+                                    *position,
+                                    *charge,
+                                )
+                            });
+                            let d_b = raise_lower(*beta, cartesian[nu].powers, axis, |powers| {
+                                primitive_nuclear(
+                                    *alpha,
+                                    powers_tuple(cartesian[mu].powers),
+                                    cartesian[mu].center,
+                                    *beta,
+                                    (powers[0], powers[1], powers[2]),
+                                    cartesian[nu].center,
+                                    *position,
+                                    *charge,
+                                )
+                            });
+                            values[0][axis] += weight * d_a;
+                            values[1][axis] += weight * d_b;
+                        }
+                    }
+                }
+                for axis in 0..3 {
+                    let value = -(values[0][axis] + values[1][axis]);
+                    blocks[3 * atom + axis].nuclear_center[(mu, nu)] += value;
+                    if mu != nu {
+                        blocks[3 * atom + axis].nuclear_center[(nu, mu)] += value;
+                    }
+                }
+            }
+        }
+    }
 }
 
 /// 一电子块（`S^x`、`h^x`）：一趟 AO 对遍历，两侧的中心各算各的导数。
@@ -343,6 +426,148 @@ fn two_electron_blocks(cartesian: &[CartAo], density: &Matrix, blocks: &mut [Dir
     }
 }
 
+/// CPHF 的右端骨架：`F^x_{pq}`、`S^x_{pq}` 与 `B^x_{ai} = F^x_{ai} − ε_i S^x_{ai}`。
+///
+/// `right_hand_sides[d]` 里 `p = i·n_vir + a`，与 `qwb_response::cphf` 的展平约定一致。
+#[derive(Debug, Clone)]
+#[non_exhaustive]
+pub struct CphfRhs {
+    /// 占据轨道数。
+    pub n_occupied: usize,
+    /// 虚轨道数。
+    pub n_virtual: usize,
+    /// 方向数（`3N`）。
+    pub n_directions: usize,
+    /// `F^x_{pq} = C^T(h^x + V^x_nucleus + G^x)C`（MO 基，`n×n`）。
+    pub fock_mo: Vec<Matrix>,
+    /// `S^x_{pq}`（MO 基，`n×n`）。
+    pub overlap_mo: Vec<Matrix>,
+    /// `B^x_{ai}`，`p = i·n_vir + a`。
+    pub right_hand_sides: Vec<Vec<f64>>,
+    /// 直角分量基下的 MO 系数 `C_cart = T·C`（显式二阶导项要复用它）。
+    pub coefficients_cartesian: Matrix,
+}
+
+/// 由导数块与 MO 数据组装 CPHF 右端（`3N` 个方向）。
+///
+/// 一电子骨架导数是**两块之和**：`one_electron`（AO 中心动）+ `nuclear_center`（核动）。
+/// 2e 那块 `G^x` 已按密度收缩好。
+///
+/// # Errors
+///
+/// 维度不匹配（`coefficients` 的列数必须等于 `basis.n_functions()`、
+/// `mo_energies` 长度不够、`n_occupied` 越界）。
+pub fn cphf_right_hand_sides(
+    basis: &InternalBasis,
+    molecule: &Molecule,
+    density: &Matrix,
+    coefficients: &Matrix,
+    mo_energies: &[f64],
+    n_occupied: usize,
+) -> Result<CphfRhs, EngineError> {
+    let n_mo = basis.n_functions();
+    if coefficients.nrows() != n_mo || coefficients.ncols() != n_mo {
+        return Err(EngineError::Internal(format!(
+            "CPHF: MO coefficient matrix is {}x{}, expected {n_mo}x{n_mo}",
+            coefficients.nrows(),
+            coefficients.ncols()
+        )));
+    }
+    if mo_energies.len() < n_mo {
+        return Err(EngineError::Internal(format!(
+            "CPHF: only {} orbital energies for {n_mo} functions",
+            mo_energies.len()
+        )));
+    }
+    if n_occupied == 0 || n_occupied >= n_mo {
+        return Err(EngineError::InvalidInput(format!(
+            "CPHF needs at least one occupied and one virtual orbital (n_occ = {n_occupied}, n = {n_mo})"
+        )));
+    }
+    let (cartesian, expansion) = cartesian_orbitals(basis, molecule)?;
+    let n_cart = cartesian.len();
+    let coefficients_cartesian = cartesian_mo_coefficients(coefficients, &expansion, n_cart);
+    let blocks = cartesian_direction_blocks(basis, molecule, density)?;
+    let n_virtual = n_mo - n_occupied;
+
+    let mut fock_mo = Vec::with_capacity(blocks.len());
+    let mut overlap_mo = Vec::with_capacity(blocks.len());
+    let mut right_hand_sides = Vec::with_capacity(blocks.len());
+    for block in &blocks {
+        let mut fock = Matrix::zeros(n_mo, n_mo);
+        let mut overlap = Matrix::zeros(n_mo, n_mo);
+        for p in 0..n_mo {
+            for q in 0..n_mo {
+                let mut fock_sum = 0.0_f64;
+                let mut overlap_sum = 0.0_f64;
+                for mu in 0..n_cart {
+                    let c_mu_p = coefficients_cartesian[(mu, p)];
+                    if c_mu_p == 0.0 {
+                        continue;
+                    }
+                    for nu in 0..n_cart {
+                        let c_nu_q = coefficients_cartesian[(nu, q)];
+                        if c_nu_q == 0.0 {
+                            continue;
+                        }
+                        let weight = c_mu_p * c_nu_q;
+                        fock_sum += weight
+                            * (block.one_electron[(mu, nu)]
+                                + block.nuclear_center[(mu, nu)]
+                                + block.two_electron[(mu, nu)]);
+                        overlap_sum += weight * block.overlap[(mu, nu)];
+                    }
+                }
+                fock[(p, q)] = fock_sum;
+                overlap[(p, q)] = overlap_sum;
+            }
+        }
+        let mut vector = vec![0.0_f64; n_occupied * n_virtual];
+        for i in 0..n_occupied {
+            for a in 0..n_virtual {
+                let virtual_index = n_occupied + a;
+                vector[i * n_virtual + a] =
+                    fock[(virtual_index, i)] - mo_energies[i] * overlap[(virtual_index, i)];
+            }
+        }
+        fock_mo.push(fock);
+        overlap_mo.push(overlap);
+        right_hand_sides.push(vector);
+    }
+
+    Ok(CphfRhs {
+        n_occupied,
+        n_virtual,
+        n_directions: blocks.len(),
+        fock_mo,
+        overlap_mo,
+        right_hand_sides,
+        coefficients_cartesian,
+    })
+}
+
+/// `C_cart = T·C`：把球谐基的 MO 系数摊到直角分量基（`T[μ,p]` 是展开表里的权重）。
+fn cartesian_mo_coefficients(
+    coefficients: &Matrix,
+    expansion: &[Vec<(usize, f64)>],
+    n_cart: usize,
+) -> Matrix {
+    let n_mo = coefficients.ncols();
+    let mut out = Matrix::zeros(n_cart, n_mo);
+    for (p, entries) in expansion.iter().enumerate() {
+        for (mu, weight) in entries {
+            for q in 0..n_mo {
+                let value = coefficients[(p, q)];
+                if value == 0.0 {
+                    continue;
+                }
+                out[(*mu, q)] += weight * value;
+            }
+        }
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     //! 导数块的验收：块与**已验的解析梯度分量**必须逐项对上。
@@ -420,15 +645,18 @@ mod tests {
         let mut worst_one = 0.0_f64;
         let mut worst_two = 0.0_f64;
         let mut worst_pulay = 0.0_f64;
+        let mut worst_center = 0.0_f64;
         for block in &blocks {
             let (atom, axis) = (block.atom, block.axis);
             let mut one_sum = 0.0_f64;
             let mut two_sum = 0.0_f64;
             let mut pulay_sum = 0.0_f64;
+            let mut center_sum = 0.0_f64;
             for mu in 0..n {
                 for nu in 0..n {
                     let p = p_cart[(mu, nu)];
                     one_sum += p * block.one_electron[(mu, nu)];
+                    center_sum += p * block.nuclear_center[(mu, nu)];
                     two_sum += p * block.two_electron[(mu, nu)];
                     pulay_sum += w_cart[(mu, nu)] * block.overlap[(mu, nu)];
                 }
@@ -436,12 +664,15 @@ mod tests {
             let expected_one = components.kinetic[atom][axis] + components.nuclear_ao[atom][axis];
             let expected_two = 2.0 * components.two_electron[atom][axis];
             let expected_pulay = -components.pulay[atom][axis];
+            let expected_center = components.nuclear_center[atom][axis];
             let scale_one = expected_one.abs().max(one_sum.abs()).max(1.0e-3);
             let scale_two = expected_two.abs().max(two_sum.abs()).max(1.0e-3);
             let scale_pulay = expected_pulay.abs().max(pulay_sum.abs()).max(1.0e-3);
+            let scale_center = expected_center.abs().max(center_sum.abs()).max(1.0e-3);
             let diff_one = (one_sum - expected_one).abs() / scale_one;
             let diff_two = (two_sum - expected_two).abs() / scale_two;
             let diff_pulay = (pulay_sum - expected_pulay).abs() / scale_pulay;
+            let diff_center = (center_sum - expected_center).abs() / scale_center;
             assert!(
                 diff_one < 1.0e-9,
                 "{basis_name} 1e 方向 ({atom},{axis}): 块 {one_sum:.12e} vs 梯度 {expected_one:.12e}（相对差 {diff_one:.2e}）"
@@ -454,12 +685,17 @@ mod tests {
                 diff_pulay < 1.0e-9,
                 "{basis_name} Pulay 方向 ({atom},{axis}): 块 {pulay_sum:.12e} vs −梯度 {expected_pulay:.12e}（相对差 {diff_pulay:.2e}）"
             );
+            assert!(
+                diff_center < 1.0e-9,
+                "{basis_name} 核位置方向 ({atom},{axis}): 块 {center_sum:.12e} vs 梯度 {expected_center:.12e}（相对差 {diff_center:.2e}）"
+            );
             worst_one = worst_one.max(diff_one);
             worst_two = worst_two.max(diff_two);
             worst_pulay = worst_pulay.max(diff_pulay);
+            worst_center = worst_center.max(diff_center);
         }
         println!(
-            "{basis_name}: 最大相对差 1e {worst_one:.2e} / 2e {worst_two:.2e} / Pulay {worst_pulay:.2e}"
+            "{basis_name}: 最大相对差 1e {worst_one:.2e} / 2e {worst_two:.2e} / Pulay {worst_pulay:.2e} / 核位置 {worst_center:.2e}"
         );
     }
 
@@ -471,5 +707,126 @@ mod tests {
     #[test]
     fn direction_blocks_match_gradient_components_def2svp() {
         check("def2-svp");
+    }
+
+    /// 骨架 Fock 导数 `F^x_{pq}` 与「位移几何上用**固定**密度和**固定** C 重建 Fock」的
+    /// 中心差分对照（独立于整套导数块：只用到现有的 `one_electron` / `two_electron` /
+    /// `build_fock`）。
+    #[test]
+    fn skeleton_fock_derivative_matches_finite_difference() {
+        const ANGSTROM_PER_BOHR: f64 = 0.529_177_210_903;
+        let delta = 1.0e-3_f64;
+        let registry = Registry::open(data_root()).expect("registry");
+        let molecule = water();
+        let basis = InternalBasis::build(registry.get_basis("sto-3g").expect("basis"), &molecule)
+            .expect("build basis");
+        let grid =
+            qwb_grid::molecular_grid(registry.get_grid("grid-coarse").expect("grid"), &molecule)
+                .expect("grid");
+        let tensor = two_electron(&basis, &molecule).expect("2e");
+        let options = RksOptions {
+            max_iter: 400,
+            energy_threshold: 1.0e-12,
+            density_threshold: 1.0e-10,
+            ..RksOptions::default()
+        };
+        let result = rks_scf(&basis, &molecule, &tensor, &grid, &[], options).expect("scf");
+        let n_occupied = (molecule
+            .atoms
+            .iter()
+            .map(|atom| qwb_registry::elements::atomic_number(&atom.symbol).unwrap_or(0))
+            .sum::<u32>() as usize
+            - molecule.charge as usize)
+            / 2;
+        let energies: Vec<f64> = (0..basis.n_functions())
+            .map(|index| result.mo_energies_hartree.get(index))
+            .collect();
+        let rhs = crate::cphf_hessian::cphf_right_hand_sides(
+            &basis,
+            &molecule,
+            &result.density,
+            &result.coefficients,
+            &energies,
+            n_occupied,
+        )
+        .expect("rhs");
+        assert_eq!(rhs.n_directions, 3 * molecule.atoms.len());
+        assert_eq!(rhs.n_virtual, basis.n_functions() - n_occupied);
+
+        let n = basis.n_functions();
+        let transform = |fock: &qwb_linalg::Matrix| {
+            let mut out = vec![0.0_f64; n * n];
+            for p in 0..n {
+                for q in 0..n {
+                    let mut total = 0.0;
+                    for mu in 0..n {
+                        let c_mu_p = result.coefficients[(mu, p)];
+                        if c_mu_p == 0.0 {
+                            continue;
+                        }
+                        for nu in 0..n {
+                            let c_nu_q = result.coefficients[(nu, q)];
+                            if c_nu_q == 0.0 {
+                                continue;
+                            }
+                            total += c_mu_p * c_nu_q * fock[(mu, nu)];
+                        }
+                    }
+                    out[p * n + q] = total;
+                }
+            }
+            out
+        };
+        let mut worst = 0.0_f64;
+        for atom in 0..molecule.atoms.len() {
+            for axis in 0..3 {
+                let displaced = |amount: f64| {
+                    let mut moved = molecule.clone();
+                    moved.atoms[atom].position_angstrom[axis] += amount * ANGSTROM_PER_BOHR;
+                    moved
+                };
+                let fock_at = |moved: &Molecule| {
+                    let moved_basis =
+                        InternalBasis::build(registry.get_basis("sto-3g").expect("basis"), moved)
+                            .expect("basis");
+                    let moved_one = one_electron(&moved_basis, moved).expect("1e");
+                    let moved_tensor = two_electron(&moved_basis, moved).expect("2e");
+                    let fock = crate::build_fock(
+                        &moved_one.core_hamiltonian,
+                        &moved_tensor,
+                        &result.density,
+                    )
+                    .expect("fock");
+                    transform(&fock.fock)
+                };
+                // Richardson：`D(δ)` 与 `D(δ/2)` 外推掉 `O(δ²)` 项。小矩阵元（1e-4 量级）
+                // 的截断误差会把相对判据打穿，不消掉就只能靠松判据。
+                let step = |amount: f64| {
+                    let plus_mo = fock_at(&displaced(amount));
+                    let minus_mo = fock_at(&displaced(-amount));
+                    (0..n * n)
+                        .map(|index| (plus_mo[index] - minus_mo[index]) / (2.0 * amount))
+                        .collect::<Vec<f64>>()
+                };
+                let coarse = step(delta);
+                let fine = step(0.5 * delta);
+                let direction = 3 * atom + axis;
+                for p in 0..n {
+                    for q in 0..n {
+                        let index = p * n + q;
+                        let numeric = (4.0 * fine[index] - coarse[index]) / 3.0;
+                        let analytic = rhs.fock_mo[direction][(p, q)];
+                        let scale = numeric.abs().max(analytic.abs()).max(1.0e-3);
+                        let difference = (numeric - analytic).abs() / scale;
+                        assert!(
+                            difference < 1.0e-7,
+                            "F^{direction} MO ({p},{q}): 解析 {analytic:.10e} vs 差分 {numeric:.10e}（相对差 {difference:.2e}）"
+                        );
+                        worst = worst.max(difference);
+                    }
+                }
+            }
+        }
+        println!("骨架 Fock 导数的最大相对差：{worst:.2e}");
     }
 }

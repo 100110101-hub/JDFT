@@ -77,7 +77,7 @@ pub struct CartAo {
 }
 
 /// 抬/降幂恒等式：对中心求导 = `2α·抬阶 − a_x·降阶`。
-fn raise_lower<F>(alpha: f64, powers: [u32; 3], axis: usize, integral: F) -> f64
+pub(crate) fn raise_lower<F>(alpha: f64, powers: [u32; 3], axis: usize, integral: F) -> f64
 where
     F: Fn([u32; 3]) -> f64,
 {
