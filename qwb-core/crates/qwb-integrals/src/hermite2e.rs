@@ -175,8 +175,10 @@ pub(crate) fn derivative_boys(l: u32, m: u32, n: u32, scale: f64, r: [f64; 3]) -
 enum KernelMode {
     /// `1/r12`（普通 Boys）。
     Coulomb,
-    /// `erfc(ωr12)/r12`，`alpha = ω/√(p+q)`。
-    ShortRange { alpha: f64 },
+    /// `erfc(ωr12)/r12`：t 表示里截断在 `t_min = ω/√(ρ+ω²)`（见 `attenuated::truncated_boys`）。
+    ShortRange { t_min: f64 },
+    /// `erf(ωr12)/r12`（长程那一半）：`∫_0^{t_min}`（见 `attenuated::partial_boys`）。
+    LongRange { t_min: f64 },
 }
 
 /// Hermite–Coulomb 核的**整块表**：`S^{(s)}(l,m,n) = ∂^l_x∂^m_y∂^n_z F_s(T)`。
@@ -248,8 +250,11 @@ impl RTable {
                         if order == 0 {
                             values[index(s, l, m, n)] = match mode {
                                 KernelMode::Coulomb => boys[s],
-                                KernelMode::ShortRange { alpha } => {
-                                    crate::attenuated::erfc_boys(s, t, alpha)
+                                KernelMode::ShortRange { t_min } => {
+                                    crate::attenuated::truncated_boys(s, t, t_min)
+                                }
+                                KernelMode::LongRange { t_min } => {
+                                    crate::attenuated::partial_boys(s, t, t_min)
                                 }
                             };
                             continue;
@@ -531,7 +536,8 @@ pub fn primitive_component_sr(
     ];
     let p = alpha + beta;
     let q = gamma + delta;
-    let short_alpha = omega / (p + q).sqrt();
+    let rho = p * q / (p + q);
+    let short_min = crate::attenuated::short_range_t_min(omega, rho);
     let mut context = PrimitiveContext::new_with_mode(
         a,
         alpha,
@@ -542,7 +548,56 @@ pub fn primitive_component_sr(
         d,
         delta,
         max_powers,
-        KernelMode::ShortRange { alpha: short_alpha },
+        KernelMode::ShortRange { t_min: short_min },
+    );
+    let mut scratch = [0.0_f64; 16 * 16 * 16];
+    context.integral(pa, pb, pc, pd, &mut scratch)
+}
+
+/// 长程（`erf(ωr12)/r12`）原函数积分：与 [`primitive_component_sr`] 同一条路径，只是种子
+/// 换成 `∫_0^{t_min}`。两者之和**必须**等于全库仑积分（`erf + erfc = 1`），这是判据。
+///
+/// # Panics
+///
+/// `omega` 为非有限值或负数。
+#[allow(clippy::too_many_arguments)]
+#[must_use]
+pub fn primitive_component_lr(
+    pa: [u32; 3],
+    a: [f64; 3],
+    alpha: f64,
+    pb: [u32; 3],
+    b: [f64; 3],
+    beta: f64,
+    pc: [u32; 3],
+    c: [f64; 3],
+    gamma: f64,
+    pd: [u32; 3],
+    d: [f64; 3],
+    delta: f64,
+    omega: f64,
+) -> f64 {
+    assert!(omega.is_finite() && omega >= 0.0, "ω 非法：{omega}");
+    let max_powers = [
+        pa[0] + pb[0] + pc[0] + pd[0],
+        pa[1] + pb[1] + pc[1] + pd[1],
+        pa[2] + pb[2] + pc[2] + pd[2],
+    ];
+    let p = alpha + beta;
+    let q = gamma + delta;
+    let rho = p * q / (p + q);
+    let t_min = crate::attenuated::short_range_t_min(omega, rho);
+    let mut context = PrimitiveContext::new_with_mode(
+        a,
+        alpha,
+        b,
+        beta,
+        c,
+        gamma,
+        d,
+        delta,
+        max_powers,
+        KernelMode::LongRange { t_min },
     );
     let mut scratch = [0.0_f64; 16 * 16 * 16];
     context.integral(pa, pb, pc, pd, &mut scratch)

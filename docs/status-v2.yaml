@@ -106,13 +106,12 @@ IN-01:
   verification: "① **外部参考（不变量）**：`cargo test -p qwb-integrals --test in01_ri_integrals` 4 例绿。`V=(P|Q)` 的特征值与 PySCF 的 `int2c2e` 最大相对差 **1.30e-7**（def2-SVP-RI）/ **3.27e-8**（STO-3G）；3 中心张量作为 `(n_aux × n_orb²)` 矩阵的奇异值与 PySCF 的 `df.incore.aux_e2` 最大相对差 **7.95e-8** / **3.01e-8**。用不变量而不是逐元素，是因为两边的球谐排序不同（我们的 Gram–Schmidt vs libcint）；特征值/奇异值对「壳层内任意正交混合」都不变，是等价判据。② **对称性**：`(ij|P)` 的 i↔j 不对称 **0.00e0**，`V` 的不对称 0.00e0，`V` 正定（条件数 1.17e5），`max|W V W − I| = 5.8e-13`。③ **拟合误差（RI-J）**：`cargo test -p qwb-scf --test in01_ri_fit` 绿 —— 我们的 `E_J^RI` 与 PySCF 同配对结果差 **1.37e-7 Ha**（三种辅助基分别是 1.367e-7 / 1.372e-7 / 1.366e-7，是同一个常数偏移，来自 K2 的 Å→bohr 常数，见 note）。④ RI 恒等式残差随辅助基变好单调下降：STO-3G 5.30e-1 → def2-SVP 4.50e-1 → def2-SVP-RI **3.51e-3**（且不为 0）。⑤ `cargo clippy --workspace --all-targets -- -D warnings` 干净。"
   note: "**判据改了一处，并如实记账（记进 docs/choices.md 五十七）**：原文写「拟合误差对 H2O/def2-SVP < 1e-6 Ha（能量）」。实测（我们的实现与 PySCF **两边逐位一致**）表明这个 1e-6 把两件事混在了一起：`E_J^RI − E_J`（精确 4 中心）在 `def2-SVP`/`def2-SVP-RI` 配对下是 **6.14e-3 Ha**（占 46.845 Ha 的 0.013%），RI-J 的 **SCF 总能量**偏 **2.27e-3 Ha** —— 这是**辅助基不完备**的性质，不是实现错误；要求 < 1e-6 等于要求 76 个辅助函数把 Coulomb 能量拟合到 2e-8 的相对精度，任何实现都做不到。所以判据拆成两条：**实现正确性**用「与 PySCF 同配对的 `E_J^RI` 差 < 1e-6 Ha」（实测 1.4e-7，且三种辅助基给出同一个偏移，指向几何常数而不是积分），**辅助基质量**如实落盘（6.14e-3，并断言它落在 2e-2 的宽上界内、对照组 STO-3G 的误差 9.2e-1 远大于它）。对照组是必要的：没有它，这条断言在积分真的坏掉时也可能「通过」。"
 IN-02:
-  state: in_progress
-  ts: "2026-11-07T22:00:00Z"
-  artifact: "qwb-core/crates/qwb-integrals/src/attenuated.rs（erfc_boys/odd_moment）、crates/qwb-integrals/src/hermite2e.rs（KernelMode + primitive_component_sr）、tests/in02_erfc_boys.rs（5 条）、tests/in02_short_range.rs（4 过 1 ignore）"
-  verification: "**辅助函数**：`F_m^{SR}` 与独立 Simpson 对照 —— 物理范围（α ≤ 2.2）< 1e-10；α=0 与 Boys 一致 < 1e-14；α=30 时 F_0 归零、F_1 按 α^{−3} 衰减。**短程 2e 积分**（复用 MD 展开 + R 块表、只换核种子）：①ω=0 逐位退回全库仑（< 1e-10）；②ω=40 时 < 1e-100；③通式 vs MD 闭式 < 1e-12；④**独立一维参照（两次换元）在 ω=0 处与经典闭式一致 < 1e-9** —— 归约、换元、积分器都被钉住。"
-  note: "ω>0 时参考答案与生产路径差 **9.8%**（ω=0.1：生产 0.9724 vs 参照 0.8854），ω=0 处完全一致 ⇒ 分叉在**核**上。两个候选原因：①生产的 `α = ω/√(p+q)` 约定（该式是推导来的，未对照独立实现）；②参照路径的独立 erfc 在 ω·y 上不准。测试里把 ω>0 的对照标 `#[ignore]` 并写明两种可能，不假装通过。"
-  gap: "下一轮的判定实验已写死：用高斯阻尼核 `e^{−μ r12²}` 的闭式在 u 空间做 `∫_ω^∞` 积分（核是纯高斯、被积函数初等），把「α 约定」与「参照 erfc」分开判定；判定后再补 FX-03 需要的通用角动量短程导数积分。"
-  choices: "一百二十三、一百二十四、一百二十五"
+  state: done
+  ts: "2026-11-08T00:00:00Z"
+  artifact: "crates/qwb-integrals/src/attenuated.rs（truncated_boys/partial_boys/short_range_t_min）、src/hermite2e.rs（KernelMode::{ShortRange,LongRange} + primitive_component_sr/_lr）、tests/in02_erfc_boys.rs（5 条）、tests/in02_short_range.rs（7 条）"
+  verification: "**§6 四条全达成**：①`ω→0` 退回全库仑 < 1e-10（s 与 p/d 分量都验）；②`ω→∞` 短程项 → 0（多项式 `1/ω²`：`ψ(40)/ψ(20)` ≈ 1/4、`< 1e-3`）；③与**独立**数值积分 < 1e-9 —— 参照在 u 空间积高斯阻尼核的初等闭式 `(2/√π)∫_ω^∞(ss|ss)(u²)du`，不含 erfc/Hermite，实测最大相对差 **1.41e-14**（ω∈{0,0.1,0.3,0.6,1.0} × 2 组几何）；④`(ss|ss)` 有限 ω 的 MD 闭式一致 < 1e-12。另加：**短程 + 长程 = 全库仑** < 1e-13（ω∈{0,0.1,0.35,0.8,2.0}）。"
+  note: "**关键修正（一百二十六）**：上一轮用的 `F_m^{SR} = ∫_0^1 t^{2m}e^{−Tt²}erfc(αt)dt, α=ω/√(p+q)` 是**错的**。由高斯阻尼核的闭式 + 换元 `u²=ρt²/(1−t²)` 推出正确形状是**截断 Boys**：`F_m^{SR} = ∫_{t_min}^1 t^{2m}e^{−Tt²}dt, t_min = ω/√(ρ+ω²)`。旧的两条极限测试在新旧核下都成立，所以没能发现；是「与独立数值积分对照」这一条把它逼出来的 —— 这正是 §6 要那条判据的理由。"
+  choices: "一百二十三～一百二十六"
 IN-03:
   state: pending
   stretch: true

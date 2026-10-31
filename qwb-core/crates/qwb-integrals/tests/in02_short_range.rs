@@ -9,8 +9,10 @@
 //! 4. **`(ss|ss)` 的解析闭式在有限 `ω` 下可对**：MD 闭式
 //!    `2π^{5/2}/(pq√(p+q))·F_0^{SR}(T,α)` 与第 3 条的一维积分一致。
 
-use qwb_integrals::attenuated::erfc_boys;
-use qwb_integrals::hermite2e::{primitive_component, primitive_component_sr};
+use qwb_integrals::attenuated::{short_range_t_min, truncated_boys};
+use qwb_integrals::hermite2e::{
+    primitive_component, primitive_component_lr, primitive_component_sr,
+};
 
 type Center = [f64; 3];
 
@@ -43,25 +45,19 @@ fn simpson(intervals: usize, low: f64, high: f64, f: impl Fn(f64) -> f64) -> f64
     total * h / 3.0
 }
 
-/// `(ss|ss)` 的**独立一维参照**：换两次变量把六维积分化成一次一维积分。
+/// `(ss|ss)` 的**独立参照**：**u 空间**里积高斯阻尼核的闭式。
 ///
-/// 记 `e_ab = e^{−αβ/p|A−B|²}`、`e_cd = e^{−γδ/q|C−D|²}`、`ρ = pq/(p+q)`、`d = |P−Q|`，
-/// 先把 `r1, r2` 换到相对坐标 `w = (r1−P) − (r2−Q)`：
-///
-/// ```text
-/// ∫∫ e^{−p|r1−P|²−q|r2−Q|²} K(|r12|) = (π/(p+q))^{3/2} ∫ d³w e^{−ρ|w|²} K(|d + w|)
-/// ```
-///
-/// 再把 `w` 的角向积掉：令 `u = |d + w|`，则 `sinθ dθ = −u du/(d w)`，`u ∈ [|d−w|, d+w]`，
+/// `erfc(ωr)/r = (2/√π)∫_ω^∞ e^{−r²u²}du`，而高斯阻尼核的六维积分有初等闭式
 ///
 /// ```text
-/// (ss|ss)_SR = (2π e_ab e_cd (π/(p+q))^{3/2} / d) ∫_0^∞ w dw e^{−ρw²} [G(d+w) − G(|d−w|)]
-/// G(y) = ∫_0^y erfc(ωu) du = y·erfc(ωy) − e^{−ω²y²}/(ω√π)      （ω = 0 时 G(y) = y）
+/// (ss|ss)(μ) = e_ab e_cd (π/(p+q))^{3/2}(π/(ρ+μ))^{3/2} exp(−ρμd²/(ρ+μ)),   μ = u²
 /// ```
 ///
-/// 这条路径与生产路径不共享代码：不用 Hermite 系数、不用 R 块表、不用 `erfc_boys`
-/// （用的是独立的 `reference_erfc`）。在 `w = d` 处 `|d−w|` 有折点，所以积分按 `d` 分成两段。
-#[allow(clippy::too_many_arguments)] // 四个中心 + 四个指数 + omega，正是这条积分自己的参数
+/// 于是 `(ss|ss)_SR = (2/√π)∫_ω^∞ (ss|ss)(u²) du` —— **被积函数是初等的，不含 erfc，
+/// 也不含任何 Hermite 系数**，与生产路径（t 表示 + 截断 Boys）完全是另一条路。
+///
+/// 换元 `u = √ρ·tanθ` 把无穷区间压到 `θ ∈ [atan(ω/√ρ), π/2)`，被积函数在那里快速衰减。
+#[allow(clippy::too_many_arguments)]
 fn reference_ssss(
     a: Center,
     alpha: f64,
@@ -88,44 +84,34 @@ fn reference_ssss(
     let ab2 = (0..3).map(|i| (a[i] - b[i]).powi(2)).sum::<f64>();
     let cd2 = (0..3).map(|i| (c[i] - d[i]).powi(2)).sum::<f64>();
     let rho = p * q / (p + q);
-    let dd = (0..3)
+    let dd2 = (0..3)
         .map(|i| (p_center[i] - q_center[i]).powi(2))
-        .sum::<f64>()
-        .sqrt();
+        .sum::<f64>();
     let e_ab = (-alpha * beta / p * ab2).exp();
     let e_cd = (-gamma * delta / q * cd2).exp();
-    // G(y) = ∫_0^y erfc(ωu)du
-    let g = |y: f64| -> f64 {
-        if omega == 0.0 {
-            return y;
-        }
-        y * reference_erfc(omega * y)
-            - (-omega * omega * y * y).exp() / (omega * std::f64::consts::PI.sqrt())
+    let common = e_ab * e_cd * (std::f64::consts::PI / (p + q)).powf(1.5) * 2.0
+        / std::f64::consts::PI.sqrt();
+    // u = √ρ·tanθ, du = √ρ sec²θ dθ；μ = ρtan²θ
+    let u = |theta: f64| -> f64 { rho.sqrt() * theta.tan() };
+    let mu = |u: f64| -> f64 { u * u };
+    let damped = |u: f64| -> f64 {
+        let m = mu(u);
+        (std::f64::consts::PI / (rho + m)).powf(1.5) * (-rho * m * dd2 / (rho + m)).exp()
     };
-    // 被积函数（不含常数因子）
-    let integrand = |w: f64| -> f64 { w * (-rho * w * w).exp() * (g(dd + w) - g((dd - w).abs())) };
-    // 上限：超过它之后 e^{−ρw²} 已把被积函数压到 1e-30 以下。
-    let upper = (dd + 20.0 / rho.sqrt()).max(10.0);
-    // 在 w = d 处分成两段（`|d−w|` 的折点）。
-    let left = simpson(20000, 0.0, dd, integrand);
-    let right = simpson(20000, dd, upper, integrand);
-    let prefactor = if dd < 1.0e-12 {
-        // d → 0：角向积给出 4π/w 的极限，换成直接式。
-        return 4.0
-            * std::f64::consts::PI
-            * e_ab
-            * e_cd
-            * (std::f64::consts::PI / (p + q)).powf(1.5)
-            * simpson(40000, 0.0, upper, |w| {
-                w * w * (-rho * w * w).exp() * reference_erfc(omega * w)
-            });
-    } else {
-        2.0 * std::f64::consts::PI * e_ab * e_cd * (std::f64::consts::PI / (p + q)).powf(1.5) / dd
+    let integrand = |theta: f64| -> f64 {
+        let uu = u(theta);
+        let sec2 = 1.0 + theta.tan() * theta.tan();
+        damped(uu) * rho.sqrt() * sec2
     };
-    prefactor * (left + right)
+    // θ 从 atan(ω/√ρ) 起；上限取到衰减完（u 足够大时 damped ~ π^{3/2}/u³，但
+    // 真正把被积函数压下去的是 exp(−ρ d²)）—— 用 π/2−1e-9 作上限并检查尾部。
+    let theta_min = (omega / rho.sqrt()).atan();
+    let theta_max = std::f64::consts::FRAC_PI_2 - 1.0e-9;
+    common * simpson(40000, theta_min, theta_max, integrand)
 }
 
 /// 与生产路径无关的 `erfc`（`erf` 的幂级数，|x| ≤ 6 足够）。
+#[allow(dead_code)] // 上一版归约用过；换成 u 空间后不再需要，留着备查
 fn reference_erfc(x: f64) -> f64 {
     if x <= 0.0 {
         return 1.0;
@@ -255,7 +241,6 @@ fn zero_omega_reduces_to_the_full_coulomb_integral() {
 }
 
 #[test]
-#[ignore = "ω>0 时参考答案与生产差 9.8%（ω=0 完全一致）：或是生产的 α=ω/√(p+q) 约定错，或是参照的 erfc 用错，未定。下一轮用「高斯阻尼核的闭式 + u 空间积分」判定。"]
 fn short_range_integral_matches_the_one_dimensional_reference() {
     let mut worst = 0.0_f64;
     for (name, centers, exponents) in geometries() {
@@ -330,8 +315,9 @@ fn the_general_integral_agrees_with_the_md_closed_form() {
             * (-alpha * beta / p * ab2).exp()
             * (-gamma * delta / q * cd2).exp();
         for omega in [0.0, 0.2, 0.5] {
-            let short_alpha = omega / (p + q).sqrt();
-            let closed = prefactor * erfc_boys(0, t, short_alpha);
+            // 正确的短程 t 表示：截断在 t_min = ω/√(ρ+ω²)，不是 erfc 加权。
+            let t_min = short_range_t_min(omega, rho);
+            let closed = prefactor * truncated_boys(0, t, t_min);
             let general =
                 primitive_component_sr(S, a, alpha, S, b, beta, S, c, gamma, S, d, delta, omega);
             let relative = (general - closed).abs() / closed.abs().max(1e-14);
@@ -344,9 +330,14 @@ fn the_general_integral_agrees_with_the_md_closed_form() {
 }
 
 #[test]
-fn large_omega_vanishes() {
-    for (name, centers, exponents) in geometries() {
-        let value = primitive_component_sr(
+fn large_omega_shrinks_the_short_range_integral_polynomially() {
+    // §6 的判据是「ω→∞ 时短程项 → 0」。它在 t 表示下是 `∫_{t_min}^1`、`t_min = ω/√(ρ+ω²)`，
+    // 于是 `1 − t_min ≈ ρ/(2ω²)` —— **多项式**衰减，不是指数（短程核在 `r12 → 0` 处有限，
+    // 截掉的只是 `r12 ≲ 1/ω` 那一圈，量级就是 `1/ω²`）。所以判据写成：
+    // ① 随 ω 单调变小；② 比值 ψ(2ω)/ψ(ω) ≈ 1/4（`1/ω²` 的特征）；③ 绝对值足够小。
+    let (_, centers, exponents) = geometries()[0];
+    let value = |omega: f64| {
+        primitive_component_sr(
             S,
             centers[0],
             exponents[0],
@@ -359,11 +350,138 @@ fn large_omega_vanishes() {
             S,
             centers[3],
             exponents[3],
-            40.0,
+            omega,
+        )
+    };
+    let a = value(20.0);
+    let b = value(40.0);
+    assert!(b > 0.0 && a > 0.0);
+    assert!(b < a, "ω 增大时短程项必须变小（{a} → {b}）");
+    let ratio = b / a;
+    assert!(
+        (ratio - 0.25).abs() < 0.05,
+        "短程项的 ω 衰减指数不对：ψ(40)/ψ(20) = {ratio}（应 ≈ 1/4）"
+    );
+    assert!(b < 1e-3, "ω=40 时短程项 = {b}，还不够小");
+}
+
+#[test]
+fn short_plus_long_range_equals_the_full_coulomb_integral() {
+    // `erf + erfc = 1` ⇒ 短程 + 长程 = 全库仑。这是最强的一条：两条分支共用同一个
+    // PrimitiveContext/MD 展开，但种子不同（`∫_{t_min}^1` 与 `∫_0^{t_min}`），
+    // 所以它同时钉住「截断点的定义」与「两半的互补性」。
+    for (name, centers, exponents) in geometries() {
+        let full = primitive_component(
+            S,
+            centers[0],
+            exponents[0],
+            S,
+            centers[1],
+            exponents[1],
+            S,
+            centers[2],
+            exponents[2],
+            S,
+            centers[3],
+            exponents[3],
         );
+        for omega in [0.0, 0.1, 0.35, 0.8, 2.0] {
+            let short = primitive_component_sr(
+                S,
+                centers[0],
+                exponents[0],
+                S,
+                centers[1],
+                exponents[1],
+                S,
+                centers[2],
+                exponents[2],
+                S,
+                centers[3],
+                exponents[3],
+                omega,
+            );
+            let long = primitive_component_lr(
+                S,
+                centers[0],
+                exponents[0],
+                S,
+                centers[1],
+                exponents[1],
+                S,
+                centers[2],
+                exponents[2],
+                S,
+                centers[3],
+                exponents[3],
+                omega,
+            );
+            let relative = (short + long - full).abs() / full.abs();
+            assert!(
+                relative < 1e-13,
+                "{name} ω={omega}: 短程 {short} + 长程 {long} = {} ≠ 全库仑 {full}（相对差 {relative:.2e}）",
+                short + long
+            );
+            // ω=0 时长程项必须为 0、ω 大时短程项必须小。
+            if omega == 0.0 {
+                assert!(
+                    (long / full).abs() < 1e-14,
+                    "{name}: ω=0 时长程项应为 0，实得 {long}"
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn short_range_works_for_higher_angular_momentum() {
+    // ω=0 时必须逐位退回 `primitive_component` —— 对 p/d 分量同样成立（MD 展开是通用的）。
+    let centers: [Center; 4] = [
+        [0.0, 0.0, 0.0],
+        [0.0, 1.430_5, 1.107_4],
+        [0.0, -1.430_5, 1.107_4],
+        [0.6, 0.9, -0.4],
+    ];
+    let exponents = [1.5, 0.7, 1.0, 0.55];
+    let cases: [[[u32; 3]; 4]; 3] = [
+        [[1, 0, 0], [0, 0, 0], [0, 0, 1], [0, 1, 0]],
+        [[2, 0, 0], [1, 1, 0], [0, 0, 0], [1, 0, 0]],
+        [[1, 0, 0], [0, 0, 1], [1, 0, 0], [0, 0, 1]],
+    ];
+    for powers in cases {
+        let full = primitive_component(
+            powers[0],
+            centers[0],
+            exponents[0],
+            powers[1],
+            centers[1],
+            exponents[1],
+            powers[2],
+            centers[2],
+            exponents[2],
+            powers[3],
+            centers[3],
+            exponents[3],
+        );
+        let short = primitive_component_sr(
+            powers[0],
+            centers[0],
+            exponents[0],
+            powers[1],
+            centers[1],
+            exponents[1],
+            powers[2],
+            centers[2],
+            exponents[2],
+            powers[3],
+            centers[3],
+            exponents[3],
+            0.0,
+        );
+        let relative = (short - full).abs() / full.abs();
         assert!(
-            value.abs() < 1e-100,
-            "{name}: ω=40 时短程积分 = {value}，没有消失"
+            relative < 1e-10,
+            "{powers:?}: ω=0 时短程 {short} ≠ 全库仑 {full}（相对差 {relative:.2e}）"
         );
     }
 }

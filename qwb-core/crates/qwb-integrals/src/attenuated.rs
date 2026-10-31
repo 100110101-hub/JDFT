@@ -52,7 +52,15 @@
 //! **只有物理范围那一段有 1e-10 保证** —— IN-02 的 2e 积分只会走那一段。若将来要支持
 //! 更弥散的基组（`p+q` 很小 ⇒ `α` 变大），必须补一个中段的可靠算法，而不是放宽判据。
 //!
+//! # ⚠ `erfc_boys` **不是**短程 2e 核用的种子
+//!
+//! 一百二十六 的推导证明：短程核在 t 表示里是**截断**的 Boys 积分
+//! `∫_{t_min}^1 t^{2m}e^{−Tt²}dt`（`t_min = ω/√(ρ+ω²)`），不是 `∫_0^1 t^{2m}e^{−Tt²}erfc(αt)dt`。
+//! `erfc_boys` 作为数学函数仍是对的（与独立数值积分一致），2e 短程积分用的是
+//! [`truncated_boys`] / [`partial_boys`]。
+//!
 //! # 验证
+
 //!
 //! `tests/in02_erfc_boys.rs`（5 条）：与独立的高阶复合 Simpson 数值积分逐点对照（按上表
 //! 分段的容差）、`α = 0` 与 `boys_functions` 一致（< 1e-14）、`α` 增大时单调衰减、
@@ -210,4 +218,100 @@ fn asymptotic_branch(m: usize, t: f64, alpha: f64) -> f64 {
         total += 3.0 * inv_four_alpha_4 * odd_moment(2 * m - 5, beta);
     }
     total / (alpha * std::f64::consts::PI.sqrt())
+}
+
+/// 短程核在 **t 表示**下的正确形状：`F_m^{SR}(T, t_min) = ∫_{t_min}^1 t^{2m}e^{−Tt²}dt`。
+///
+/// # 为什么不是 `∫_0^1 t^{2m}e^{−Tt²}erfc(αt)dt`
+///
+/// 先前的实现假设短程核等于 `α = ω/√(p+q)` 的 erfc 加权的 Boys 积分。**那是错的**，
+/// 推导如下（`choices` 一百二十六）：用高斯阻尼核的闭式
+///
+/// ```text
+/// (ss|ss)(μ) = e_ab e_cd (π/(p+q))^{3/2}(π/(ρ+μ))^{3/2} exp(−ρμd²/(ρ+μ)),   μ = u²
+/// ```
+///
+/// 和 `erfc(ωr)/r = (2/√π)∫_ω^∞ e^{−r²u²}du`，再做换元 `u² = ρ t²/(1−t²)`：
+///
+/// ```text
+/// (ss|ss)_SR = e_ab e_cd (π/(p+q))^{3/2}·(2π/ρ)·∫_{t_min}^1 e^{−ρd²t²}dt,
+/// t_min = ω/√(ρ+ω²).
+/// ```
+///
+/// 而 MD 的预因子正是 `e_ab e_cd (π/(p+q))^{3/2}(2π/ρ)`，所以
+/// `F_0^{SR} = ∫_{t_min}^1 e^{−Tt²}dt` —— **截断在 `t_min`，不是 erfc 加权**。
+/// `ω=0` 给 `t_min=0`（退回完整 Boys），`ω→∞` 给 `t_min→1`（积分 → 0），两条极限都对。
+///
+/// # 求值
+///
+/// `∫_{t_min}^1 = F_m(T) − ∫_0^{t_min}`，后者用幂级数：
+///
+/// ```text
+/// ∫_0^{t_min} t^{2m}e^{−Tt²}dt = Σ_{k≥0} (−T)^k t_min^{2m+2k+1} / (k! (2m+2k+1))
+/// ```
+///
+/// 级数不需要任何特殊函数（这也是选它的理由：`erf` 的高精度实现是另一个坑）。
+#[must_use]
+pub fn truncated_boys(m: usize, t: f64, t_min: f64) -> f64 {
+    assert!(t.is_finite() && t >= 0.0, "T 非法：{t}");
+    assert!(
+        (0.0..=1.0).contains(&t_min),
+        "t_min 必须落在 [0,1]（实得 {t_min}）"
+    );
+    if t_min <= 0.0 {
+        return boys_single(m, t);
+    }
+    if t_min >= 1.0 {
+        return 0.0;
+    }
+    (boys_single(m, t) - partial_boys(m, t, t_min)).max(0.0)
+}
+
+/// `∫_0^{t_min} t^{2m}e^{−Tt²}dt` —— 短程核的**补集**（即长程 `erf(ωr12)/r12` 那一半
+/// 在 t 表示里的形状：`F_m^{LR} = ∫_0^{t_min}t^{2m}e^{−Tt²}dt`，因为
+/// `∫_{t_min}^1 = F_m − ∫_0^{t_min}` 且 `F_m^{LR} + F_m^{SR} = F_m`）。
+///
+/// 幂级数：`Σ_{k≥0} (−T)^k t_min^{2m+2k+1}/(k!(2m+2k+1))`。
+#[must_use]
+pub fn partial_boys(m: usize, t: f64, t_min: f64) -> f64 {
+    assert!(t.is_finite() && t >= 0.0, "T 非法：{t}");
+    assert!(
+        (0.0..=1.0).contains(&t_min),
+        "t_min 必须落在 [0,1]（实得 {t_min}）"
+    );
+    if t_min <= 0.0 {
+        return 0.0;
+    }
+    if t_min >= 1.0 {
+        return boys_single(m, t);
+    }
+    // ∫_0^{t_min} t^{2m} e^{−T t²} dt 的幂级数
+    let mut total = 0.0_f64;
+    let mut compensation = 0.0_f64;
+    let mut power = t_min.powi(2 * m as i32 + 1); // t_min^{2m+2k+1}
+    let mut t_power = 1.0_f64; // T^k
+    let mut factorial = 1.0_f64;
+    for k in 0..400_usize {
+        let term = t_power * power / (factorial * (2.0 * m as f64 + 2.0 * k as f64 + 1.0));
+        let signed = if k % 2 == 0 { term } else { -term };
+        let adjusted = signed - compensation;
+        let updated = total + adjusted;
+        compensation = (updated - total) - adjusted;
+        total = updated;
+        if term.abs() <= 1.0e-19 * total.abs().max(1.0e-300) {
+            break;
+        }
+        // 下一项：幂次 +2、T 的幂 +1、阶乘 ×(k+1)
+        power *= t_min * t_min;
+        t_power *= t;
+        factorial *= (k + 1) as f64;
+    }
+    total.max(0.0)
+}
+
+/// `t_min = ω/√(ρ+ω²)`：短程核在 t 表示里的截断点（`ρ = pq/(p+q)`）。
+#[must_use]
+pub fn short_range_t_min(omega: f64, rho: f64) -> f64 {
+    assert!(omega >= 0.0 && rho > 0.0);
+    omega / (rho + omega * omega).sqrt()
 }
