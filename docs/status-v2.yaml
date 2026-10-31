@@ -195,7 +195,13 @@ SC-02:
   blocked_reason_note: "**第 44 轮的处置（§2.5）**：UHF 半 done 且有用（开壳层 UHF 的 `opt` 能跑通、判据 3.626e-7 / 7.285e-7 Ha/Bohr）；**UKS 半记 blocked**。卡点与实测差距：把解析梯度的七个部件逐个验过（Fock 重建 `H + J(P_tot) + v_xc^σ` 对上本征值之和 2.6e-9；DIIS 与差值无关；自旋分辨 XC 几何导数对上闭壳层实现 1.6e-10；2e 项在 UHF 上 7e-7；闭壳层极限 1.5e-9；±δ/±4δ 五个点同分支 ⟨S²⟩=2.000169、n_α=9/n_β=7、能量线性、数值梯度自洽到 5e-6），解析梯度仍与数值差 **7.635e-3 Ha/Bohr（O2/SVWN5/STO-3G，相对 4%，判据 1e-6）**，剩下的可疑项只有一个：`v_xc^σ` 进能量权重密度 `W` 的系数（等自旋极限会把它藏起来）。`uks` + `opt` 与 UKS 解析梯度保持显式拒绝，不静默降级。下一手段：解析梯度逐项 vs 分项数值差分对照。"
   note: "开壳层解析梯度 + opt 接线"
 SC-03:
-  state: pending
+  state: blocked
+  ts: "2026-11-07T05:00:00Z"
+  artifact: "`qwb-scf/tests/sc03_open_shell_stability.rs`（2 例：五体系稳定性测量 + 预算不足返回 `ScfNotConverged`）"
+  verification: "**实测（UHF/STO-3G，八档配方 A→H：默认 / 移位 0.5 / 移位+阻尼 / +破对称 / 重移位 / 无 DIIS …）**：OH 140 步 0.052 s、O2 25 步 0.043 s、CH3 138 步 0.042 s、NH2 140 步 0.041 s —— **4/5 体系在 1e-8 收敛**（默认 DIIS 即可，无需移位）。**NO 八档配方全部在 200 步上限失败**；诊断：放宽到 density 1e-6 后 **103 步收敛，E = −127.5288655749 Ha** —— 说明它收敛得了，只是到不了 1e-8。另：`max_iter = 1` 的预算不足用例确实返回 `ScfNotConverged`。"
+  gap: "**5/5 未达成，差 1 个体系（NO）**：它在 1e-6 收敛、1e-8 不收敛，八档「静态」稳定性配方（level shift、阻尼、无 DIIS、破对称初猜）都救不了。与 SC-02 里 OH 的病因同类（两个自旋解之间跳），当时的解法是**能级移动退火**（λ_k = λ_0·decay^k）——`UksOptions` 有 `level_shift_decay`，**`UhfOptions` 没有**，这就是下一步要补的那一个字段 + SCF 循环里的逐步衰减。"
+  blocked_reason_note: "下一步（明确）：给 `UhfOptions` 加 `level_shift_decay` 并在 UHF 的 SCF 循环里按迭代衰减 λ（照 `uks.rs` 的既有实现），再用 NO 复测；若退火后 NO 能到 1e-8，SC-03 即可转 done（4/5 已在位）。本轮没做这一步是因为它要改 SCF 主循环，预算不够安全完成 + 复测 + 门禁。"
+
   note: "开壳层 SCF 稳定性（level shift / 破对称初猜）"
 SC-04:
   state: done
