@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/qwb-gpu", "crates/qwb-registry", "crates/qwb-io", "crates/qwb-cli", "crates/qwb-linalg", "crates/qwb-basis", "crates/qwb-integrals", "crates/qwb-xc", "crates/qwb-scf", "crates/qwb-grid", "crates/qwb-props", "crates/qwb-response", "crates/qwb-engine"]
+members = ["crates/qwb-registry", "crates/qwb-io", "crates/qwb-cli", "crates/qwb-linalg", "crates/qwb-basis", "crates/qwb-integrals", "crates/qwb-xc", "crates/qwb-scf", "crates/qwb-grid", "crates/qwb-props", "crates/qwb-response", "crates/qwb-engine"]
 
 [workspace.package]
 version = "0.1.0"
@@ -48,3 +48,9 @@ missing_docs = "deny"
 [workspace.lints.clippy]
 todo = "warn"
 pedantic = { level = "allow", priority = -1 }
+
+# EX-02：测试在 debug 下慢一个数量级以上（同一批 UKS 测试：debug 591.6 s、release 15.5 s）。
+# 门禁的测试段 981 s 里绝大部分是**未优化**的发射开销，不是算例本身。这里只改 test profile
+# 的优化级别（debug-assertions 保持打开），测试集合、断言与容差一个都不动。
+[profile.test]
+opt-level = 2
