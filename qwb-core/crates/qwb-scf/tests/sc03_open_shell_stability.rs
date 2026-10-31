@@ -97,8 +97,16 @@ fn recipes() -> Vec<(&'static str, UhfOptions)> {
         options.use_diis = true;
         options.diis_max_vectors = 8;
         options.level_shift = shift;
+        options.level_shift_decay = 0.0;
         options.damping = damping;
         options.initial_guess_scale = scale;
+        options
+    };
+    // 退火配方：λ_k = λ_0·decay^k（SC-02 救活 OH 的机制，见 choices 七十六）。
+    let annealed = |shift: f64, decay: f64, scale: f64| {
+        let mut options = base(shift, 0.0, scale);
+        options.level_shift_decay = decay;
+        options.max_iter = 400;
         options
     };
     vec![
@@ -118,6 +126,10 @@ fn recipes() -> Vec<(&'static str, UhfOptions)> {
             o.use_diis = false;
             o
         }),
+        ("I 退火 0.5/0.90", annealed(0.5, 0.90, 1.0)),
+        ("J 退火 2.0/0.95", annealed(2.0, 0.95, 1.0)),
+        ("K 退火 5.0/0.97", annealed(5.0, 0.97, 1.0)),
+        ("L 退火 2.0/0.90+破对称", annealed(2.0, 0.90, 1.5)),
     ]
 }
 
@@ -165,7 +177,10 @@ fn open_shell_stability_is_measured_not_assumed() {
                     ),
                     Err(e) => format!("放宽到 1e-6 仍失败：{e}"),
                 };
-                println!("{name}: 八档配方全部失败 —— 诊断：{relaxed_outcome}");
+                println!(
+                    "{name}: 全部 {} 档配方失败 —— 诊断：{relaxed_outcome}",
+                    recipes().len()
+                );
                 failed.push((name, relaxed_outcome));
             }
         }

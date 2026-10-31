@@ -73,6 +73,12 @@ pub struct UhfOptions {
     pub damping: f64,
     /// 静态能级移动 `λ`；`F_σ ← F_σ + λ (S − S P_σ S)`。
     pub level_shift: f64,
+    /// 能级移动的**逐步衰减因子**（`0` = 不衰减，用恒定 `λ`）。
+    ///
+    /// 与 [`crate::uks::UksOptions::level_shift_decay`] 同义：`λ_k = λ_0 · decay^k`，
+    /// 衰减到 1e-4 以下就当 0。静态移位只能把 SCF 停到「移位哈密顿量的不动点」（不是驻点）；
+    /// 逐步退火才可能被带到真驻点上（`docs/choices.md` 七十六）。
+    pub level_shift_decay: f64,
     /// 初猜的非对角缩放（多初猜用；默认 1.0 = 纯 core guess）。
     pub initial_guess_scale: f64,
     /// 初猜策略（默认原子密度叠加）。
@@ -93,6 +99,7 @@ impl Default for UhfOptions {
             diis_max_vectors: 8,
             damping: 0.0,
             level_shift: 0.0,
+            level_shift_decay: 0.0,
             initial_guess_scale: 1.0,
             initial_guess: UhfInitialGuess::default(),
             nuclear_charges: None,
@@ -483,6 +490,7 @@ pub fn uhf_scf(
     let mut mo_energies_beta = Vector::zeros(n);
     let mut electronic = 0.0;
 
+    let mut current_shift = options.level_shift;
     for step in 0..options.max_iter {
         iterations = step + 1;
         let (fock_alpha, fock_beta, e_elec, _, _) = fock_and_energy(
@@ -490,10 +498,15 @@ pub fn uhf_scf(
             tensor,
             &density_alpha,
             &density_beta,
-            options.level_shift,
+            current_shift,
             overlap,
         )?;
         electronic = e_elec;
+        // 退火：λ_k = λ_0 · decay^k（decay <= 0 表示不衰减；衰减到 1e-4 以下直接关掉）。
+        if options.level_shift_decay > 0.0 && options.level_shift_decay < 1.0 {
+            let decayed = options.level_shift * options.level_shift_decay.powi(step as i32 + 1);
+            current_shift = if decayed < 1.0e-4 { 0.0 } else { decayed };
+        }
         let energy = e_elec + e_nuc;
         last_change = (energy - previous_energy).abs();
         previous_energy = energy;
