@@ -12,6 +12,8 @@
 //!
 //! 只做两件事：`available()` 探测，和行主序 `f64` 的 `gemm`（`C = A·B`）。
 
+pub mod t1;
+
 use std::ffi::c_void;
 use std::sync::OnceLock;
 
