@@ -114,7 +114,9 @@ fn ri_j_versus_exact_j() {
                 }
             }
         }
-        // t[P] = Σ_(λσ) B'[(λσ),P] P_λσ
+        // 到这里为止都是 RI 的**共享开销**（三中心 + 度量 + 逆平方根 + B' 的改造）；
+        // 它计入任何 RI-J 变体，不能只算两个 gemm —— 否则加速比是假的。
+        let setup_seconds = started.elapsed().as_secs_f64();
         let mut t = vec![0.0_f64; n_aux];
         for p in 0..n_aux {
             let mut sum = 0.0_f64;
@@ -135,7 +137,40 @@ fn ri_j_versus_exact_j() {
                 j_ri.set(i, j, sum);
             }
         }
-        let ri_seconds = started.elapsed().as_secs_f64();
+        let naive_assembly_seconds = started.elapsed().as_secs_f64();
+
+        // 第三种：用库的 matmul（BLAS 式）做同样的两次收缩，看是否值得为它重构。
+        let started = Instant::now();
+        // t = B'ᵀ · P  —— B' 是 (n² × n_aux)，转成 (n_aux × n²) 再乘 (n² × 1)
+        let mut b_fit_t = qwb_linalg::Matrix::zeros(n_aux, n * n);
+        for row in 0..n * n {
+            for p in 0..n_aux {
+                b_fit_t.set(p, row, b_fit[row * n_aux + p]);
+            }
+        }
+        let mut flat_density = qwb_linalg::Matrix::zeros(n * n, 1);
+        for row in 0..n * n {
+            flat_density.set(row, 0, density[(row / n, row % n)]);
+        }
+        let t_vec = qwb_linalg::matmul(&b_fit_t, &flat_density).unwrap();
+        let mut b_fit_m = qwb_linalg::Matrix::zeros(n * n, n_aux);
+        for row in 0..n * n {
+            for p in 0..n_aux {
+                b_fit_m.set(row, p, b_fit[row * n_aux + p]);
+            }
+        }
+        let j_vec = qwb_linalg::matmul(&b_fit_m, &t_vec).unwrap();
+        let mut j_matmul = qwb_linalg::Matrix::zeros(n, n);
+        for row in 0..n * n {
+            j_matmul.set(row / n, row % n, j_vec[(row, 0)]);
+        }
+        let matmul_seconds = started.elapsed().as_secs_f64();
+        let mut worst_matmul = 0.0_f64;
+        for i in 0..n {
+            for j in 0..n {
+                worst_matmul = worst_matmul.max((j_ri[(i, j)] - j_matmul[(i, j)]).abs());
+            }
+        }
 
         let mut worst = 0.0_f64;
         let mut scale = 0.0_f64;
@@ -146,10 +181,19 @@ fn ri_j_versus_exact_j() {
             }
         }
         println!(
-            "{label}: n={n}, n_aux={n_aux}  4-index J {exact_seconds:.3} s, RI-J {ri_seconds:.3} s, \
-加速 {:.2}x, 最大绝对差 {worst:.3e}（相对 {:.3e}）",
-            exact_seconds / ri_seconds,
-            worst / scale.max(1e-30)
+            "{label}: n={n}, n_aux={n_aux}\n  4-index J {:.3} s\n  RI setup (3c+metric+B') {:.3} s\n  \
+assembly naive {:.3} s -> full {:.3} s ({:.2}x)\n  assembly matmul {:.3} s -> full {:.3} s ({:.2}x)\n  \
+相对差 {:.2e} | matmul-vs-naive {:.2e}",
+            exact_seconds,
+            setup_seconds,
+            naive_assembly_seconds - setup_seconds,
+            naive_assembly_seconds,
+            exact_seconds / naive_assembly_seconds,
+            matmul_seconds,
+            setup_seconds + matmul_seconds,
+            exact_seconds / (setup_seconds + matmul_seconds),
+            worst / scale.max(1e-30),
+            worst_matmul
         );
     }
 }
