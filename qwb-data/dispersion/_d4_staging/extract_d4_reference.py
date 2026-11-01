@@ -111,7 +111,13 @@ def arr(relpath, name, expected):
 
 hardness = arr("dftd4/src/dftd4/data/hardness.f90", "chemical_hardness", 118)
 zeff = arr("dftd4/src/dftd4/data/zeff.f90", "effective_nuclear_charge", 118)
-r4r2 = arr("dftd4/src/dftd4/data/r4r2.f90", "r4_over_r2", 118)
+r4r2_raw = arr("dftd4/src/dftd4/data/r4r2.f90", "r4_over_r2", 118)
+# get_r4r2_val returns sqrt_z_r4_over_r2 (r4r2.f90:100-104), i.e.
+#   r4r2 = sqrt(0.5*(<r4>/<r2>)*sqrt(Z))
+# and the damping uses rrij = 3*r4r2_i*r4r2_j (rational.f90:184).
+R4R2 = [
+    math.sqrt(0.5 * v * math.sqrt(z)) for z, v in enumerate(r4r2_raw["values"], start=1)
+]
 covrad = arr("dftd4/src/dftd4/data/covrad.f90", "covalent_rad_2009", 118)
 pauling = arr("dftd4/src/dftd4/data/en.f90", "pauling_en", 118)
 
@@ -229,8 +235,13 @@ for z in range(1, NTARGET + 1):
             "symbol": SYMBOLS[z - 1],
             "nref": nref,
             "refn_source_line": refn_line[z],
-            "r4r2": r4r2["values"][z - 1],
-            "r4r2_source_line": r4r2["lines"][z - 1],
+            "r4_over_r2": r4r2_raw["values"][z - 1],
+            "r4_over_r2_source_line": r4r2_raw["lines"][z - 1],
+            "r4r2": R4R2[z - 1],
+            "r4r2_derivation": (
+                "sqrt(0.5*r4_over_r2*sqrt(Z)); get_r4r2_val returns "
+                "sqrt_z_r4_over_r2 (r4r2.f90:70-71,100-104)"
+            ),
             "covalent_rad_2009_angstrom": covrad["values"][z - 1],
             "covalent_rad_d3_angstrom": round(4.0 / 3.0 * covrad["values"][z - 1], 12),
             "covalent_rad_source_line": covrad["lines"][z - 1],
@@ -252,7 +263,7 @@ c6_pairs = []
 max_asym = 0.0
 for zi in range(1, NTARGET + 1):
     for zj in range(zi, NTARGET + 1):
-        rrij = 3.0 * r4r2["values"][zi - 1] * r4r2["values"][zj - 1]
+        rrij = 3.0 * R4R2[zi - 1] * R4R2[zj - 1]
         rrij_pairs.append({"Zi": zi, "Zj": zj, "rrij": rrij})
         rows = []
         for ri in range(1, refn[zi] + 1):
@@ -413,6 +424,14 @@ doc = {
                 "triangles). There is no 'higher-Z first' convention to recover."
             ),
         },
+        "three_body_use": (
+            "disp.f90:139-141 sets q(:) = 0 before rebuilding C6 for the ATM term, "
+            "so the three-body term uses reference weights evaluated at q = 0 "
+            "(zeta(ga, eta*gc, clsq+zeff, 0+zeff)), NOT the molecular EEQ charges. "
+            "The two-body term uses the C6 weighted with the actual charges. "
+            "Validated: with this split the full D4 energies match the official "
+            "dftd4 values to 3e-8 relative (validate_d4_data.py)."
+        ),
     },
     "cn_parameters": {
         "model": "D4 electronegativity-weighted error-function CN (cn_count%dftd4)",
@@ -495,9 +514,10 @@ doc = {
             "EEQ charge",
             "polarizability",
             "C6 to first atom",
+            "two-body + ATM energy (5 functionals)",
         ],
         "result": (
-            "all four quantities reproduced to <= 3e-8 relative for the 9 reference "
+            "all five quantities reproduced to <= 4e-8 relative for the 9 reference "
             "dimers, using only the JSON data staged here"
         ),
         "attainable_precision": (

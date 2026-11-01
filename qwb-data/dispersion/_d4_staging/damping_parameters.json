@@ -26,7 +26,7 @@
     },
     "atm_three_body_energy_implemented": "E_3 = sum_{i<j<k} ang_ijk * fdmp_ijk * C9_ijk with C9_ijk = -s9*sqrt(|C6_ij*C6_ik*C6_jk|), r0_ijk = prod r0_ab, fdmp = 1/(1 + 6*(r0_ijk/(r_ij r_ik r_jk))^(alp/3)), ang = 3/8*(...)/(r_ij r_ik r_jk)^5 + 1/(r_ij r_ik r_jk)^3",
     "atm_enabled_by_default": true,
-    "atm_note": "get_rational_damping() prefers the 'bj-eeq-atm' table, whose dftd_param defaults s9 = 1.0, so the three-body term is on by default; s9 = 0 disables it (get_atm_dispersion returns immediately for |s9| < eps).",
+    "atm_note": "get_rational_damping() prefers the 'bj-eeq-atm' table, whose dftd_param defaults s9 = 1.0, so the three-body term is on by default; s9 = 0 disables it (get_atm_dispersion returns immediately for |s9| < eps). disp.f90:139-141 resets q(:) = 0 before rebuilding C6 for the ATM call, so the three-body term uses weights evaluated at q = 0 while the two-body term keeps the charge-weighted C6.",
     "defaults": {
       "s6": 1.0,
       "s9": 1.0,

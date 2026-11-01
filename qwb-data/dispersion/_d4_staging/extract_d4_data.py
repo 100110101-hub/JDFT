@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import argparse
 import bisect
+import math
 import hashlib
 import json
 import re
@@ -170,7 +171,7 @@ field_specs = [
         None,
     ),
     ("zeff", DFTD4 / "src/dftd4/data/zeff.f90", "effective_nuclear_charge", 118, "dftd4", None),
-    ("r4r2", DFTD4 / "src/dftd4/data/r4r2.f90", "r4_over_r2", 118, "dftd4", None),
+    ("r4_over_r2", DFTD4 / "src/dftd4/data/r4r2.f90", "r4_over_r2", 118, "dftd4", None),
     ("chi", MC / "src/multicharge/param/eeq2019.f90", "eeq_chi", 103, "multicharge", None),
     ("eta", MC / "src/multicharge/param/eeq2019.f90", "eeq_eta", 103, "multicharge", None),
     (
@@ -215,7 +216,7 @@ for z in range(1, NTARGET + 1):
         "chemical_hardness",
         "covalent_rad_2009_angstrom",
         "zeff",
-        "r4r2",
+        "r4_over_r2",
     ):
         info = parsed[key]
         entry[key] = info["values"][z - 1]
@@ -225,6 +226,11 @@ for z in range(1, NTARGET + 1):
     entry["covalent_rad_d3_angstrom"] = round(
         4.0 / 3.0 * entry["covalent_rad_2009_angstrom"], 12
     )
+    # the value D4 actually uses is the derived array (r4r2.f90:70-71):
+    #   sqrt_z_r4_over_r2 = sqrt(0.5*(r4_over_r2*sqrt(Z)))
+    # get_r4r2_val returns sqrt_z_r4_over_r2 (r4r2.f90:100-104), and the damping
+    # uses rrij = 3*r4r2_i*r4r2_j (rational.f90:184).
+    entry["r4r2"] = math.sqrt(0.5 * entry["r4_over_r2"] * math.sqrt(z))
     entry["source_lines"] = source_lines
     entry["comment"] = (
         "chi,eta,kcnchi,rad: multicharge eeq2019.f90 "
@@ -237,13 +243,14 @@ for z in range(1, NTARGET + 1):
         "covalent_rad_d3_angstrom = 4/3 * covalent_rad_2009_angstrom "
         "(covrad.f90:64-65); "
         "zeff: dftd4 data/zeff.f90:{3}; "
-        "r4r2: dftd4 data/r4r2.f90:{4}"
+        "r4_over_r2: dftd4 data/r4r2.f90:{4} (raw table); "
+        "r4r2 = sqrt(0.5*r4_over_r2*sqrt(Z)) (derived array D4 actually uses)"
     ).format(
         source_lines["pauling_en"],
         source_lines["chemical_hardness"],
         source_lines["covalent_rad_2009_angstrom"],
         source_lines["zeff"],
-        source_lines["r4r2"],
+        source_lines["r4_over_r2"],
     )
     elements.append(entry)
 
@@ -257,7 +264,7 @@ for key in (
     "chemical_hardness",
     "covalent_rad_2009_angstrom",
     "zeff",
-    "r4r2",
+    "r4_over_r2",
 ):
     info = parsed[key]
     owner, commit, tag = REPOS[info["repo"]]
@@ -321,7 +328,14 @@ eeq_doc = {
         ),
         "covalent_rad_d3_angstrom": "4/3 * covalent_rad_2009_angstrom (used for the D4 CN)",
         "zeff": "effective nuclear charge of the def2 ECP, e (q is shifted by zeff)",
-        "r4r2": "<r^4>/<r^2> expectation value, bohr^2 (C8/C6 = 3 r4r2_i r4r2_j)",
+        "r4_over_r2": (
+            "<r^4>/<r^2> expectation value, bohr^2, raw upstream table "
+            "(r4r2.f90:44-68); NOT the value used in the damping"
+        ),
+        "r4r2": (
+            "derived sqrt(0.5*r4_over_r2*sqrt(Z)) (r4r2.f90:70-71), the value "
+            "get_r4r2_val returns and D4 uses in C8/C6 = 3*r4r2_i*r4r2_j"
+        ),
     },
     "element_order": "sorted by Z",
     "elements": elements,
@@ -537,7 +551,10 @@ damping_doc = {
         "atm_note": (
             "get_rational_damping() prefers the 'bj-eeq-atm' table, whose dftd_param "
             "defaults s9 = 1.0, so the three-body term is on by default; s9 = 0 "
-            "disables it (get_atm_dispersion returns immediately for |s9| < eps)."
+            "disables it (get_atm_dispersion returns immediately for |s9| < eps). "
+            "disp.f90:139-141 resets q(:) = 0 before rebuilding C6 for the ATM call, "
+            "so the three-body term uses weights evaluated at q = 0 while the "
+            "two-body term keeps the charge-weighted C6."
         ),
         "defaults": DEFAULTS,
         "charge_response": {

@@ -114,7 +114,8 @@
       "tolerance": 0.0,
       "passed": true,
       "note": "C6 is a product of two polarizabilities under a linear quadrature, so it is exactly symmetric; the test confirms that the first index carries no element-order information (the Fortran fills both triangles). There is no 'higher-Z first' convention to recover."
-    }
+    },
+    "three_body_use": "disp.f90:139-141 sets q(:) = 0 before rebuilding C6 for the ATM term, so the three-body term uses reference weights evaluated at q = 0 (zeta(ga, eta*gc, clsq+zeff, 0+zeff)), NOT the molecular EEQ charges. The two-body term uses the C6 weighted with the actual charges. Validated: with this split the full D4 energies match the official dftd4 values to 3e-8 relative (validate_d4_data.py)."
   },
   "cn_parameters": {
     "model": "D4 electronegativity-weighted error-function CN (cn_count%dftd4)",
@@ -504,8 +505,10 @@
       "symbol": "H",
       "nref": 2,
       "refn_source_line": 143,
-      "r4r2": 8.0589,
-      "r4r2_source_line": 45,
+      "r4_over_r2": 8.0589,
+      "r4_over_r2_source_line": 45,
+      "r4r2": 2.00734899805689,
+      "r4r2_derivation": "sqrt(0.5*r4_over_r2*sqrt(Z)); get_r4r2_val returns sqrt_z_r4_over_r2 (r4r2.f90:70-71,100-104)",
       "covalent_rad_2009_angstrom": 0.32,
       "covalent_rad_d3_angstrom": 0.426666666667,
       "covalent_rad_source_line": 39,
@@ -671,8 +674,10 @@
       "symbol": "He",
       "nref": 1,
       "refn_source_line": 169,
-      "r4r2": 3.4698,
-      "r4r2_source_line": 45,
+      "r4_over_r2": 3.4698,
+      "r4_over_r2_source_line": 45,
+      "r4r2": 1.5663713191197939,
+      "r4r2_derivation": "sqrt(0.5*r4_over_r2*sqrt(Z)); get_r4r2_val returns sqrt_z_r4_over_r2 (r4r2.f90:70-71,100-104)",
       "covalent_rad_2009_angstrom": 0.46,
       "covalent_rad_d3_angstrom": 0.613333333333,
       "covalent_rad_source_line": 39,
@@ -764,8 +769,10 @@
       "symbol": "Li",
       "nref": 3,
       "refn_source_line": 245,
-      "r4r2": 29.0974,
-      "r4r2_source_line": 46,
+      "r4_over_r2": 29.0974,
+      "r4_over_r2_source_line": 46,
+      "r4r2": 5.019869279580627,
+      "r4r2_derivation": "sqrt(0.5*r4_over_r2*sqrt(Z)); get_r4r2_val returns sqrt_z_r4_over_r2 (r4r2.f90:70-71,100-104)",
       "covalent_rad_2009_angstrom": 1.2,
       "covalent_rad_d3_angstrom": 1.6,
       "covalent_rad_source_line": 40,
@@ -1005,8 +1012,10 @@
       "symbol": "Be",
       "nref": 4,
       "refn_source_line": 346,
-      "r4r2": 14.8517,
-      "r4r2_source_line": 46,
+      "r4_over_r2": 14.8517,
+      "r4_over_r2_source_line": 46,
+      "r4r2": 3.8537903419880015,
+      "r4r2_derivation": "sqrt(0.5*r4_over_r2*sqrt(Z)); get_r4r2_val returns sqrt_z_r4_over_r2 (r4r2.f90:70-71,100-104)",
       "covalent_rad_2009_angstrom": 0.94,
       "covalent_rad_d3_angstrom": 1.253333333333,
       "covalent_rad_source_line": 40,
@@ -1320,8 +1329,10 @@
       "symbol": "B",
       "nref": 5,
       "refn_source_line": 472,
-      "r4r2": 11.8799,
-      "r4r2_source_line": 46,
+      "r4_over_r2": 11.8799,
+      "r4_over_r2_source_line": 46,
+      "r4r2": 3.6444659393318353,
+      "r4r2_derivation": "sqrt(0.5*r4_over_r2*sqrt(Z)); get_r4r2_val returns sqrt_z_r4_over_r2 (r4r2.f90:70-71,100-104)",
       "covalent_rad_2009_angstrom": 0.77,
       "covalent_rad_d3_angstrom": 1.026666666667,
       "covalent_rad_source_line": 40,
@@ -1709,8 +1720,10 @@
       "symbol": "C",
       "nref": 7,
       "refn_source_line": 648,
-      "r4r2": 7.8715,
-      "r4r2_source_line": 46,
+      "r4_over_r2": 7.8715,
+      "r4_over_r2_source_line": 46,
+      "r4r2": 3.104928220612981,
+      "r4r2_derivation": "sqrt(0.5*r4_over_r2*sqrt(Z)); get_r4r2_val returns sqrt_z_r4_over_r2 (r4r2.f90:70-71,100-104)",
       "covalent_rad_2009_angstrom": 0.75,
       "covalent_rad_d3_angstrom": 1.0,
       "covalent_rad_source_line": 40,
@@ -2246,8 +2259,10 @@
       "symbol": "N",
       "nref": 5,
       "refn_source_line": 774,
-      "r4r2": 5.5588,
-      "r4r2_source_line": 46,
+      "r4_over_r2": 5.5588,
+      "r4_over_r2_source_line": 46,
+      "r4r2": 2.7117524212163846,
+      "r4r2_derivation": "sqrt(0.5*r4_over_r2*sqrt(Z)); get_r4r2_val returns sqrt_z_r4_over_r2 (r4r2.f90:70-71,100-104)",
       "covalent_rad_2009_angstrom": 0.71,
       "covalent_rad_d3_angstrom": 0.946666666667,
       "covalent_rad_source_line": 40,
@@ -2635,8 +2650,10 @@
       "symbol": "O",
       "nref": 4,
       "refn_source_line": 875,
-      "r4r2": 4.7566,
-      "r4r2_source_line": 46,
+      "r4_over_r2": 4.7566,
+      "r4_over_r2_source_line": 46,
+      "r4r2": 2.5936168242020377,
+      "r4r2_derivation": "sqrt(0.5*r4_over_r2*sqrt(Z)); get_r4r2_val returns sqrt_z_r4_over_r2 (r4r2.f90:70-71,100-104)",
       "covalent_rad_2009_angstrom": 0.63,
       "covalent_rad_d3_angstrom": 0.84,
       "covalent_rad_source_line": 40,
@@ -2950,8 +2967,10 @@
       "symbol": "F",
       "nref": 2,
       "refn_source_line": 926,
-      "r4r2": 3.8025,
-      "r4r2_source_line": 46,
+      "r4_over_r2": 3.8025,
+      "r4_over_r2_source_line": 46,
+      "r4r2": 2.3882524992135985,
+      "r4r2_derivation": "sqrt(0.5*r4_over_r2*sqrt(Z)); get_r4r2_val returns sqrt_z_r4_over_r2 (r4r2.f90:70-71,100-104)",
       "covalent_rad_2009_angstrom": 0.64,
       "covalent_rad_d3_angstrom": 0.853333333333,
       "covalent_rad_source_line": 40,
@@ -3117,8 +3136,10 @@
       "symbol": "Ne",
       "nref": 1,
       "refn_source_line": 952,
-      "r4r2": 3.1036,
-      "r4r2_source_line": 46,
+      "r4_over_r2": 3.1036,
+      "r4_over_r2_source_line": 46,
+      "r4r2": 2.2152251517733568,
+      "r4r2_derivation": "sqrt(0.5*r4_over_r2*sqrt(Z)); get_r4r2_val returns sqrt_z_r4_over_r2 (r4r2.f90:70-71,100-104)",
       "covalent_rad_2009_angstrom": 0.67,
       "covalent_rad_d3_angstrom": 0.893333333333,
       "covalent_rad_source_line": 40,
@@ -3210,8 +3231,10 @@
       "symbol": "Na",
       "nref": 3,
       "refn_source_line": 1028,
-      "r4r2": 26.1552,
-      "r4r2_source_line": 47,
+      "r4_over_r2": 26.1552,
+      "r4_over_r2_source_line": 47,
+      "r4r2": 6.585855476576431,
+      "r4r2_derivation": "sqrt(0.5*r4_over_r2*sqrt(Z)); get_r4r2_val returns sqrt_z_r4_over_r2 (r4r2.f90:70-71,100-104)",
       "covalent_rad_2009_angstrom": 1.4,
       "covalent_rad_d3_angstrom": 1.866666666667,
       "covalent_rad_source_line": 41,
@@ -3451,8 +3474,10 @@
       "symbol": "Mg",
       "nref": 4,
       "refn_source_line": 1129,
-      "r4r2": 17.2304,
-      "r4r2_source_line": 47,
+      "r4_over_r2": 17.2304,
+      "r4_over_r2_source_line": 47,
+      "r4r2": 5.462959658896886,
+      "r4r2_derivation": "sqrt(0.5*r4_over_r2*sqrt(Z)); get_r4r2_val returns sqrt_z_r4_over_r2 (r4r2.f90:70-71,100-104)",
       "covalent_rad_2009_angstrom": 1.25,
       "covalent_rad_d3_angstrom": 1.666666666667,
       "covalent_rad_source_line": 41,
@@ -3766,8 +3791,10 @@
       "symbol": "Al",
       "nref": 4,
       "refn_source_line": 1230,
-      "r4r2": 17.721,
-      "r4r2_source_line": 47,
+      "r4_over_r2": 17.721,
+      "r4_over_r2_source_line": 47,
+      "r4r2": 5.65216658249283,
+      "r4r2_derivation": "sqrt(0.5*r4_over_r2*sqrt(Z)); get_r4r2_val returns sqrt_z_r4_over_r2 (r4r2.f90:70-71,100-104)",
       "covalent_rad_2009_angstrom": 1.13,
       "covalent_rad_d3_angstrom": 1.506666666667,
       "covalent_rad_source_line": 41,
@@ -4081,8 +4108,10 @@
       "symbol": "Si",
       "nref": 5,
       "refn_source_line": 1356,
-      "r4r2": 12.7442,
-      "r4r2_source_line": 47,
+      "r4_over_r2": 12.7442,
+      "r4_over_r2_source_line": 47,
+      "r4r2": 4.882849069371511,
+      "r4r2_derivation": "sqrt(0.5*r4_over_r2*sqrt(Z)); get_r4r2_val returns sqrt_z_r4_over_r2 (r4r2.f90:70-71,100-104)",
       "covalent_rad_2009_angstrom": 1.04,
       "covalent_rad_d3_angstrom": 1.386666666667,
       "covalent_rad_source_line": 41,
@@ -4470,8 +4499,10 @@
       "symbol": "P",
       "nref": 4,
       "refn_source_line": 1457,
-      "r4r2": 9.5361,
-      "r4r2_source_line": 47,
+      "r4_over_r2": 9.5361,
+      "r4_over_r2_source_line": 47,
+      "r4r2": 4.297275676970734,
+      "r4r2_derivation": "sqrt(0.5*r4_over_r2*sqrt(Z)); get_r4r2_val returns sqrt_z_r4_over_r2 (r4r2.f90:70-71,100-104)",
       "covalent_rad_2009_angstrom": 1.1,
       "covalent_rad_d3_angstrom": 1.466666666667,
       "covalent_rad_source_line": 41,
@@ -4785,8 +4816,10 @@
       "symbol": "S",
       "nref": 3,
       "refn_source_line": 1533,
-      "r4r2": 8.1652,
-      "r4r2_source_line": 47,
+      "r4_over_r2": 8.1652,
+      "r4_over_r2_source_line": 47,
+      "r4r2": 4.041088962148693,
+      "r4r2_derivation": "sqrt(0.5*r4_over_r2*sqrt(Z)); get_r4r2_val returns sqrt_z_r4_over_r2 (r4r2.f90:70-71,100-104)",
       "covalent_rad_2009_angstrom": 1.02,
       "covalent_rad_d3_angstrom": 1.36,
       "covalent_rad_source_line": 41,
@@ -5026,8 +5059,10 @@
       "symbol": "Cl",
       "nref": 2,
       "refn_source_line": 1584,
-      "r4r2": 6.7463,
-      "r4r2_source_line": 47,
+      "r4_over_r2": 6.7463,
+      "r4_over_r2_source_line": 47,
+      "r4r2": 3.7293234964336643,
+      "r4r2_derivation": "sqrt(0.5*r4_over_r2*sqrt(Z)); get_r4r2_val returns sqrt_z_r4_over_r2 (r4r2.f90:70-71,100-104)",
       "covalent_rad_2009_angstrom": 0.99,
       "covalent_rad_d3_angstrom": 1.32,
       "covalent_rad_source_line": 41,
@@ -5193,8 +5228,10 @@
       "symbol": "Ar",
       "nref": 1,
       "refn_source_line": 1610,
-      "r4r2": 5.6004,
-      "r4r2_source_line": 47,
+      "r4_over_r2": 5.6004,
+      "r4_over_r2_source_line": 47,
+      "r4r2": 3.4467727589836006,
+      "r4r2_derivation": "sqrt(0.5*r4_over_r2*sqrt(Z)); get_r4r2_val returns sqrt_z_r4_over_r2 (r4r2.f90:70-71,100-104)",
       "covalent_rad_2009_angstrom": 0.96,
       "covalent_rad_d3_angstrom": 1.28,
       "covalent_rad_source_line": 41,
@@ -5286,8 +5323,10 @@
       "symbol": "K",
       "nref": 3,
       "refn_source_line": 1686,
-      "r4r2": 29.2012,
-      "r4r2_source_line": 48,
+      "r4_over_r2": 29.2012,
+      "r4_over_r2_source_line": 48,
+      "r4r2": 7.977627461536416,
+      "r4r2_derivation": "sqrt(0.5*r4_over_r2*sqrt(Z)); get_r4r2_val returns sqrt_z_r4_over_r2 (r4r2.f90:70-71,100-104)",
       "covalent_rad_2009_angstrom": 1.76,
       "covalent_rad_d3_angstrom": 2.346666666667,
       "covalent_rad_source_line": 42,
@@ -5527,8 +5566,10 @@
       "symbol": "Ca",
       "nref": 4,
       "refn_source_line": 1787,
-      "r4r2": 22.3934,
-      "r4r2_source_line": 48,
+      "r4_over_r2": 22.3934,
+      "r4_over_r2_source_line": 48,
+      "r4r2": 7.076239442482412,
+      "r4r2_derivation": "sqrt(0.5*r4_over_r2*sqrt(Z)); get_r4r2_val returns sqrt_z_r4_over_r2 (r4r2.f90:70-71,100-104)",
       "covalent_rad_2009_angstrom": 1.54,
       "covalent_rad_d3_angstrom": 2.053333333333,
       "covalent_rad_source_line": 42,
@@ -5842,8 +5883,10 @@
       "symbol": "Sc",
       "nref": 4,
       "refn_source_line": 1888,
-      "r4r2": 19.0598,
-      "r4r2_source_line": 49,
+      "r4_over_r2": 19.0598,
+      "r4_over_r2_source_line": 49,
+      "r4r2": 6.608440672001199,
+      "r4r2_derivation": "sqrt(0.5*r4_over_r2*sqrt(Z)); get_r4r2_val returns sqrt_z_r4_over_r2 (r4r2.f90:70-71,100-104)",
       "covalent_rad_2009_angstrom": 1.33,
       "covalent_rad_d3_angstrom": 1.773333333333,
       "covalent_rad_source_line": 43,
@@ -6157,8 +6200,10 @@
       "symbol": "Ti",
       "nref": 4,
       "refn_source_line": 1989,
-      "r4r2": 16.859,
-      "r4r2_source_line": 49,
+      "r4_over_r2": 16.859,
+      "r4_over_r2_source_line": 49,
+      "r4r2": 6.287913775445048,
+      "r4r2_derivation": "sqrt(0.5*r4_over_r2*sqrt(Z)); get_r4r2_val returns sqrt_z_r4_over_r2 (r4r2.f90:70-71,100-104)",
       "covalent_rad_2009_angstrom": 1.22,
       "covalent_rad_d3_angstrom": 1.626666666667,
       "covalent_rad_source_line": 43,
@@ -6472,8 +6517,10 @@
       "symbol": "V",
       "nref": 4,
       "refn_source_line": 2090,
-      "r4r2": 15.4023,
-      "r4r2_source_line": 49,
+      "r4_over_r2": 15.4023,
+      "r4_over_r2_source_line": 49,
+      "r4r2": 6.077287053921326,
+      "r4r2_derivation": "sqrt(0.5*r4_over_r2*sqrt(Z)); get_r4r2_val returns sqrt_z_r4_over_r2 (r4r2.f90:70-71,100-104)",
       "covalent_rad_2009_angstrom": 1.21,
       "covalent_rad_d3_angstrom": 1.613333333333,
       "covalent_rad_source_line": 43,
@@ -6787,8 +6834,10 @@
       "symbol": "Cr",
       "nref": 4,
       "refn_source_line": 2191,
-      "r4r2": 12.5589,
-      "r4r2_source_line": 49,
+      "r4_over_r2": 12.5589,
+      "r4_over_r2_source_line": 49,
+      "r4r2": 5.546430990343218,
+      "r4r2_derivation": "sqrt(0.5*r4_over_r2*sqrt(Z)); get_r4r2_val returns sqrt_z_r4_over_r2 (r4r2.f90:70-71,100-104)",
       "covalent_rad_2009_angstrom": 1.1,
       "covalent_rad_d3_angstrom": 1.466666666667,
       "covalent_rad_source_line": 43,
@@ -7102,8 +7151,10 @@
       "symbol": "Mn",
       "nref": 3,
       "refn_source_line": 2267,
-      "r4r2": 13.4788,
-      "r4r2_source_line": 49,
+      "r4_over_r2": 13.4788,
+      "r4_over_r2_source_line": 49,
+      "r4r2": 5.8049117133682575,
+      "r4r2_derivation": "sqrt(0.5*r4_over_r2*sqrt(Z)); get_r4r2_val returns sqrt_z_r4_over_r2 (r4r2.f90:70-71,100-104)",
       "covalent_rad_2009_angstrom": 1.07,
       "covalent_rad_d3_angstrom": 1.426666666667,
       "covalent_rad_source_line": 43,
@@ -7343,8 +7394,10 @@
       "symbol": "Fe",
       "nref": 3,
       "refn_source_line": 2343,
-      "r4r2": 12.2309,
-      "r4r2_source_line": 50,
+      "r4_over_r2": 12.2309,
+      "r4_over_r2_source_line": 50,
+      "r4r2": 5.584156058385277,
+      "r4r2_derivation": "sqrt(0.5*r4_over_r2*sqrt(Z)); get_r4r2_val returns sqrt_z_r4_over_r2 (r4r2.f90:70-71,100-104)",
       "covalent_rad_2009_angstrom": 1.04,
       "covalent_rad_d3_angstrom": 1.386666666667,
       "covalent_rad_source_line": 44,
@@ -7584,8 +7637,10 @@
       "symbol": "Co",
       "nref": 4,
       "refn_source_line": 2444,
-      "r4r2": 11.2809,
-      "r4r2_source_line": 50,
+      "r4_over_r2": 11.2809,
+      "r4_over_r2_source_line": 50,
+      "r4r2": 5.413745277777264,
+      "r4r2_derivation": "sqrt(0.5*r4_over_r2*sqrt(Z)); get_r4r2_val returns sqrt_z_r4_over_r2 (r4r2.f90:70-71,100-104)",
       "covalent_rad_2009_angstrom": 1.0,
       "covalent_rad_d3_angstrom": 1.333333333333,
       "covalent_rad_source_line": 44,
@@ -7899,8 +7954,10 @@
       "symbol": "Ni",
       "nref": 4,
       "refn_source_line": 2545,
-      "r4r2": 10.5569,
-      "r4r2_source_line": 50,
+      "r4_over_r2": 10.5569,
+      "r4_over_r2_source_line": 50,
+      "r4r2": 5.284972281457849,
+      "r4r2_derivation": "sqrt(0.5*r4_over_r2*sqrt(Z)); get_r4r2_val returns sqrt_z_r4_over_r2 (r4r2.f90:70-71,100-104)",
       "covalent_rad_2009_angstrom": 0.99,
       "covalent_rad_d3_angstrom": 1.32,
       "covalent_rad_source_line": 44,
@@ -8214,8 +8271,10 @@
       "symbol": "Cu",
       "nref": 2,
       "refn_source_line": 2596,
-      "r4r2": 10.1428,
-      "r4r2_source_line": 50,
+      "r4_over_r2": 10.1428,
+      "r4_over_r2_source_line": 50,
+      "r4r2": 5.225928128371258,
+      "r4r2_derivation": "sqrt(0.5*r4_over_r2*sqrt(Z)); get_r4r2_val returns sqrt_z_r4_over_r2 (r4r2.f90:70-71,100-104)",
       "covalent_rad_2009_angstrom": 1.01,
       "covalent_rad_d3_angstrom": 1.346666666667,
       "covalent_rad_source_line": 44,
@@ -8381,8 +8440,10 @@
       "symbol": "Zn",
       "nref": 2,
       "refn_source_line": 2647,
-      "r4r2": 9.4907,
-      "r4r2_source_line": 50,
+      "r4_over_r2": 9.4907,
+      "r4_over_r2_source_line": 50,
+      "r4r2": 5.098171474418196,
+      "r4r2_derivation": "sqrt(0.5*r4_over_r2*sqrt(Z)); get_r4r2_val returns sqrt_z_r4_over_r2 (r4r2.f90:70-71,100-104)",
       "covalent_rad_2009_angstrom": 1.09,
       "covalent_rad_d3_angstrom": 1.453333333333,
       "covalent_rad_source_line": 44,
@@ -8548,8 +8609,10 @@
       "symbol": "Ga",
       "nref": 3,
       "refn_source_line": 2723,
-      "r4r2": 13.4606,
-      "r4r2_source_line": 51,
+      "r4_over_r2": 13.4606,
+      "r4_over_r2_source_line": 51,
+      "r4r2": 6.121496915882168,
+      "r4r2_derivation": "sqrt(0.5*r4_over_r2*sqrt(Z)); get_r4r2_val returns sqrt_z_r4_over_r2 (r4r2.f90:70-71,100-104)",
       "covalent_rad_2009_angstrom": 1.12,
       "covalent_rad_d3_angstrom": 1.493333333333,
       "covalent_rad_source_line": 45,
@@ -8789,8 +8852,10 @@
       "symbol": "Ge",
       "nref": 5,
       "refn_source_line": 2849,
-      "r4r2": 10.8544,
-      "r4r2_source_line": 51,
+      "r4_over_r2": 10.8544,
+      "r4_over_r2_source_line": 51,
+      "r4r2": 5.540837426133801,
+      "r4r2_derivation": "sqrt(0.5*r4_over_r2*sqrt(Z)); get_r4r2_val returns sqrt_z_r4_over_r2 (r4r2.f90:70-71,100-104)",
       "covalent_rad_2009_angstrom": 1.09,
       "covalent_rad_d3_angstrom": 1.453333333333,
       "covalent_rad_source_line": 45,
@@ -9178,8 +9243,10 @@
       "symbol": "As",
       "nref": 4,
       "refn_source_line": 2950,
-      "r4r2": 8.9386,
-      "r4r2_source_line": 51,
+      "r4_over_r2": 8.9386,
+      "r4_over_r2_source_line": 51,
+      "r4r2": 5.066968900257076,
+      "r4r2_derivation": "sqrt(0.5*r4_over_r2*sqrt(Z)); get_r4r2_val returns sqrt_z_r4_over_r2 (r4r2.f90:70-71,100-104)",
       "covalent_rad_2009_angstrom": 1.15,
       "covalent_rad_d3_angstrom": 1.533333333333,
       "covalent_rad_source_line": 45,
@@ -9493,8 +9560,10 @@
       "symbol": "Se",
       "nref": 3,
       "refn_source_line": 3026,
-      "r4r2": 8.135,
-      "r4r2_source_line": 51,
+      "r4_over_r2": 8.135,
+      "r4_over_r2_source_line": 51,
+      "r4r2": 4.870051009207528,
+      "r4r2_derivation": "sqrt(0.5*r4_over_r2*sqrt(Z)); get_r4r2_val returns sqrt_z_r4_over_r2 (r4r2.f90:70-71,100-104)",
       "covalent_rad_2009_angstrom": 1.1,
       "covalent_rad_d3_angstrom": 1.466666666667,
       "covalent_rad_source_line": 45,
@@ -9734,8 +9803,10 @@
       "symbol": "Br",
       "nref": 2,
       "refn_source_line": 3077,
-      "r4r2": 7.1251,
-      "r4r2_source_line": 51,
+      "r4_over_r2": 7.1251,
+      "r4_over_r2_source_line": 51,
+      "r4r2": 4.590896430032106,
+      "r4r2_derivation": "sqrt(0.5*r4_over_r2*sqrt(Z)); get_r4r2_val returns sqrt_z_r4_over_r2 (r4r2.f90:70-71,100-104)",
       "covalent_rad_2009_angstrom": 1.14,
       "covalent_rad_d3_angstrom": 1.52,
       "covalent_rad_source_line": 45,
@@ -9901,8 +9972,10 @@
       "symbol": "Kr",
       "nref": 1,
       "refn_source_line": 3103,
-      "r4r2": 6.1971,
-      "r4r2_source_line": 51,
+      "r4_over_r2": 6.1971,
+      "r4_over_r2_source_line": 51,
+      "r4r2": 4.311762980498812,
+      "r4r2_derivation": "sqrt(0.5*r4_over_r2*sqrt(Z)); get_r4r2_val returns sqrt_z_r4_over_r2 (r4r2.f90:70-71,100-104)",
       "covalent_rad_2009_angstrom": 1.17,
       "covalent_rad_d3_angstrom": 1.56,
       "covalent_rad_source_line": 45,
@@ -9997,3341 +10070,3342 @@
       "coordination number",
       "EEQ charge",
       "polarizability",
-      "C6 to first atom"
+      "C6 to first atom",
+      "two-body + ATM energy (5 functionals)"
     ],
-    "result": "all four quantities reproduced to <= 3e-8 relative for the 9 reference dimers, using only the JSON data staged here",
+    "result": "all five quantities reproduced to <= 4e-8 relative for the 9 reference dimers, using only the JSON data staged here",
     "attainable_precision": "alphaiw is stored upstream with 7 decimals, so C6 agrees with the official values only to ~1e-8 relative; larger deviations would be a bug"
   },
   "pair_rrij": [
     {
       "Zi": 1,
       "Zj": 1,
-      "rrij": 194.83760762999995
+      "rrij": 12.08835
     },
     {
       "Zi": 1,
       "Zj": 2,
-      "rrij": 83.88831366
+      "rrij": 9.432761694060503
     },
     {
       "Zi": 1,
       "Zj": 3,
-      "rrij": 703.4791105799999
+      "rrij": 30.229888706228202
     },
     {
       "Zi": 1,
       "Zj": 4,
-      "rrij": 359.06509538999995
+      "rrij": 23.2077065451328
     },
     {
       "Zi": 1,
       "Zj": 5,
-      "rrij": 287.21677832999995
+      "rrij": 21.947145155310665
     },
     {
       "Zi": 1,
       "Zj": 6,
-      "rrij": 190.30689404999998
+      "rrij": 18.698023658058087
     },
     {
       "Zi": 1,
       "Zj": 7,
-      "rrij": 134.39343995999997
+      "rrij": 16.330300517121167
     },
     {
       "Zi": 1,
       "Zj": 8,
-      "rrij": 114.99889121999998
+      "rrij": 15.618882400216359
     },
     {
       "Zi": 1,
       "Zj": 9,
-      "rrij": 91.93190175
+      "rrij": 14.38216878420984
     },
     {
       "Zi": 1,
       "Zj": 10,
-      "rrij": 75.03480612
+      "rrij": 13.340189966648008
     },
     {
       "Zi": 1,
       "Zj": 11,
-      "rrij": 632.3464238399999
+      "rrij": 39.66033117675954
     },
     {
       "Zi": 1,
       "Zj": 12,
-      "rrij": 416.5742116799999
+      "rrij": 32.89819979313562
     },
     {
       "Zi": 1,
       "Zj": 13,
-      "rrij": 428.43530069999997
+      "rrij": 34.03761277865286
     },
     {
       "Zi": 1,
       "Zj": 14,
-      "rrij": 308.11270013999996
+      "rrij": 29.40474656119776
     },
     {
       "Zi": 1,
       "Zj": 15,
-      "rrij": 230.55142886999997
+      "rrij": 25.878396073624337
     },
     {
       "Zi": 1,
       "Zj": 16,
-      "rrij": 197.40759083999998
+      "rrij": 24.33562763768381
     },
     {
       "Zi": 1,
       "Zj": 17,
-      "rrij": 163.10327120999997
+      "rrij": 22.4581613519884
     },
     {
       "Zi": 1,
       "Zj": 18,
-      "rrij": 135.39919067999998
+      "rrij": 20.75662753282654
     },
     {
       "Zi": 1,
       "Zj": 19,
-      "rrij": 705.9886520399999
+      "rrij": 48.041647475358765
     },
     {
       "Zi": 1,
       "Zj": 20,
-      "rrij": 541.3985137799999
+      "rrij": 42.61344646463314
     },
     {
       "Zi": 1,
       "Zj": 21,
-      "rrij": 460.8030666599999
+      "rrij": 39.79634028498002
     },
     {
       "Zi": 1,
       "Zj": 22,
-      "rrij": 407.59498529999996
+      "rrij": 37.8661122510232
     },
     {
       "Zi": 1,
       "Zj": 23,
-      "rrij": 372.37678640999997
+      "rrij": 36.597708235779244
     },
     {
       "Zi": 1,
       "Zj": 24,
-      "rrij": 303.63275762999996
+      "rrij": 33.40086807377143
     },
     {
       "Zi": 1,
       "Zj": 25,
-      "rrij": 325.87290396
+      "rrij": 34.95745113491543
     },
     {
       "Zi": 1,
       "Zj": 26,
-      "rrij": 295.70280002999993
+      "rrij": 33.628050206378994
     },
     {
       "Zi": 1,
       "Zj": 27,
-      "rrij": 272.73493503
+      "rrij": 32.60182847724423
     },
     {
       "Zi": 1,
       "Zj": 28,
-      "rrij": 255.23100422999997
+      "rrij": 31.826351441828546
     },
     {
       "Zi": 1,
       "Zj": 29,
-      "rrij": 245.21943275999996
+      "rrij": 31.47078477721009
     },
     {
       "Zi": 1,
       "Zj": 30,
-      "rrij": 229.45380668999996
+      "rrij": 30.70142820328675
     },
     {
       "Zi": 1,
       "Zj": 31,
-      "rrij": 325.43288801999995
+      "rrij": 36.863942102113235
     },
     {
       "Zi": 1,
       "Zj": 32,
-      "rrij": 262.42357247999996
+      "rrij": 33.36718336723741
     },
     {
       "Zi": 1,
       "Zj": 33,
-      "rrij": 216.10585061999996
+      "rrij": 30.51352483534939
     },
     {
       "Zi": 1,
       "Zj": 34,
-      "rrij": 196.67745449999998
+      "rrij": 29.327676041456034
     },
     {
       "Zi": 1,
       "Zj": 35,
-      "rrij": 172.26140516999996
+      "rrij": 27.6465940470237
     },
     {
       "Zi": 1,
       "Zj": 36,
-      "rrij": 149.82542757
+      "rrij": 25.965639296289236
     },
     {
       "Zi": 2,
       "Zj": 2,
-      "rrij": 36.11853612000001
+      "rrij": 7.3605573280832495
     },
     {
       "Zi": 2,
       "Zj": 3,
-      "rrij": 302.88647556000006
+      "rrij": 23.58893779579691
     },
     {
       "Zi": 2,
       "Zj": 4,
-      "rrij": 154.59728598
+      "rrij": 18.1093999847726
     },
     {
       "Zi": 2,
       "Zj": 5,
-      "rrij": 123.66263106000001
+      "rrij": 17.125760762635096
     },
     {
       "Zi": 2,
       "Zj": 6,
-      "rrij": 81.93759210000002
+      "rrij": 14.590411538081488
     },
     {
       "Zi": 2,
       "Zj": 7,
-      "rrij": 57.86377272000001
+      "rrij": 12.74283365144101
     },
     {
       "Zi": 2,
       "Zj": 8,
-      "rrij": 49.51335204
+      "rrij": 12.187701018649909
     },
     {
       "Zi": 2,
       "Zj": 9,
-      "rrij": 39.58174350000001
+      "rrij": 11.222670652753047
     },
     {
       "Zi": 2,
       "Zj": 10,
-      "rrij": 32.306613840000004
+      "rrij": 10.409595429391736
     },
     {
       "Zi": 2,
       "Zj": 11,
-      "rrij": 272.25993888000005
+      "rrij": 30.94768539113203
     },
     {
       "Zi": 2,
       "Zj": 12,
-      "rrij": 179.35812576
+      "rrij": 25.671069981613606
     },
     {
       "Zi": 2,
       "Zj": 13,
-      "rrij": 184.46497740000004
+      "rrij": 26.560174877112335
     },
     {
       "Zi": 2,
       "Zj": 14,
-      "rrij": 132.65947548000003
+      "rrij": 22.945064213562937
     },
     {
       "Zi": 2,
       "Zj": 15,
-      "rrij": 99.26507934000001
+      "rrij": 20.19338811227416
     },
     {
       "Zi": 2,
       "Zj": 16,
-      "rrij": 84.99483288000002
+      "rrij": 18.989537544963863
     },
     {
       "Zi": 2,
       "Zj": 17,
-      "rrij": 70.22493522
+      "rrij": 17.524516093599722
     },
     {
       "Zi": 2,
       "Zj": 18,
-      "rrij": 58.29680376
+      "rrij": 16.196777979585942
     },
     {
       "Zi": 2,
       "Zj": 19,
-      "rrij": 303.96697128000005
+      "rrij": 37.487780551119265
     },
     {
       "Zi": 2,
       "Zj": 20,
-      "rrij": 233.10185796000002
+      "rrij": 33.25205552978607
     },
     {
       "Zi": 2,
       "Zj": 21,
-      "rrij": 198.40108212
+      "rrij": 31.053815798182242
     },
     {
       "Zi": 2,
       "Zj": 22,
-      "rrij": 175.49207460000005
+      "rrij": 29.54762338486615
     },
     {
       "Zi": 2,
       "Zj": 23,
-      "rrij": 160.32870162000003
+      "rrij": 28.55786441796118
     },
     {
       "Zi": 2,
       "Zj": 24,
-      "rrij": 130.73061366000002
+      "rrij": 26.063311280252435
     },
     {
       "Zi": 2,
       "Zj": 25,
-      "rrij": 140.30622072000003
+      "rrij": 27.27794165352774
     },
     {
       "Zi": 2,
       "Zj": 26,
-      "rrij": 127.31633046000002
+      "rrij": 26.240585674031205
     },
     {
       "Zi": 2,
       "Zj": 27,
-      "rrij": 117.42740046000003
+      "rrij": 25.439805996391584
     },
     {
       "Zi": 2,
       "Zj": 28,
-      "rrij": 109.89099486000002
+      "rrij": 24.834687012056033
     },
     {
       "Zi": 2,
       "Zj": 29,
-      "rrij": 105.58046232000001
+      "rrij": 24.55723180818637
     },
     {
       "Zi": 2,
       "Zj": 30,
-      "rrij": 98.79249258000002
+      "rrij": 23.956888732450004
     },
     {
       "Zi": 2,
       "Zj": 31,
-      "rrij": 140.11676964
+      "rrij": 28.765611597354305
     },
     {
       "Zi": 2,
       "Zj": 32,
-      "rrij": 112.98779136000002
+      "rrij": 26.037026484604574
     },
     {
       "Zi": 2,
       "Zj": 33,
-      "rrij": 93.04546284
+      "rrij": 23.810264280703944
     },
     {
       "Zi": 2,
       "Zj": 34,
-      "rrij": 84.68046900000002
+      "rrij": 22.884924670419238
     },
     {
       "Zi": 2,
       "Zj": 35,
-      "rrij": 74.16801594
+      "rrij": 21.573145491155227
     },
     {
       "Zi": 2,
       "Zj": 36,
-      "rrij": 64.50809274000001
+      "rrij": 20.261465602487455
     },
     {
       "Zi": 3,
       "Zj": 3,
-      "rrij": 2539.97606028
+      "rrij": 75.59726275223197
     },
     {
       "Zi": 3,
       "Zj": 4,
-      "rrij": 1296.43756674
+      "rrij": 58.03657124307026
     },
     {
       "Zi": 3,
       "Zj": 5,
-      "rrij": 1037.02260678
+      "rrij": 54.8842278279895
     },
     {
       "Zi": 3,
       "Zj": 6,
-      "rrij": 687.1205523000001
+      "rrij": 46.75900136987413
     },
     {
       "Zi": 3,
       "Zj": 7,
-      "rrij": 485.23988136
+      "rrij": 40.83792801927754
     },
     {
       "Zi": 3,
       "Zj": 8,
-      "rrij": 415.21407852
+      "rrij": 39.05885225644583
     },
     {
       "Zi": 3,
       "Zj": 9,
-      "rrij": 331.92859050000004
+      "rrij": 35.966146058052
     },
     {
       "Zi": 3,
       "Zj": 10,
-      "rrij": 270.92007192000005
+      "rrij": 33.36042206022422
     },
     {
       "Zi": 3,
       "Zj": 11,
-      "rrij": 2283.1449494400003
+      "rrij": 99.18040075987157
     },
     {
       "Zi": 3,
       "Zj": 12,
-      "rrij": 1504.07952288
+      "rrij": 82.27003010185422
     },
     {
       "Zi": 3,
       "Zj": 13,
-      "rrij": 1546.9050762000002
+      "rrij": 85.11941217158393
     },
     {
       "Zi": 3,
       "Zj": 14,
-      "rrij": 1112.46925524
+      "rrij": 73.5337921205007
     },
     {
       "Zi": 3,
       "Zj": 15,
-      "rrij": 832.42714842
+      "rrij": 64.71528647014328
     },
     {
       "Zi": 3,
       "Zj": 16,
-      "rrij": 712.7582714400002
+      "rrij": 60.857215011427755
     },
     {
       "Zi": 3,
       "Zj": 17,
-      "rrij": 588.89936886
+      "rrij": 56.16214936009669
     },
     {
       "Zi": 3,
       "Zj": 18,
-      "rrij": 488.87123688
+      "rrij": 51.90704605955141
     },
     {
       "Zi": 3,
       "Zj": 19,
-      "rrij": 2549.03699064
+      "rrij": 120.13994105431631
     },
     {
       "Zi": 3,
       "Zj": 20,
-      "rrij": 1954.7691514800001
+      "rrij": 106.56539097682261
     },
     {
       "Zi": 3,
       "Zj": 21,
-      "rrij": 1663.7718735600001
+      "rrij": 99.5205249459299
     },
     {
       "Zi": 3,
       "Zj": 22,
-      "rrij": 1471.6591998000004
+      "rrij": 94.6935155820253
     },
     {
       "Zi": 3,
       "Zj": 23,
-      "rrij": 1344.5006520600002
+      "rrij": 91.52155975551815
     },
     {
       "Zi": 3,
       "Zj": 24,
-      "rrij": 1096.29401058
+      "rrij": 83.52707561921362
     },
     {
       "Zi": 3,
       "Zj": 25,
-      "rrij": 1176.5941053600002
+      "rrij": 87.41969394184517
     },
     {
       "Zi": 3,
       "Zj": 26,
-      "rrij": 1067.6621689800002
+      "rrij": 84.09520034961689
     },
     {
       "Zi": 3,
       "Zj": 27,
-      "rrij": 984.7345789800002
+      "rrij": 81.52888082216633
     },
     {
       "Zi": 3,
       "Zj": 28,
-      "rrij": 921.5350261800002
+      "rrij": 79.58960999737619
     },
     {
       "Zi": 3,
       "Zj": 29,
-      "rrij": 885.38732616
+      "rrij": 78.70042820672148
     },
     {
       "Zi": 3,
       "Zj": 30,
-      "rrij": 828.4640825400002
+      "rrij": 76.77646309939851
     },
     {
       "Zi": 3,
       "Zj": 31,
-      "rrij": 1175.00538732
+      "rrij": 92.18734293925334
     },
     {
       "Zi": 3,
       "Zj": 32,
-      "rrij": 947.5044556800001
+      "rrij": 83.44283873579897
     },
     {
       "Zi": 3,
       "Zj": 33,
-      "rrij": 780.27005892
+      "rrij": 76.30656456897279
     },
     {
       "Zi": 3,
       "Zj": 34,
-      "rrij": 710.1220470000001
+      "rrij": 73.3410583533345
     },
     {
       "Zi": 3,
       "Zj": 35,
-      "rrij": 621.96565422
+      "rrij": 69.13709986456362
     },
     {
       "Zi": 3,
       "Zj": 36,
-      "rrij": 540.95849262
+      "rrij": 64.93345957991696
     },
     {
       "Zi": 4,
       "Zj": 4,
-      "rrij": 661.71897867
+      "rrij": 44.55509999999999
     },
     {
       "Zi": 4,
       "Zj": 5,
-      "rrij": 529.3101324899999
+      "rrij": 42.135022916103765
     },
     {
       "Zi": 4,
       "Zj": 6,
-      "rrij": 350.71546965
+      "rrij": 35.897227167492886
     },
     {
       "Zi": 4,
       "Zj": 7,
-      "rrij": 247.67288987999996
+      "rrij": 31.351575872238843
     },
     {
       "Zi": 4,
       "Zj": 8,
-      "rrij": 211.93078865999996
+      "rrij": 29.985766403782215
     },
     {
       "Zi": 4,
       "Zj": 9,
-      "rrij": 169.42076774999998
+      "rrij": 27.611473247094217
     },
     {
       "Zi": 4,
       "Zj": 10,
-      "rrij": 138.28120836
+      "rrij": 25.6110398856992
     },
     {
       "Zi": 4,
       "Zj": 11,
-      "rrij": 1165.34755152
+      "rrij": 76.14151868807711
     },
     {
       "Zi": 4,
       "Zj": 12,
-      "rrij": 767.7021950399999
+      "rrij": 63.15930351638065
     },
     {
       "Zi": 4,
       "Zj": 13,
-      "rrij": 789.5609271
+      "rrij": 65.3467949607546
     },
     {
       "Zi": 4,
       "Zj": 14,
-      "rrij": 567.8191054199999
+      "rrij": 56.45242975478709
     },
     {
       "Zi": 4,
       "Zj": 15,
-      "rrij": 424.8818891099999
+      "rrij": 49.68239850230929
     },
     {
       "Zi": 4,
       "Zj": 16,
-      "rrij": 363.80130252
+      "rrij": 46.72052884032885
     },
     {
       "Zi": 4,
       "Zj": 17,
-      "rrij": 300.58207113
+      "rrij": 43.11609261811494
     },
     {
       "Zi": 4,
       "Zj": 18,
-      "rrij": 249.52638203999996
+      "rrij": 39.84941870879501
     },
     {
       "Zi": 4,
       "Zj": 19,
-      "rrij": 1301.06238612
+      "rrij": 92.23231098974189
     },
     {
       "Zi": 4,
       "Zj": 20,
-      "rrij": 997.74017634
+      "rrij": 81.81102966309983
     },
     {
       "Zi": 4,
       "Zj": 21,
-      "rrij": 849.2112949799999
+      "rrij": 76.40263451207674
     },
     {
       "Zi": 4,
       "Zj": 22,
-      "rrij": 751.1544309
+      "rrij": 72.69690413719032
     },
     {
       "Zi": 4,
       "Zj": 23,
-      "rrij": 686.25101673
+      "rrij": 70.26177046167216
     },
     {
       "Zi": 4,
       "Zj": 24,
-      "rrij": 559.56304539
+      "rrij": 64.12434654926291
     },
     {
       "Zi": 4,
       "Zj": 25,
-      "rrij": 600.54928188
+      "rrij": 67.11273809121484
     },
     {
       "Zi": 4,
       "Zj": 26,
-      "rrij": 544.9489725899999
+      "rrij": 64.5605000578769
     },
     {
       "Zi": 4,
       "Zj": 27,
-      "rrij": 502.62162759
+      "rrij": 62.59031779644351
     },
     {
       "Zi": 4,
       "Zj": 28,
-      "rrij": 470.36373519
+      "rrij": 61.10152540786965
     },
     {
       "Zi": 4,
       "Zj": 29,
-      "rrij": 451.9134682799999
+      "rrij": 60.41889404712176
     },
     {
       "Zi": 4,
       "Zj": 30,
-      "rrij": 422.85908757
+      "rrij": 58.941851969734714
     },
     {
       "Zi": 4,
       "Zj": 31,
-      "rrij": 599.7383790599999
+      "rrij": 70.7728970788081
     },
     {
       "Zi": 4,
       "Zj": 32,
-      "rrij": 483.61887743999995
+      "rrij": 64.05967727808029
     },
     {
       "Zi": 4,
       "Zj": 33,
-      "rrij": 398.2602168599999
+      "rrij": 58.58110743289285
     },
     {
       "Zi": 4,
       "Zj": 34,
-      "rrij": 362.45573849999994
+      "rrij": 56.304466632818674
     },
     {
       "Zi": 4,
       "Zj": 35,
-      "rrij": 317.45954300999995
+      "rrij": 53.077056969374766
     },
     {
       "Zi": 4,
       "Zj": 36,
-      "rrij": 276.11241020999995
+      "rrij": 49.84989159356316
     },
     {
       "Zi": 5,
       "Zj": 5,
-      "rrij": 423.39607202999997
+      "rrij": 39.846395948849626
     },
     {
       "Zi": 5,
       "Zj": 6,
-      "rrij": 280.53789854999997
+      "rrij": 33.94741543228263
     },
     {
       "Zi": 5,
       "Zj": 7,
-      "rrij": 198.11396435999998
+      "rrij": 29.648668005071247
     },
     {
       "Zi": 5,
       "Zj": 8,
-      "rrij": 169.52379702
+      "rrij": 28.35704452644699
     },
     {
       "Zi": 5,
       "Zj": 9,
-      "rrij": 135.51995925
+      "rrij": 26.11171466372427
     },
     {
       "Zi": 5,
       "Zj": 10,
-      "rrij": 110.61137292
+      "rrij": 24.21993784076758
     },
     {
       "Zi": 5,
       "Zj": 11,
-      "rrij": 932.1634814399999
+      "rrij": 72.00577789723451
     },
     {
       "Zi": 5,
       "Zj": 12,
-      "rrij": 614.08628688
+      "rrij": 59.72871121438068
     },
     {
       "Zi": 5,
       "Zj": 13,
-      "rrij": 631.5711236999999
+      "rrij": 61.79738577997422
     },
     {
       "Zi": 5,
       "Zj": 14,
-      "rrij": 454.19946473999994
+      "rrij": 53.38613136066787
     },
     {
       "Zi": 5,
       "Zj": 15,
-      "rrij": 339.86374316999996
+      "rrij": 46.98382450991698
     },
     {
       "Zi": 5,
       "Zj": 16,
-      "rrij": 291.00527844
+      "rrij": 44.18283324108224
     },
     {
       "Zi": 5,
       "Zj": 17,
-      "rrij": 240.43610810999996
+      "rrij": 40.7741773785072
     },
     {
       "Zi": 5,
       "Zj": 18,
-      "rrij": 199.59657587999996
+      "rrij": 37.68493776219765
     },
     {
       "Zi": 5,
       "Zj": 19,
-      "rrij": 1040.72200764
+      "rrij": 87.22257468074328
     },
     {
       "Zi": 5,
       "Zj": 20,
-      "rrij": 798.0940579799999
+      "rrij": 77.36734088005093
     },
     {
       "Zi": 5,
       "Zj": 21,
-      "rrij": 679.28555406
+      "rrij": 72.25271082361066
     },
     {
       "Zi": 5,
       "Zj": 22,
-      "rrij": 600.8497023
+      "rrij": 68.74826275219478
     },
     {
       "Zi": 5,
       "Zj": 23,
-      "rrij": 548.9333513099999
+      "rrij": 66.44539701467576
     },
     {
       "Zi": 5,
       "Zj": 24,
-      "rrij": 447.59542832999995
+      "rrij": 60.64133648748119
     },
     {
       "Zi": 5,
       "Zj": 25,
-      "rrij": 480.38038836
+      "rrij": 63.467409060597056
     },
     {
       "Zi": 5,
       "Zj": 26,
-      "rrij": 435.90560673
+      "rrij": 61.05379966409597
     },
     {
       "Zi": 5,
       "Zj": 27,
-      "rrij": 402.04789173
+      "rrij": 59.19063080723341
     },
     {
       "Zi": 5,
       "Zj": 28,
-      "rrij": 376.24474893
+      "rrij": 57.78270441025797
     },
     {
       "Zi": 5,
       "Zj": 29,
-      "rrij": 361.48634916
+      "rrij": 57.13715119573565
     },
     {
       "Zi": 5,
       "Zj": 30,
-      "rrij": 338.24570079
+      "rrij": 55.740336874170836
     },
     {
       "Zi": 5,
       "Zj": 31,
-      "rrij": 479.73174581999996
+      "rrij": 66.92876102297231
     },
     {
       "Zi": 5,
       "Zj": 32,
-      "rrij": 386.84755967999996
+      "rrij": 60.58017982475913
     },
     {
       "Zi": 5,
       "Zj": 33,
-      "rrij": 318.56902241999995
+      "rrij": 55.3991867179218
     },
     {
       "Zi": 5,
       "Zj": 34,
-      "rrij": 289.92895949999996
+      "rrij": 53.2462050775964
     },
     {
       "Zi": 5,
       "Zj": 35,
-      "rrij": 253.93642647
+      "rrij": 50.19409701075638
     },
     {
       "Zi": 5,
       "Zj": 36,
-      "rrij": 220.86278486999998
+      "rrij": 47.14221996269951
     },
     {
       "Zi": 6,
       "Zj": 6,
-      "rrij": 185.88153675
+      "rrij": 28.921737765476674
     },
     {
       "Zi": 6,
       "Zj": 7,
-      "rrij": 131.2682826
+      "rrij": 25.259389859850994
     },
     {
       "Zi": 6,
       "Zj": 8,
-      "rrij": 112.32473069999999
+      "rrij": 24.15898221276457
     },
     {
       "Zi": 6,
       "Zj": 9,
-      "rrij": 89.79413625000001
+      "rrij": 22.246057748273348
     },
     {
       "Zi": 6,
       "Zj": 10,
-      "rrij": 73.2899622
+      "rrij": 20.634345266258308
     },
     {
       "Zi": 6,
       "Zj": 11,
-      "rrij": 617.6419704
+      "rrij": 61.34582557830214
     },
     {
       "Zi": 6,
       "Zj": 12,
-      "rrij": 406.8872808
+      "rrij": 50.886292838937614
     },
     {
       "Zi": 6,
       "Zj": 13,
-      "rrij": 418.4725545
+      "rrij": 52.64871458876285
     },
     {
       "Zi": 6,
       "Zj": 14,
-      "rrij": 300.94791089999995
+      "rrij": 45.48268761745631
     },
     {
       "Zi": 6,
       "Zj": 15,
-      "rrij": 225.19023345
+      "rrij": 40.028197563540544
     },
     {
       "Zi": 6,
       "Zj": 16,
-      "rrij": 192.8171154
+      "rrij": 37.6418734817493
     },
     {
       "Zi": 6,
       "Zj": 17,
-      "rrij": 159.31050134999998
+      "rrij": 34.73784530361587
     },
     {
       "Zi": 6,
       "Zj": 18,
-      "rrij": 132.2506458
+      "rrij": 32.105946028224736
     },
     {
       "Zi": 6,
       "Zj": 19,
-      "rrij": 689.5717374
+      "rrij": 74.30988191658454
     },
     {
       "Zi": 6,
       "Zj": 20,
-      "rrij": 528.8089443
+      "rrij": 65.91364662233492
     },
     {
       "Zi": 6,
       "Zj": 21,
-      "rrij": 450.08764709999997
+      "rrij": 61.556201810229396
     },
     {
       "Zi": 6,
       "Zj": 22,
-      "rrij": 398.11685550000004
+      "rrij": 58.57056279048133
     },
     {
       "Zi": 6,
       "Zj": 23,
-      "rrij": 363.71761335
+      "rrij": 56.608620235458744
     },
     {
       "Zi": 6,
       "Zj": 24,
-      "rrij": 296.57214404999996
+      "rrij": 51.66381031679718
     },
     {
       "Zi": 6,
       "Zj": 25,
-      "rrij": 318.2951226
+      "rrij": 54.07150259101186
     },
     {
       "Zi": 6,
       "Zj": 26,
-      "rrij": 288.82658805
+      "rrij": 52.01521120196219
     },
     {
       "Zi": 6,
       "Zj": 27,
-      "rrij": 266.39281305000003
+      "rrij": 50.42787147654266
     },
     {
       "Zi": 6,
       "Zj": 28,
-      "rrij": 249.29591505000002
+      "rrij": 49.22837874556753
     },
     {
       "Zi": 6,
       "Zj": 29,
-      "rrij": 239.51715059999998
+      "rrij": 48.67839517402529
     },
     {
       "Zi": 6,
       "Zj": 30,
-      "rrij": 224.11813515
+      "rrij": 47.48836945333544
     },
     {
       "Zi": 6,
       "Zj": 31,
-      "rrij": 317.8653387
+      "rrij": 57.02042557955361
     },
     {
       "Zi": 6,
       "Zj": 32,
-      "rrij": 256.3212288
+      "rrij": 51.61170747069429
     },
     {
       "Zi": 6,
       "Zj": 33,
-      "rrij": 211.08056969999998
+      "rrij": 47.19772419412955
     },
     {
       "Zi": 6,
       "Zj": 34,
-      "rrij": 192.10395749999998
+      "rrij": 45.36347644293954
     },
     {
       "Zi": 6,
       "Zj": 35,
-      "rrij": 168.25567395
+      "rrij": 42.76321165055422
     },
     {
       "Zi": 6,
       "Zj": 36,
-      "rrij": 146.34141795
+      "rrij": 40.16314367623529
     },
     {
       "Zi": 7,
       "Zj": 7,
-      "rrij": 92.70077232
+      "rrij": 22.060803581918773
     },
     {
       "Zi": 7,
       "Zj": 8,
-      "rrij": 79.32296424
+      "rrij": 21.099740108212277
     },
     {
       "Zi": 7,
       "Zj": 9,
-      "rrij": 63.41201100000001
+      "rrij": 19.42904849165567
     },
     {
       "Zi": 7,
       "Zj": 10,
-      "rrij": 51.756875040000004
+      "rrij": 18.0214265065825
     },
     {
       "Zi": 7,
       "Zj": 11,
-      "rrij": 436.17457728000005
+      "rrij": 53.57762860316197
     },
     {
       "Zi": 7,
       "Zj": 12,
-      "rrij": 287.34104256
+      "rrij": 44.442582246063196
     },
     {
       "Zi": 7,
       "Zj": 13,
-      "rrij": 295.5224844
+      "rrij": 45.98182924557981
     },
     {
       "Zi": 7,
       "Zj": 14,
-      "rrij": 212.52737688
+      "rrij": 39.723233358907095
     },
     {
       "Zi": 7,
       "Zj": 15,
-      "rrij": 159.02781804
+      "rrij": 34.95944316497899
     },
     {
       "Zi": 7,
       "Zj": 16,
-      "rrij": 136.16614128
+      "rrij": 32.87529833237258
     },
     {
       "Zi": 7,
       "Zj": 17,
-      "rrij": 112.50399732
+      "rrij": 30.339006062859426
     },
     {
       "Zi": 7,
       "Zj": 18,
-      "rrij": 93.39451056
+      "rrij": 28.04038312366937
     },
     {
       "Zi": 7,
       "Zj": 19,
-      "rrij": 486.97089168
+      "rrij": 64.90005175315109
     },
     {
       "Zi": 7,
       "Zj": 20,
-      "rrij": 373.44129576
+      "rrij": 57.56702832377567
     },
     {
       "Zi": 7,
       "Zj": 21,
-      "rrij": 317.84884872
+      "rrij": 53.76136497829224
     },
     {
       "Zi": 7,
       "Zj": 22,
-      "rrij": 281.14742760000007
+      "rrij": 51.1537962148889
     },
     {
       "Zi": 7,
       "Zj": 23,
-      "rrij": 256.85491572
+      "rrij": 49.440293648694436
     },
     {
       "Zi": 7,
       "Zj": 24,
-      "rrij": 209.43723996
+      "rrij": 45.12164300151843
     },
     {
       "Zi": 7,
       "Zj": 25,
-      "rrij": 224.77786032
+      "rrij": 47.22445018102117
     },
     {
       "Zi": 7,
       "Zj": 26,
-      "rrij": 203.96738076000003
+      "rrij": 45.42854613532925
     },
     {
       "Zi": 7,
       "Zj": 27,
-      "rrij": 188.12480076000003
+      "rrij": 44.04221059458379
     },
     {
       "Zi": 7,
       "Zj": 28,
-      "rrij": 176.05108716
+      "rrij": 42.9946091409144
     },
     {
       "Zi": 7,
       "Zj": 29,
-      "rrij": 169.14538992
+      "rrij": 42.514269765640705
     },
     {
       "Zi": 7,
       "Zj": 30,
-      "rrij": 158.27070948000002
+      "rrij": 41.474936518589544
     },
     {
       "Zi": 7,
       "Zj": 31,
-      "rrij": 224.47434984
+      "rrij": 49.7999522493363
     },
     {
       "Zi": 7,
       "Zj": 32,
-      "rrij": 181.01231616
+      "rrij": 45.07613791765408
     },
     {
       "Zi": 7,
       "Zj": 33,
-      "rrij": 149.06366904
+      "rrij": 41.22109555050074
     },
     {
       "Zi": 7,
       "Zj": 34,
-      "rrij": 135.66251400000002
+      "rrij": 39.61911784699743
     },
     {
       "Zi": 7,
       "Zj": 35,
-      "rrij": 118.82101764000001
+      "rrij": 37.34812352907966
     },
     {
       "Zi": 7,
       "Zj": 36,
-      "rrij": 103.34531844
+      "rrij": 35.07730110623648
     },
     {
       "Zi": 8,
       "Zj": 8,
-      "rrij": 67.87573067999999
+      "rrij": 20.180544692351592
     },
     {
       "Zi": 8,
       "Zj": 9,
-      "rrij": 54.260914500000005
+      "rrij": 18.58263558720886
     },
     {
       "Zi": 8,
       "Zj": 10,
-      "rrij": 44.28775128
+      "rrij": 17.236335669104673
     },
     {
       "Zi": 8,
       "Zj": 11,
-      "rrij": 373.22947296
+      "rrij": 51.24355669743529
     },
     {
       "Zi": 8,
       "Zj": 12,
-      "rrij": 245.87436191999998
+      "rrij": 42.506472243755965
     },
     {
       "Zi": 8,
       "Zj": 13,
-      "rrij": 252.8751258
+      "rrij": 43.97866302463782
     },
     {
       "Zi": 8,
       "Zj": 14,
-      "rrij": 181.85718516
+      "rrij": 37.99271848908364
     },
     {
       "Zi": 8,
       "Zj": 15,
-      "rrij": 136.07823978
+      "rrij": 33.436459482076486
     },
     {
       "Zi": 8,
       "Zj": 16,
-      "rrij": 116.51577096000001
+      "rrij": 31.44310896097801
     },
     {
       "Zi": 8,
       "Zj": 17,
-      "rrij": 96.26835174
+      "rrij": 29.01730848972696
     },
     {
       "Zi": 8,
       "Zj": 18,
-      "rrij": 79.91658792
+      "rrij": 26.818823450703427
     },
     {
       "Zi": 8,
       "Zj": 19,
-      "rrij": 416.69528376
+      "rrij": 62.07272640437113
     },
     {
       "Zi": 8,
       "Zj": 20,
-      "rrij": 319.54933932
+      "rrij": 55.0591610103133
     },
     {
       "Zi": 8,
       "Zj": 21,
-      "rrij": 271.97953404
+      "rrij": 51.41928872592999
     },
     {
       "Zi": 8,
       "Zj": 22,
-      "rrij": 240.5745582
+      "rrij": 48.925316871378094
     },
     {
       "Zi": 8,
       "Zj": 23,
-      "rrij": 219.78774054000002
+      "rrij": 47.286461845666764
     },
     {
       "Zi": 8,
       "Zj": 24,
-      "rrij": 179.21299122
+      "rrij": 43.15595019248922
     },
     {
       "Zi": 8,
       "Zj": 25,
-      "rrij": 192.33978023999998
+      "rrij": 45.16715004839817
     },
     {
       "Zi": 8,
       "Zj": 26,
-      "rrij": 174.53249682
+      "rrij": 43.449483305993375
     },
     {
       "Zi": 8,
       "Zj": 27,
-      "rrij": 160.97618682
+      "rrij": 42.12354250316234
     },
     {
       "Zi": 8,
       "Zj": 28,
-      "rrij": 150.64485162
+      "rrij": 41.12157907389151
     },
     {
       "Zi": 8,
       "Zj": 29,
-      "rrij": 144.73572744
+      "rrij": 40.662165347443086
     },
     {
       "Zi": 8,
       "Zj": 30,
-      "rrij": 135.43039086000002
+      "rrij": 39.668109926153825
     },
     {
       "Zi": 8,
       "Zj": 31,
-      "rrij": 192.08006988
+      "rrij": 47.63045217099863
     },
     {
       "Zi": 8,
       "Zj": 32,
-      "rrij": 154.89011712
+      "rrij": 43.112427505766824
     },
     {
       "Zi": 8,
       "Zj": 33,
-      "rrij": 127.55203427999999
+      "rrij": 39.42532736224575
     },
     {
       "Zi": 8,
       "Zj": 34,
-      "rrij": 116.084823
+      "rrij": 37.893138696608275
     },
     {
       "Zi": 8,
       "Zj": 35,
-      "rrij": 101.67375197999999
+      "rrij": 35.72107865730103
     },
     {
       "Zi": 8,
       "Zj": 36,
-      "rrij": 88.43137758
+      "rrij": 33.549183024579726
     },
     {
       "Zi": 9,
       "Zj": 9,
-      "rrij": 43.377018750000005
+      "rrij": 17.11125
     },
     {
       "Zi": 9,
       "Zj": 10,
-      "rrij": 35.404317000000006
+      "rrij": 15.871551015130628
     },
     {
       "Zi": 9,
       "Zj": 11,
-      "rrij": 298.365444
+      "rrij": 47.186057404179685
     },
     {
       "Zi": 9,
       "Zj": 12,
-      "rrij": 196.555788
+      "rrij": 39.14078117539067
     },
     {
       "Zi": 9,
       "Zj": 13,
-      "rrij": 202.1523075
+      "rrij": 40.49640289983026
     },
     {
       "Zi": 9,
       "Zj": 14,
-      "rrij": 145.3794615
+      "rrij": 34.98442947962792
     },
     {
       "Zi": 9,
       "Zj": 15,
-      "rrij": 108.78306075
+      "rrij": 30.78893812600549
     },
     {
       "Zi": 9,
       "Zj": 16,
-      "rrij": 93.14451900000002
+      "rrij": 28.953422440188312
     },
     {
       "Zi": 9,
       "Zj": 17,
-      "rrij": 76.95841725
+      "rrij": 26.719698482201085
     },
     {
       "Zi": 9,
       "Zj": 18,
-      "rrij": 63.886563
+      "rrij": 24.695290967591806
     },
     {
       "Zi": 9,
       "Zj": 19,
-      "rrij": 333.11268900000005
+      "rrij": 57.15776616842815
     },
     {
       "Zi": 9,
       "Zj": 20,
-      "rrij": 255.45271050000002
+      "rrij": 50.69953960062738
     },
     {
       "Zi": 9,
       "Zj": 21,
-      "rrij": 217.4246685
+      "rrij": 47.34787485243497
     },
     {
       "Zi": 9,
       "Zj": 22,
-      "rrij": 192.31904250000002
+      "rrij": 45.051377367138755
     },
     {
       "Zi": 9,
       "Zj": 23,
-      "rrij": 175.70173725
+      "rrij": 43.54228798489817
     },
     {
       "Zi": 9,
       "Zj": 24,
-      "rrij": 143.26565175
+      "rrij": 39.738833023208834
     },
     {
       "Zi": 9,
       "Zj": 25,
-      "rrij": 153.759411
+      "rrij": 41.5907847214981
     },
     {
       "Zi": 9,
       "Zj": 26,
-      "rrij": 139.52399175000002
+      "rrij": 40.009123987312186
     },
     {
       "Zi": 9,
       "Zj": 27,
-      "rrij": 128.68686675
+      "rrij": 38.78817206927211
     },
     {
       "Zi": 9,
       "Zj": 28,
-      "rrij": 120.42783675000001
+      "rrij": 37.865544778398906
     },
     {
       "Zi": 9,
       "Zj": 29,
-      "rrij": 115.703991
+      "rrij": 37.44250773987991
     },
     {
       "Zi": 9,
       "Zj": 30,
-      "rrij": 108.26516025000001
+      "rrij": 36.5271622955962
     },
     {
       "Zi": 9,
       "Zj": 31,
-      "rrij": 153.5517945
+      "rrij": 43.85904092485177
     },
     {
       "Zi": 9,
       "Zj": 32,
-      "rrij": 123.82156800000001
+      "rrij": 39.69875649210088
     },
     {
       "Zi": 9,
       "Zj": 33,
-      "rrij": 101.9670795
+      "rrij": 36.303603418429624
     },
     {
       "Zi": 9,
       "Zj": 34,
-      "rrij": 92.80001250000001
+      "rrij": 34.892734482112765
     },
     {
       "Zi": 9,
       "Zj": 35,
-      "rrij": 81.27957825
+      "rrij": 32.892659617964895
     },
     {
       "Zi": 9,
       "Zj": 36,
-      "rrij": 70.69341825000001
+      "rrij": 30.892736142578887
     },
     {
       "Zi": 10,
       "Zj": 10,
-      "rrij": 28.89699888
+      "rrij": 14.721667419147874
     },
     {
       "Zi": 10,
       "Zj": 11,
-      "rrij": 243.52583616
+      "rrij": 43.76745809296926
     },
     {
       "Zi": 10,
       "Zj": 12,
-      "rrij": 160.42880832
+      "rrij": 36.30505691853474
     },
     {
       "Zi": 10,
       "Zj": 13,
-      "rrij": 164.99668680000002
+      "rrij": 37.56246472665293
     },
     {
       "Zi": 10,
       "Zj": 14,
-      "rrij": 118.65869736
+      "rrij": 32.4498302123547
     },
     {
       "Zi": 10,
       "Zj": 15,
-      "rrij": 88.78871988
+      "rrij": 28.558299491188343
     },
     {
       "Zi": 10,
       "Zj": 16,
-      "rrij": 76.02454416
+      "rrij": 26.855765728516428
     },
     {
       "Zi": 10,
       "Zj": 17,
-      "rrij": 62.81345004
+      "rrij": 24.78387362519763
     },
     {
       "Zi": 10,
       "Zj": 18,
-      "rrij": 52.14420432
+      "rrij": 22.906133124443155
     },
     {
       "Zi": 10,
       "Zj": 19,
-      "rrij": 271.88653296
+      "rrij": 53.01672301281992
     },
     {
       "Zi": 10,
       "Zj": 20,
-      "rrij": 208.50046872000001
+      "rrij": 47.02639077887314
     },
     {
       "Zi": 10,
       "Zj": 21,
-      "rrij": 177.46198584
+      "rrij": 43.917551971857236
     },
     {
       "Zi": 10,
       "Zj": 22,
-      "rrij": 156.97077720000001
+      "rrij": 41.78743424264411
     },
     {
       "Zi": 10,
       "Zj": 23,
-      "rrij": 143.40773484000002
+      "rrij": 40.387677409179375
     },
     {
       "Zi": 10,
       "Zj": 24,
-      "rrij": 116.93340612
+      "rrij": 36.859780297150515
     },
     {
       "Zi": 10,
       "Zj": 25,
-      "rrij": 125.49841104000001
+      "rrij": 38.577559293831406
     },
     {
       "Zi": 10,
       "Zj": 26,
-      "rrij": 113.87946372
+      "rrij": 37.11048885588791
     },
     {
       "Zi": 10,
       "Zj": 27,
-      "rrij": 105.03420372000001
+      "rrij": 35.9779941138793
     },
     {
       "Zi": 10,
       "Zj": 28,
-      "rrij": 98.29318452000001
+      "rrij": 35.12221057293134
     },
     {
       "Zi": 10,
       "Zj": 29,
-      "rrij": 94.43758224
+      "rrij": 34.729822293983624
     },
     {
       "Zi": 10,
       "Zj": 30,
-      "rrij": 88.36600956000001
+      "rrij": 33.88079303455394
     },
     {
       "Zi": 10,
       "Zj": 31,
-      "rrij": 125.32895448000001
+      "rrij": 40.68148180369563
     },
     {
       "Zi": 10,
       "Zj": 32,
-      "rrij": 101.06314752
+      "rrij": 36.82260728477623
     },
     {
       "Zi": 10,
       "Zj": 33,
-      "rrij": 83.22551688
+      "rrij": 33.67343085330858
     },
     {
       "Zi": 10,
       "Zj": 34,
-      "rrij": 75.743358
+      "rrij": 32.364778458047205
     },
     {
       "Zi": 10,
       "Zj": 35,
-      "rrij": 66.34038108
+      "rrij": 30.5096077229809
     },
     {
       "Zi": 10,
       "Zj": 36,
-      "rrij": 57.69995868
+      "rrij": 28.654577408658664
     },
     {
       "Zi": 11,
       "Zj": 11,
-      "rrij": 2052.28346112
+      "rrij": 130.12047707505533
     },
     {
       "Zi": 11,
       "Zj": 12,
-      "rrij": 1351.9936742399998
+      "rrij": 107.93478836358652
     },
     {
       "Zi": 11,
       "Zj": 13,
-      "rrij": 1390.4888976
+      "rrij": 111.6730567254981
     },
     {
       "Zi": 11,
       "Zj": 14,
-      "rrij": 999.9812995199999
+      "rrij": 96.4732148544495
     },
     {
       "Zi": 11,
       "Zj": 15,
-      "rrij": 748.2558081599999
+      "rrij": 84.9037096546092
     },
     {
       "Zi": 11,
       "Zj": 16,
-      "rrij": 640.68731712
+      "rrij": 79.84208361809863
     },
     {
       "Zi": 11,
       "Zj": 17,
-      "rrij": 529.3524772799999
+      "rrij": 73.68235671873845
     },
     {
       "Zi": 11,
       "Zj": 18,
-      "rrij": 439.43874623999994
+      "rrij": 68.09984175379981
     },
     {
       "Zi": 11,
       "Zj": 19,
-      "rrij": 2291.2896787199998
+      "rrij": 157.61850452293842
     },
     {
       "Zi": 11,
       "Zj": 20,
-      "rrij": 1757.11156704
+      "rrij": 139.80927085751685
     },
     {
       "Zi": 11,
       "Zj": 21,
-      "rrij": 1495.5386428799998
+      "rrij": 130.56670557398857
     },
     {
       "Zi": 11,
       "Zj": 22,
-      "rrij": 1322.8515504
+      "rrij": 124.23387412276547
     },
     {
       "Zi": 11,
       "Zj": 23,
-      "rrij": 1208.55071088
+      "rrij": 120.07240268038444
     },
     {
       "Zi": 11,
       "Zj": 24,
-      "rrij": 985.4416238399999
+      "rrij": 109.58397873961538
     },
     {
       "Zi": 11,
       "Zj": 25,
-      "rrij": 1057.6221292799999
+      "rrij": 114.69092879558704
     },
     {
       "Zi": 11,
       "Zj": 26,
-      "rrij": 959.70490704
+      "rrij": 110.3293342775224
     },
     {
       "Zi": 11,
       "Zj": 27,
-      "rrij": 885.1625870400001
+      "rrij": 106.96243195931757
     },
     {
       "Zi": 11,
       "Zj": 28,
-      "rrij": 828.35349264
+      "rrij": 104.41819093018144
     },
     {
       "Zi": 11,
       "Zj": 29,
-      "rrij": 795.8608876799999
+      "rrij": 103.25162215328601
     },
     {
       "Zi": 11,
       "Zj": 30,
-      "rrij": 744.69346992
+      "rrij": 100.72746157596845
     },
     {
       "Zi": 11,
       "Zj": 31,
-      "rrij": 1056.19405536
+      "rrij": 120.94588196492494
     },
     {
       "Zi": 11,
       "Zj": 32,
-      "rrij": 851.6970086399999
+      "rrij": 109.47346352316886
     },
     {
       "Zi": 11,
       "Zj": 33,
-      "rrij": 701.3726121599999
+      "rrij": 100.11097464420158
     },
     {
       "Zi": 11,
       "Zj": 34,
-      "rrij": 638.3176559999999
+      "rrij": 96.22035633058793
     },
     {
       "Zi": 11,
       "Zj": 35,
-      "rrij": 559.07524656
+      "rrij": 90.70494118836639
     },
     {
       "Zi": 11,
       "Zj": 36,
-      "rrij": 486.25916975999996
+      "rrij": 85.18994351645286
     },
     {
       "Zi": 12,
       "Zj": 12,
-      "rrij": 890.6600524799999
+      "rrij": 89.53178470420436
     },
     {
       "Zi": 12,
       "Zj": 13,
-      "rrij": 916.0197552
+      "rrij": 92.63267407657024
     },
     {
       "Zi": 12,
       "Zj": 14,
-      "rrij": 658.7629910399999
+      "rrij": 80.02442245937631
     },
     {
       "Zi": 12,
       "Zj": 15,
-      "rrij": 492.9324523199999
+      "rrij": 70.42753099934977
     },
     {
       "Zi": 12,
       "Zj": 16,
-      "rrij": 422.06898623999996
+      "rrij": 66.22891793469539
     },
     {
       "Zi": 12,
       "Zj": 17,
-      "rrij": 348.72434255999997
+      "rrij": 61.11943144798018
     },
     {
       "Zi": 12,
       "Zj": 18,
-      "rrij": 289.49139647999993
+      "rrij": 56.48874160713639
     },
     {
       "Zi": 12,
       "Zj": 19,
-      "rrij": 1509.4450694399998
+      "rrij": 130.74437098824424
     },
     {
       "Zi": 12,
       "Zj": 20,
-      "rrij": 1157.5417180799998
+      "rrij": 115.97163183292923
     },
     {
       "Zi": 12,
       "Zj": 21,
-      "rrij": 985.2239337599999
+      "rrij": 108.30493439806793
     },
     {
       "Zi": 12,
       "Zj": 22,
-      "rrij": 871.4619408
+      "rrij": 103.05185788163494
     },
     {
       "Zi": 12,
       "Zj": 23,
-      "rrij": 796.1633697599999
+      "rrij": 99.59992203332554
     },
     {
       "Zi": 12,
       "Zj": 24,
-      "rrij": 649.1846116799999
+      "rrij": 90.89978625330151
     },
     {
       "Zi": 12,
       "Zj": 25,
-      "rrij": 696.7353465599999
+      "rrij": 95.13599554076639
     },
     {
       "Zi": 12,
       "Zj": 26,
-      "rrij": 632.22989808
+      "rrij": 91.51805782783025
     },
     {
       "Zi": 12,
       "Zj": 27,
-      "rrij": 583.12325808
+      "rrij": 88.72521616812213
     },
     {
       "Zi": 12,
       "Zj": 28,
-      "rrij": 545.6988292799999
+      "rrij": 86.6147711159774
     },
     {
       "Zi": 12,
       "Zj": 29,
-      "rrij": 524.2935033599999
+      "rrij": 85.64710363676008
     },
     {
       "Zi": 12,
       "Zj": 30,
-      "rrij": 490.58567184
+      "rrij": 83.5533152966564
     },
     {
       "Zi": 12,
       "Zj": 31,
-      "rrij": 695.7945667199999
+      "rrij": 100.32447211057797
     },
     {
       "Zi": 12,
       "Zj": 32,
-      "rrij": 561.07696128
+      "rrij": 90.80811400642503
     },
     {
       "Zi": 12,
       "Zj": 33,
-      "rrij": 462.0469603199999
+      "rrij": 83.04194008496859
     },
     {
       "Zi": 12,
       "Zj": 34,
-      "rrij": 420.5079119999999
+      "rrij": 79.81467660021238
     },
     {
       "Zi": 12,
       "Zj": 35,
-      "rrij": 368.30496911999995
+      "rrij": 75.23964598631738
     },
     {
       "Zi": 12,
       "Zj": 36,
-      "rrij": 320.33553551999995
+      "rrij": 70.66496166357004
     },
     {
       "Zi": 13,
       "Zj": 13,
-      "rrij": 942.1015229999999
+      "rrij": 95.84096122874602
     },
     {
       "Zi": 13,
       "Zj": 14,
-      "rrij": 677.5199045999999
+      "rrij": 82.79602901177361
     },
     {
       "Zi": 13,
       "Zj": 15,
-      "rrij": 506.9676842999999
+      "rrij": 72.8667539313997
     },
     {
       "Zi": 13,
       "Zj": 16,
-      "rrij": 434.0865276
+      "rrij": 68.52272396621242
     },
     {
       "Zi": 13,
       "Zj": 17,
-      "rrij": 358.6535469
+      "rrij": 63.23627292554303
     },
     {
       "Zi": 13,
       "Zj": 18,
-      "rrij": 297.7340652
+      "rrij": 58.44520141732116
     },
     {
       "Zi": 13,
       "Zj": 19,
-      "rrij": 1552.4233955999998
+      "rrij": 135.2726380370197
     },
     {
       "Zi": 13,
       "Zj": 20,
-      "rrij": 1190.5003242
+      "rrij": 119.98825231955034
     },
     {
       "Zi": 13,
       "Zj": 21,
-      "rrij": 1013.2761473999999
+      "rrij": 112.0560225860149
     },
     {
       "Zi": 13,
       "Zj": 22,
-      "rrij": 896.275017
+      "rrij": 106.62100834550047
     },
     {
       "Zi": 13,
       "Zj": 23,
-      "rrij": 818.8324749
+      "rrij": 103.04951639517125
     },
     {
       "Zi": 13,
       "Zj": 24,
-      "rrij": 667.6688006999999
+      "rrij": 94.04805568716164
     },
     {
       "Zi": 13,
       "Zj": 25,
-      "rrij": 716.5734444
+      "rrij": 98.43098400186378
     },
     {
       "Zi": 13,
       "Zj": 26,
-      "rrij": 650.2313366999999
+      "rrij": 94.68774079389043
     },
     {
       "Zi": 13,
       "Zj": 27,
-      "rrij": 599.7264867
+      "rrij": 91.79817043554304
     },
     {
       "Zi": 13,
       "Zj": 28,
-      "rrij": 561.2364747
+      "rrij": 89.61463115597083
     },
     {
       "Zi": 13,
       "Zj": 29,
-      "rrij": 539.2216764
+      "rrij": 88.61344898906798
     },
     {
       "Zi": 13,
       "Zj": 30,
-      "rrij": 504.5540841
+      "rrij": 86.44714331857418
     },
     {
       "Zi": 13,
       "Zj": 31,
-      "rrij": 715.6058777999999
+      "rrij": 103.79916090834632
     },
     {
       "Zi": 13,
       "Zj": 32,
-      "rrij": 577.0524671999999
+      "rrij": 93.95320841705716
     },
     {
       "Zi": 13,
       "Zj": 33,
-      "rrij": 475.20279179999994
+      "rrij": 85.91805687769047
     },
     {
       "Zi": 13,
       "Zj": 34,
-      "rrij": 432.481005
+      "rrij": 82.5790187078348
     },
     {
       "Zi": 13,
       "Zj": 35,
-      "rrij": 378.79169129999997
+      "rrij": 77.8455341565393
     },
     {
       "Zi": 13,
       "Zj": 36,
-      "rrij": 329.4564273
+      "rrij": 73.1124078900152
     },
     {
       "Zi": 14,
       "Zj": 14,
-      "rrij": 487.24390091999993
+      "rrij": 71.5266451027867
     },
     {
       "Zi": 14,
       "Zj": 15,
-      "rrij": 364.58989685999995
+      "rrij": 62.948845620388134
     },
     {
       "Zi": 14,
       "Zj": 16,
-      "rrij": 312.17682552
+      "rrij": 59.1960824342257
     },
     {
       "Zi": 14,
       "Zj": 17,
-      "rrij": 257.92858937999995
+      "rrij": 54.629171291839285
     },
     {
       "Zi": 14,
       "Zj": 18,
-      "rrij": 214.11785303999997
+      "rrij": 50.49021347561445
     },
     {
       "Zi": 14,
       "Zj": 19,
-      "rrij": 1116.43779912
+      "rrij": 116.86065247906711
     },
     {
       "Zi": 14,
       "Zj": 20,
-      "rrij": 856.1579048399999
+      "rrij": 103.65662752912569
     },
     {
       "Zi": 14,
       "Zj": 21,
-      "rrij": 728.7057094799999
+      "rrij": 96.8040551558337
     },
     {
       "Zi": 14,
       "Zj": 22,
-      "rrij": 644.5634034000001
+      "rrij": 92.10880178016048
     },
     {
       "Zi": 14,
       "Zj": 23,
-      "rrij": 588.8699749799999
+      "rrij": 89.02342630662984
     },
     {
       "Zi": 14,
       "Zj": 24,
-      "rrij": 480.15940013999995
+      "rrij": 81.24715619859208
     },
     {
       "Zi": 14,
       "Zj": 25,
-      "rrij": 515.32956888
+      "rrij": 85.03352327221195
     },
     {
       "Zi": 14,
       "Zj": 26,
-      "rrij": 467.61910733999997
+      "rrij": 81.79977363873552
     },
     {
       "Zi": 14,
       "Zj": 27,
-      "rrij": 431.29813734
+      "rrij": 79.30350327422738
     },
     {
       "Zi": 14,
       "Zj": 28,
-      "rrij": 403.61773494
+      "rrij": 77.41716595851207
     },
     {
       "Zi": 14,
       "Zj": 29,
-      "rrij": 387.78561527999994
+      "rrij": 76.55225489466001
     },
     {
       "Zi": 14,
       "Zj": 30,
-      "rrij": 362.85413682
+      "rrij": 74.68080551807782
     },
     {
       "Zi": 14,
       "Zj": 31,
-      "rrij": 514.63373556
+      "rrij": 89.67103655662746
     },
     {
       "Zi": 14,
       "Zj": 32,
-      "rrij": 414.99193343999997
+      "rrij": 81.16521860920881
     },
     {
       "Zi": 14,
       "Zj": 33,
-      "rrij": 341.74591835999996
+      "rrij": 74.22373313746397
     },
     {
       "Zi": 14,
       "Zj": 34,
-      "rrij": 311.022201
+      "rrij": 71.3391721143023
     },
     {
       "Zi": 14,
       "Zj": 35,
-      "rrij": 272.41109825999996
+      "rrij": 67.24996308288979
     },
     {
       "Zi": 14,
       "Zj": 36,
-      "rrij": 236.93124545999999
+      "rrij": 63.16106357003747
     },
     {
       "Zi": 15,
       "Zj": 15,
-      "rrij": 272.81160962999996
+      "rrij": 55.39973473165283
     },
     {
       "Zi": 15,
       "Zj": 16,
-      "rrij": 233.59249116
+      "rrij": 52.097019916549456
     },
     {
       "Zi": 15,
       "Zj": 17,
-      "rrij": 193.00017429
+      "rrij": 48.077793458339514
     },
     {
       "Zi": 15,
       "Zj": 18,
-      "rrij": 160.21792331999998
+      "rrij": 44.4351982236766
     },
     {
       "Zi": 15,
       "Zj": 19,
-      "rrij": 835.39668996
+      "rrij": 102.84619335118265
     },
     {
       "Zi": 15,
       "Zj": 20,
-      "rrij": 640.63710522
+      "rrij": 91.22565492180183
     },
     {
       "Zi": 15,
       "Zj": 21,
-      "rrij": 545.26847634
+      "rrij": 85.19487408748464
     },
     {
       "Zi": 15,
       "Zj": 22,
-      "rrij": 482.3073297
+      "rrij": 81.06269677832766
     },
     {
       "Zi": 15,
       "Zj": 23,
-      "rrij": 440.63361909
+      "rrij": 78.34733351635572
     },
     {
       "Zi": 15,
       "Zj": 24,
-      "rrij": 359.28877887
+      "rrij": 71.50362896639582
     },
     {
       "Zi": 15,
       "Zj": 25,
-      "rrij": 385.60555404
+      "rrij": 74.83591773845976
     },
     {
       "Zi": 15,
       "Zj": 26,
-      "rrij": 349.90525647
+      "rrij": 71.98997401832344
     },
     {
       "Zi": 15,
       "Zj": 27,
-      "rrij": 322.72737147000004
+      "rrij": 69.79306771052221
     },
     {
       "Zi": 15,
       "Zj": 28,
-      "rrij": 302.01496227
+      "rrij": 68.13294851572002
     },
     {
       "Zi": 15,
       "Zj": 29,
-      "rrij": 290.16826524
+      "rrij": 67.37176150694098
     },
     {
       "Zi": 15,
       "Zj": 30,
-      "rrij": 271.51279281
+      "rrij": 65.72474482213
     },
     {
       "Zi": 15,
       "Zj": 31,
-      "rrij": 385.08488298
+      "rrij": 78.9172794098154
     },
     {
       "Zi": 15,
       "Zj": 32,
-      "rrij": 310.52593152
+      "rrij": 71.43151770412172
     },
     {
       "Zi": 15,
       "Zj": 33,
-      "rrij": 255.71815037999997
+      "rrij": 65.32248663312564
     },
     {
       "Zi": 15,
       "Zj": 34,
-      "rrij": 232.7285205
+      "rrij": 62.78385524242285
     },
     {
       "Zi": 15,
       "Zj": 35,
-      "rrij": 203.83699833
+      "rrij": 59.18504269280622
     },
     {
       "Zi": 15,
       "Zj": 36,
-      "rrij": 177.28849592999998
+      "rrij": 55.586502542881135
     },
     {
       "Zi": 16,
       "Zj": 16,
-      "rrij": 200.01147312000003
+      "rrij": 48.99120000000001
     },
     {
       "Zi": 16,
       "Zj": 17,
-      "rrij": 165.25466628
+      "rrij": 45.21158405315956
     },
     {
       "Zi": 16,
       "Zj": 18,
-      "rrij": 137.18515824000002
+      "rrij": 41.78614605409028
     },
     {
       "Zi": 16,
       "Zj": 19,
-      "rrij": 715.30091472
+      "rrij": 96.71490683684733
     },
     {
       "Zi": 16,
       "Zj": 20,
-      "rrij": 548.53976904
+      "rrij": 85.7871393136107
     },
     {
       "Zi": 16,
       "Zj": 21,
-      "rrij": 466.88123688
+      "rrij": 80.11588996991561
     },
     {
       "Zi": 16,
       "Zj": 22,
-      "rrij": 412.9713204000001
+      "rrij": 76.23005685868111
     },
     {
       "Zi": 16,
       "Zj": 23,
-      "rrij": 377.28857988000004
+      "rrij": 73.67657290023186
     },
     {
       "Zi": 16,
       "Zj": 24,
-      "rrij": 307.63779084000004
+      "rrij": 67.24086316318628
     },
     {
       "Zi": 16,
       "Zj": 25,
-      "rrij": 330.17129328000004
+      "rrij": 70.37449395342037
     },
     {
       "Zi": 16,
       "Zj": 26,
-      "rrij": 299.60323404
+      "rrij": 67.69821423136949
     },
     {
       "Zi": 16,
       "Zj": 27,
-      "rrij": 276.33241404000006
+      "rrij": 65.63227885773094
     },
     {
       "Zi": 16,
       "Zj": 28,
-      "rrij": 258.59759964000006
+      "rrij": 64.07112945558333
     },
     {
       "Zi": 16,
       "Zj": 29,
-      "rrij": 248.45397168000002
+      "rrij": 63.355321429630415
     },
     {
       "Zi": 16,
       "Zj": 30,
-      "rrij": 232.48039092000005
+      "rrij": 61.80649341723811
     },
     {
       "Zi": 16,
       "Zj": 31,
-      "rrij": 329.72547336
+      "rrij": 74.21254085579609
     },
     {
       "Zi": 16,
       "Zj": 32,
-      "rrij": 265.88504064000006
+      "rrij": 67.17305089142904
     },
     {
       "Zi": 16,
       "Zj": 33,
-      "rrij": 218.95637016
+      "rrij": 61.428216283138724
     },
     {
       "Zi": 16,
       "Zj": 34,
-      "rrij": 199.27170600000002
+      "rrij": 59.04092813522894
     },
     {
       "Zi": 16,
       "Zj": 35,
-      "rrij": 174.53359956000003
+      "rrij": 55.65666266931175
     },
     {
       "Zi": 16,
       "Zj": 36,
-      "rrij": 151.80168276
+      "rrij": 52.2726533636853
     },
     {
       "Zi": 17,
       "Zj": 17,
-      "rrij": 136.53769107
+      "rrij": 41.72356122315663
     },
     {
       "Zi": 17,
       "Zj": 18,
-      "rrij": 113.34593556
+      "rrij": 38.56239191083509
     },
     {
       "Zi": 17,
       "Zj": 19,
-      "rrij": 591.00016668
+      "rrij": 89.25346061430662
     },
     {
       "Zi": 17,
       "Zj": 20,
-      "rrij": 453.21778326000003
+      "rrij": 79.16875805772094
     },
     {
       "Zi": 17,
       "Zj": 21,
-      "rrij": 385.74938622
+      "rrij": 73.93503921864583
     },
     {
       "Zi": 17,
       "Zj": 22,
-      "rrij": 341.20761510000006
+      "rrij": 70.34899375894838
     },
     {
       "Zi": 17,
       "Zj": 23,
-      "rrij": 311.72560947
+      "rrij": 67.99250821428276
     },
     {
       "Zi": 17,
       "Zj": 24,
-      "rrij": 254.17832121
+      "rrij": 62.053306240904405
     },
     {
       "Zi": 17,
       "Zj": 25,
-      "rrij": 272.79608532000003
+      "rrij": 64.94518094216173
     },
     {
       "Zi": 17,
       "Zj": 26,
-      "rrij": 247.53996201
+      "rrij": 62.47537318886583
     },
     {
       "Zi": 17,
       "Zj": 27,
-      "rrij": 228.31300701000004
+      "rrij": 60.56882240436463
     },
     {
       "Zi": 17,
       "Zj": 28,
-      "rrij": 213.66004341000001
+      "rrij": 59.12811392172415
     },
     {
       "Zi": 17,
       "Zj": 29,
-      "rrij": 205.27911491999998
+      "rrij": 58.4675296794256
     },
     {
       "Zi": 17,
       "Zj": 30,
-      "rrij": 192.08132823000003
+      "rrij": 57.03819200518691
     },
     {
       "Zi": 17,
       "Zj": 31,
-      "rrij": 272.42773734
+      "rrij": 68.48712684523673
     },
     {
       "Zi": 17,
       "Zj": 32,
-      "rrij": 219.68111616000002
+      "rrij": 61.99072560959943
     },
     {
       "Zi": 17,
       "Zj": 33,
-      "rrij": 180.90743154
+      "rrij": 56.68909852628207
     },
     {
       "Zi": 17,
       "Zj": 34,
-      "rrij": 164.6434515
+      "rrij": 54.48598697240434
     },
     {
       "Zi": 17,
       "Zj": 35,
-      "rrij": 144.20418639
+      "rrij": 51.36281377863648
     },
     {
       "Zi": 17,
       "Zj": 36,
-      "rrij": 125.42248719
+      "rrij": 48.239876982681196
     },
     {
       "Zi": 18,
       "Zj": 18,
-      "rrij": 94.09344047999998
+      "rrij": 35.64072735621426
     },
     {
       "Zi": 18,
       "Zj": 19,
-      "rrij": 490.61520143999996
+      "rrij": 82.49120704722964
     },
     {
       "Zi": 18,
       "Zj": 20,
-      "rrij": 376.23599207999996
+      "rrij": 73.17056803918103
     },
     {
       "Zi": 18,
       "Zj": 21,
-      "rrij": 320.22751175999997
+      "rrij": 68.33337986283904
     },
     {
       "Zi": 18,
       "Zj": 22,
-      "rrij": 283.2514308
+      "rrij": 65.01902973612515
     },
     {
       "Zi": 18,
       "Zj": 23,
-      "rrij": 258.77712276
+      "rrij": 62.84108239793918
     },
     {
       "Zi": 18,
       "Zj": 24,
-      "rrij": 211.00459067999998
+      "rrij": 57.35186174129231
     },
     {
       "Zi": 18,
       "Zj": 25,
-      "rrij": 226.46001455999996
+      "rrij": 60.024634685827586
     },
     {
       "Zi": 18,
       "Zj": 26,
-      "rrij": 205.49379707999998
+      "rrij": 57.74195095186683
     },
     {
       "Zi": 18,
       "Zj": 27,
-      "rrij": 189.53265707999998
+      "rrij": 55.979849242556334
     },
     {
       "Zi": 18,
       "Zj": 28,
-      "rrij": 177.36858827999998
+      "rrij": 54.64829547513697
     },
     {
       "Zi": 18,
       "Zj": 29,
-      "rrij": 170.41121135999998
+      "rrij": 54.03776013982862
     },
     {
       "Zi": 18,
       "Zj": 30,
-      "rrij": 159.45514884
+      "rrij": 52.71671567595569
     },
     {
       "Zi": 18,
       "Zj": 31,
-      "rrij": 226.15423271999995
+      "rrij": 63.298226441594345
     },
     {
       "Zi": 18,
       "Zj": 32,
-      "rrij": 182.36694527999998
+      "rrij": 57.294022507064376
     },
     {
       "Zi": 18,
       "Zj": 33,
-      "rrij": 150.17920631999996
+      "rrij": 52.39407112806955
     },
     {
       "Zi": 18,
       "Zj": 34,
-      "rrij": 136.67776199999997
+      "rrij": 50.357877460191304
     },
     {
       "Zi": 18,
       "Zj": 35,
-      "rrij": 119.71023011999998
+      "rrij": 47.47133026304917
     },
     {
       "Zi": 18,
       "Zj": 36,
-      "rrij": 104.11871651999998
+      "rrij": 44.585001553131725
     },
     {
       "Zi": 19,
       "Zj": 19,
-      "rrij": 2558.13024432
+      "rrij": 190.9276197451799
     },
     {
       "Zi": 19,
       "Zj": 20,
-      "rrij": 1961.74245624
+      "rrij": 169.3548063022645
     },
     {
       "Zi": 19,
       "Zj": 21,
-      "rrij": 1669.70709528
+      "rrij": 158.1590333486728
     },
     {
       "Zi": 19,
       "Zj": 22,
-      "rrij": 1476.9090924000002
+      "rrij": 150.48790083229065
     },
     {
       "Zi": 19,
       "Zj": 23,
-      "rrij": 1349.29692828
+      "rrij": 145.44699627900755
     },
     {
       "Zi": 19,
       "Zj": 24,
-      "rrij": 1100.2048520399999
+      "rrij": 132.74208054623605
     },
     {
       "Zi": 19,
       "Zj": 25,
-      "rrij": 1180.79140368
+      "rrij": 138.92826928908306
     },
     {
       "Zi": 19,
       "Zj": 26,
-      "rrij": 1071.47087124
+      "rrij": 133.64495016263803
     },
     {
       "Zi": 19,
       "Zj": 27,
-      "rrij": 988.24745124
+      "rrij": 129.566528993277
     },
     {
       "Zi": 19,
       "Zj": 28,
-      "rrij": 924.82244484
+      "rrij": 126.4846200180507
     },
     {
       "Zi": 19,
       "Zj": 29,
-      "rrij": 888.54579408
+      "rrij": 125.07152324673048
     },
     {
       "Zi": 19,
       "Zj": 30,
-      "rrij": 831.4194865200001
+      "rrij": 122.01393827382061
     },
     {
       "Zi": 19,
       "Zj": 31,
-      "rrij": 1179.19701816
+      "rrij": 146.5050657055562
     },
     {
       "Zi": 19,
       "Zj": 32,
-      "rrij": 950.88451584
+      "rrij": 132.6082104319013
     },
     {
       "Zi": 19,
       "Zj": 33,
-      "rrij": 783.05353896
+      "rrij": 121.26717073632548
     },
     {
       "Zi": 19,
       "Zj": 34,
-      "rrij": 712.6552859999999
+      "rrij": 116.55435801041135
     },
     {
       "Zi": 19,
       "Zj": 35,
-      "rrij": 624.18441036
+      "rrij": 109.87338429988088
     },
     {
       "Zi": 19,
       "Zj": 36,
-      "rrij": 542.88826956
+      "rrij": 103.19291628259029
     },
     {
       "Zi": 20,
       "Zj": 20,
-      "rrij": 1504.39309068
+      "rrij": 150.2194939420314
     },
     {
       "Zi": 20,
       "Zj": 21,
-      "rrij": 1280.44117596
+      "rrij": 140.28872560955958
     },
     {
       "Zi": 20,
       "Zj": 22,
-      "rrij": 1132.5909918000002
+      "rrij": 133.48435040619825
     },
     {
       "Zi": 20,
       "Zj": 23,
-      "rrij": 1034.72959446
+      "rrij": 129.01301506273748
     },
     {
       "Zi": 20,
       "Zj": 24,
-      "rrij": 843.70941378
+      "rrij": 117.7436212166204
     },
     {
       "Zi": 20,
       "Zj": 25,
-      "rrij": 905.50847976
+      "rrij": 123.23083567879387
     },
     {
       "Zi": 20,
       "Zj": 26,
-      "rrij": 821.67430818
+      "rrij": 118.54447605996906
     },
     {
       "Zi": 20,
       "Zj": 27,
-      "rrij": 757.85311818
+      "rrij": 114.92687359848114
     },
     {
       "Zi": 20,
       "Zj": 28,
-      "rrij": 709.2146533800001
+      "rrij": 112.19318793143486
     },
     {
       "Zi": 20,
       "Zj": 29,
-      "rrij": 681.3953325599999
+      "rrij": 110.93975623667696
     },
     {
       "Zi": 20,
       "Zj": 30,
-      "rrij": 637.58712414
+      "rrij": 108.22764621545026
     },
     {
       "Zi": 20,
       "Zj": 31,
-      "rrij": 904.28580012
+      "rrij": 129.9515337695995
     },
     {
       "Zi": 20,
       "Zj": 32,
-      "rrij": 729.20076288
+      "rrij": 117.62487701757219
     },
     {
       "Zi": 20,
       "Zj": 33,
-      "rrij": 600.4969357199999
+      "rrij": 107.56525555749256
     },
     {
       "Zi": 20,
       "Zj": 34,
-      "rrij": 546.5109269999999
+      "rrij": 103.38494111476676
     },
     {
       "Zi": 20,
       "Zj": 35,
-      "rrij": 478.66564302
+      "rrij": 97.45884718363465
     },
     {
       "Zi": 20,
       "Zj": 36,
-      "rrij": 416.32241741999997
+      "rrij": 91.53320180772364
     },
     {
       "Zi": 21,
       "Zj": 21,
-      "rrij": 1089.82792812
+      "rrij": 131.01446434607897
     },
     {
       "Zi": 21,
       "Zj": 22,
-      "rrij": 963.9875046000001
+      "rrij": 124.65991540706301
     },
     {
       "Zi": 21,
       "Zj": 23,
-      "rrij": 880.69427262
+      "rrij": 120.4841728276801
     },
     {
       "Zi": 21,
       "Zj": 24,
-      "rrij": 718.11036666
+      "rrij": 109.95978042309603
     },
     {
       "Zi": 21,
       "Zj": 25,
-      "rrij": 770.70969672
+      "rrij": 115.08424399199687
     },
     {
       "Zi": 21,
       "Zj": 26,
-      "rrij": 699.35552346
+      "rrij": 110.7076920451055
     },
     {
       "Zi": 21,
       "Zj": 27,
-      "rrij": 645.0350934600001
+      "rrij": 107.3292434445531
     },
     {
       "Zi": 21,
       "Zj": 28,
-      "rrij": 603.6372078600001
+      "rrij": 104.77627732555504
     },
     {
       "Zi": 21,
       "Zj": 29,
-      "rrij": 579.95921832
+      "rrij": 103.60570797745117
     },
     {
       "Zi": 21,
       "Zj": 30,
-      "rrij": 542.67253158
+      "rrij": 101.07289117314458
     },
     {
       "Zi": 21,
       "Zj": 31,
-      "rrij": 769.66903164
+      "rrij": 121.36064757733686
     },
     {
       "Zi": 21,
       "Zj": 32,
-      "rrij": 620.64807936
+      "rrij": 109.84888621142714
     },
     {
       "Zi": 21,
       "Zj": 33,
-      "rrij": 511.10378483999995
+      "rrij": 100.45429009267214
     },
     {
       "Zi": 21,
       "Zj": 34,
-      "rrij": 465.154419
+      "rrij": 96.55032949190254
     },
     {
       "Zi": 21,
       "Zj": 35,
-      "rrij": 407.40894294
+      "rrij": 91.01600006750782
     },
     {
       "Zi": 21,
       "Zj": 36,
-      "rrij": 354.34645974
+      "rrij": 85.48208954507238
     },
     {
       "Zi": 22,
       "Zj": 22,
-      "rrij": 852.6776430000002
+      "rrij": 118.61357894229481
     },
     {
       "Zi": 22,
       "Zj": 23,
-      "rrij": 779.0021271
+      "rrij": 114.64037095105728
     },
     {
       "Zi": 22,
       "Zj": 24,
-      "rrij": 635.1914853000001
+      "rrij": 104.62643948620332
     },
     {
       "Zi": 22,
       "Zj": 25,
-      "rrij": 681.7172676
+      "rrij": 109.50235298319176
     },
     {
       "Zi": 22,
       "Zj": 26,
-      "rrij": 618.6022293000001
+      "rrij": 105.33807541126713
     },
     {
       "Zi": 22,
       "Zj": 27,
-      "rrij": 570.5540793000001
+      "rrij": 102.12349052665871
     },
     {
       "Zi": 22,
       "Zj": 28,
-      "rrij": 533.9363313000001
+      "rrij": 99.69435003427216
     },
     {
       "Zi": 22,
       "Zj": 29,
-      "rrij": 512.9923956
+      "rrij": 98.58055640361418
     },
     {
       "Zi": 22,
       "Zj": 30,
-      "rrij": 480.01113390000006
+      "rrij": 96.1705879307255
     },
     {
       "Zi": 22,
       "Zj": 31,
-      "rrij": 680.7967662000001
+      "rrij": 115.47433435115958
     },
     {
       "Zi": 22,
       "Zj": 32,
-      "rrij": 548.9829888
+      "rrij": 104.52092393786464
     },
     {
       "Zi": 22,
       "Zj": 33,
-      "rrij": 452.0875722
+      "rrij": 95.58199064303435
     },
     {
       "Zi": 22,
       "Zj": 34,
-      "rrij": 411.44389500000005
+      "rrij": 91.86738248374823
     },
     {
       "Zi": 22,
       "Zj": 35,
-      "rrij": 360.3661827
+      "rrij": 86.60148271212111
     },
     {
       "Zi": 22,
       "Zj": 36,
-      "rrij": 313.43072670000004
+      "rrij": 81.33598152459743
     },
     {
       "Zi": 23,
       "Zj": 23,
-      "rrij": 711.69253587
+      "rrij": 110.80025380727926
     },
     {
       "Zi": 23,
       "Zj": 24,
-      "rrij": 580.30783641
+      "rrij": 101.12175975924265
     },
     {
       "Zi": 23,
       "Zj": 25,
-      "rrij": 622.81356372
+      "rrij": 105.83434441442753
     },
     {
       "Zi": 23,
       "Zj": 26,
-      "rrij": 565.15197321
+      "rrij": 101.80955796210357
     },
     {
       "Zi": 23,
       "Zj": 27,
-      "rrij": 521.2554182100001
+      "rrij": 98.70265226959044
     },
     {
       "Zi": 23,
       "Zj": 28,
-      "rrij": 487.8016226100001
+      "rrij": 96.35488087931053
     },
     {
       "Zi": 23,
       "Zj": 29,
-      "rrij": 468.66734532000004
+      "rrij": 95.27839607782187
     },
     {
       "Zi": 23,
       "Zj": 30,
-      "rrij": 438.5358258300001
+      "rrij": 92.94915450045812
     },
     {
       "Zi": 23,
       "Zj": 31,
-      "rrij": 621.9725981400001
+      "rrij": 111.60628187253009
     },
     {
       "Zi": 23,
       "Zj": 32,
-      "rrij": 501.5481753600001
+      "rrij": 101.01977867317714
     },
     {
       "Zi": 23,
       "Zj": 33,
-      "rrij": 413.02499634000003
+      "rrij": 92.38027350046293
     },
     {
       "Zi": 23,
       "Zj": 34,
-      "rrij": 375.89313150000004
+      "rrij": 88.7900938505802
     },
     {
       "Zi": 23,
       "Zj": 35,
-      "rrij": 329.22878319
+      "rrij": 83.70058632038325
     },
     {
       "Zi": 23,
       "Zj": 36,
-      "rrij": 286.34877999
+      "rrij": 78.61146402288799
     },
     {
       "Zi": 24,
       "Zj": 24,
-      "rrij": 473.17790762999994
+      "rrij": 92.28869019191895
     },
     {
       "Zi": 24,
       "Zj": 25,
-      "rrij": 507.83670395999997
+      "rrij": 96.58962666969616
     },
     {
       "Zi": 24,
       "Zj": 26,
-      "rrij": 460.81995003
+      "rrij": 92.9164086514228
     },
     {
       "Zi": 24,
       "Zj": 27,
-      "rrij": 425.02708502999997
+      "rrij": 90.08089374746422
     },
     {
       "Zi": 24,
       "Zj": 28,
-      "rrij": 397.74915423
+      "rrij": 87.93820213494814
     },
     {
       "Zi": 24,
       "Zj": 29,
-      "rrij": 382.14723275999995
+      "rrij": 86.95574917351404
     },
     {
       "Zi": 24,
       "Zj": 30,
-      "rrij": 357.57825669
+      "rrij": 84.82996877939058
     },
     {
       "Zi": 24,
       "Zj": 31,
-      "rrij": 507.15098801999994
+      "rrij": 101.85738060461786
     },
     {
       "Zi": 24,
       "Zj": 32,
-      "rrij": 408.95797247999997
+      "rrij": 92.19561723828619
     },
     {
       "Zi": 24,
       "Zj": 33,
-      "rrij": 336.7769506199999
+      "rrij": 84.31078000647342
     },
     {
       "Zi": 24,
       "Zj": 34,
-      "rrij": 306.49995449999994
+      "rrij": 81.03420552606269
     },
     {
       "Zi": 24,
       "Zj": 35,
-      "rrij": 268.45025517
+      "rrij": 76.38927069895836
     },
     {
       "Zi": 24,
       "Zj": 36,
-      "rrij": 233.48627756999997
+      "rrij": 71.74468745415975
     },
     {
       "Zi": 25,
       "Zj": 25,
-      "rrij": 545.03414832
+      "rrij": 101.09100000000001
     },
     {
       "Zi": 25,
       "Zj": 26,
-      "rrij": 494.57356476
+      "rrij": 97.24659873779106
     },
     {
       "Zi": 25,
       "Zj": 27,
-      "rrij": 456.15898476
+      "rrij": 94.278940128484
     },
     {
       "Zi": 25,
       "Zj": 28,
-      "rrij": 426.88303116000003
+      "rrij": 92.0363925043837
     },
     {
       "Zi": 25,
       "Zj": 29,
-      "rrij": 410.13831791999996
+      "rrij": 91.00815421680892
     },
     {
       "Zi": 25,
       "Zj": 30,
-      "rrij": 383.76974148
+      "rrij": 88.78330592583033
     },
     {
       "Zi": 25,
       "Zj": 31,
-      "rrij": 544.2982058399999
+      "rrij": 106.6042474510562
     },
     {
       "Zi": 25,
       "Zj": 32,
-      "rrij": 438.91286016
+      "rrij": 96.49221623049999
     },
     {
       "Zi": 25,
       "Zj": 33,
-      "rrij": 361.44480503999995
+      "rrij": 88.23992136112494
     },
     {
       "Zi": 25,
       "Zj": 34,
-      "rrij": 328.950114
+      "rrij": 84.81064844414907
     },
     {
       "Zi": 25,
       "Zj": 35,
-      "rrij": 288.11339363999997
+      "rrij": 79.94924538466167
     },
     {
       "Zi": 25,
       "Zj": 36,
-      "rrij": 250.58841443999998
+      "rrij": 75.08821029229556
     },
     {
       "Zi": 26,
       "Zj": 26,
-      "rrij": 448.78474443000005
+      "rrij": 93.548396653203
     },
     {
       "Zi": 26,
       "Zj": 27,
-      "rrij": 413.92667943000004
+      "rrij": 90.69359547436379
     },
     {
       "Zi": 26,
       "Zj": 28,
-      "rrij": 387.36116463
+      "rrij": 88.53632995170332
     },
     {
       "Zi": 26,
       "Zj": 29,
-      "rrij": 372.16671756
+      "rrij": 87.5471946561912
     },
     {
       "Zi": 26,
       "Zj": 30,
-      "rrij": 348.23940789000005
+      "rrij": 85.40695537667813
     },
     {
       "Zi": 26,
       "Zj": 31,
-      "rrij": 493.90575762000003
+      "rrij": 102.5501822676306
     },
     {
       "Zi": 26,
       "Zj": 32,
-      "rrij": 398.27724288
+      "rrij": 92.82270264501886
     },
     {
       "Zi": 26,
       "Zj": 33,
-      "rrij": 327.98136822
+      "rrij": 84.88423524606102
     },
     {
       "Zi": 26,
       "Zj": 34,
-      "rrij": 298.4951145
+      "rrij": 81.58537454313466
     },
     {
       "Zi": 26,
       "Zj": 35,
-      "rrij": 261.43915677
+      "rrij": 76.90884633954938
     },
     {
       "Zi": 26,
       "Zj": 36,
-      "rrij": 227.38833117000001
+      "rrij": 72.2326721096214
     },
     {
       "Zi": 27,
       "Zj": 27,
-      "rrij": 381.77611443
+      "rrij": 87.92591379796687
     },
     {
       "Zi": 27,
       "Zj": 28,
-      "rrij": 357.27399963000005
+      "rrij": 85.8344811957785
     },
     {
       "Zi": 27,
       "Zj": 29,
-      "rrij": 343.25973755999996
+      "rrij": 84.87553118091982
     },
     {
       "Zi": 27,
       "Zj": 30,
-      "rrij": 321.19091289
+      "rrij": 82.80060523479078
     },
     {
       "Zi": 27,
       "Zj": 31,
-      "rrij": 455.54304762
+      "rrij": 99.42067506385553
     },
     {
       "Zi": 27,
       "Zj": 32,
-      "rrij": 367.34220288
+      "rrij": 89.99004735199019
     },
     {
       "Zi": 27,
       "Zj": 33,
-      "rrij": 302.50635822
+      "rrij": 82.293836869233
     },
     {
       "Zi": 27,
       "Zj": 34,
-      "rrij": 275.3103645
+      "rrij": 79.09564696089497
     },
     {
       "Zi": 27,
       "Zj": 35,
-      "rrij": 241.13262177
+      "rrij": 74.56183160655245
     },
     {
       "Zi": 27,
       "Zj": 36,
-      "rrij": 209.72659617
+      "rrij": 70.0283594237108
     },
     {
       "Zi": 28,
       "Zj": 28,
-      "rrij": 334.34441283000007
+      "rrij": 83.79279604733334
     },
     {
       "Zi": 28,
       "Zj": 29,
-      "rrij": 321.22957596000003
+      "rrij": 82.85665590999898
     },
     {
       "Zi": 28,
       "Zj": 30,
-      "rrij": 300.57711249000005
+      "rrij": 80.83108478525777
     },
     {
       "Zi": 28,
       "Zj": 31,
-      "rrij": 426.30662442000005
+      "rrij": 97.0558245644009
     },
     {
       "Zi": 28,
       "Zj": 32,
-      "rrij": 343.76644608000004
+      "rrij": 87.84951663954416
     },
     {
       "Zi": 28,
       "Zj": 33,
-      "rrij": 283.09171902
+      "rrij": 80.33637056660282
     },
     {
       "Zi": 28,
       "Zj": 34,
-      "rrij": 257.6411445
+      "rrij": 77.21425377884283
     },
     {
       "Zi": 28,
       "Zj": 35,
-      "rrij": 225.65690457000002
+      "rrij": 72.78828113929042
     },
     {
       "Zi": 28,
       "Zj": 36,
-      "rrij": 196.26649497000002
+      "rrij": 68.3626435084569
     },
     {
       "Zi": 29,
       "Zj": 29,
-      "rrij": 308.62917551999993
+      "rrij": 81.93097440870577
     },
     {
       "Zi": 29,
       "Zj": 30,
-      "rrij": 288.78681587999995
+      "rrij": 79.92803313426606
     },
     {
       "Zi": 29,
       "Zj": 31,
-      "rrij": 409.5845210399999
+      "rrij": 95.97150876133958
     },
     {
       "Zi": 29,
       "Zj": 32,
-      "rrij": 330.28202495999994
+      "rrij": 86.8680544798945
     },
     {
       "Zi": 29,
       "Zj": 33,
-      "rrij": 271.9872962399999
+      "rrij": 79.4388459043075
     },
     {
       "Zi": 29,
       "Zj": 34,
-      "rrij": 247.53503399999997
+      "rrij": 76.35160966686136
     },
     {
       "Zi": 29,
       "Zj": 35,
-      "rrij": 216.80539283999997
+      "rrij": 71.97508436443192
     },
     {
       "Zi": 29,
       "Zj": 36,
-      "rrij": 188.56783763999996
+      "rrij": 67.5988903279759
     },
     {
       "Zi": 30,
       "Zj": 30,
-      "rrij": 270.22015947
+      "rrij": 77.9740571477142
     },
     {
       "Zi": 30,
       "Zj": 31,
-      "rrij": 383.25154926
+      "rrij": 93.62532287186829
     },
     {
       "Zi": 30,
       "Zj": 32,
-      "rrij": 309.04756224
+      "rrij": 84.74441793091225
     },
     {
       "Zi": 30,
       "Zj": 33,
-      "rrij": 254.50071305999998
+      "rrij": 77.49682892716429
     },
     {
       "Zi": 30,
       "Zj": 34,
-      "rrij": 231.6205335
+      "rrij": 74.4850654023101
     },
     {
       "Zi": 30,
       "Zj": 35,
-      "rrij": 202.86655971
+      "rrij": 70.21553166479404
     },
     {
       "Zi": 30,
       "Zj": 36,
-      "rrij": 176.44445091
+      "rrij": 65.94632109489427
     },
     {
       "Zi": 31,
       "Zj": 31,
-      "rrij": 543.56325708
+      "rrij": 112.41817347346468
     },
     {
       "Zi": 31,
       "Zj": 32,
-      "rrij": 438.32020991999997
+      "rrij": 101.75465764644765
     },
     {
       "Zi": 31,
       "Zj": 33,
-      "rrij": 360.95675747999996
+      "rrij": 93.05230348738365
     },
     {
       "Zi": 31,
       "Zj": 34,
-      "rrij": 328.505943
+      "rrij": 89.43600669915817
     },
     {
       "Zi": 31,
       "Zj": 35,
-      "rrij": 287.72436317999995
+      "rrij": 84.30947501272797
     },
     {
       "Zi": 31,
       "Zj": 36,
-      "rrij": 250.25005277999998
+      "rrij": 79.18333136141514
     },
     {
       "Zi": 32,
       "Zj": 32,
-      "rrij": 353.45399808
+      "rrij": 92.10263814853512
     },
     {
       "Zi": 32,
       "Zj": 33,
-      "rrij": 291.06941952
+      "rrij": 84.22575275880129
     },
     {
       "Zi": 32,
       "Zj": 34,
-      "rrij": 264.901632
+      "rrij": 80.95248269699327
     },
     {
       "Zi": 32,
       "Zj": 35,
-      "rrij": 232.01605632000002
+      "rrij": 76.31223227707784
     },
     {
       "Zi": 32,
       "Zj": 36,
-      "rrij": 201.79740672
+      "rrij": 71.67233308489813
     },
     {
       "Zi": 33,
       "Zj": 33,
-      "rrij": 239.69570987999995
+      "rrij": 77.0225215085172
     },
     {
       "Zi": 33,
       "Zj": 34,
-      "rrij": 218.14653299999995
+      "rrij": 74.02919101896039
     },
     {
       "Zi": 33,
       "Zj": 35,
-      "rrij": 191.06525657999995
+      "rrij": 69.78578830582174
     },
     {
       "Zi": 33,
       "Zj": 36,
-      "rrij": 166.18019417999997
+      "rrij": 65.54270678240171
     },
     {
       "Zi": 34,
       "Zj": 34,
-      "rrij": 198.534675
+      "rrij": 71.15219049684978
     },
     {
       "Zi": 34,
       "Zj": 35,
-      "rrij": 173.8880655
+      "rrij": 67.07369937673528
     },
     {
       "Zi": 34,
       "Zj": 36,
-      "rrij": 151.2402255
+      "rrij": 62.99551696392569
     },
     {
       "Zi": 35,
       "Zj": 35,
-      "rrij": 152.30115003
+      "rrij": 63.228990093844594
     },
     {
       "Zi": 35,
       "Zj": 36,
-      "rrij": 132.46487163
+      "rrij": 59.38457182294976
     },
     {
       "Zi": 36,
       "Zj": 36,
-      "rrij": 115.21214523
+      "rrij": 55.77389999999998
     }
   ],
   "c6_reference_pairs": [

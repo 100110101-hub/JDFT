@@ -97,7 +97,7 @@
       "tag": "v4.3.1",
       "url": "https://raw.githubusercontent.com/dftd4/dftd4/1107ea7c7c2131719e306fd57a5f4a1579e2577e/src/dftd4/data/zeff.f90"
     },
-    "r4r2": {
+    "r4_over_r2": {
       "file": "raw/dftd4/src/dftd4/data/r4r2.f90",
       "array": "r4_over_r2",
       "lines": "44-67",
@@ -117,7 +117,8 @@
     "covalent_rad_2009_angstrom": "Pyykko/Atsumi covalent radius in Angstrom exactly as printed upstream (metals already reduced by 10 %); upstream multiplies by aatoau at compile time",
     "covalent_rad_d3_angstrom": "4/3 * covalent_rad_2009_angstrom (used for the D4 CN)",
     "zeff": "effective nuclear charge of the def2 ECP, e (q is shifted by zeff)",
-    "r4r2": "<r^4>/<r^2> expectation value, bohr^2 (C8/C6 = 3 r4r2_i r4r2_j)"
+    "r4_over_r2": "<r^4>/<r^2> expectation value, bohr^2, raw upstream table (r4r2.f90:44-68); NOT the value used in the damping",
+    "r4r2": "derived sqrt(0.5*r4_over_r2*sqrt(Z)) (r4r2.f90:70-71), the value get_r4r2_val returns and D4 uses in C8/C6 = 3*r4r2_i*r4r2_j"
   },
   "element_order": "sorted by Z",
   "elements": [
@@ -132,8 +133,9 @@
       "chemical_hardness": 0.47259288,
       "covalent_rad_2009_angstrom": 0.32,
       "zeff": 1.0,
-      "r4r2": 8.0589,
+      "r4_over_r2": 8.0589,
       "covalent_rad_d3_angstrom": 0.426666666667,
+      "r4r2": 2.00734899805689,
       "source_lines": {
         "chi": 61,
         "eta": 85,
@@ -143,9 +145,9 @@
         "chemical_hardness": 37,
         "covalent_rad_2009_angstrom": 39,
         "zeff": 38,
-        "r4r2": 45
+        "r4_over_r2": 45
       },
-      "comment": "chi,eta,kcnchi,rad: multicharge eeq2019.f90 lines 61,85,109,133; pauling_en: dftd4 data/en.f90:36; chemical_hardness: dftd4 data/hardness.f90:37; covalent_rad_2009_angstrom: dftd4 data/covrad.f90:39 (literal Angstrom, upstream multiplies by aatoau); covalent_rad_d3_angstrom = 4/3 * covalent_rad_2009_angstrom (covrad.f90:64-65); zeff: dftd4 data/zeff.f90:38; r4r2: dftd4 data/r4r2.f90:45"
+      "comment": "chi,eta,kcnchi,rad: multicharge eeq2019.f90 lines 61,85,109,133; pauling_en: dftd4 data/en.f90:36; chemical_hardness: dftd4 data/hardness.f90:37; covalent_rad_2009_angstrom: dftd4 data/covrad.f90:39 (literal Angstrom, upstream multiplies by aatoau); covalent_rad_d3_angstrom = 4/3 * covalent_rad_2009_angstrom (covrad.f90:64-65); zeff: dftd4 data/zeff.f90:38; r4_over_r2: dftd4 data/r4r2.f90:45 (raw table); r4r2 = sqrt(0.5*r4_over_r2*sqrt(Z)) (derived array D4 actually uses)"
     },
     {
       "Z": 2,
@@ -158,8 +160,9 @@
       "chemical_hardness": 0.92203391,
       "covalent_rad_2009_angstrom": 0.46,
       "zeff": 2.0,
-      "r4r2": 3.4698,
+      "r4_over_r2": 3.4698,
       "covalent_rad_d3_angstrom": 0.613333333333,
+      "r4r2": 1.5663713191197939,
       "source_lines": {
         "chi": 61,
         "eta": 85,
@@ -169,9 +172,9 @@
         "chemical_hardness": 37,
         "covalent_rad_2009_angstrom": 39,
         "zeff": 38,
-        "r4r2": 45
+        "r4_over_r2": 45
       },
-      "comment": "chi,eta,kcnchi,rad: multicharge eeq2019.f90 lines 61,85,109,133; pauling_en: dftd4 data/en.f90:36; chemical_hardness: dftd4 data/hardness.f90:37; covalent_rad_2009_angstrom: dftd4 data/covrad.f90:39 (literal Angstrom, upstream multiplies by aatoau); covalent_rad_d3_angstrom = 4/3 * covalent_rad_2009_angstrom (covrad.f90:64-65); zeff: dftd4 data/zeff.f90:38; r4r2: dftd4 data/r4r2.f90:45"
+      "comment": "chi,eta,kcnchi,rad: multicharge eeq2019.f90 lines 61,85,109,133; pauling_en: dftd4 data/en.f90:36; chemical_hardness: dftd4 data/hardness.f90:37; covalent_rad_2009_angstrom: dftd4 data/covrad.f90:39 (literal Angstrom, upstream multiplies by aatoau); covalent_rad_d3_angstrom = 4/3 * covalent_rad_2009_angstrom (covrad.f90:64-65); zeff: dftd4 data/zeff.f90:38; r4_over_r2: dftd4 data/r4r2.f90:45 (raw table); r4r2 = sqrt(0.5*r4_over_r2*sqrt(Z)) (derived array D4 actually uses)"
     },
     {
       "Z": 3,
@@ -184,8 +187,9 @@
       "chemical_hardness": 0.17452888,
       "covalent_rad_2009_angstrom": 1.2,
       "zeff": 3.0,
-      "r4r2": 29.0974,
+      "r4_over_r2": 29.0974,
       "covalent_rad_d3_angstrom": 1.6,
+      "r4r2": 5.019869279580627,
       "source_lines": {
         "chi": 61,
         "eta": 85,
@@ -195,9 +199,9 @@
         "chemical_hardness": 37,
         "covalent_rad_2009_angstrom": 40,
         "zeff": 39,
-        "r4r2": 46
+        "r4_over_r2": 46
       },
-      "comment": "chi,eta,kcnchi,rad: multicharge eeq2019.f90 lines 61,85,109,133; pauling_en: dftd4 data/en.f90:37; chemical_hardness: dftd4 data/hardness.f90:37; covalent_rad_2009_angstrom: dftd4 data/covrad.f90:40 (literal Angstrom, upstream multiplies by aatoau); covalent_rad_d3_angstrom = 4/3 * covalent_rad_2009_angstrom (covrad.f90:64-65); zeff: dftd4 data/zeff.f90:39; r4r2: dftd4 data/r4r2.f90:46"
+      "comment": "chi,eta,kcnchi,rad: multicharge eeq2019.f90 lines 61,85,109,133; pauling_en: dftd4 data/en.f90:37; chemical_hardness: dftd4 data/hardness.f90:37; covalent_rad_2009_angstrom: dftd4 data/covrad.f90:40 (literal Angstrom, upstream multiplies by aatoau); covalent_rad_d3_angstrom = 4/3 * covalent_rad_2009_angstrom (covrad.f90:64-65); zeff: dftd4 data/zeff.f90:39; r4_over_r2: dftd4 data/r4r2.f90:46 (raw table); r4r2 = sqrt(0.5*r4_over_r2*sqrt(Z)) (derived array D4 actually uses)"
     },
     {
       "Z": 4,
@@ -210,8 +214,9 @@
       "chemical_hardness": 0.25700733,
       "covalent_rad_2009_angstrom": 0.94,
       "zeff": 4.0,
-      "r4r2": 14.8517,
+      "r4_over_r2": 14.8517,
       "covalent_rad_d3_angstrom": 1.253333333333,
+      "r4r2": 3.8537903419880015,
       "source_lines": {
         "chi": 61,
         "eta": 85,
@@ -221,9 +226,9 @@
         "chemical_hardness": 37,
         "covalent_rad_2009_angstrom": 40,
         "zeff": 39,
-        "r4r2": 46
+        "r4_over_r2": 46
       },
-      "comment": "chi,eta,kcnchi,rad: multicharge eeq2019.f90 lines 61,85,109,133; pauling_en: dftd4 data/en.f90:37; chemical_hardness: dftd4 data/hardness.f90:37; covalent_rad_2009_angstrom: dftd4 data/covrad.f90:40 (literal Angstrom, upstream multiplies by aatoau); covalent_rad_d3_angstrom = 4/3 * covalent_rad_2009_angstrom (covrad.f90:64-65); zeff: dftd4 data/zeff.f90:39; r4r2: dftd4 data/r4r2.f90:46"
+      "comment": "chi,eta,kcnchi,rad: multicharge eeq2019.f90 lines 61,85,109,133; pauling_en: dftd4 data/en.f90:37; chemical_hardness: dftd4 data/hardness.f90:37; covalent_rad_2009_angstrom: dftd4 data/covrad.f90:40 (literal Angstrom, upstream multiplies by aatoau); covalent_rad_d3_angstrom = 4/3 * covalent_rad_2009_angstrom (covrad.f90:64-65); zeff: dftd4 data/zeff.f90:39; r4_over_r2: dftd4 data/r4r2.f90:46 (raw table); r4r2 = sqrt(0.5*r4_over_r2*sqrt(Z)) (derived array D4 actually uses)"
     },
     {
       "Z": 5,
@@ -236,8 +241,9 @@
       "chemical_hardness": 0.33949086,
       "covalent_rad_2009_angstrom": 0.77,
       "zeff": 5.0,
-      "r4r2": 11.8799,
+      "r4_over_r2": 11.8799,
       "covalent_rad_d3_angstrom": 1.026666666667,
+      "r4r2": 3.6444659393318353,
       "source_lines": {
         "chi": 61,
         "eta": 85,
@@ -247,9 +253,9 @@
         "chemical_hardness": 37,
         "covalent_rad_2009_angstrom": 40,
         "zeff": 39,
-        "r4r2": 46
+        "r4_over_r2": 46
       },
-      "comment": "chi,eta,kcnchi,rad: multicharge eeq2019.f90 lines 61,85,109,133; pauling_en: dftd4 data/en.f90:37; chemical_hardness: dftd4 data/hardness.f90:37; covalent_rad_2009_angstrom: dftd4 data/covrad.f90:40 (literal Angstrom, upstream multiplies by aatoau); covalent_rad_d3_angstrom = 4/3 * covalent_rad_2009_angstrom (covrad.f90:64-65); zeff: dftd4 data/zeff.f90:39; r4r2: dftd4 data/r4r2.f90:46"
+      "comment": "chi,eta,kcnchi,rad: multicharge eeq2019.f90 lines 61,85,109,133; pauling_en: dftd4 data/en.f90:37; chemical_hardness: dftd4 data/hardness.f90:37; covalent_rad_2009_angstrom: dftd4 data/covrad.f90:40 (literal Angstrom, upstream multiplies by aatoau); covalent_rad_d3_angstrom = 4/3 * covalent_rad_2009_angstrom (covrad.f90:64-65); zeff: dftd4 data/zeff.f90:39; r4_over_r2: dftd4 data/r4r2.f90:46 (raw table); r4r2 = sqrt(0.5*r4_over_r2*sqrt(Z)) (derived array D4 actually uses)"
     },
     {
       "Z": 6,
@@ -262,8 +268,9 @@
       "chemical_hardness": 0.42195412,
       "covalent_rad_2009_angstrom": 0.75,
       "zeff": 6.0,
-      "r4r2": 7.8715,
+      "r4_over_r2": 7.8715,
       "covalent_rad_d3_angstrom": 1.0,
+      "r4r2": 3.104928220612981,
       "source_lines": {
         "chi": 62,
         "eta": 86,
@@ -273,9 +280,9 @@
         "chemical_hardness": 38,
         "covalent_rad_2009_angstrom": 40,
         "zeff": 39,
-        "r4r2": 46
+        "r4_over_r2": 46
       },
-      "comment": "chi,eta,kcnchi,rad: multicharge eeq2019.f90 lines 62,86,110,134; pauling_en: dftd4 data/en.f90:37; chemical_hardness: dftd4 data/hardness.f90:38; covalent_rad_2009_angstrom: dftd4 data/covrad.f90:40 (literal Angstrom, upstream multiplies by aatoau); covalent_rad_d3_angstrom = 4/3 * covalent_rad_2009_angstrom (covrad.f90:64-65); zeff: dftd4 data/zeff.f90:39; r4r2: dftd4 data/r4r2.f90:46"
+      "comment": "chi,eta,kcnchi,rad: multicharge eeq2019.f90 lines 62,86,110,134; pauling_en: dftd4 data/en.f90:37; chemical_hardness: dftd4 data/hardness.f90:38; covalent_rad_2009_angstrom: dftd4 data/covrad.f90:40 (literal Angstrom, upstream multiplies by aatoau); covalent_rad_d3_angstrom = 4/3 * covalent_rad_2009_angstrom (covrad.f90:64-65); zeff: dftd4 data/zeff.f90:39; r4_over_r2: dftd4 data/r4r2.f90:46 (raw table); r4r2 = sqrt(0.5*r4_over_r2*sqrt(Z)) (derived array D4 actually uses)"
     },
     {
       "Z": 7,
@@ -288,8 +295,9 @@
       "chemical_hardness": 0.50438193,
       "covalent_rad_2009_angstrom": 0.71,
       "zeff": 7.0,
-      "r4r2": 5.5588,
+      "r4_over_r2": 5.5588,
       "covalent_rad_d3_angstrom": 0.946666666667,
+      "r4r2": 2.7117524212163846,
       "source_lines": {
         "chi": 62,
         "eta": 86,
@@ -299,9 +307,9 @@
         "chemical_hardness": 38,
         "covalent_rad_2009_angstrom": 40,
         "zeff": 39,
-        "r4r2": 46
+        "r4_over_r2": 46
       },
-      "comment": "chi,eta,kcnchi,rad: multicharge eeq2019.f90 lines 62,86,110,134; pauling_en: dftd4 data/en.f90:37; chemical_hardness: dftd4 data/hardness.f90:38; covalent_rad_2009_angstrom: dftd4 data/covrad.f90:40 (literal Angstrom, upstream multiplies by aatoau); covalent_rad_d3_angstrom = 4/3 * covalent_rad_2009_angstrom (covrad.f90:64-65); zeff: dftd4 data/zeff.f90:39; r4r2: dftd4 data/r4r2.f90:46"
+      "comment": "chi,eta,kcnchi,rad: multicharge eeq2019.f90 lines 62,86,110,134; pauling_en: dftd4 data/en.f90:37; chemical_hardness: dftd4 data/hardness.f90:38; covalent_rad_2009_angstrom: dftd4 data/covrad.f90:40 (literal Angstrom, upstream multiplies by aatoau); covalent_rad_d3_angstrom = 4/3 * covalent_rad_2009_angstrom (covrad.f90:64-65); zeff: dftd4 data/zeff.f90:39; r4_over_r2: dftd4 data/r4r2.f90:46 (raw table); r4r2 = sqrt(0.5*r4_over_r2*sqrt(Z)) (derived array D4 actually uses)"
     },
     {
       "Z": 8,
@@ -314,8 +322,9 @@
       "chemical_hardness": 0.58691863,
       "covalent_rad_2009_angstrom": 0.63,
       "zeff": 8.0,
-      "r4r2": 4.7566,
+      "r4_over_r2": 4.7566,
       "covalent_rad_d3_angstrom": 0.84,
+      "r4r2": 2.5936168242020377,
       "source_lines": {
         "chi": 62,
         "eta": 86,
@@ -325,9 +334,9 @@
         "chemical_hardness": 38,
         "covalent_rad_2009_angstrom": 40,
         "zeff": 39,
-        "r4r2": 46
+        "r4_over_r2": 46
       },
-      "comment": "chi,eta,kcnchi,rad: multicharge eeq2019.f90 lines 62,86,110,134; pauling_en: dftd4 data/en.f90:37; chemical_hardness: dftd4 data/hardness.f90:38; covalent_rad_2009_angstrom: dftd4 data/covrad.f90:40 (literal Angstrom, upstream multiplies by aatoau); covalent_rad_d3_angstrom = 4/3 * covalent_rad_2009_angstrom (covrad.f90:64-65); zeff: dftd4 data/zeff.f90:39; r4r2: dftd4 data/r4r2.f90:46"
+      "comment": "chi,eta,kcnchi,rad: multicharge eeq2019.f90 lines 62,86,110,134; pauling_en: dftd4 data/en.f90:37; chemical_hardness: dftd4 data/hardness.f90:38; covalent_rad_2009_angstrom: dftd4 data/covrad.f90:40 (literal Angstrom, upstream multiplies by aatoau); covalent_rad_d3_angstrom = 4/3 * covalent_rad_2009_angstrom (covrad.f90:64-65); zeff: dftd4 data/zeff.f90:39; r4_over_r2: dftd4 data/r4r2.f90:46 (raw table); r4r2 = sqrt(0.5*r4_over_r2*sqrt(Z)) (derived array D4 actually uses)"
     },
     {
       "Z": 9,
@@ -340,8 +349,9 @@
       "chemical_hardness": 0.66931351,
       "covalent_rad_2009_angstrom": 0.64,
       "zeff": 9.0,
-      "r4r2": 3.8025,
+      "r4_over_r2": 3.8025,
       "covalent_rad_d3_angstrom": 0.853333333333,
+      "r4r2": 2.3882524992135985,
       "source_lines": {
         "chi": 62,
         "eta": 86,
@@ -351,9 +361,9 @@
         "chemical_hardness": 38,
         "covalent_rad_2009_angstrom": 40,
         "zeff": 39,
-        "r4r2": 46
+        "r4_over_r2": 46
       },
-      "comment": "chi,eta,kcnchi,rad: multicharge eeq2019.f90 lines 62,86,110,134; pauling_en: dftd4 data/en.f90:37; chemical_hardness: dftd4 data/hardness.f90:38; covalent_rad_2009_angstrom: dftd4 data/covrad.f90:40 (literal Angstrom, upstream multiplies by aatoau); covalent_rad_d3_angstrom = 4/3 * covalent_rad_2009_angstrom (covrad.f90:64-65); zeff: dftd4 data/zeff.f90:39; r4r2: dftd4 data/r4r2.f90:46"
+      "comment": "chi,eta,kcnchi,rad: multicharge eeq2019.f90 lines 62,86,110,134; pauling_en: dftd4 data/en.f90:37; chemical_hardness: dftd4 data/hardness.f90:38; covalent_rad_2009_angstrom: dftd4 data/covrad.f90:40 (literal Angstrom, upstream multiplies by aatoau); covalent_rad_d3_angstrom = 4/3 * covalent_rad_2009_angstrom (covrad.f90:64-65); zeff: dftd4 data/zeff.f90:39; r4_over_r2: dftd4 data/r4r2.f90:46 (raw table); r4r2 = sqrt(0.5*r4_over_r2*sqrt(Z)) (derived array D4 actually uses)"
     },
     {
       "Z": 10,
@@ -366,8 +376,9 @@
       "chemical_hardness": 0.75191607,
       "covalent_rad_2009_angstrom": 0.67,
       "zeff": 10.0,
-      "r4r2": 3.1036,
+      "r4_over_r2": 3.1036,
       "covalent_rad_d3_angstrom": 0.893333333333,
+      "r4r2": 2.2152251517733568,
       "source_lines": {
         "chi": 62,
         "eta": 86,
@@ -377,9 +388,9 @@
         "chemical_hardness": 38,
         "covalent_rad_2009_angstrom": 40,
         "zeff": 39,
-        "r4r2": 46
+        "r4_over_r2": 46
       },
-      "comment": "chi,eta,kcnchi,rad: multicharge eeq2019.f90 lines 62,86,110,134; pauling_en: dftd4 data/en.f90:37; chemical_hardness: dftd4 data/hardness.f90:38; covalent_rad_2009_angstrom: dftd4 data/covrad.f90:40 (literal Angstrom, upstream multiplies by aatoau); covalent_rad_d3_angstrom = 4/3 * covalent_rad_2009_angstrom (covrad.f90:64-65); zeff: dftd4 data/zeff.f90:39; r4r2: dftd4 data/r4r2.f90:46"
+      "comment": "chi,eta,kcnchi,rad: multicharge eeq2019.f90 lines 62,86,110,134; pauling_en: dftd4 data/en.f90:37; chemical_hardness: dftd4 data/hardness.f90:38; covalent_rad_2009_angstrom: dftd4 data/covrad.f90:40 (literal Angstrom, upstream multiplies by aatoau); covalent_rad_d3_angstrom = 4/3 * covalent_rad_2009_angstrom (covrad.f90:64-65); zeff: dftd4 data/zeff.f90:39; r4_over_r2: dftd4 data/r4r2.f90:46 (raw table); r4r2 = sqrt(0.5*r4_over_r2*sqrt(Z)) (derived array D4 actually uses)"
     },
     {
       "Z": 11,
@@ -392,8 +403,9 @@
       "chemical_hardness": 0.17964105,
       "covalent_rad_2009_angstrom": 1.4,
       "zeff": 11.0,
-      "r4r2": 26.1552,
+      "r4_over_r2": 26.1552,
       "covalent_rad_d3_angstrom": 1.866666666667,
+      "r4r2": 6.585855476576431,
       "source_lines": {
         "chi": 63,
         "eta": 87,
@@ -403,9 +415,9 @@
         "chemical_hardness": 39,
         "covalent_rad_2009_angstrom": 41,
         "zeff": 40,
-        "r4r2": 47
+        "r4_over_r2": 47
       },
-      "comment": "chi,eta,kcnchi,rad: multicharge eeq2019.f90 lines 63,87,111,135; pauling_en: dftd4 data/en.f90:38; chemical_hardness: dftd4 data/hardness.f90:39; covalent_rad_2009_angstrom: dftd4 data/covrad.f90:41 (literal Angstrom, upstream multiplies by aatoau); covalent_rad_d3_angstrom = 4/3 * covalent_rad_2009_angstrom (covrad.f90:64-65); zeff: dftd4 data/zeff.f90:40; r4r2: dftd4 data/r4r2.f90:47"
+      "comment": "chi,eta,kcnchi,rad: multicharge eeq2019.f90 lines 63,87,111,135; pauling_en: dftd4 data/en.f90:38; chemical_hardness: dftd4 data/hardness.f90:39; covalent_rad_2009_angstrom: dftd4 data/covrad.f90:41 (literal Angstrom, upstream multiplies by aatoau); covalent_rad_d3_angstrom = 4/3 * covalent_rad_2009_angstrom (covrad.f90:64-65); zeff: dftd4 data/zeff.f90:40; r4_over_r2: dftd4 data/r4r2.f90:47 (raw table); r4r2 = sqrt(0.5*r4_over_r2*sqrt(Z)) (derived array D4 actually uses)"
     },
     {
       "Z": 12,
@@ -418,8 +430,9 @@
       "chemical_hardness": 0.22157276,
       "covalent_rad_2009_angstrom": 1.25,
       "zeff": 12.0,
-      "r4r2": 17.2304,
+      "r4_over_r2": 17.2304,
       "covalent_rad_d3_angstrom": 1.666666666667,
+      "r4r2": 5.462959658896886,
       "source_lines": {
         "chi": 63,
         "eta": 87,
@@ -429,9 +442,9 @@
         "chemical_hardness": 39,
         "covalent_rad_2009_angstrom": 41,
         "zeff": 40,
-        "r4r2": 47
+        "r4_over_r2": 47
       },
-      "comment": "chi,eta,kcnchi,rad: multicharge eeq2019.f90 lines 63,87,111,135; pauling_en: dftd4 data/en.f90:38; chemical_hardness: dftd4 data/hardness.f90:39; covalent_rad_2009_angstrom: dftd4 data/covrad.f90:41 (literal Angstrom, upstream multiplies by aatoau); covalent_rad_d3_angstrom = 4/3 * covalent_rad_2009_angstrom (covrad.f90:64-65); zeff: dftd4 data/zeff.f90:40; r4r2: dftd4 data/r4r2.f90:47"
+      "comment": "chi,eta,kcnchi,rad: multicharge eeq2019.f90 lines 63,87,111,135; pauling_en: dftd4 data/en.f90:38; chemical_hardness: dftd4 data/hardness.f90:39; covalent_rad_2009_angstrom: dftd4 data/covrad.f90:41 (literal Angstrom, upstream multiplies by aatoau); covalent_rad_d3_angstrom = 4/3 * covalent_rad_2009_angstrom (covrad.f90:64-65); zeff: dftd4 data/zeff.f90:40; r4_over_r2: dftd4 data/r4r2.f90:47 (raw table); r4r2 = sqrt(0.5*r4_over_r2*sqrt(Z)) (derived array D4 actually uses)"
     },
     {
       "Z": 13,
@@ -444,8 +457,9 @@
       "chemical_hardness": 0.26348578,
       "covalent_rad_2009_angstrom": 1.13,
       "zeff": 13.0,
-      "r4r2": 17.721,
+      "r4_over_r2": 17.721,
       "covalent_rad_d3_angstrom": 1.506666666667,
+      "r4r2": 5.65216658249283,
       "source_lines": {
         "chi": 63,
         "eta": 87,
@@ -455,9 +469,9 @@
         "chemical_hardness": 39,
         "covalent_rad_2009_angstrom": 41,
         "zeff": 40,
-        "r4r2": 47
+        "r4_over_r2": 47
       },
-      "comment": "chi,eta,kcnchi,rad: multicharge eeq2019.f90 lines 63,87,111,135; pauling_en: dftd4 data/en.f90:38; chemical_hardness: dftd4 data/hardness.f90:39; covalent_rad_2009_angstrom: dftd4 data/covrad.f90:41 (literal Angstrom, upstream multiplies by aatoau); covalent_rad_d3_angstrom = 4/3 * covalent_rad_2009_angstrom (covrad.f90:64-65); zeff: dftd4 data/zeff.f90:40; r4r2: dftd4 data/r4r2.f90:47"
+      "comment": "chi,eta,kcnchi,rad: multicharge eeq2019.f90 lines 63,87,111,135; pauling_en: dftd4 data/en.f90:38; chemical_hardness: dftd4 data/hardness.f90:39; covalent_rad_2009_angstrom: dftd4 data/covrad.f90:41 (literal Angstrom, upstream multiplies by aatoau); covalent_rad_d3_angstrom = 4/3 * covalent_rad_2009_angstrom (covrad.f90:64-65); zeff: dftd4 data/zeff.f90:40; r4_over_r2: dftd4 data/r4r2.f90:47 (raw table); r4r2 = sqrt(0.5*r4_over_r2*sqrt(Z)) (derived array D4 actually uses)"
     },
     {
       "Z": 14,
@@ -470,8 +484,9 @@
       "chemical_hardness": 0.30539645,
       "covalent_rad_2009_angstrom": 1.04,
       "zeff": 14.0,
-      "r4r2": 12.7442,
+      "r4_over_r2": 12.7442,
       "covalent_rad_d3_angstrom": 1.386666666667,
+      "r4r2": 4.882849069371511,
       "source_lines": {
         "chi": 63,
         "eta": 87,
@@ -481,9 +496,9 @@
         "chemical_hardness": 39,
         "covalent_rad_2009_angstrom": 41,
         "zeff": 40,
-        "r4r2": 47
+        "r4_over_r2": 47
       },
-      "comment": "chi,eta,kcnchi,rad: multicharge eeq2019.f90 lines 63,87,111,135; pauling_en: dftd4 data/en.f90:38; chemical_hardness: dftd4 data/hardness.f90:39; covalent_rad_2009_angstrom: dftd4 data/covrad.f90:41 (literal Angstrom, upstream multiplies by aatoau); covalent_rad_d3_angstrom = 4/3 * covalent_rad_2009_angstrom (covrad.f90:64-65); zeff: dftd4 data/zeff.f90:40; r4r2: dftd4 data/r4r2.f90:47"
+      "comment": "chi,eta,kcnchi,rad: multicharge eeq2019.f90 lines 63,87,111,135; pauling_en: dftd4 data/en.f90:38; chemical_hardness: dftd4 data/hardness.f90:39; covalent_rad_2009_angstrom: dftd4 data/covrad.f90:41 (literal Angstrom, upstream multiplies by aatoau); covalent_rad_d3_angstrom = 4/3 * covalent_rad_2009_angstrom (covrad.f90:64-65); zeff: dftd4 data/zeff.f90:40; r4_over_r2: dftd4 data/r4r2.f90:47 (raw table); r4r2 = sqrt(0.5*r4_over_r2*sqrt(Z)) (derived array D4 actually uses)"
     },
     {
       "Z": 15,
@@ -496,8 +511,9 @@
       "chemical_hardness": 0.34734014,
       "covalent_rad_2009_angstrom": 1.1,
       "zeff": 15.0,
-      "r4r2": 9.5361,
+      "r4_over_r2": 9.5361,
       "covalent_rad_d3_angstrom": 1.466666666667,
+      "r4r2": 4.297275676970734,
       "source_lines": {
         "chi": 63,
         "eta": 87,
@@ -507,9 +523,9 @@
         "chemical_hardness": 39,
         "covalent_rad_2009_angstrom": 41,
         "zeff": 40,
-        "r4r2": 47
+        "r4_over_r2": 47
       },
-      "comment": "chi,eta,kcnchi,rad: multicharge eeq2019.f90 lines 63,87,111,135; pauling_en: dftd4 data/en.f90:38; chemical_hardness: dftd4 data/hardness.f90:39; covalent_rad_2009_angstrom: dftd4 data/covrad.f90:41 (literal Angstrom, upstream multiplies by aatoau); covalent_rad_d3_angstrom = 4/3 * covalent_rad_2009_angstrom (covrad.f90:64-65); zeff: dftd4 data/zeff.f90:40; r4r2: dftd4 data/r4r2.f90:47"
+      "comment": "chi,eta,kcnchi,rad: multicharge eeq2019.f90 lines 63,87,111,135; pauling_en: dftd4 data/en.f90:38; chemical_hardness: dftd4 data/hardness.f90:39; covalent_rad_2009_angstrom: dftd4 data/covrad.f90:41 (literal Angstrom, upstream multiplies by aatoau); covalent_rad_d3_angstrom = 4/3 * covalent_rad_2009_angstrom (covrad.f90:64-65); zeff: dftd4 data/zeff.f90:40; r4_over_r2: dftd4 data/r4r2.f90:47 (raw table); r4r2 = sqrt(0.5*r4_over_r2*sqrt(Z)) (derived array D4 actually uses)"
     },
     {
       "Z": 16,
@@ -522,8 +538,9 @@
       "chemical_hardness": 0.38924725,
       "covalent_rad_2009_angstrom": 1.02,
       "zeff": 16.0,
-      "r4r2": 8.1652,
+      "r4_over_r2": 8.1652,
       "covalent_rad_d3_angstrom": 1.36,
+      "r4r2": 4.041088962148693,
       "source_lines": {
         "chi": 64,
         "eta": 88,
@@ -533,9 +550,9 @@
         "chemical_hardness": 40,
         "covalent_rad_2009_angstrom": 41,
         "zeff": 40,
-        "r4r2": 47
+        "r4_over_r2": 47
       },
-      "comment": "chi,eta,kcnchi,rad: multicharge eeq2019.f90 lines 64,88,112,136; pauling_en: dftd4 data/en.f90:38; chemical_hardness: dftd4 data/hardness.f90:40; covalent_rad_2009_angstrom: dftd4 data/covrad.f90:41 (literal Angstrom, upstream multiplies by aatoau); covalent_rad_d3_angstrom = 4/3 * covalent_rad_2009_angstrom (covrad.f90:64-65); zeff: dftd4 data/zeff.f90:40; r4r2: dftd4 data/r4r2.f90:47"
+      "comment": "chi,eta,kcnchi,rad: multicharge eeq2019.f90 lines 64,88,112,136; pauling_en: dftd4 data/en.f90:38; chemical_hardness: dftd4 data/hardness.f90:40; covalent_rad_2009_angstrom: dftd4 data/covrad.f90:41 (literal Angstrom, upstream multiplies by aatoau); covalent_rad_d3_angstrom = 4/3 * covalent_rad_2009_angstrom (covrad.f90:64-65); zeff: dftd4 data/zeff.f90:40; r4_over_r2: dftd4 data/r4r2.f90:47 (raw table); r4r2 = sqrt(0.5*r4_over_r2*sqrt(Z)) (derived array D4 actually uses)"
     },
     {
       "Z": 17,
@@ -548,8 +565,9 @@
       "chemical_hardness": 0.4311567,
       "covalent_rad_2009_angstrom": 0.99,
       "zeff": 17.0,
-      "r4r2": 6.7463,
+      "r4_over_r2": 6.7463,
       "covalent_rad_d3_angstrom": 1.32,
+      "r4r2": 3.7293234964336643,
       "source_lines": {
         "chi": 64,
         "eta": 88,
@@ -559,9 +577,9 @@
         "chemical_hardness": 40,
         "covalent_rad_2009_angstrom": 41,
         "zeff": 40,
-        "r4r2": 47
+        "r4_over_r2": 47
       },
-      "comment": "chi,eta,kcnchi,rad: multicharge eeq2019.f90 lines 64,88,112,136; pauling_en: dftd4 data/en.f90:38; chemical_hardness: dftd4 data/hardness.f90:40; covalent_rad_2009_angstrom: dftd4 data/covrad.f90:41 (literal Angstrom, upstream multiplies by aatoau); covalent_rad_d3_angstrom = 4/3 * covalent_rad_2009_angstrom (covrad.f90:64-65); zeff: dftd4 data/zeff.f90:40; r4r2: dftd4 data/r4r2.f90:47"
+      "comment": "chi,eta,kcnchi,rad: multicharge eeq2019.f90 lines 64,88,112,136; pauling_en: dftd4 data/en.f90:38; chemical_hardness: dftd4 data/hardness.f90:40; covalent_rad_2009_angstrom: dftd4 data/covrad.f90:41 (literal Angstrom, upstream multiplies by aatoau); covalent_rad_d3_angstrom = 4/3 * covalent_rad_2009_angstrom (covrad.f90:64-65); zeff: dftd4 data/zeff.f90:40; r4_over_r2: dftd4 data/r4r2.f90:47 (raw table); r4r2 = sqrt(0.5*r4_over_r2*sqrt(Z)) (derived array D4 actually uses)"
     },
     {
       "Z": 18,
@@ -574,8 +592,9 @@
       "chemical_hardness": 0.47308269,
       "covalent_rad_2009_angstrom": 0.96,
       "zeff": 18.0,
-      "r4r2": 5.6004,
+      "r4_over_r2": 5.6004,
       "covalent_rad_d3_angstrom": 1.28,
+      "r4r2": 3.4467727589836006,
       "source_lines": {
         "chi": 64,
         "eta": 88,
@@ -585,9 +604,9 @@
         "chemical_hardness": 40,
         "covalent_rad_2009_angstrom": 41,
         "zeff": 40,
-        "r4r2": 47
+        "r4_over_r2": 47
       },
-      "comment": "chi,eta,kcnchi,rad: multicharge eeq2019.f90 lines 64,88,112,136; pauling_en: dftd4 data/en.f90:38; chemical_hardness: dftd4 data/hardness.f90:40; covalent_rad_2009_angstrom: dftd4 data/covrad.f90:41 (literal Angstrom, upstream multiplies by aatoau); covalent_rad_d3_angstrom = 4/3 * covalent_rad_2009_angstrom (covrad.f90:64-65); zeff: dftd4 data/zeff.f90:40; r4r2: dftd4 data/r4r2.f90:47"
+      "comment": "chi,eta,kcnchi,rad: multicharge eeq2019.f90 lines 64,88,112,136; pauling_en: dftd4 data/en.f90:38; chemical_hardness: dftd4 data/hardness.f90:40; covalent_rad_2009_angstrom: dftd4 data/covrad.f90:41 (literal Angstrom, upstream multiplies by aatoau); covalent_rad_d3_angstrom = 4/3 * covalent_rad_2009_angstrom (covrad.f90:64-65); zeff: dftd4 data/zeff.f90:40; r4_over_r2: dftd4 data/r4r2.f90:47 (raw table); r4r2 = sqrt(0.5*r4_over_r2*sqrt(Z)) (derived array D4 actually uses)"
     },
     {
       "Z": 19,
@@ -600,8 +619,9 @@
       "chemical_hardness": 0.17105469,
       "covalent_rad_2009_angstrom": 1.76,
       "zeff": 19.0,
-      "r4r2": 29.2012,
+      "r4_over_r2": 29.2012,
       "covalent_rad_d3_angstrom": 2.346666666667,
+      "r4r2": 7.977627461536416,
       "source_lines": {
         "chi": 64,
         "eta": 88,
@@ -611,9 +631,9 @@
         "chemical_hardness": 40,
         "covalent_rad_2009_angstrom": 42,
         "zeff": 41,
-        "r4r2": 48
+        "r4_over_r2": 48
       },
-      "comment": "chi,eta,kcnchi,rad: multicharge eeq2019.f90 lines 64,88,112,136; pauling_en: dftd4 data/en.f90:39; chemical_hardness: dftd4 data/hardness.f90:40; covalent_rad_2009_angstrom: dftd4 data/covrad.f90:42 (literal Angstrom, upstream multiplies by aatoau); covalent_rad_d3_angstrom = 4/3 * covalent_rad_2009_angstrom (covrad.f90:64-65); zeff: dftd4 data/zeff.f90:41; r4r2: dftd4 data/r4r2.f90:48"
+      "comment": "chi,eta,kcnchi,rad: multicharge eeq2019.f90 lines 64,88,112,136; pauling_en: dftd4 data/en.f90:39; chemical_hardness: dftd4 data/hardness.f90:40; covalent_rad_2009_angstrom: dftd4 data/covrad.f90:42 (literal Angstrom, upstream multiplies by aatoau); covalent_rad_d3_angstrom = 4/3 * covalent_rad_2009_angstrom (covrad.f90:64-65); zeff: dftd4 data/zeff.f90:41; r4_over_r2: dftd4 data/r4r2.f90:48 (raw table); r4r2 = sqrt(0.5*r4_over_r2*sqrt(Z)) (derived array D4 actually uses)"
     },
     {
       "Z": 20,
@@ -626,8 +646,9 @@
       "chemical_hardness": 0.20276244,
       "covalent_rad_2009_angstrom": 1.54,
       "zeff": 20.0,
-      "r4r2": 22.3934,
+      "r4_over_r2": 22.3934,
       "covalent_rad_d3_angstrom": 2.053333333333,
+      "r4r2": 7.076239442482412,
       "source_lines": {
         "chi": 64,
         "eta": 88,
@@ -637,9 +658,9 @@
         "chemical_hardness": 40,
         "covalent_rad_2009_angstrom": 42,
         "zeff": 41,
-        "r4r2": 48
+        "r4_over_r2": 48
       },
-      "comment": "chi,eta,kcnchi,rad: multicharge eeq2019.f90 lines 64,88,112,136; pauling_en: dftd4 data/en.f90:39; chemical_hardness: dftd4 data/hardness.f90:40; covalent_rad_2009_angstrom: dftd4 data/covrad.f90:42 (literal Angstrom, upstream multiplies by aatoau); covalent_rad_d3_angstrom = 4/3 * covalent_rad_2009_angstrom (covrad.f90:64-65); zeff: dftd4 data/zeff.f90:41; r4r2: dftd4 data/r4r2.f90:48"
+      "comment": "chi,eta,kcnchi,rad: multicharge eeq2019.f90 lines 64,88,112,136; pauling_en: dftd4 data/en.f90:39; chemical_hardness: dftd4 data/hardness.f90:40; covalent_rad_2009_angstrom: dftd4 data/covrad.f90:42 (literal Angstrom, upstream multiplies by aatoau); covalent_rad_d3_angstrom = 4/3 * covalent_rad_2009_angstrom (covrad.f90:64-65); zeff: dftd4 data/zeff.f90:41; r4_over_r2: dftd4 data/r4r2.f90:48 (raw table); r4r2 = sqrt(0.5*r4_over_r2*sqrt(Z)) (derived array D4 actually uses)"
     },
     {
       "Z": 21,
@@ -652,8 +673,9 @@
       "chemical_hardness": 0.21007322,
       "covalent_rad_2009_angstrom": 1.33,
       "zeff": 21.0,
-      "r4r2": 19.0598,
+      "r4_over_r2": 19.0598,
       "covalent_rad_d3_angstrom": 1.773333333333,
+      "r4r2": 6.608440672001199,
       "source_lines": {
         "chi": 65,
         "eta": 89,
@@ -663,9 +685,9 @@
         "chemical_hardness": 41,
         "covalent_rad_2009_angstrom": 43,
         "zeff": 41,
-        "r4r2": 49
+        "r4_over_r2": 49
       },
-      "comment": "chi,eta,kcnchi,rad: multicharge eeq2019.f90 lines 65,89,113,137; pauling_en: dftd4 data/en.f90:40; chemical_hardness: dftd4 data/hardness.f90:41; covalent_rad_2009_angstrom: dftd4 data/covrad.f90:43 (literal Angstrom, upstream multiplies by aatoau); covalent_rad_d3_angstrom = 4/3 * covalent_rad_2009_angstrom (covrad.f90:64-65); zeff: dftd4 data/zeff.f90:41; r4r2: dftd4 data/r4r2.f90:49"
+      "comment": "chi,eta,kcnchi,rad: multicharge eeq2019.f90 lines 65,89,113,137; pauling_en: dftd4 data/en.f90:40; chemical_hardness: dftd4 data/hardness.f90:41; covalent_rad_2009_angstrom: dftd4 data/covrad.f90:43 (literal Angstrom, upstream multiplies by aatoau); covalent_rad_d3_angstrom = 4/3 * covalent_rad_2009_angstrom (covrad.f90:64-65); zeff: dftd4 data/zeff.f90:41; r4_over_r2: dftd4 data/r4r2.f90:49 (raw table); r4r2 = sqrt(0.5*r4_over_r2*sqrt(Z)) (derived array D4 actually uses)"
     },
     {
       "Z": 22,
@@ -678,8 +700,9 @@
       "chemical_hardness": 0.21739647,
       "covalent_rad_2009_angstrom": 1.22,
       "zeff": 22.0,
-      "r4r2": 16.859,
+      "r4_over_r2": 16.859,
       "covalent_rad_d3_angstrom": 1.626666666667,
+      "r4r2": 6.287913775445048,
       "source_lines": {
         "chi": 65,
         "eta": 89,
@@ -689,9 +712,9 @@
         "chemical_hardness": 41,
         "covalent_rad_2009_angstrom": 43,
         "zeff": 41,
-        "r4r2": 49
+        "r4_over_r2": 49
       },
-      "comment": "chi,eta,kcnchi,rad: multicharge eeq2019.f90 lines 65,89,113,137; pauling_en: dftd4 data/en.f90:40; chemical_hardness: dftd4 data/hardness.f90:41; covalent_rad_2009_angstrom: dftd4 data/covrad.f90:43 (literal Angstrom, upstream multiplies by aatoau); covalent_rad_d3_angstrom = 4/3 * covalent_rad_2009_angstrom (covrad.f90:64-65); zeff: dftd4 data/zeff.f90:41; r4r2: dftd4 data/r4r2.f90:49"
+      "comment": "chi,eta,kcnchi,rad: multicharge eeq2019.f90 lines 65,89,113,137; pauling_en: dftd4 data/en.f90:40; chemical_hardness: dftd4 data/hardness.f90:41; covalent_rad_2009_angstrom: dftd4 data/covrad.f90:43 (literal Angstrom, upstream multiplies by aatoau); covalent_rad_d3_angstrom = 4/3 * covalent_rad_2009_angstrom (covrad.f90:64-65); zeff: dftd4 data/zeff.f90:41; r4_over_r2: dftd4 data/r4r2.f90:49 (raw table); r4r2 = sqrt(0.5*r4_over_r2*sqrt(Z)) (derived array D4 actually uses)"
     },
     {
       "Z": 23,
@@ -704,8 +727,9 @@
       "chemical_hardness": 0.22471039,
       "covalent_rad_2009_angstrom": 1.21,
       "zeff": 23.0,
-      "r4r2": 15.4023,
+      "r4_over_r2": 15.4023,
       "covalent_rad_d3_angstrom": 1.613333333333,
+      "r4r2": 6.077287053921326,
       "source_lines": {
         "chi": 65,
         "eta": 89,
@@ -715,9 +739,9 @@
         "chemical_hardness": 41,
         "covalent_rad_2009_angstrom": 43,
         "zeff": 41,
-        "r4r2": 49
+        "r4_over_r2": 49
       },
-      "comment": "chi,eta,kcnchi,rad: multicharge eeq2019.f90 lines 65,89,113,137; pauling_en: dftd4 data/en.f90:40; chemical_hardness: dftd4 data/hardness.f90:41; covalent_rad_2009_angstrom: dftd4 data/covrad.f90:43 (literal Angstrom, upstream multiplies by aatoau); covalent_rad_d3_angstrom = 4/3 * covalent_rad_2009_angstrom (covrad.f90:64-65); zeff: dftd4 data/zeff.f90:41; r4r2: dftd4 data/r4r2.f90:49"
+      "comment": "chi,eta,kcnchi,rad: multicharge eeq2019.f90 lines 65,89,113,137; pauling_en: dftd4 data/en.f90:40; chemical_hardness: dftd4 data/hardness.f90:41; covalent_rad_2009_angstrom: dftd4 data/covrad.f90:43 (literal Angstrom, upstream multiplies by aatoau); covalent_rad_d3_angstrom = 4/3 * covalent_rad_2009_angstrom (covrad.f90:64-65); zeff: dftd4 data/zeff.f90:41; r4_over_r2: dftd4 data/r4r2.f90:49 (raw table); r4r2 = sqrt(0.5*r4_over_r2*sqrt(Z)) (derived array D4 actually uses)"
     },
     {
       "Z": 24,
@@ -730,8 +754,9 @@
       "chemical_hardness": 0.23201501,
       "covalent_rad_2009_angstrom": 1.1,
       "zeff": 24.0,
-      "r4r2": 12.5589,
+      "r4_over_r2": 12.5589,
       "covalent_rad_d3_angstrom": 1.466666666667,
+      "r4r2": 5.546430990343218,
       "source_lines": {
         "chi": 65,
         "eta": 89,
@@ -741,9 +766,9 @@
         "chemical_hardness": 41,
         "covalent_rad_2009_angstrom": 43,
         "zeff": 41,
-        "r4r2": 49
+        "r4_over_r2": 49
       },
-      "comment": "chi,eta,kcnchi,rad: multicharge eeq2019.f90 lines 65,89,113,137; pauling_en: dftd4 data/en.f90:40; chemical_hardness: dftd4 data/hardness.f90:41; covalent_rad_2009_angstrom: dftd4 data/covrad.f90:43 (literal Angstrom, upstream multiplies by aatoau); covalent_rad_d3_angstrom = 4/3 * covalent_rad_2009_angstrom (covrad.f90:64-65); zeff: dftd4 data/zeff.f90:41; r4r2: dftd4 data/r4r2.f90:49"
+      "comment": "chi,eta,kcnchi,rad: multicharge eeq2019.f90 lines 65,89,113,137; pauling_en: dftd4 data/en.f90:40; chemical_hardness: dftd4 data/hardness.f90:41; covalent_rad_2009_angstrom: dftd4 data/covrad.f90:43 (literal Angstrom, upstream multiplies by aatoau); covalent_rad_d3_angstrom = 4/3 * covalent_rad_2009_angstrom (covrad.f90:64-65); zeff: dftd4 data/zeff.f90:41; r4_over_r2: dftd4 data/r4r2.f90:49 (raw table); r4r2 = sqrt(0.5*r4_over_r2*sqrt(Z)) (derived array D4 actually uses)"
     },
     {
       "Z": 25,
@@ -756,8 +781,9 @@
       "chemical_hardness": 0.23933969,
       "covalent_rad_2009_angstrom": 1.07,
       "zeff": 25.0,
-      "r4r2": 13.4788,
+      "r4_over_r2": 13.4788,
       "covalent_rad_d3_angstrom": 1.426666666667,
+      "r4r2": 5.8049117133682575,
       "source_lines": {
         "chi": 65,
         "eta": 89,
@@ -767,9 +793,9 @@
         "chemical_hardness": 41,
         "covalent_rad_2009_angstrom": 43,
         "zeff": 41,
-        "r4r2": 49
+        "r4_over_r2": 49
       },
-      "comment": "chi,eta,kcnchi,rad: multicharge eeq2019.f90 lines 65,89,113,137; pauling_en: dftd4 data/en.f90:40; chemical_hardness: dftd4 data/hardness.f90:41; covalent_rad_2009_angstrom: dftd4 data/covrad.f90:43 (literal Angstrom, upstream multiplies by aatoau); covalent_rad_d3_angstrom = 4/3 * covalent_rad_2009_angstrom (covrad.f90:64-65); zeff: dftd4 data/zeff.f90:41; r4r2: dftd4 data/r4r2.f90:49"
+      "comment": "chi,eta,kcnchi,rad: multicharge eeq2019.f90 lines 65,89,113,137; pauling_en: dftd4 data/en.f90:40; chemical_hardness: dftd4 data/hardness.f90:41; covalent_rad_2009_angstrom: dftd4 data/covrad.f90:43 (literal Angstrom, upstream multiplies by aatoau); covalent_rad_d3_angstrom = 4/3 * covalent_rad_2009_angstrom (covrad.f90:64-65); zeff: dftd4 data/zeff.f90:41; r4_over_r2: dftd4 data/r4r2.f90:49 (raw table); r4r2 = sqrt(0.5*r4_over_r2*sqrt(Z)) (derived array D4 actually uses)"
     },
     {
       "Z": 26,
@@ -782,8 +808,9 @@
       "chemical_hardness": 0.24665638,
       "covalent_rad_2009_angstrom": 1.04,
       "zeff": 26.0,
-      "r4r2": 12.2309,
+      "r4_over_r2": 12.2309,
       "covalent_rad_d3_angstrom": 1.386666666667,
+      "r4r2": 5.584156058385277,
       "source_lines": {
         "chi": 66,
         "eta": 90,
@@ -793,9 +820,9 @@
         "chemical_hardness": 42,
         "covalent_rad_2009_angstrom": 44,
         "zeff": 41,
-        "r4r2": 50
+        "r4_over_r2": 50
       },
-      "comment": "chi,eta,kcnchi,rad: multicharge eeq2019.f90 lines 66,90,114,138; pauling_en: dftd4 data/en.f90:41; chemical_hardness: dftd4 data/hardness.f90:42; covalent_rad_2009_angstrom: dftd4 data/covrad.f90:44 (literal Angstrom, upstream multiplies by aatoau); covalent_rad_d3_angstrom = 4/3 * covalent_rad_2009_angstrom (covrad.f90:64-65); zeff: dftd4 data/zeff.f90:41; r4r2: dftd4 data/r4r2.f90:50"
+      "comment": "chi,eta,kcnchi,rad: multicharge eeq2019.f90 lines 66,90,114,138; pauling_en: dftd4 data/en.f90:41; chemical_hardness: dftd4 data/hardness.f90:42; covalent_rad_2009_angstrom: dftd4 data/covrad.f90:44 (literal Angstrom, upstream multiplies by aatoau); covalent_rad_d3_angstrom = 4/3 * covalent_rad_2009_angstrom (covrad.f90:64-65); zeff: dftd4 data/zeff.f90:41; r4_over_r2: dftd4 data/r4r2.f90:50 (raw table); r4r2 = sqrt(0.5*r4_over_r2*sqrt(Z)) (derived array D4 actually uses)"
     },
     {
       "Z": 27,
@@ -808,8 +835,9 @@
       "chemical_hardness": 0.25398255,
       "covalent_rad_2009_angstrom": 1.0,
       "zeff": 27.0,
-      "r4r2": 11.2809,
+      "r4_over_r2": 11.2809,
       "covalent_rad_d3_angstrom": 1.333333333333,
+      "r4r2": 5.413745277777264,
       "source_lines": {
         "chi": 66,
         "eta": 90,
@@ -819,9 +847,9 @@
         "chemical_hardness": 42,
         "covalent_rad_2009_angstrom": 44,
         "zeff": 41,
-        "r4r2": 50
+        "r4_over_r2": 50
       },
-      "comment": "chi,eta,kcnchi,rad: multicharge eeq2019.f90 lines 66,90,114,138; pauling_en: dftd4 data/en.f90:41; chemical_hardness: dftd4 data/hardness.f90:42; covalent_rad_2009_angstrom: dftd4 data/covrad.f90:44 (literal Angstrom, upstream multiplies by aatoau); covalent_rad_d3_angstrom = 4/3 * covalent_rad_2009_angstrom (covrad.f90:64-65); zeff: dftd4 data/zeff.f90:41; r4r2: dftd4 data/r4r2.f90:50"
+      "comment": "chi,eta,kcnchi,rad: multicharge eeq2019.f90 lines 66,90,114,138; pauling_en: dftd4 data/en.f90:41; chemical_hardness: dftd4 data/hardness.f90:42; covalent_rad_2009_angstrom: dftd4 data/covrad.f90:44 (literal Angstrom, upstream multiplies by aatoau); covalent_rad_d3_angstrom = 4/3 * covalent_rad_2009_angstrom (covrad.f90:64-65); zeff: dftd4 data/zeff.f90:41; r4_over_r2: dftd4 data/r4r2.f90:50 (raw table); r4r2 = sqrt(0.5*r4_over_r2*sqrt(Z)) (derived array D4 actually uses)"
     },
     {
       "Z": 28,
@@ -834,8 +862,9 @@
       "chemical_hardness": 0.26128863,
       "covalent_rad_2009_angstrom": 0.99,
       "zeff": 28.0,
-      "r4r2": 10.5569,
+      "r4_over_r2": 10.5569,
       "covalent_rad_d3_angstrom": 1.32,
+      "r4r2": 5.284972281457849,
       "source_lines": {
         "chi": 66,
         "eta": 90,
@@ -845,9 +874,9 @@
         "chemical_hardness": 42,
         "covalent_rad_2009_angstrom": 44,
         "zeff": 41,
-        "r4r2": 50
+        "r4_over_r2": 50
       },
-      "comment": "chi,eta,kcnchi,rad: multicharge eeq2019.f90 lines 66,90,114,138; pauling_en: dftd4 data/en.f90:41; chemical_hardness: dftd4 data/hardness.f90:42; covalent_rad_2009_angstrom: dftd4 data/covrad.f90:44 (literal Angstrom, upstream multiplies by aatoau); covalent_rad_d3_angstrom = 4/3 * covalent_rad_2009_angstrom (covrad.f90:64-65); zeff: dftd4 data/zeff.f90:41; r4r2: dftd4 data/r4r2.f90:50"
+      "comment": "chi,eta,kcnchi,rad: multicharge eeq2019.f90 lines 66,90,114,138; pauling_en: dftd4 data/en.f90:41; chemical_hardness: dftd4 data/hardness.f90:42; covalent_rad_2009_angstrom: dftd4 data/covrad.f90:44 (literal Angstrom, upstream multiplies by aatoau); covalent_rad_d3_angstrom = 4/3 * covalent_rad_2009_angstrom (covrad.f90:64-65); zeff: dftd4 data/zeff.f90:41; r4_over_r2: dftd4 data/r4r2.f90:50 (raw table); r4r2 = sqrt(0.5*r4_over_r2*sqrt(Z)) (derived array D4 actually uses)"
     },
     {
       "Z": 29,
@@ -860,8 +889,9 @@
       "chemical_hardness": 0.26859476,
       "covalent_rad_2009_angstrom": 1.01,
       "zeff": 29.0,
-      "r4r2": 10.1428,
+      "r4_over_r2": 10.1428,
       "covalent_rad_d3_angstrom": 1.346666666667,
+      "r4r2": 5.225928128371258,
       "source_lines": {
         "chi": 66,
         "eta": 90,
@@ -871,9 +901,9 @@
         "chemical_hardness": 42,
         "covalent_rad_2009_angstrom": 44,
         "zeff": 41,
-        "r4r2": 50
+        "r4_over_r2": 50
       },
-      "comment": "chi,eta,kcnchi,rad: multicharge eeq2019.f90 lines 66,90,114,138; pauling_en: dftd4 data/en.f90:41; chemical_hardness: dftd4 data/hardness.f90:42; covalent_rad_2009_angstrom: dftd4 data/covrad.f90:44 (literal Angstrom, upstream multiplies by aatoau); covalent_rad_d3_angstrom = 4/3 * covalent_rad_2009_angstrom (covrad.f90:64-65); zeff: dftd4 data/zeff.f90:41; r4r2: dftd4 data/r4r2.f90:50"
+      "comment": "chi,eta,kcnchi,rad: multicharge eeq2019.f90 lines 66,90,114,138; pauling_en: dftd4 data/en.f90:41; chemical_hardness: dftd4 data/hardness.f90:42; covalent_rad_2009_angstrom: dftd4 data/covrad.f90:44 (literal Angstrom, upstream multiplies by aatoau); covalent_rad_d3_angstrom = 4/3 * covalent_rad_2009_angstrom (covrad.f90:64-65); zeff: dftd4 data/zeff.f90:41; r4_over_r2: dftd4 data/r4r2.f90:50 (raw table); r4r2 = sqrt(0.5*r4_over_r2*sqrt(Z)) (derived array D4 actually uses)"
     },
     {
       "Z": 30,
@@ -886,8 +916,9 @@
       "chemical_hardness": 0.27592565,
       "covalent_rad_2009_angstrom": 1.09,
       "zeff": 30.0,
-      "r4r2": 9.4907,
+      "r4_over_r2": 9.4907,
       "covalent_rad_d3_angstrom": 1.453333333333,
+      "r4r2": 5.098171474418196,
       "source_lines": {
         "chi": 66,
         "eta": 90,
@@ -897,9 +928,9 @@
         "chemical_hardness": 42,
         "covalent_rad_2009_angstrom": 44,
         "zeff": 41,
-        "r4r2": 50
+        "r4_over_r2": 50
       },
-      "comment": "chi,eta,kcnchi,rad: multicharge eeq2019.f90 lines 66,90,114,138; pauling_en: dftd4 data/en.f90:41; chemical_hardness: dftd4 data/hardness.f90:42; covalent_rad_2009_angstrom: dftd4 data/covrad.f90:44 (literal Angstrom, upstream multiplies by aatoau); covalent_rad_d3_angstrom = 4/3 * covalent_rad_2009_angstrom (covrad.f90:64-65); zeff: dftd4 data/zeff.f90:41; r4r2: dftd4 data/r4r2.f90:50"
+      "comment": "chi,eta,kcnchi,rad: multicharge eeq2019.f90 lines 66,90,114,138; pauling_en: dftd4 data/en.f90:41; chemical_hardness: dftd4 data/hardness.f90:42; covalent_rad_2009_angstrom: dftd4 data/covrad.f90:44 (literal Angstrom, upstream multiplies by aatoau); covalent_rad_d3_angstrom = 4/3 * covalent_rad_2009_angstrom (covrad.f90:64-65); zeff: dftd4 data/zeff.f90:41; r4_over_r2: dftd4 data/r4r2.f90:50 (raw table); r4r2 = sqrt(0.5*r4_over_r2*sqrt(Z)) (derived array D4 actually uses)"
     },
     {
       "Z": 31,
@@ -912,8 +943,9 @@
       "chemical_hardness": 0.30762999,
       "covalent_rad_2009_angstrom": 1.12,
       "zeff": 31.0,
-      "r4r2": 13.4606,
+      "r4_over_r2": 13.4606,
       "covalent_rad_d3_angstrom": 1.493333333333,
+      "r4r2": 6.121496915882168,
       "source_lines": {
         "chi": 67,
         "eta": 91,
@@ -923,9 +955,9 @@
         "chemical_hardness": 43,
         "covalent_rad_2009_angstrom": 45,
         "zeff": 41,
-        "r4r2": 51
+        "r4_over_r2": 51
       },
-      "comment": "chi,eta,kcnchi,rad: multicharge eeq2019.f90 lines 67,91,115,139; pauling_en: dftd4 data/en.f90:42; chemical_hardness: dftd4 data/hardness.f90:43; covalent_rad_2009_angstrom: dftd4 data/covrad.f90:45 (literal Angstrom, upstream multiplies by aatoau); covalent_rad_d3_angstrom = 4/3 * covalent_rad_2009_angstrom (covrad.f90:64-65); zeff: dftd4 data/zeff.f90:41; r4r2: dftd4 data/r4r2.f90:51"
+      "comment": "chi,eta,kcnchi,rad: multicharge eeq2019.f90 lines 67,91,115,139; pauling_en: dftd4 data/en.f90:42; chemical_hardness: dftd4 data/hardness.f90:43; covalent_rad_2009_angstrom: dftd4 data/covrad.f90:45 (literal Angstrom, upstream multiplies by aatoau); covalent_rad_d3_angstrom = 4/3 * covalent_rad_2009_angstrom (covrad.f90:64-65); zeff: dftd4 data/zeff.f90:41; r4_over_r2: dftd4 data/r4r2.f90:51 (raw table); r4r2 = sqrt(0.5*r4_over_r2*sqrt(Z)) (derived array D4 actually uses)"
     },
     {
       "Z": 32,
@@ -938,8 +970,9 @@
       "chemical_hardness": 0.3393158,
       "covalent_rad_2009_angstrom": 1.09,
       "zeff": 32.0,
-      "r4r2": 10.8544,
+      "r4_over_r2": 10.8544,
       "covalent_rad_d3_angstrom": 1.453333333333,
+      "r4r2": 5.540837426133801,
       "source_lines": {
         "chi": 67,
         "eta": 91,
@@ -949,9 +982,9 @@
         "chemical_hardness": 43,
         "covalent_rad_2009_angstrom": 45,
         "zeff": 41,
-        "r4r2": 51
+        "r4_over_r2": 51
       },
-      "comment": "chi,eta,kcnchi,rad: multicharge eeq2019.f90 lines 67,91,115,139; pauling_en: dftd4 data/en.f90:42; chemical_hardness: dftd4 data/hardness.f90:43; covalent_rad_2009_angstrom: dftd4 data/covrad.f90:45 (literal Angstrom, upstream multiplies by aatoau); covalent_rad_d3_angstrom = 4/3 * covalent_rad_2009_angstrom (covrad.f90:64-65); zeff: dftd4 data/zeff.f90:41; r4r2: dftd4 data/r4r2.f90:51"
+      "comment": "chi,eta,kcnchi,rad: multicharge eeq2019.f90 lines 67,91,115,139; pauling_en: dftd4 data/en.f90:42; chemical_hardness: dftd4 data/hardness.f90:43; covalent_rad_2009_angstrom: dftd4 data/covrad.f90:45 (literal Angstrom, upstream multiplies by aatoau); covalent_rad_d3_angstrom = 4/3 * covalent_rad_2009_angstrom (covrad.f90:64-65); zeff: dftd4 data/zeff.f90:41; r4_over_r2: dftd4 data/r4r2.f90:51 (raw table); r4r2 = sqrt(0.5*r4_over_r2*sqrt(Z)) (derived array D4 actually uses)"
     },
     {
       "Z": 33,
@@ -964,8 +997,9 @@
       "chemical_hardness": 0.37235985,
       "covalent_rad_2009_angstrom": 1.15,
       "zeff": 33.0,
-      "r4r2": 8.9386,
+      "r4_over_r2": 8.9386,
       "covalent_rad_d3_angstrom": 1.533333333333,
+      "r4r2": 5.066968900257076,
       "source_lines": {
         "chi": 67,
         "eta": 91,
@@ -975,9 +1009,9 @@
         "chemical_hardness": 43,
         "covalent_rad_2009_angstrom": 45,
         "zeff": 41,
-        "r4r2": 51
+        "r4_over_r2": 51
       },
-      "comment": "chi,eta,kcnchi,rad: multicharge eeq2019.f90 lines 67,91,115,139; pauling_en: dftd4 data/en.f90:42; chemical_hardness: dftd4 data/hardness.f90:43; covalent_rad_2009_angstrom: dftd4 data/covrad.f90:45 (literal Angstrom, upstream multiplies by aatoau); covalent_rad_d3_angstrom = 4/3 * covalent_rad_2009_angstrom (covrad.f90:64-65); zeff: dftd4 data/zeff.f90:41; r4r2: dftd4 data/r4r2.f90:51"
+      "comment": "chi,eta,kcnchi,rad: multicharge eeq2019.f90 lines 67,91,115,139; pauling_en: dftd4 data/en.f90:42; chemical_hardness: dftd4 data/hardness.f90:43; covalent_rad_2009_angstrom: dftd4 data/covrad.f90:45 (literal Angstrom, upstream multiplies by aatoau); covalent_rad_d3_angstrom = 4/3 * covalent_rad_2009_angstrom (covrad.f90:64-65); zeff: dftd4 data/zeff.f90:41; r4_over_r2: dftd4 data/r4r2.f90:51 (raw table); r4r2 = sqrt(0.5*r4_over_r2*sqrt(Z)) (derived array D4 actually uses)"
     },
     {
       "Z": 34,
@@ -990,8 +1024,9 @@
       "chemical_hardness": 0.40273549,
       "covalent_rad_2009_angstrom": 1.1,
       "zeff": 34.0,
-      "r4r2": 8.135,
+      "r4_over_r2": 8.135,
       "covalent_rad_d3_angstrom": 1.466666666667,
+      "r4r2": 4.870051009207528,
       "source_lines": {
         "chi": 67,
         "eta": 91,
@@ -1001,9 +1036,9 @@
         "chemical_hardness": 43,
         "covalent_rad_2009_angstrom": 45,
         "zeff": 41,
-        "r4r2": 51
+        "r4_over_r2": 51
       },
-      "comment": "chi,eta,kcnchi,rad: multicharge eeq2019.f90 lines 67,91,115,139; pauling_en: dftd4 data/en.f90:42; chemical_hardness: dftd4 data/hardness.f90:43; covalent_rad_2009_angstrom: dftd4 data/covrad.f90:45 (literal Angstrom, upstream multiplies by aatoau); covalent_rad_d3_angstrom = 4/3 * covalent_rad_2009_angstrom (covrad.f90:64-65); zeff: dftd4 data/zeff.f90:41; r4r2: dftd4 data/r4r2.f90:51"
+      "comment": "chi,eta,kcnchi,rad: multicharge eeq2019.f90 lines 67,91,115,139; pauling_en: dftd4 data/en.f90:42; chemical_hardness: dftd4 data/hardness.f90:43; covalent_rad_2009_angstrom: dftd4 data/covrad.f90:45 (literal Angstrom, upstream multiplies by aatoau); covalent_rad_d3_angstrom = 4/3 * covalent_rad_2009_angstrom (covrad.f90:64-65); zeff: dftd4 data/zeff.f90:41; r4_over_r2: dftd4 data/r4r2.f90:51 (raw table); r4r2 = sqrt(0.5*r4_over_r2*sqrt(Z)) (derived array D4 actually uses)"
     },
     {
       "Z": 35,
@@ -1016,8 +1051,9 @@
       "chemical_hardness": 0.43445776,
       "covalent_rad_2009_angstrom": 1.14,
       "zeff": 35.0,
-      "r4r2": 7.1251,
+      "r4_over_r2": 7.1251,
       "covalent_rad_d3_angstrom": 1.52,
+      "r4r2": 4.590896430032106,
       "source_lines": {
         "chi": 67,
         "eta": 91,
@@ -1027,9 +1063,9 @@
         "chemical_hardness": 43,
         "covalent_rad_2009_angstrom": 45,
         "zeff": 41,
-        "r4r2": 51
+        "r4_over_r2": 51
       },
-      "comment": "chi,eta,kcnchi,rad: multicharge eeq2019.f90 lines 67,91,115,139; pauling_en: dftd4 data/en.f90:42; chemical_hardness: dftd4 data/hardness.f90:43; covalent_rad_2009_angstrom: dftd4 data/covrad.f90:45 (literal Angstrom, upstream multiplies by aatoau); covalent_rad_d3_angstrom = 4/3 * covalent_rad_2009_angstrom (covrad.f90:64-65); zeff: dftd4 data/zeff.f90:41; r4r2: dftd4 data/r4r2.f90:51"
+      "comment": "chi,eta,kcnchi,rad: multicharge eeq2019.f90 lines 67,91,115,139; pauling_en: dftd4 data/en.f90:42; chemical_hardness: dftd4 data/hardness.f90:43; covalent_rad_2009_angstrom: dftd4 data/covrad.f90:45 (literal Angstrom, upstream multiplies by aatoau); covalent_rad_d3_angstrom = 4/3 * covalent_rad_2009_angstrom (covrad.f90:64-65); zeff: dftd4 data/zeff.f90:41; r4_over_r2: dftd4 data/r4r2.f90:51 (raw table); r4r2 = sqrt(0.5*r4_over_r2*sqrt(Z)) (derived array D4 actually uses)"
     },
     {
       "Z": 36,
@@ -1042,8 +1078,9 @@
       "chemical_hardness": 0.46611708,
       "covalent_rad_2009_angstrom": 1.17,
       "zeff": 36.0,
-      "r4r2": 6.1971,
+      "r4_over_r2": 6.1971,
       "covalent_rad_d3_angstrom": 1.56,
+      "r4r2": 4.311762980498812,
       "source_lines": {
         "chi": 68,
         "eta": 92,
@@ -1053,9 +1090,9 @@
         "chemical_hardness": 44,
         "covalent_rad_2009_angstrom": 45,
         "zeff": 41,
-        "r4r2": 51
+        "r4_over_r2": 51
       },
-      "comment": "chi,eta,kcnchi,rad: multicharge eeq2019.f90 lines 68,92,116,140; pauling_en: dftd4 data/en.f90:42; chemical_hardness: dftd4 data/hardness.f90:44; covalent_rad_2009_angstrom: dftd4 data/covrad.f90:45 (literal Angstrom, upstream multiplies by aatoau); covalent_rad_d3_angstrom = 4/3 * covalent_rad_2009_angstrom (covrad.f90:64-65); zeff: dftd4 data/zeff.f90:41; r4r2: dftd4 data/r4r2.f90:51"
+      "comment": "chi,eta,kcnchi,rad: multicharge eeq2019.f90 lines 68,92,116,140; pauling_en: dftd4 data/en.f90:42; chemical_hardness: dftd4 data/hardness.f90:44; covalent_rad_2009_angstrom: dftd4 data/covrad.f90:45 (literal Angstrom, upstream multiplies by aatoau); covalent_rad_d3_angstrom = 4/3 * covalent_rad_2009_angstrom (covrad.f90:64-65); zeff: dftd4 data/zeff.f90:41; r4_over_r2: dftd4 data/r4r2.f90:51 (raw table); r4r2 = sqrt(0.5*r4_over_r2*sqrt(Z)) (derived array D4 actually uses)"
     }
   ]
 }
