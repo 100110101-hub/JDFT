@@ -61,6 +61,14 @@ pub struct RohfResult {
     pub scf_converged: bool,
     /// `⟨S²⟩`：纯自旋的精确值 `S(S+1)`。
     pub s_squared: f64,
+    /// α 电子数（= 闭壳层数 + 开壳层数）。
+    pub n_alpha: usize,
+    /// β 电子数（= 闭壳层数）。
+    pub n_beta: usize,
+    /// 电子能量（不含核排斥）。
+    pub electronic_hartree: f64,
+    /// 总密度 `2D_c + D_o`（偶极矩等一次性性质用它）。
+    pub density_total: Matrix,
 }
 
 /// 按 **Roothaan 的占据规则**选轨道（PySCF `_fill_rohf_occ` 同款）：
@@ -385,6 +393,12 @@ pub fn rohf_scf(
     };
 
     // 走到这里一定收敛过（不收敛在上面就 `Err` 了），所以 `scf_converged` 恒为 true。
+    let mut density_total = Matrix::zeros(n, n);
+    for i in 0..n {
+        for j in 0..n {
+            density_total[(i, j)] = 2.0 * rho_closed.get(i, j) + rho_open.get(i, j);
+        }
+    }
     let angular = 0.5 * f64::from(molecule.multiplicity.saturating_sub(1));
     Ok(RohfResult {
         energy_hartree,
@@ -394,6 +408,10 @@ pub fn rohf_scf(
         density_open: rho_open,
         iterations,
         scf_converged: true,
+        n_alpha,
+        n_beta,
+        electronic_hartree: energy_hartree - e_nuc,
+        density_total,
         s_squared: angular * (angular + 1.0),
     })
 }

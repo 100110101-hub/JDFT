@@ -451,6 +451,150 @@ impl RksBackend {
     /// 与闭壳层路径的三个差别：① 走 [`qwb_scf::uhf::uhf_scf`]（双套密度、⟨S²⟩）；
     /// ② 结果里带 K9 的 `spin` 块（自旋污染必须报出来）；③ 轨道填**α** 的那一套
     ///（K2 的 `mo_energies_hartree` / `mo_coeffs` 是单套字段，β 的轨道能写进日志）。
+    /// **ROHF** 单点（SC-01c，第 383 轮接线）：纯自旋的开壳层 HF。
+    ///
+    /// 与 UHF 的差别只在 SCF 内核（Roothaan 等效 Fock）；结果侧多一件事、少一件事：
+    /// * `⟨S²⟩` 是解析的 `S(S+1)`（CSF），不是行列式的期望值；
+    /// * 只有一套空间轨道，`mo_energies` 给的是**等效 Fock** 的本征值（不是 Koopmans 轨道能）。
+    ///
+    /// 自旋密度 = `P_α − P_β = D_o`，所以 `options.epr` 在 ROHF 上同样可用。
+    fn run_rohf_single_point(
+        &self,
+        input: &JobInput,
+        reporter: &dyn Reporter,
+    ) -> Result<JobResult, EngineError> {
+        let basis_k1 = self.registry.get_basis(&input.basis_name)?;
+        let spec = self.spec(input)?;
+        if !spec.terms.is_empty() {
+            return Err(EngineError::Unsupported(format!(
+                "options.scf_type = `rohf` is Hartree-Fock only, but method `{}` is a \
+                 density functional; use `uks`/`rks`",
+                input.method_name
+            )));
+        }
+        if !matches!(input.jobtype, JobType::Sp | JobType::Opt) {
+            return Err(EngineError::Unsupported(format!(
+                "options.scf_type = `rohf` supports `sp` and `opt` only (SC-01c); jobtype = `{}`",
+                input.jobtype.as_str()
+            )));
+        }
+        if input.molecule.multiplicity <= 1 {
+            return Err(EngineError::InvalidInput(
+                "options.scf_type = `rohf` needs an open shell (multiplicity > 1)".to_string(),
+            ));
+        }
+
+        reporter.progress("load", 0.0);
+        reporter.log(&format!(
+            "scf_type = rohf (restricted open-shell Hartree-Fock), basis = {} \
+             ({} elements), {} atoms, multiplicity {}",
+            basis_k1.name,
+            basis_k1.elements.len(),
+            input.molecule.n_atoms(),
+            input.molecule.multiplicity
+        ));
+
+        reporter.progress("integrals", 25.0);
+        let basis = qwb_basis::InternalBasis::build(basis_k1, &input.molecule)?;
+        let tensor = qwb_integrals::two_electron::two_electron(&basis, &input.molecule)?;
+
+        let mut options = qwb_scf::uhf::UhfOptions::default();
+        options.max_iter = input.options.scf_max_iter;
+        options.energy_threshold = input.options.scf_energy_threshold_hartree;
+        options.density_threshold = input.options.scf_density_threshold;
+        options.diis_max_vectors = input.options.diis_history as usize;
+        if let Some(ecp_name) = &input.options.ecp_name {
+            let (charges, potential) = self.ecp_terms(input, &basis, &spec.grid_name, ecp_name)?;
+            options.nuclear_charges = Some(charges);
+            options.ecp_potential = Some(potential);
+        }
+
+        reporter.progress("scf", 40.0);
+        let result = qwb_scf::rohf::rohf_scf(&basis, &input.molecule, &tensor, &options)?;
+        reporter.log(&format!(
+            "rohf {} in {} iterations: E = {:.10} Ha, <S^2> = {:.6} (exact S(S+1))",
+            if result.scf_converged {
+                "converged"
+            } else {
+                "NOT converged"
+            },
+            result.iterations,
+            result.energy_hartree,
+            result.s_squared
+        ));
+        if !result.scf_converged {
+            return Err(EngineError::ScfNotConverged {
+                iters: result.iterations,
+                max: input.options.scf_max_iter,
+            });
+        }
+        reporter.progress("done", 100.0);
+
+        let env = env::build(&self.registry);
+        let dipole = qwb_props::dipole_debye(&basis, &input.molecule, &result.density_total)?;
+        let spin = qwb_engine_api::SpinResult::new(
+            result.n_alpha as u32,
+            result.n_beta as u32,
+            input.molecule.multiplicity,
+            result.s_squared,
+        );
+        // ROHF 的自旋密度就是开壳层密度（`P_α − P_β = D_o`）。
+        let mut alpha_density = result.density_total.clone();
+        for i in 0..alpha_density.nrows() {
+            for j in 0..alpha_density.ncols() {
+                alpha_density[(i, j)] -= result.density_open.get(i, j);
+            }
+        }
+        let epr = if input.options.epr {
+            reporter.progress("epr", 96.0);
+            let block = epr_block(
+                &basis,
+                &input.molecule,
+                &alpha_density,
+                &result.density_closed.clone(),
+                "rohf",
+            )?;
+            reporter.log(&format!(
+                "epr: {} nuclei, method = rohf, first a_iso = {:.4} MHz ({:.4} G)",
+                block.nuclei.len(),
+                block.nuclei.first().map_or(0.0, |n| n.a_iso_mhz),
+                block.nuclei.first().map_or(0.0, |n| n.a_iso_gauss),
+            ));
+            Some(block)
+        } else {
+            None
+        };
+        let mut job = JobResult::new(
+            result.energy_hartree,
+            result.scf_converged,
+            self.registry.snapshot(),
+            env,
+        )
+        .with_dipole(nalgebra::DVector::from_column_slice(&dipole))
+        .with_orbitals(
+            nalgebra::DVector::from_column_slice(result.mo_energies.as_slice()),
+            density_to_api(&result.coefficients),
+        )
+        .with_spin(spin);
+        if let Some(block) = epr {
+            job = job.with_epr(block);
+        }
+        Ok(job.with_log(format!(
+            "scf_type = rohf, basis = {}, iterations = {}, E_elec = {:.10}, <S^2> = {:.6} \
+             (exact), n_alpha = {}, n_beta = {}, dipole = [{:.4}, {:.4}, {:.4}] D. \
+             mo_energies_hartree are the EFFECTIVE (Roothaan) Fock eigenvalues, not Koopmans.",
+            basis_k1.name,
+            result.iterations,
+            result.electronic_hartree,
+            result.s_squared,
+            result.n_alpha,
+            result.n_beta,
+            dipole[0],
+            dipole[1],
+            dipole[2]
+        )))
+    }
+
     fn run_uhf_single_point(
         &self,
         input: &JobInput,
@@ -602,6 +746,9 @@ impl RksBackend {
             }
             Some(qwb_engine_api::ScfType::Uks) => {
                 return self.run_uks_single_point(input, reporter);
+            }
+            Some(qwb_engine_api::ScfType::Rohf) => {
+                return self.run_rohf_single_point(input, reporter);
             }
             _ => {}
         }
@@ -1577,14 +1724,16 @@ fn reject_unimplemented_options(input: &JobInput) -> Result<(), EngineError> {
         }
     }
     if let Some(scf_type) = options.scf_type {
-        // 阶段二已接：闭壳层 KS/RHF（阶段一行为）、**UHF**（SC-01）、**UKS**（SC-01b）。
-        // 只剩 ROHF 没接线（SC-01c 记为 blocked，见 docs/status-v2.yaml）。
+        // 阶段二已接：闭壳层 KS/RHF（阶段一行为）、**UHF**（SC-01）、**UKS**（SC-01b）、
+        // **ROHF**（SC-01c，第 383 轮接线；4/5 体系与 PySCF 一致到 1e-8，NH2 仍落进错的盆地，
+        // 见台账 SC-01c 的 gap）。ROHF 只在 Hartree-Fock 方法上可用（DFT 走 UKS/RKS）。
         let supported = matches!(
             scf_type,
             qwb_engine_api::ScfType::Rks
                 | qwb_engine_api::ScfType::Rhf
                 | qwb_engine_api::ScfType::Uhf
                 | qwb_engine_api::ScfType::Uks
+                | qwb_engine_api::ScfType::Rohf
         );
         if !supported {
             return Err(EngineError::Unsupported(format!(

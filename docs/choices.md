@@ -7184,3 +7184,17 @@ gap 里写明"下一步换起点"，测试里把 NH2 标成 `KNOWN_OPEN_CASES`�
 
 顺带把 `QWB_SCF_TRACE` 的逐步残差也加进了 ROHF 循环（与 UHF 一致）：这次三个坑都是靠它 +
 "与 PySCF 差多少 mHa"这两个数定位的。
+
+**第 383 轮：接进引擎。** `rohf_scf` 落地之后如果不接线，它就是死代码 —— 引擎的
+`reject_unimplemented_options` 里还留着"ROHF 是 SC-01c、blocked"的拒绝分支。这一轮把
+`scf_type: rohf` 接到独立路径 `run_rohf_single_point`（`sp`/`opt`、Hartree-Fock only，
+DFT 方法显式拒绝并提示用 `uks`/`rks`），结果侧给出 spin 块（`mult`、`n_α`、`n_β`、解析 `⟨S²⟩`）、
+偶极矩（用总密度 `2D_c + D_o`）与**等效 Fock 本征值**（日志里写明这不是 Koopmans 轨道能）。
+`options.epr` 在 ROHF 上同样可用，因为自旋密度恰好就是开壳层密度 `P_α − P_β = D_o`。
+
+引擎级实测（`sc01c_rohf_engine.rs`，2 例）：O2/STO-3G 得 **−147.6321670245 Ha**
+（PySCF −147.6321669907，Δ 3.4e-8）、`⟨S²⟩ = 2.0` 精确、`n_α = 9 / n_β = 7`；多重度 1 被拒。
+同时**改了一条老测试的口径**：`kv_phase2_options` 里 `open_shell_scf_type_is_rejected_with_its_wp`
+原来断言"ROHF 会被拒且消息含 blocked" —— 现在 ROHF 已接线，所以它改成两半：
+ROHF + DFT 必须被拒（消息含 Hartree-Fock only 与 uks），ROHF + `hf` 必须真的算出并带 spin 块。
+这类"被实装之后必须改口径"的测试是好事：它反过来证明接线真的改变了行为。

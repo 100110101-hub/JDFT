@@ -78,13 +78,24 @@ fn error_context(input: &JobInput) -> String {
 
 #[test]
 fn open_shell_scf_type_is_rejected_with_its_wp() {
-    // UHF（SC-01）与 UKS（SC-01b）都已实装，只剩 ROHF（SC-01c，blocked）会被拒。
+    // 第 383 轮起 ROHF（SC-01c）也接线了 —— 所以这条测试的口径改成两半：
+    // ① ROHF 是 **Hartree-Fock only**：配 DFT 方法时必须被拒（且消息说明改用 uks/rks，
+    //    不能静默当 UKS 跑）；② 配 `hf` 时必须**真的算出来**（数值验收在 `sc01c_rohf_engine.rs`）。
     // UHF 的验收在 `sc01_uhf_engine.rs`，UKS 的在 `sc01b_uks_engine.rs`。
     let options = TaskOptions::default().with_scf_type(ScfType::Rohf);
     let message = unsupported(&input("svwn5", 3, options));
-    assert!(message.contains("SC-01c"), "{message}");
-    assert!(message.contains("ROHF"), "{message}");
-    assert!(message.contains("blocked"), "{message}");
+    assert!(message.contains("Hartree-Fock only"), "{message}");
+    assert!(message.contains("uks"), "{message}");
+
+    let result = backend()
+        .run(
+            &input("hf", 3, TaskOptions::default().with_scf_type(ScfType::Rohf)),
+            &NullReporter,
+        )
+        .unwrap_or_else(|e| panic!("ROHF 已接线（SC-01c），不该被拒：{e}"));
+    assert!(result.scf_converged, "ROHF 应该收敛");
+    let spin = result.spin.expect("ROHF 结果必须带 spin 块");
+    assert_eq!(spin.multiplicity, 3);
 }
 
 #[test]
