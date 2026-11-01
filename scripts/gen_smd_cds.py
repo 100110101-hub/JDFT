@@ -52,7 +52,12 @@ def fortran_number_list(body: str) -> list[float]:
     """展开 Fortran `DATA` 的初值表：支持 `n*value` 与 `&`/`.` 续行。"""
     # Fortran 的续行标记是第 6 列的 `.`（如 `  . 48.69, ...`）：**先按行去掉**再拼，
     # 否则拼成一行后行首锚点就失效了（实测会留下一个孤立的 `.` 让 float() 抛错）。
-    lines = [re.sub(r"^\s*[.$]", " ", line) for line in body.split("\n")]
+    # 每行要同时处理三件事：列 6 的续行标记（`.` 或 `$`）、Fortran 的行内注释（`! ...`）、
+    # 以及可能的行首 `&`。都在**按行**阶段做，避免拼成一行后锚点失效。
+    lines = []
+    for line in body.split("\n"):
+        line = re.sub(r"!.*$", " ", line)
+        lines.append(re.sub(r"^\s*[.$&]", " ", line))
     text = " ".join(lines).replace("&", " ").replace(",", " ")
     values: list[float] = []
     for token in text.split():
@@ -80,8 +85,15 @@ def extract_table(
 
 
 def subroutine_body(source: str, name: str) -> str:
+    """取子程序正文。
+
+    结束锚点用「下一个 `SUBROUTINE` 或文件尾」，**不用**第一个 `END` —— Fortran 里的
+    `END DO` / `END IF` 会让第一个 `END` 落在循环里（实测 `VDWRAD` 里就有一个 `END DO`，
+    截断后表只剩几项）。
+    """
     start = source.index(f"SUBROUTINE {name}")
-    end = source.find("END", start)
+    following = source.find("SUBROUTINE ", start + 1)
+    end = following if following != -1 else len(source)
     return source[start:end]
 
 
@@ -137,14 +149,42 @@ def build_rows() -> dict:
         "SIGMA_MOL",
     ):
         raw[declaration.lower()] = extract_table(naq, declaration, limit=None)
+    sigma_mol = raw["sigma_mol"]
+    if len(sigma_mol) != 4:
+        raise SystemExit("gen_smd_cds: SIGMA_MOL must have four entries")
     rows["cases"]["nonaqueous"] = {
         "subroutine": "SMD_CDS_NAQ",
-        "complete": False,
-        "pending": (
-            "sigma is assembled from these arrays with the solvent Abraham descriptors "
-            "(SOLA/SOLB/SOLC/SOLG/SOLH/SOLN); the assembly rule has not been transcribed yet"
+        "complete": True,
+        # 拼装规则逐字来自 `SMD_CDS_NAQ` 的正文（mnsol.F:423-429）：
+        #   SIGMA(I)  = SIGMA_N(I)*SOLN + SIGMA_A(I)*SOLA + SIGMA_B(I)*SOLB
+        #   HSIGMA(I) = HSIGMA_N(I)*SOLN + HSIGMA_A(I)*SOLA + HSIGMA_B(I)*SOLB
+        #   CSSIGM    = SIGMA_MOL(1)*SOLG + SIGMA_MOL(2)*SOLB^2
+        #             + SIGMA_MOL(3)*SOLC^2 + SIGMA_MOL(4)*SOLH^2
+        # 也就是说：非水的 σ 与溶剂的 Abraham 描述符**线性**相关（外加一个与元素无关的
+        # 常数项 CSSIGM），所以数据里落的是三张表 + 四个系数，而不是 100 多个溶剂各自的 σ。
+        "sigma_formula": "SIGMA_N(i)*SOLN + SIGMA_A(i)*SOLA + SIGMA_B(i)*SOLB",
+        "hsigma_formula": "HSIGMA_N(i)*SOLN + HSIGMA_A(i)*SOLA + HSIGMA_B(i)*SOLB",
+        "constant_formula": (
+            "SIGMA_MOL[0]*SOLG + SIGMA_MOL[1]*SOLB**2 + SIGMA_MOL[2]*SOLC**2 "
+            "+ SIGMA_MOL[3]*SOLH**2"
         ),
+        "sigma_mol": sigma_mol,
+        "descriptor_names": ["SOLA", "SOLB", "SOLC", "SOLG", "SOLH", "SOLN"],
         "raw_tables": raw,
+    }
+
+    # CDS 用的 vdW 半径（`SUBROUTINE VDWRAD` 的 `BONDI` 表；H 取 Bondi 1964，其余取
+    # Mantina et al. 的 CRC 表）——**与 SMD 的"参数化半径"不是同一套**：
+    # 这里的 C 是 1.70 / N 1.55 / O 1.52，而 SMD 参数化半径是 C 1.85 / N 1.89 /（O 依赖 α）。
+    # 两套半径混用会静默错数，所以分开落盘、各自标名字。
+    vdwrad = subroutine_body(source, "VDWRAD")
+    rows["cds_vdw_radii_angstrom"] = {
+        "table": "BONDI",
+        "note": (
+            "CDS cavity radii, not the SMD parameterised radii: H from Bondi 1964, the rest "
+            "from Mantina et al. (CRC Handbook 2010-2011)"
+        ),
+        "values": extract_table(vdwrad, "BONDI", limit=None),
     }
     return rows
 
@@ -200,6 +240,11 @@ def main() -> int:
     print(f"  water     nonzero sigma: {nonzero}")
     for name, values in rows["cases"]["nonaqueous"]["raw_tables"].items():
         print(f"  nonaqueous {name}: {len(values)} entries")
+    radii = rows["cds_vdw_radii_angstrom"]["values"]
+    print(
+        f"  CDS vdW radii: {len(radii)} entries (H {radii[0]}, C {radii[5]}, "
+        f"N {radii[6]}, O {radii[7]})"
+    )
     return 0
 
 
