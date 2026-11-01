@@ -106,7 +106,7 @@ fn spin_resolved_m06_exchange_matches_libxc_pointwise() {
             cases.insert(row[case].clone(), row);
         }
     }
-    assert_eq!(cases.len(), 5, "expected five reference samples");
+    assert_eq!(cases.len(), 9, "expected nine reference samples (zeta grid)");
 
     let term = m06l_exchange();
     assert!(
