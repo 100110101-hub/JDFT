@@ -221,6 +221,73 @@ $defs:
     - pair_sigma_b
     - sigma_mol
     type: object
+  SmdOxygenRadius:
+    additionalProperties: false
+    description: |-
+      SMD 参数化半径里 O 的 α 规则（eq. 16）。
+
+      `R = radius_high_angstrom`（`α ≥ threshold_alpha`），否则
+      `R = radius_high_angstrom + slope_angstrom·(offset_alpha − α)`。
+    properties:
+      offset_alpha:
+        description: 斜率里的参考 α（与阈值相同，但独立落盘以免实现侧写死）。
+        format: double
+        type: number
+      radius_high_angstrom:
+        description: α 高于阈值时的 O 半径（Å）。
+        format: double
+        type: number
+      slope_angstrom:
+        description: '`α < 阈值` 时的斜率（Å / α）。'
+        format: double
+        type: number
+      threshold_alpha:
+        description: α 的阈值（0.43）。
+        format: double
+        type: number
+    required:
+    - threshold_alpha
+    - radius_high_angstrom
+    - slope_angstrom
+    - offset_alpha
+    type: object
+  SmdParameterisedRadii:
+    additionalProperties: false
+    description: |-
+      SMD 的**参数化半径**（Marenich–Cramer–Truhlar 2009, eq. 16）。
+
+      规则：逐元素覆盖表 → 基础表；O 走 [`SmdOxygenRadius`]。
+      **不要**与 [`SmdCds::vdw_radii_angstrom`] 混用：C 在这里是 1.85、在 CDS 里是 1.70；
+      N 是 1.89 vs 1.55；O 依赖 α vs 固定 1.52。
+    properties:
+      base_angstrom:
+        additionalProperties:
+          format: double
+          type: number
+        description: 基础表（Å，逐元素；来自 PySCF 的 `radii.VDW`）。
+        type: object
+      note:
+        description: 提取说明。
+        type: string
+      overrides_angstrom:
+        additionalProperties:
+          format: double
+          type: number
+        description: SMD 的逐元素覆盖值（Å；键是元素符号）。
+        type: object
+      oxygen:
+        $ref: '#/$defs/SmdOxygenRadius'
+        description: O 的 α 规则。
+      rule:
+        description: 规则的文字说明（人读用）。
+        type: string
+    required:
+    - rule
+    - note
+    - base_angstrom
+    - overrides_angstrom
+    - oxygen
+    type: object
   SmdWaterSigma:
     additionalProperties: false
     description: CDS 的水相参数（`SIGMA_DATA`）。
@@ -303,6 +370,9 @@ properties:
     type:
     - string
     - 'null'
+  parameterised_radii:
+    $ref: '#/$defs/SmdParameterisedRadii'
+    description: SMD 的**参数化半径**（eq. 16）—— 与 `cds.vdw_radii_angstrom` 不是同一套。
   provenance:
     $ref: '#/$defs/SmdAtomicProvenance'
     description: 溯源。
@@ -323,6 +393,7 @@ required:
 - created
 - elements
 - cds
+- parameterised_radii
 - provenance
 title: SmdAtomic
 type: object

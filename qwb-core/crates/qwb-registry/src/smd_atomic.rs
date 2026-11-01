@@ -156,8 +156,49 @@ pub struct SmdAtomic {
     pub elements: Vec<String>,
     /// CDS 数据。
     pub cds: SmdCds,
+    /// SMD 的**参数化半径**（eq. 16）—— 与 `cds.vdw_radii_angstrom` 不是同一套。
+    pub parameterised_radii: SmdParameterisedRadii,
     /// 溯源。
     pub provenance: SmdAtomicProvenance,
+}
+
+/// SMD 参数化半径里 O 的 α 规则（eq. 16）。
+///
+/// `R = radius_high_angstrom`（`α ≥ threshold_alpha`），否则
+/// `R = radius_high_angstrom + slope_angstrom·(offset_alpha − α)`。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+#[non_exhaustive]
+pub struct SmdOxygenRadius {
+    /// α 的阈值（0.43）。
+    pub threshold_alpha: f64,
+    /// α 高于阈值时的 O 半径（Å）。
+    pub radius_high_angstrom: f64,
+    /// `α < 阈值` 时的斜率（Å / α）。
+    pub slope_angstrom: f64,
+    /// 斜率里的参考 α（与阈值相同，但独立落盘以免实现侧写死）。
+    pub offset_alpha: f64,
+}
+
+/// SMD 的**参数化半径**（Marenich–Cramer–Truhlar 2009, eq. 16）。
+///
+/// 规则：逐元素覆盖表 → 基础表；O 走 [`SmdOxygenRadius`]。
+/// **不要**与 [`SmdCds::vdw_radii_angstrom`] 混用：C 在这里是 1.85、在 CDS 里是 1.70；
+/// N 是 1.89 vs 1.55；O 依赖 α vs 固定 1.52。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+#[non_exhaustive]
+pub struct SmdParameterisedRadii {
+    /// 规则的文字说明（人读用）。
+    pub rule: String,
+    /// 提取说明。
+    pub note: String,
+    /// 基础表（Å，逐元素；来自 PySCF 的 `radii.VDW`）。
+    pub base_angstrom: BTreeMap<String, f64>,
+    /// SMD 的逐元素覆盖值（Å；键是元素符号）。
+    pub overrides_angstrom: BTreeMap<String, f64>,
+    /// O 的 α 规则。
+    pub oxygen: SmdOxygenRadius,
 }
 
 impl_data_common!(SmdAtomic);
@@ -335,6 +376,45 @@ impl SmdAtomic {
                     }
                 }
             }
+        }
+        // 参数化半径：基础表覆盖每个元素、覆盖值有限为正、O 的规则参数有限。
+        let radii = &self.parameterised_radii;
+        for symbol in &self.elements {
+            match radii.base_angstrom.get(symbol) {
+                None => issues.push(format!(
+                    "parameterised_radii.base_angstrom has no entry for `{symbol}`"
+                )),
+                Some(radius) => {
+                    if !radius.is_finite() || *radius <= 0.0 {
+                        issues.push(format!(
+                            "parameterised_radii.base_angstrom[{symbol}] must be positive"
+                        ));
+                    }
+                }
+            }
+        }
+        for (symbol, radius) in &radii.overrides_angstrom {
+            if !radius.is_finite() || *radius <= 0.0 {
+                issues.push(format!(
+                    "parameterised_radii.overrides_angstrom[{symbol}] must be positive"
+                ));
+            }
+        }
+        if radii.overrides_angstrom.is_empty() {
+            issues.push("parameterised_radii.overrides_angstrom must not be empty".into());
+        }
+        for (label, value) in [
+            ("threshold_alpha", radii.oxygen.threshold_alpha),
+            ("radius_high_angstrom", radii.oxygen.radius_high_angstrom),
+            ("slope_angstrom", radii.oxygen.slope_angstrom),
+            ("offset_alpha", radii.oxygen.offset_alpha),
+        ] {
+            if !value.is_finite() {
+                issues.push(format!("parameterised_radii.oxygen.{label} must be finite"));
+            }
+        }
+        if radii.oxygen.radius_high_angstrom <= 0.0 {
+            issues.push("parameterised_radii.oxygen.radius_high_angstrom must be positive".into());
         }
         if self.provenance.upstream.is_empty() {
             issues.push("provenance.upstream must not be empty".into());

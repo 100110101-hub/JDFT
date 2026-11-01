@@ -3,7 +3,7 @@
 # （否则 grid 的 normal 等级会有两个定义、get_grid_by_level 歧义）。
 schema_version: 1.0.0
 name: qwb-data
-version: 0.18.0
+version: 0.19.0
 created: 2026-10-22T22:53:00Z
 features:
   - "jobtype:sp"
@@ -121,7 +121,7 @@ d4_dispersions:
 smd_atomics:
   - name: smd-atomic
     path: solvent/smd_atomic.yaml
-    sha256: 6add01069bf415e969e054b3bee8e1c2e44088c13c9a9ffe8ca59ccb45537980
+    sha256: 431d7009f152876647702a43dea9566ee75fba4c350611b6e5d0a235b6045e61
 
 # 阶段二 K10：数值路径的精度等级与等价容差（project-phase2.md 4.5 / 8.5）。
 # 文件里只引用 grid 的名字，网格参数仍然只有 grid/*.yaml 一份。

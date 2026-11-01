@@ -119,6 +119,9 @@ GENERATORS = {
     # 于是差异只剩表面分解本身。
     "qwb-core/crates/qwb-props/tests/reference/smd_cds_legacy.csv":
         "scripts/smd_cds_legacy_reference.py",
+    # SV-03：SMD 参数化半径（eq. 16）的官方参考值（PySCF 的 `smd.smd_radii`，单位 bohr）。
+    "qwb-core/crates/qwb-props/tests/reference/smd_parameterised_radii.csv":
+        "scripts/smd_radii_reference.py",
 }
 
 FAMILIES = tuple(GENERATORS)

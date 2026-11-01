@@ -25,6 +25,9 @@ import sys
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 STAGING = os.path.join(ROOT, "qwb-data", "solvent", "_smd_cds_staging", "cds_atomic.json")
 OUTPUT = os.path.join(ROOT, "qwb-data", "solvent", "smd_atomic.yaml")
+RADII_STAGING = os.path.join(
+    ROOT, "qwb-data", "solvent", "_smd_radii_staging", "smd_radii.json"
+)
 
 NOTES = (
     "SMD 的 CDS（cavity dispersion solvent structure）项所需的元素级数据，从 PySCF 2.14.0 的 "
@@ -46,6 +49,8 @@ def build() -> dict:
     naq = staging["cases"]["nonaqueous"]
     bonds = staging["cds_bond_rules"]
     radii = staging["cds_vdw_radii_angstrom"]["values"]
+    with open(RADII_STAGING, encoding="utf-8") as handle:
+        parameterised = json.load(handle)
     element_symbols = [
         "H", "He", "Li", "Be", "B", "C", "N", "O", "F", "Ne",
         "Na", "Mg", "Al", "Si", "P", "S", "Cl", "Ar", "K", "Ca",
@@ -117,6 +122,23 @@ def build() -> dict:
                 "element_types": dict(bonds["element_types"]),
                 "rkkval_angstrom": [list(row) for row in bonds["rkkval_angstrom"]],
             },
+        },
+        # 第二块半径：SMD 的**参数化半径**（eq. 16）。与上面 `cds.vdw_radii_angstrom`
+        # 不是同一套（C 1.85 / N 1.89 / O 依赖 α），所以放在并列的顶层块、各自标名字。
+        "parameterised_radii": {
+            "rule": (
+                "eq. 16 of Marenich-Cramer-Truhlar 2009: per-element base table, the SMD "
+                "element overrides, and the oxygen radius that depends on the solvent Abraham "
+                "alpha"
+            ),
+            "note": parameterised["note"],
+            "base_angstrom": dict(parameterised["base_angstrom"]),
+            "overrides_angstrom": {
+                symbol: parameterised["overrides_angstrom"][str(index)]
+                for index, symbol in enumerate(element_symbols, start=1)
+                if str(index) in parameterised["overrides_angstrom"]
+            },
+            "oxygen": dict(parameterised["oxygen"]),
         },
         "provenance": {
             "generator": "scripts/gen_smd_atomic.py",

@@ -186,3 +186,32 @@ fn the_pair_sigma_blocks_match_upstream() {
     let issues = data.check();
     assert!(issues.is_empty(), "{issues:?}");
 }
+
+#[test]
+fn the_parameterised_radii_are_the_second_radius_family() {
+    // SMD 的**参数化半径**（eq. 16）与 CDS 的 vdW 半径是两套：C 1.85 vs 1.70、N 1.89 vs 1.55。
+    // 数据里它们并列存在、各自有名字，这条测试钉住几个关键值并断言"不许相等"。
+    let registry = Registry::open(data_root()).expect("qwb-data");
+    let data = registry.get_smd_atomic("smd-atomic").expect("smd-atomic");
+    let radii = &data.parameterised_radii;
+    assert_eq!(radii.base_angstrom.len(), 36);
+    assert_eq!(radii.base_angstrom["H"], 1.20);
+    assert_eq!(radii.base_angstrom["He"], 1.40);
+    assert_eq!(radii.overrides_angstrom["H"], 1.20);
+    assert_eq!(radii.overrides_angstrom["C"], 1.85);
+    assert_eq!(radii.overrides_angstrom["N"], 1.89);
+    assert_eq!(radii.overrides_angstrom["F"], 1.73);
+    assert_eq!(radii.overrides_angstrom["S"], 2.49);
+    assert_eq!(radii.overrides_angstrom["Cl"], 2.38);
+    assert_eq!(radii.overrides_angstrom["Br"], 2.60);
+    // O 由 α 决定，不在覆盖表里（那是常数表解释不了的部分）。
+    assert!(!radii.overrides_angstrom.contains_key("O"));
+    assert_eq!(radii.oxygen.threshold_alpha, 0.43);
+    assert_eq!(radii.oxygen.radius_high_angstrom, 1.52);
+    assert_eq!(radii.oxygen.slope_angstrom, 1.8);
+    // 两套半径在 C/N 上必须不同。
+    assert!((radii.overrides_angstrom["C"] - data.cds.vdw_radii_angstrom["C"]).abs() > 0.1);
+    assert!((radii.overrides_angstrom["N"] - data.cds.vdw_radii_angstrom["N"]).abs() > 0.3);
+    let issues = data.check();
+    assert!(issues.is_empty(), "{issues:?}");
+}

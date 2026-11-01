@@ -38,13 +38,13 @@
 | `qwb-data/grid/grid-normal.yaml` | 1.0.0 | Apache-2.0 | true | true | `a792b362b1fdb278` |
 | `qwb-data/grid/grid-veryfine.yaml` | 1.0.0 | Apache-2.0 | true | true | `5c630f5a1ec0688d` |
 | `qwb-data/numerics/numerics.yaml` | 1.1.0 | Apache-2.0 | true | true | `7013e40da43be893` |
-| `qwb-data/registry.yaml` | 0.18.0 | ? | ? | ? | `—（manifest，条目各自带` |
+| `qwb-data/registry.yaml` | 0.19.0 | ? | ? | ? | `—（manifest，条目各自带` |
 | `qwb-data/solvent/acetonitrile.yaml` | 2.1.0 | Apache-2.0 | true | true | `56d58923014a0c54` |
 | `qwb-data/solvent/chloroform.yaml` | 2.1.0 | Apache-2.0 | true | true | `c38ee6eaf924c523` |
 | `qwb-data/solvent/dmso.yaml` | 2.1.0 | Apache-2.0 | true | true | `0279f71b9c5d60bc` |
 | `qwb-data/solvent/ethanol.yaml` | 2.1.0 | Apache-2.0 | true | true | `2d4a3fb7f7fbe89c` |
 | `qwb-data/solvent/methanol.yaml` | 2.1.0 | Apache-2.0 | true | true | `8d169de7be353695` |
-| `qwb-data/solvent/smd_atomic.yaml` | 1.0.0 | Apache-2.0 | true | true | `6add01069bf415e9` |
+| `qwb-data/solvent/smd_atomic.yaml` | 1.0.0 | Apache-2.0 | true | true | `431d7009f1528766` |
 | `qwb-data/solvent/thf.yaml` | 2.1.0 | Apache-2.0 | true | true | `0ebfcdb75b9e4038` |
 | `qwb-data/solvent/toluene.yaml` | 2.1.0 | Apache-2.0 | true | true | `ce103d842f376323` |
 | `qwb-data/solvent/water.yaml` | 2.1.0 | Apache-2.0 | true | true | `555d69fb1b8af3f1` |
@@ -162,7 +162,7 @@
 - A multicenter numerical integration scheme for polyatomic molecules (Becke partitioning)
 - New Methods For Electronic Structure Calculations on Large Molecules (pseudospectral approach)
 
-### `qwb-data/registry.yaml`（qwb-data 0.18.0）
+### `qwb-data/registry.yaml`（qwb-data 0.19.0）
 
 
 ### `qwb-data/solvent/acetonitrile.yaml`（acetonitrile 2.1.0）

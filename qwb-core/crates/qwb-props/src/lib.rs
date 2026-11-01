@@ -20,6 +20,7 @@ pub mod cosmo;
 pub mod epr;
 pub mod smd;
 pub mod smd_gradient;
+pub mod smd_radii;
 pub mod smd_sigma;
 pub mod smd_surface;
 pub mod spectrum;

@@ -1,0 +1,78 @@
+{
+  "schema_version": 1,
+  "description": "SMD parameterised radii (eq. 16): a per-element base table plus the SMD overrides and the oxygen rule that depends on the solvent Abraham alpha. Distinct from the CDS vdW radii.",
+  "generated_by": "scripts/gen_smd_radii.py",
+  "upstream": [
+    {
+      "file": "pyscf/data/radii.py",
+      "url": "https://github.com/pyscf/pyscf/blob/master/pyscf/data/radii.py",
+      "pyscf_version": "2.14.0",
+      "sha256": "975a624b1ae55ad3d9518889f7b6f87d89e2a2c07e23a1bde5224fb0debf22ee",
+      "license": "Apache-2.0"
+    },
+    {
+      "file": "pyscf/solvent/smd.py (smd_radii)",
+      "url": "https://github.com/pyscf/pyscf/blob/master/pyscf/solvent/smd.py",
+      "pyscf_version": "2.14.0",
+      "sha256": "49bb5d01898f34be7444ea08ebc6efca3cc7c4c9b326a6ce94a7e700bb8f0f94",
+      "license": "Apache-2.0"
+    }
+  ],
+  "base_angstrom": {
+    "H": 1.2,
+    "He": 1.4,
+    "Li": 1.82,
+    "Be": 1.53,
+    "B": 1.92,
+    "C": 1.7,
+    "N": 1.55,
+    "O": 1.52,
+    "F": 1.47,
+    "Ne": 1.54,
+    "Na": 2.27,
+    "Mg": 1.73,
+    "Al": 1.84,
+    "Si": 2.1,
+    "P": 1.8,
+    "S": 1.8,
+    "Cl": 1.75,
+    "Ar": 1.88,
+    "K": 2.75,
+    "Ca": 2.31,
+    "Sc": 1.999999,
+    "Ti": 1.999999,
+    "V": 1.999999,
+    "Cr": 1.999999,
+    "Mn": 1.999999,
+    "Fe": 1.999999,
+    "Co": 1.999999,
+    "Ni": 1.63,
+    "Cu": 1.4,
+    "Zn": 1.39,
+    "Ga": 1.87,
+    "Ge": 2.11,
+    "As": 1.85,
+    "Se": 1.9,
+    "Br": 1.85,
+    "Kr": 2.02
+  },
+  "overrides_angstrom": {
+    "1": 1.2,
+    "6": 1.85,
+    "7": 1.89,
+    "9": 1.73,
+    "14": 2.47,
+    "15": 2.12,
+    "16": 2.49,
+    "17": 2.38,
+    "35": 2.6,
+    "53": 2.74
+  },
+  "oxygen": {
+    "threshold_alpha": 0.43,
+    "radius_high_angstrom": 1.52,
+    "slope_angstrom": 1.8,
+    "offset_alpha": 0.43
+  },
+  "note": "base_angstrom is PySCF's radii.VDW array (values in angstrom); overrides_angstrom are the eq. 16 element-wise SMD radii, keyed by nuclear charge; oxygen follows R = radius_high for alpha >= threshold, else R = radius_high + slope*(offset - alpha)"
+}
