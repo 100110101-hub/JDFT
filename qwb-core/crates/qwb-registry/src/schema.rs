@@ -6,6 +6,7 @@
 use schemars::schema_for;
 
 use crate::basis::BasisSet;
+use crate::dispersion::Dispersion;
 use crate::ecp::Ecp;
 use crate::functional::Functional;
 use crate::grid::GridLevelDef;
@@ -24,6 +25,7 @@ pub fn schema_for_kind(kind: DataKind) -> schemars::Schema {
         DataKind::Functional => schema_for!(Functional),
         DataKind::Grid => schema_for!(GridLevelDef),
         DataKind::Solvent => schema_for!(Solvent),
+        DataKind::Dispersion => schema_for!(Dispersion),
         DataKind::Numerics => schema_for!(NumericsDef),
         DataKind::Molecule => schema_for!(MoleculeFile),
         DataKind::Registry => schema_for!(RegistryManifest),

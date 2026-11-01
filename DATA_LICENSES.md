@@ -3,7 +3,7 @@
 本文件由 `scripts/gen_data_licenses.py` 生成。重跑必须得到**逐字节相同**的结果
 （排序固定 + 不含时间戳），所以它可以直接进 CI 比对。
 
-共 30 个生产数据文件。`qwb-data/examples/` 下的 SPECIMEN 不计入
+共 31 个生产数据文件。`qwb-data/examples/` 下的 SPECIMEN 不计入
 （它们是形状示例，不在 manifest 里）。
 
 其中 `qwb-data/basis/` 与 `qwb-data/ecp/` 的部分文件是从 Basis Set Exchange 导出的
@@ -22,6 +22,7 @@
 | `qwb-data/basis/def2-universal-jkfit.yaml` | 1.0.0 | Apache-2.0 | true | true | `5ae0422479300349` |
 | `qwb-data/basis/lanl2dz.yaml` | 1.0.1 | NOASSERTION | false | false | `bc14a7e191563cb1` |
 | `qwb-data/basis/sto-3g.yaml` | 1.0.0 | Apache-2.0 | true | true | `fce3af14b8b3ea12` |
+| `qwb-data/dispersion/d3bj.yaml` | 1.0.0 | LGPL-3.0-or-later | true | true | `85607c132bef00c4` |
 | `qwb-data/ecp/lanl2dz-cu.yaml` | 1.0.0 | NOASSERTION | false | false | `a44df71fd56eea38` |
 | `qwb-data/ecp/lanl2dz-zn.yaml` | 1.0.0 | NOASSERTION | false | false | `55b3391680aaad1d` |
 | `qwb-data/functional/b88.yaml` | 1.0.0 | Apache-2.0 | true | true | `efa0fa7b9f8aa98d` |
@@ -35,7 +36,7 @@
 | `qwb-data/grid/grid-normal.yaml` | 1.0.0 | Apache-2.0 | true | true | `a792b362b1fdb278` |
 | `qwb-data/grid/grid-veryfine.yaml` | 1.0.0 | Apache-2.0 | true | true | `5c630f5a1ec0688d` |
 | `qwb-data/numerics/numerics.yaml` | 1.1.0 | Apache-2.0 | true | true | `7013e40da43be893` |
-| `qwb-data/registry.yaml` | 0.11.1 | ? | ? | ? | `—（manifest，条目各自带` |
+| `qwb-data/registry.yaml` | 0.12.0 | ? | ? | ? | `—（manifest，条目各自带` |
 | `qwb-data/solvent/acetonitrile.yaml` | 2.1.0 | Apache-2.0 | true | true | `641eb80227e75fb8` |
 | `qwb-data/solvent/chloroform.yaml` | 2.1.0 | Apache-2.0 | true | true | `01ae69f7167f95c8` |
 | `qwb-data/solvent/dmso.yaml` | 2.1.0 | Apache-2.0 | true | true | `00714c4363b488b6` |
@@ -78,6 +79,11 @@
 ### `qwb-data/basis/sto-3g.yaml`（sto-3g 1.0.0）
 
 - Self-Consistent Molecular-Orbital Methods. I. Use of Gaussian Expansions of Slater-Type Atomic Orbitals
+
+### `qwb-data/dispersion/d3bj.yaml`（d3bj 1.0.0）
+
+- A consistent and accurate ab initio parametrization of density functional dispersion correction (DFT-D) for the 94 elements H-Pu
+- Molecular Single-Bond Covalent Radii for Elements 1-118
 
 ### `qwb-data/ecp/lanl2dz-cu.yaml`（lanl2dz-cu 1.0.0）
 
@@ -143,7 +149,7 @@
 - A multicenter numerical integration scheme for polyatomic molecules (Becke partitioning)
 - New Methods For Electronic Structure Calculations on Large Molecules (pseudospectral approach)
 
-### `qwb-data/registry.yaml`（qwb-data 0.11.1）
+### `qwb-data/registry.yaml`（qwb-data 0.12.0）
 
 
 ### `qwb-data/solvent/acetonitrile.yaml`（acetonitrile 2.1.0）

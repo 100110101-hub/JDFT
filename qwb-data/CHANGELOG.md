@@ -3,6 +3,36 @@
 数据仓独立 semver（§8.6）。**任何数据改动都必须 bump version 并在此登记**，
 否则 CI 拒绝（§8.6「变更必须 bump version」）。
 
+## 0.12.0 — 2026-11-09
+
+### 新增：`dispersion/d3bj.yaml`（DA-06）
+
+D3(BJ) 色散校正的整套参数，元素范围 H–Kr（36 个元素、666 个元素对）：
+
+- **参考 C6 表**：每个元素对 7×7 = 49 个值（Ha·Bohr⁶），按 Fortran 展平顺序保存，
+  块内**第一维是高 Z 元素**、第二维是低 Z 元素。这个取向是拿官方实现反解出来的
+  （两原子 O-H 在 CN≈0 处 C6 = 10.0951；转置读法给 6.14，差 40%），
+  同核元素对在转置下不变，所以只有异核对才能发现搞反了。
+- **参考 CN**：每个元素 1–7 个参考点（H 2、O 3、Kr 1 …），与上表的参考点索引一一对应。
+- **CN 参数**：`kcn = 16`、`scale = 4/3`（D3 用 Pyykko 共价半径的 4/3 倍）、半径存
+  **Å 原值**（上游表把金属降过 10%），Å→Bohr 用 K2 的 `BOHR_PER_ANGSTROM`。
+- **r4r2**：`r4r2` 是**派生值** `sqrt(0.5·published·sqrt(Z))`（模型消费的就是它），
+  `r4r2_published` 是同一文件里公布的 `<r⁴>/<r²>`。用错哪一个都会让 C8/C6 差 2–16 倍。
+- **阻尼参数**：`b3lyp` / `pbe` / `pbe0` / `hf` 四组 `s6/s8/a1/a2` + DOI。
+  M06-L 与 M06-2X **没有** BJ 参数（上游 `get_rational_damping` 无此分支，只有零阻尼），
+  所以不在这份数据里 —— 不是遗漏。
+- **溯源**：`provenance.upstream` 逐个列出上游文件（URL + sha256），
+  生成器是 `scripts/gen_d3_params.py`（`--check` 逐项比较，容差 0）。
+
+`registry.yaml` 0.11.1 → 0.12.0（新增 `dispersions:` 段与 `dispersion:d3bj` feature）；
+`qwb-contracts/schema/dispersion.schema.{json,yaml}` 新增（K1 加性扩展，由
+`qwb-gen-schemas` 从 Rust 类型生成）；`DATA_LICENSES.md` 重新生成（30 → 31 个文件，
+许可 LGPL-3.0-or-later —— 数据转写自 s-dftd3 的源码表）。
+
+**验证**：`qwb data verify` 31 passed；`cargo test -p qwb-registry --test da06_dispersion`
+4 例绿（666 个元素对逐一断言）；`scripts/validate_d3_data.py` 复现官方 s-dftd3 的
+能量与解析梯度，最大偏差 8.559e-10 Ha = 5.371e-7 kcal/mol。
+
 ## 0.8.0 — 2026-10-27
 
 ### 新增：三个 RI 辅助基（DA-07 / IN-01 / SC-05）

@@ -32,6 +32,12 @@ properties:
   created:
     description: 创建时间，ISO 8601 UTC。
     type: string
+  dispersions:
+    default: []
+    description: 色散校正参数条目（DA-06）。
+    items:
+      $ref: '#/$defs/RegistryEntry'
+    type: array
   ecps:
     default: []
     description: ECP 条目。

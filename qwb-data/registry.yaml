@@ -3,7 +3,7 @@
 # （否则 grid 的 normal 等级会有两个定义、get_grid_by_level 歧义）。
 schema_version: 1.0.0
 name: qwb-data
-version: 0.11.1
+version: 0.12.0
 created: 2026-10-22T22:53:00Z
 features:
   - "jobtype:sp"
@@ -14,6 +14,7 @@ features:
   - "functional:gga"
   - "functional:hybrid"
   - grid
+  - "dispersion:d3bj"
   - "solvent:vacuum"
   - "solvent:implicit"
   - ecp
@@ -87,6 +88,14 @@ grids:
   - name: grid-veryfine
     path: grid/grid-veryfine.yaml
     sha256: 5c630f5a1ec0688de0682e38f6baeed11c475439bd122edaa4196c8c60fabff2
+
+# DA-06：色散校正参数（D3(BJ)，H–Kr）。元素对参数是「参考 C6 表 + 参考 CN + 每元素
+# 参考点个数 + CN 半径 + r4r2 + 阻尼参数」的一整套，缺一项都算不出 C6，所以只有一个
+# 条目而不是每元素一条。
+dispersions:
+  - name: d3bj
+    path: dispersion/d3bj.yaml
+    sha256: 85607c132bef00c4a88ee143e8be4c6f6478abe1c892bd3498dc08289b7aebed
 
 # 阶段二 K10：数值路径的精度等级与等价容差（project-phase2.md 4.5 / 8.5）。
 # 文件里只引用 grid 的名字，网格参数仍然只有 grid/*.yaml 一份。

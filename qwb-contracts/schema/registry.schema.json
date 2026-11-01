@@ -16,6 +16,14 @@
       "description": "创建时间，ISO 8601 UTC。",
       "type": "string"
     },
+    "dispersions": {
+      "description": "色散校正参数条目（DA-06）。",
+      "type": "array",
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/RegistryEntry"
+      }
+    },
     "ecps": {
       "description": "ECP 条目。",
       "type": "array",

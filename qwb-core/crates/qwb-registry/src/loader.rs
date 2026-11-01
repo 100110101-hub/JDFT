@@ -37,6 +37,7 @@ use serde::de::DeserializeOwned;
 
 use crate::basis::BasisSet;
 use crate::common::DataCommon;
+use crate::dispersion::Dispersion;
 use crate::ecp::Ecp;
 use crate::functional::Functional;
 use crate::grid::{GridLevelDef, GridLevelName};
@@ -61,6 +62,7 @@ pub struct Registry {
     functionals: BTreeMap<String, Functional>,
     grids: BTreeMap<String, GridLevelDef>,
     solvents: BTreeMap<String, Solvent>,
+    dispersions: BTreeMap<String, Dispersion>,
     numerics: BTreeMap<String, NumericsDef>,
     missing: Vec<MissingData>,
 }
@@ -133,6 +135,14 @@ impl Registry {
             None,
             &mut missing,
         )?;
+        let dispersions = load_all::<Dispersion>(
+            &root,
+            "dispersion",
+            &manifest.dispersions,
+            Dispersion::check_structure,
+            None,
+            &mut missing,
+        )?;
         let numerics = load_all::<NumericsDef>(
             &root,
             "numerics",
@@ -164,6 +174,7 @@ impl Registry {
             functionals,
             grids,
             solvents,
+            dispersions,
             numerics,
             missing,
         })
@@ -217,6 +228,20 @@ impl Registry {
     /// 溶剂键名。
     pub fn solvent_names(&self) -> impl Iterator<Item = &str> {
         self.solvents.keys().map(String::as_str)
+    }
+
+    /// 色散参数键名（DA-06；字典序）。
+    pub fn dispersion_names(&self) -> impl Iterator<Item = &str> {
+        self.dispersions.keys().map(String::as_str)
+    }
+
+    /// 按名字取色散参数。
+    ///
+    /// # Errors
+    ///
+    /// [`EngineError::Data`]：未索引该名字（消息里列出可用名字）。
+    pub fn get_dispersion(&self, name: &str) -> Result<&Dispersion, EngineError> {
+        self.lookup_checked(&self.dispersions, "dispersion", name)
     }
 
     /// 数值路径配置键名（阶段二 K10；字典序）。

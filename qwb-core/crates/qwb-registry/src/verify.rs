@@ -13,6 +13,7 @@ use serde::de::DeserializeOwned;
 
 use crate::basis::BasisSet;
 use crate::common::DataCommon;
+use crate::dispersion::Dispersion;
 use crate::ecp::Ecp;
 use crate::functional::Functional;
 use crate::grid::GridLevelDef;
@@ -36,6 +37,8 @@ pub enum DataKind {
     Grid,
     /// `solvent/`，`solvent.schema.*`。
     Solvent,
+    /// `dispersion/`，`dispersion.schema.*`（DA-06）。
+    Dispersion,
     /// `solvent/`，`solvent.schema.*`（已在上方）。
     /// `molecule/`，`molecule.schema.*`。
     Molecule,
@@ -47,12 +50,13 @@ pub enum DataKind {
 
 impl DataKind {
     /// 全部类别（schema 生成顺序即此顺序）。
-    pub const ALL: [DataKind; 8] = [
+    pub const ALL: [DataKind; 9] = [
         DataKind::Basis,
         DataKind::Ecp,
         DataKind::Functional,
         DataKind::Grid,
         DataKind::Solvent,
+        DataKind::Dispersion,
         DataKind::Numerics,
         DataKind::Molecule,
         DataKind::Registry,
@@ -67,6 +71,7 @@ impl DataKind {
             DataKind::Functional => "functional",
             DataKind::Grid => "grid",
             DataKind::Solvent => "solvent",
+            DataKind::Dispersion => "dispersion",
             DataKind::Numerics => "numerics",
             DataKind::Molecule => "molecule",
             DataKind::Registry => "registry",
@@ -246,6 +251,7 @@ pub fn verify_bytes(kind: DataKind, path: &str, bytes: &[u8]) -> Report {
         DataKind::Functional => verify_data::<Functional>(&mut report, bytes, Functional::check),
         DataKind::Grid => verify_data::<GridLevelDef>(&mut report, bytes, GridLevelDef::check),
         DataKind::Solvent => verify_data::<Solvent>(&mut report, bytes, Solvent::check),
+        DataKind::Dispersion => verify_data::<Dispersion>(&mut report, bytes, Dispersion::check),
         DataKind::Numerics => verify_data::<NumericsDef>(&mut report, bytes, NumericsDef::check),
         DataKind::Molecule => verify_molecule(&mut report, bytes),
         DataKind::Registry => verify_manifest(&mut report, bytes),

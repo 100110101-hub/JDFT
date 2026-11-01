@@ -21,6 +21,7 @@ mod macros;
 
 pub mod basis;
 pub mod common;
+pub mod dispersion;
 pub mod ecp;
 pub mod elements;
 pub mod functional;
@@ -37,6 +38,10 @@ pub mod verify;
 
 pub use basis::{Angular, BasisRole, BasisSet, ContractionType, Normalization, Shell, ShellBlock};
 pub use common::{Citation, DataCommon, License};
+pub use dispersion::{
+    CoordinationModel, CoordinationNumber, DampingModel, DampingParameters, Dispersion,
+    PairwiseSettings, Provenance, ReferenceInterpolation, UpstreamSource, WeightModel,
+};
 pub use ecp::{Ecp, EcpLocalPart, EcpNonlocalPart, EcpTerm, RPowerConvention};
 pub use functional::{Functional, FunctionalComponent, FunctionalRequires, StabilityRules};
 pub use grid::{GridLevelDef, GridLevelName};
