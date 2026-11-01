@@ -1,19 +1,22 @@
-sha256: 69b4d37ed71958f745b2744c98c2a12d75ff414ea5d24dc6be17f915d017540a
+sha256: 555d69fb1b8af3f100714c6b8fdb58aef9a818ca78e5373d4acc65ac8a53f01e
+atomic_radii:
+  H: 1.2
+  C: 1.7
+  N: 1.55
+  O: 1.52
+  F: 1.47
+  S: 1.8
+  Cl: 1.75
 name: water
 version: 2.1.0
-notes: "DA-04 v1: dielectric constant, refractive index and temperature are the SMD/Truhlar
-  values (Marenich-Cramer-Truhlar 2009, Table 1); atomic_radii are the Bondi (1964) van der
-  Waals radii, declared explicitly through radii_set=bondi so no two radius conventions can be
-  mixed silently. cavity_model=pcm keeps this entry usable by the C-PCM implementation (SV-01);
-  switching a solvent to SMD needs the SMD-specific parameterised radii plus the four nonpolar
-  terms (DA-05), which are NOT transcribed here."
+notes: 'DA-04 v1: dielectric constant, refractive index and temperature are the SMD/Truhlar values (Marenich-Cramer-Truhlar 2009, Table 1); atomic_radii are the Bondi (1964) van der Waals radii, declared explicitly through radii_set=bondi so no two radius conventions can be mixed silently. cavity_model=pcm keeps this entry usable by the C-PCM implementation (SV-01); switching a solvent to SMD needs the SMD-specific parameterised radii plus the four nonpolar terms (DA-05), which are NOT transcribed here.'
 citation:
-  - title: "Universal solvation model based on solute electron density and on a continuum model of the solvent defined by the bulk dielectric constant and atomic surface tensions (SMD)"
-    doi: "10.1021/jp810292n"
-    url: "https://doi.org/10.1021/jp810292n"
-  - title: "van der Waals volumes and radii (Bondi)"
-    doi: "10.1021/j100785a001"
-    url: "https://doi.org/10.1021/j100785a001"
+- title: Universal solvation model based on solute electron density and on a continuum model of the solvent defined by the bulk dielectric constant and atomic surface tensions (SMD)
+  doi: 10.1021/jp810292n
+  url: https://doi.org/10.1021/jp810292n
+- title: van der Waals volumes and radii (Bondi)
+  doi: 10.1021/j100785a001
+  url: https://doi.org/10.1021/j100785a001
 license:
   spdx: Apache-2.0
   commercial_ok: true
@@ -25,14 +28,13 @@ refractive_index: 1.3328
 radii_set: bondi
 cavity_model: pcm
 smd:
+  gamma_cal_per_mol_angstrom2: null
+  phi_sq: null
+  psi_sq: null
+  abraham_alpha: 0.82
+  abraham_beta: 0.35
+  refractive_index_20c: 1.3328
+  refractive_index_25c: 1.3323
   nonpolar_terms_available: false
-  source: "Minnesota solvation database, Table 1 (Marenich-Cramer-Truhlar, J. Phys. Chem. A 2009, doi:10.1021/jp810292n)；该表里 water 的 gamma/phi^2/psi^2 是 -1 占位，SMD 对水走单独的 CDS 处理，故不填这三个量（不编造、不当 0 用）"
+  source: MNSOL (Minnesota Solvation Database, https://comp.chem.umn.edu/solvation/mnsddb.pdf) row [n20, n25, alpha, beta, gamma, epsilon, phi^2, psi^2]; nonpolar terms per Marenich-Cramer-Truhlar, J. Phys. Chem. B 113, 6378 (2009), doi:10.1021/jp810292n. gamma is in cal/(mol*Angstrom^2) as published; -1 marks a placeholder (water uses the separate CDS treatment, so its nonpolar terms are unavailable).
 scale: 1.0
-atomic_radii:
-  H: 1.20
-  C: 1.70
-  N: 1.55
-  O: 1.52
-  F: 1.47
-  S: 1.80
-  Cl: 1.75

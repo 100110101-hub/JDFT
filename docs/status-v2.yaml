@@ -83,8 +83,11 @@ DA-04:
   verification: "① `qwb data verify` **23 file(s) checked, 23 passed, 0 failed** —— 新增的 solvent/water.yaml 过 K1 的 `Solvent::check`（ε ≥ 1、温度为正、scale 为正、atomic_radii 非空且每个半径为正）。② `qwb data sign` 打戳并通过 registry 的 sha256 钉（dada22bb…）。③ `python scripts/gen_data_licenses.py --check` 通过（22→23 个文件，两条 DOI 都进了 DATA_LICENSES 的来源列）。④ `cargo test -p qwb-registry` 全绿（含 KV-02 的溶剂结构检查）。"
   note: "**只做了 1/8，剩下的卡在「逐项 diff」这一条上，宁可慢也不猜**：DA-04 的判据是「与原论文表逐项 diff < 1e-12 且带 DOI」。ε/n²/温度三项是公开表（SMD 的 Table 1），有 DOI 可直接核对；但 `atomic_radii` 要跟着 `radii_set` 走 —— 本轮用的 **Bondi** 半径本身是经典且可引的（Bondi 1964），所以 water 这一条站得住。**SMD 专用的参数化半径表**（SV-03 真正要用的那套）我没有原文表可逐项核对，凭记忆写就是伪造，所以本轮**没有**写 `radii_set: smd` 的条目。下一步明确：拿到 SMD 原文附录的半径表（或一份许可允许的数据实现）再补 7 个溶剂；同时 DA-05（SMD 的 4 项非极性参数）同样需要原文表。K1 侧不用改：`refractive_index`/`radii_set`/`surface_tension_cal_per_mol_angstrom2`/`ionic_strength_molar` 四个字段在 KV-02 就已经落位。"
 DA-05:
-  state: pending
-  note: "SMD 的 4 项非极性参数表"
+  state: done
+  ts: "2026-11-09T20:40:00Z"
+  artifact: "scripts/gen_smd_params.py（转录 + 幂等 `--check`）+ 八个溶剂文件的 `smd:` 块（原来是只有 `nonpolar_terms_available`/`source` 的空壳，现在填上 MNSOL 的原值）：`gamma_cal_per_mol_angstrom2`、`phi_sq`、`psi_sq`、`abraham_alpha`、`abraham_beta`、`refractive_index_20c/25c`、`nonpolar_terms_available`。K1 侧把 `gamma_mn_per_m` 改名成 `gamma_cal_per_mol_angstrom2`（原文单位，不做换算）；registry.yaml 0.13.0→0.14.0 与八条 sha256 钉；DATA_LICENSES.md 重新生成（32 个文件）"
+  verification: "**八项参数逐值有出处，且有独立交叉核对**。① **来源**：Minnesota Solvation Database（`https://comp.chem.umn.edu/solvation/mnsddb.pdf`）的 `[n20, n25, alpha, beta, gamma, epsilon, phi², psi²]` 行；公式出处 Marenich–Cramer–Truhlar, J. Phys. Chem. B 113, 6378 (2009), `doi:10.1021/jp810292n`。② **交叉核对**：同一批行的 `epsilon` 与我们既有的溶剂文件**逐值一致**（水 78.355/甲醇 32.613/乙醇 24.852/乙腈 35.688/DMSO 46.826/氯仿 4.7113/甲苯 2.3741/THF 7.4257），`n20` 也与既有的 `refractive_index` 一致 —— 说明转录的是同一张表，不是另一套数。③ **单位**：MNSOL 的 γ 是 cal/(mol·Å²)（甲醇 31.77 ⇒ 22.07 mN/m），所以字段按原文单位命名，**不做换算**（换过就再也对不上原表）。④ **水的三个占位**：MNSOL 里水的 γ/φ²/ψ² 是 `-1`（SMD 对水走单独的 CDS 处理），所以 `nonpolar_terms_available: false` 且这三个量写 `null` —— 不编造、也不当 0 用。⑤ `qwb data verify` **32 file(s) checked, 32 passed**；`gen_smd_params.py --check` 语义比较通过（打戳会重排 YAML，逐字比会假红）"
+  note: "**踩到一个必须记住的坑**：八个溶剂文件在 DA-04 时期就已经有 `smd:` 块（空壳），第一版生成器用「按 `smd:` 切分再拼接」的写法，把块后面的 `scale` 与 `atomic_radii` 一起截掉了 —— `qwb data verify` 立刻以 `missing field atomic_radii` 报错，这正是它该抓的那类错误。改成「按缩进找到已有的 `smd:` 段并原地替换」之后一次通过。**DA-05 只做非极性参数**：SV-03 还差 SMD 的参数化半径与 CDS σ 表，那两样仍在 SV-03 里；本 WP 的判据是这四项非极性参数，已齐"
 DA-06:
   state: in_progress
   ts: "2026-11-09T13:10:00Z"

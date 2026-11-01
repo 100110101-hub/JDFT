@@ -242,8 +242,8 @@
           ],
           "format": "double"
         },
-        "gamma_mn_per_m": {
-          "description": "表面张力 γ（mN/m，数据库原值）。",
+        "gamma_cal_per_mol_angstrom2": {
+          "description": "表面张力 γ，单位 **cal/(mol·Å²)**（MNSOL / SMD 原文的单位，不做换算）。",
           "type": [
             "number",
             "null"

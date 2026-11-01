@@ -100,8 +100,8 @@ pub struct Solvent {
 #[serde(deny_unknown_fields)]
 #[non_exhaustive]
 pub struct SmdParameters {
-    /// 表面张力 γ（mN/m，数据库原值）。
-    pub gamma_mn_per_m: Option<f64>,
+    /// 表面张力 γ，单位 **cal/(mol·Å²)**（MNSOL / SMD 原文的单位，不做换算）。
+    pub gamma_cal_per_mol_angstrom2: Option<f64>,
     /// φ² 参数。
     pub phi_sq: Option<f64>,
     /// ψ² 参数。
