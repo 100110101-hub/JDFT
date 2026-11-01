@@ -20,6 +20,7 @@ __all__ = [
     "Mp2Options",
     "ExcitedStatesOptions",
     "NumericsOptions",
+    "DispersionOptions",
     "TaskOptions",
     "JobInput",
     "GridLevel",

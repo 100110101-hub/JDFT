@@ -28,12 +28,11 @@ use pyo3::prelude::*;
 use pyo3::types::{PyModule, PyTuple};
 
 use qwb_engine_api::{
-    Atom as ApiAtom, DataSnapshot as ApiDataSnapshot, Engine as ApiEngine, EngineError as ApiError,
-    EnvInfo as ApiEnvInfo, ExcitedStatesOptions as ApiExcitedStatesOptions, GridLevel,
-    JobInput as ApiJobInput, JobResult as ApiJobResult, JobType, Molecule as ApiMolecule,
-    DispersionOptions as ApiDispersionOptions, Mp2Options as ApiMp2Options,
-    NumericsOptions as ApiNumericsOptions, Reporter as ApiReporter,
-    TaskOptions as ApiTaskOptions,
+    Atom as ApiAtom, DataSnapshot as ApiDataSnapshot, DispersionOptions as ApiDispersionOptions,
+    Engine as ApiEngine, EngineError as ApiError, EnvInfo as ApiEnvInfo,
+    ExcitedStatesOptions as ApiExcitedStatesOptions, GridLevel, JobInput as ApiJobInput,
+    JobResult as ApiJobResult, JobType, Molecule as ApiMolecule, Mp2Options as ApiMp2Options,
+    NumericsOptions as ApiNumericsOptions, Reporter as ApiReporter, TaskOptions as ApiTaskOptions,
 };
 
 // ---------------------------------------------------------------------------
@@ -549,7 +548,8 @@ impl TaskOptions {
             numerics: match &options.numerics {
                 Some(numerics) => Some(Py::new(py, NumericsOptions::from_api(numerics))?),
                 None => None,
-            },            dispersion: match &options.dispersion {
+            },
+            dispersion: match &options.dispersion {
                 Some(dispersion) => Some(Py::new(py, DispersionOptions::from_api(dispersion))?),
                 None => None,
             },
