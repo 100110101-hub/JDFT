@@ -8,11 +8,15 @@
 //! ① CN     电负性加权的误差函数 CN（纯几何量）
 //! ② EEQ    χ/η/rad + 拉格朗日约束 Σq = Q 的稠密线性系统 → 原子电荷
 //! ③ C6     每个参考体系一对 alpha(iω)，按参考权重加权后做 3/π·trapzd 的 Casimir–Polder 积分
-//! ④ 能量   两体项 + ATM 三体项（ATM 用 q = 0 重建的 C6）——下一段
+//! ④ 能量   两体项 + ATM 三体项（ATM 用 q = 0 重建的 C6）→ 解析梯度
 //! ```
 //!
-//! 本模块只做 ①②③：这样能量一旦对不上，可以先用 `d4_properties.csv` 的 CN/电荷/C6 三列把错
+//! 本模块做 ①②③④：这样能量一旦对不上，可以先用 `d4_properties.csv` 的 CN/电荷/C6 三列把错
 //! 定位到具体一层。D3 那轮只有一个总能量，错了只能二分。
+//!
+//! 梯度分两层：`cn_gradient`/`charge_gradient`/`c6_gradient` 是三个中间量对笛卡尔坐标的
+//! Jacobian（`tests/da06_d4_derivs.rs` 用中心差分逐个钉住），`dispersion_gradient` 才把它们
+//! 与两体/ATM 的显式几何导数装配成总梯度（`tests/da06_d4_gradient.rs`）。
 //!
 //! # 与上游的两处"看起来该一样、其实不一样"
 //!
@@ -412,7 +416,7 @@ pub struct D4Result {
     pub atm_hartree: f64,
 }
 
-/// 计算 D4 的色散能（两体 + ATM）。**梯度还没做**（见模块文档）。
+/// 计算 D4 的色散能（两体 + ATM）。解析梯度见 [`dispersion_gradient`]。
 ///
 /// # 与 D3 的区别（都在能量里体现）
 ///
@@ -443,41 +447,58 @@ pub fn dispersion_energy(
         );
     }
     let intermediates = properties(data, symbols, positions_bohr, total_charge)?;
-    let n = symbols.len();
-    let mut two_body = 0.0_f64;
-    for i in 0..n {
-        for j in 0..n {
-            if i >= j {
-                continue;
-            }
-            two_body -= pair_energy(
-                data,
-                parameters,
-                &intermediates,
-                symbols,
-                positions_bohr,
-                i,
-                j,
-            );
-        }
-    }
-
-    let atm = if data.dispersion.atm.s9.abs() < 1.0e-16 {
-        0.0
-    } else {
-        // ATM 的 C6 用 **原子电荷 = 0** 重建（上游 disp.f90:139-141）。注意"电荷 = 0"指的是
-        // 每个原子的**部分电荷**为零，不是"把体系总电荷设成 0 再解一遍 EEQ"——后者仍然给出
-        // ±0.6 的分电荷，实测会让水二聚体的 ATM 从 −3.2866e-7 变成 −9.6076e-8（差 3.42 倍，
-        // 这正是 `choices` 一百五十七里那个"常数 2.4"的真身）。
-        let atm_c6 = zero_charge_c6(data, &indices, symbols, positions_bohr)?;
-        atm_energy(data, parameters, &atm_c6, symbols, positions_bohr)
-    };
+    let two_body = two_body_energy(data, parameters, &intermediates, symbols, positions_bohr);
+    let atm = atm_energy_of(data, parameters, &indices, symbols, positions_bohr)?;
 
     Ok(D4Result {
         energy_hartree: two_body + atm,
         two_body_hartree: two_body,
         atm_hartree: atm,
     })
+}
+
+/// 两体项 `−Σ_{i<j} pair_energy`。
+///
+/// 从 [`dispersion_energy`] 里提出来，让 [`dispersion_gradient`] 用**同一段代码**
+/// 算能量（判据要求两个函数的 `two_body_hartree` 逐位相同）。
+fn two_body_energy(
+    data: &D4Dispersion,
+    parameters: &qwb_registry::dispersion::DampingParameters,
+    properties: &D4Properties,
+    symbols: &[&str],
+    positions: &[[f64; 3]],
+) -> f64 {
+    let n = symbols.len();
+    let mut total = 0.0_f64;
+    for i in 0..n {
+        for j in 0..n {
+            if i >= j {
+                continue;
+            }
+            total -= pair_energy(data, parameters, properties, symbols, positions, i, j);
+        }
+    }
+    total
+}
+
+/// ATM 三体项（含 `s9 = 0` 时直接是 0 的判据）。
+///
+/// ATM 的 C6 用 **原子部分电荷 = 0** 重建（上游 `disp.f90:139-141`）。注意"电荷 = 0"
+/// 指的是每个原子的**部分电荷**为零，不是"把体系总电荷设成 0 再解一遍 EEQ"——后者仍然
+/// 给出 ±0.6 的分电荷，实测会让水二聚体的 ATM 从 −3.2866e-7 变成 −9.6076e-8
+/// （差 3.42 倍，这正是 `choices` 一百五十七里那个"常数 2.4"的真身）。
+fn atm_energy_of(
+    data: &D4Dispersion,
+    parameters: &qwb_registry::dispersion::DampingParameters,
+    indices: &[usize],
+    symbols: &[&str],
+    positions: &[[f64; 3]],
+) -> Result<f64, String> {
+    if data.dispersion.atm.s9.abs() < 1.0e-16 {
+        return Ok(0.0);
+    }
+    let atm_c6 = zero_charge_c6(data, indices, symbols, positions)?;
+    Ok(atm_energy(data, parameters, &atm_c6, symbols, positions))
 }
 
 /// 泛函缺参数时的报错（`m06-2x` 会带上上游缺失的原因）。
@@ -524,6 +545,15 @@ fn r4r2(data: &D4Dispersion, symbol: &str) -> f64 {
         .unwrap_or(0.0)
 }
 
+/// ATM 用的参考权重：电荷缩放按 **原子部分电荷 = 0** 求值。
+///
+/// 与 [`reference_weights`] 同一段代码，只是把电荷实参换成全 0 的常数向量
+/// （[`dispersion_gradient`] 要拿它算 ATM 的 C6 链式导数）。
+fn zero_charge_weights(data: &D4Dispersion, indices: &[usize], cn: &[f64]) -> Vec<Vec<f64>> {
+    let zero_charges = vec![0.0_f64; indices.len()];
+    reference_weights(data, indices, &zero_charges, cn)
+}
+
 /// ATM 三体项（上游 `damping/atm.f90`）：`E = -sum_{i<j<k} ang*fdmp*C9`。
 /// ATM 用的 C6：参考权重的电荷缩放按 **原子部分电荷 = 0** 求值（上游 `disp.f90:139-141`）。
 fn zero_charge_c6(
@@ -536,8 +566,7 @@ fn zero_charge_c6(
         return Err("d4: element count does not match positions".into());
     }
     let cn = coordination_numbers(data, indices, positions);
-    let zero_charges = vec![0.0_f64; indices.len()];
-    let weights = reference_weights(data, indices, &zero_charges, &cn);
+    let weights = zero_charge_weights(data, indices, &cn);
     c6_matrix(data, indices, &weights)
 }
 
@@ -989,6 +1018,37 @@ pub fn c6_gradient(
     total_charge: f64,
     weights: &[Vec<f64>],
 ) -> Result<Vec<[f64; 3]>, String> {
+    let cn = coordination_numbers(data, indices, positions);
+    let charges = eeq_charges(data, indices, positions, total_charge)?;
+    let charge_jacobian = charge_gradient(data, indices, positions, total_charge)?;
+    c6_gradient_from_state(
+        data,
+        indices,
+        positions,
+        &cn,
+        &charges,
+        Some(&charge_jacobian),
+        weights,
+    )
+}
+
+/// [`c6_gradient`] 的显式状态版本：`CN` 与电荷由调用方给，电荷响应可以为 `None`。
+///
+/// 为什么需要 `None`：ATM 的 C6 用**常数 0 电荷**的权重（[`zero_charge_weights`]），
+/// 它的权重对几何的依赖**只有** `CN` 一条通路 —— 电荷是常数，不是 `q_i(R)`。此时把
+/// `charge_jacobian` 传 `None`，`∂w_r/∂q` 那条链自然消失（而不是喂一个假的 `∂q/∂R`）。
+///
+/// `charge_state` 是给 `ζ` 求值用的电荷自变量：两体项传真实 EEQ 电荷，ATM 传全 0。
+#[allow(clippy::needless_range_loop)]
+fn c6_gradient_from_state(
+    data: &D4Dispersion,
+    indices: &[usize],
+    positions: &[[f64; 3]],
+    cn: &[f64],
+    charge_state: &[f64],
+    charge_jacobian: Option<&[[f64; 3]]>,
+    weights: &[Vec<f64>],
+) -> Result<Vec<[f64; 3]>, String> {
     let n = indices.len();
     if weights.len() != n {
         return Err(format!(
@@ -1002,15 +1062,22 @@ pub fn c6_gradient(
             positions.len()
         ));
     }
+    if cn.len() != n || charge_state.len() != n {
+        return Err(format!(
+            "d4: C6 gradient state has {} CN values and {} charges for {n} atoms",
+            cn.len(),
+            charge_state.len()
+        ));
+    }
     let grid = &data.frequency_grid;
     if grid.hartree.len() != grid.trapzd_weights.len() {
         return Err("d4: frequency grid and trapzd weights differ in length".into());
     }
 
-    let cn = coordination_numbers(data, indices, positions);
-    let charges = eeq_charges(data, indices, positions, total_charge)?;
     let cn_jacobian = cn_gradient(data, indices, positions);
-    let charge_jacobian = charge_gradient(data, indices, positions, total_charge)?;
+    // 电荷视为常数时用全 0 的 Jacobian（`∂w_r/∂q` 那条链本来就该消失）。
+    let no_charge_response = vec![[0.0_f64; 3]; n * n];
+    let charge_jacobian = charge_jacobian.unwrap_or(&no_charge_response);
 
     // ∂w_r(i)/∂CN_i 与 ∂w_r(i)/∂q_i（逐原子、逐参考体系）。
     let mut weight_by_cn = Vec::with_capacity(n);
@@ -1047,7 +1114,7 @@ pub fn c6_gradient(
         let mut by_cn = Vec::with_capacity(counts.len());
         let mut by_charge = Vec::with_capacity(counts.len());
         for (r, system) in element.reference_systems.iter().enumerate() {
-            let charge = charges[atom] + element.zeff;
+            let charge = charge_state[atom] + element.zeff;
             let scale = zeta(
                 data.constants.ga,
                 hardness,
@@ -1131,4 +1198,289 @@ pub fn c6_gradient(
         }
     }
     Ok(gradient)
+}
+
+// ---------------------------------------------------------------------------
+// 能量梯度：两体 + ATM 的完整解析梯度。
+
+/// 一层原子的 D4 色散能**与解析梯度**。
+#[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
+pub struct D4Gradient {
+    /// 总色散能（两体 + ATM），Hartree（负值）。与 [`dispersion_energy`] 逐位相同。
+    pub energy_hartree: f64,
+    /// 两体项，Hartree。与 [`dispersion_energy`] 逐位相同。
+    pub two_body_hartree: f64,
+    /// ATM 三体项，Hartree。与 [`dispersion_energy`] 逐位相同。
+    pub atm_hartree: f64,
+    /// `gradient[a] = ∂E/∂R_a`，Ha/Bohr。
+    pub gradient: Vec<[f64; 3]>,
+}
+
+/// ATM 的 `(ang, fdmp, ∂(ang·fdmp)/∂u_k)`，`u1 = R_ij², u2 = R_ik², u3 = R_jk²`。
+///
+/// 本文件里的 `ang`/`fdmp` 原本写成距离与 `r1 = rij·rik·rjk` 的形式
+/// （`ang = 0.375·l1l2l3/r1⁵ + 1/r1³`，`fdmp = 1/(1+6(r0/r1)^{alp3})`）。
+/// 用平方距离表达后，幂次全部变成对 `ww = u1u2u3` 的幂，导数才好在 `u_k` 变量上解析地写：
+///
+/// ```text
+/// ang  = 0.375·l1·l2·l3·ww^{−5/2} + ww^{−3/2}
+/// fdmp = 1/(1 + t),  t = 6·r0^{alp3}·ww^{−alp3/2}
+/// ∂ang/∂u_k  = 0.375·[(∂l1l2l3/∂u_k)·ww^{−5/2} + l1l2l3·(−5/2)·ww^{−7/2}·(∂ww/∂u_k)]
+///              − (3/2)·ww^{−5/2}·(∂ww/∂u_k)
+/// ∂t/∂u_k    = −(alp3/2)·t·(∂ww/∂u_k)/ww,     ∂fdmp/∂u_k = −(∂t/∂u_k)·fdmp²
+/// ```
+///
+/// **没有任何有限差分**：`∂l1l2l3/∂u_k` 由 `l1 = u1+u3−u2`、`l2 = u1−u3+u2`、
+/// `l3 = −u1+u3+u2` 的线性系数直接给出。
+fn atm_damping_terms(alp3: f64, r0: f64, u1: f64, u2: f64, u3: f64) -> (f64, f64, [f64; 3]) {
+    let ww = u1 * u2 * u3;
+    let inverse = 1.0 / ww;
+    let l1 = u1 + u3 - u2;
+    let l2 = u1 - u3 + u2;
+    let l3 = -u1 + u3 + u2;
+    let product = l1 * l2 * l3;
+    // ∂(l1l2l3)/∂u_k。
+    let d_product = [
+        l2 * l3 + l1 * l3 - l1 * l2,
+        -l2 * l3 + l1 * l3 + l1 * l2,
+        l2 * l3 - l1 * l3 + l1 * l2,
+    ];
+    // ∂ww/∂u_k = ww/u_k。
+    let d_ww = [u2 * u3, u1 * u3, u1 * u2];
+    let ww_m52 = ww.powf(-2.5);
+    let ww_m72 = ww_m52 * inverse;
+    let ang = 0.375 * product * ww_m52 + ww.powf(-1.5);
+
+    let t = 6.0 * r0.powf(alp3) * ww.powf(-0.5 * alp3);
+    let fdmp = 1.0 / (1.0 + t);
+
+    let mut derivative = [0.0_f64; 3];
+    for k in 0..3 {
+        let d_ang = 0.375 * (d_product[k] * ww_m52 + product * (-2.5) * ww_m72 * d_ww[k])
+            - 1.5 * ww_m52 * d_ww[k];
+        let d_t = -0.5 * alp3 * t * d_ww[k] * inverse;
+        let d_fdmp = -d_t * fdmp * fdmp;
+        derivative[k] = d_ang * fdmp + ang * d_fdmp;
+    }
+    (ang, fdmp, derivative)
+}
+
+/// ATM 三体项对几何的**显式**导数所需的中间量。
+///
+/// 返回 `∂E_ijk/∂u_k` 的三分量（还没乘 `∂u_k/∂R_a`）= `−c9·∂(ang·fdmp)/∂u_k`。
+fn atm_explicit_u_gradient(
+    alp3: f64,
+    r0: f64,
+    c9: f64,
+    u1: f64,
+    u2: f64,
+    u3: f64,
+) -> ([f64; 3], f64) {
+    let (ang, fdmp, derivative) = atm_damping_terms(alp3, r0, u1, u2, u3);
+    let scaled = [
+        -c9 * derivative[0],
+        -c9 * derivative[1],
+        -c9 * derivative[2],
+    ];
+    (scaled, ang * fdmp)
+}
+
+/// D4 色散能**与解析梯度**（两体 + ATM）。
+///
+/// `energy_hartree`/`two_body_hartree`/`atm_hartree` 与 [`dispersion_energy`] 用同一段
+/// 代码（[`two_body_energy`]、[`atm_energy_of`]），因此逐位相同。
+///
+/// # 梯度怎么组装
+///
+/// ```text
+/// 两体: E = −Σ_{i<j} C6_ij·D(R_ij),   D = s6/(R⁶+r0⁶) + s8·rrij/(R⁸+r0⁸)
+///       ∂E/∂R_a = −Σ_{i<j} [ (∂C6_ij/∂R_a)·D + C6_ij·D'(R_ij)·(∂R_ij/∂R_a) ]
+/// ATM : E = −Σ_{i<j<k} ang·fdmp·C9
+///       ∂E/∂R_a = −Σ [ C9·∂(ang·fdmp)/∂R_a + ang·fdmp·∂C9/∂R_a ]
+///       ∂C9/∂c6_pq = C9/(2·c6_pq),   ∂C9/∂R_a = Σ_{3 对} (∂C9/∂c6_pq)·∂c6_pq/∂R_a
+/// ```
+///
+/// `∂C6/∂R` 全部来自 [`c6_gradient`] 的链式结果（两体用真实电荷、ATM 用常数 0 电荷）。
+/// `r0` 与 `rrij` 只依赖元素，所以两体的显式项只需 `D'(R)`；ATM 的显式项按题目要求
+/// 在平方距离 `u1 = R_ij², u2 = R_ik², u3 = R_jk²` 上解析求导（见 [`atm_damping_terms`]）。
+///
+/// # Errors
+///
+/// 该泛函没有 D4 参数、元素超范围、EEQ 系统奇异、`symbols` 与 `positions_bohr` 长度不符。
+#[allow(clippy::needless_range_loop)]
+pub fn dispersion_gradient(
+    data: &D4Dispersion,
+    functional: &str,
+    symbols: &[&str],
+    positions_bohr: &[[f64; 3]],
+    total_charge: f64,
+) -> Result<D4Gradient, String> {
+    let parameters = data
+        .damping_parameters
+        .get(functional)
+        .ok_or_else(|| missing_functional_message(data, functional))?;
+
+    let mut indices = Vec::with_capacity(symbols.len());
+    for symbol in symbols {
+        indices.push(
+            element_index(data, symbol)
+                .ok_or_else(|| format!("d4: element `{symbol}` outside the data range"))?,
+        );
+    }
+    let intermediates = properties(data, symbols, positions_bohr, total_charge)?;
+    let n = symbols.len();
+    let two_body = two_body_energy(data, parameters, &intermediates, symbols, positions_bohr);
+    let atm = atm_energy_of(data, parameters, &indices, symbols, positions_bohr)?;
+    let mut gradient = vec![[0.0_f64; 3]; n];
+
+    // 两体：C6 链式项。权重与 `properties` 里建 C6 时用的是同一函数、同一输入。
+    let weights = reference_weights(
+        data,
+        &indices,
+        &intermediates.charges,
+        &intermediates.coordination_numbers,
+    );
+    let charge_jacobian = charge_gradient(data, &indices, positions_bohr, total_charge)?;
+    let c6_gradient = c6_gradient_from_state(
+        data,
+        &indices,
+        positions_bohr,
+        &intermediates.coordination_numbers,
+        &intermediates.charges,
+        Some(&charge_jacobian),
+        &weights,
+    )?;
+
+    for i in 0..n {
+        for j in (i + 1)..n {
+            let r = distance(positions_bohr[i], positions_bohr[j]);
+            if r <= 0.0 {
+                continue;
+            }
+            let c6 = intermediates.c6[i][j];
+            let rrij = 3.0 * r4r2(data, symbols[i]) * r4r2(data, symbols[j]);
+            let r0 = parameters.a1 * rrij.sqrt() + parameters.a2;
+            let t6 = 1.0 / (r.powi(6) + r0.powi(6));
+            let t8 = 1.0 / (r.powi(8) + r0.powi(8));
+            let damping = parameters.s6 * t6 + parameters.s8 * rrij * t8;
+            // dD/dR：r0 只依赖元素，所以 t6、t8 对 R 的导数就是 −6R⁵t6²、−8R⁷t8²。
+            let damping_derivative = -parameters.s6 * 6.0 * r.powi(5) * t6 * t6
+                - parameters.s8 * rrij * 8.0 * r.powi(7) * t8 * t8;
+            for alpha in 0..3 {
+                let unit = (positions_bohr[j][alpha] - positions_bohr[i][alpha]) / r;
+                // 显式项：−C6·D'·∂R/∂R_i（∂R/∂R_i = −R̂）与 …R_j（+R̂）。
+                let explicit = -c6 * damping_derivative;
+                gradient[i][alpha] += explicit * (-unit);
+                gradient[j][alpha] += explicit * unit;
+            }
+            // C6 链式项：−D·∂C6_ij/∂R_a。
+            for a in 0..n {
+                let dc6 = c6_gradient[(i * n + j) * n + a];
+                for alpha in 0..3 {
+                    gradient[a][alpha] -= dc6[alpha] * damping;
+                }
+            }
+        }
+    }
+
+    // ATM：显式几何项 + 常数 0 电荷 C6 的链式项。
+    if data.dispersion.atm.s9.abs() >= 1.0e-16 {
+        let zero_charges = vec![0.0_f64; n];
+        let atm_weights = zero_charge_weights(data, &indices, &intermediates.coordination_numbers);
+        let atm_c6 = c6_matrix(data, &indices, &atm_weights)?;
+        let atm_c6_gradient = c6_gradient_from_state(
+            data,
+            &indices,
+            positions_bohr,
+            &intermediates.coordination_numbers,
+            &zero_charges,
+            None,
+            &atm_weights,
+        )?;
+        let alp3 = data.dispersion.atm.alp / 3.0;
+        let s9 = data.dispersion.atm.s9;
+        for i in 0..n {
+            for j in (i + 1)..n {
+                for k in (j + 1)..n {
+                    let u1 = squared_distance(positions_bohr[i], positions_bohr[j]);
+                    let u2 = squared_distance(positions_bohr[i], positions_bohr[k]);
+                    let u3 = squared_distance(positions_bohr[j], positions_bohr[k]);
+                    let c6_ij = atm_c6[i][j];
+                    let c6_ik = atm_c6[i][k];
+                    let c6_jk = atm_c6[j][k];
+                    let c9 = -s9 * (c6_ij * c6_ik * c6_jk).abs().sqrt();
+                    let r0 = (parameters.a1
+                        * (3.0 * r4r2(data, symbols[i]) * r4r2(data, symbols[j])).sqrt()
+                        + parameters.a2)
+                        * (parameters.a1
+                            * (3.0 * r4r2(data, symbols[i]) * r4r2(data, symbols[k])).sqrt()
+                            + parameters.a2)
+                        * (parameters.a1
+                            * (3.0 * r4r2(data, symbols[j]) * r4r2(data, symbols[k])).sqrt()
+                            + parameters.a2);
+                    let (u_scaled, ang_fdmp) = atm_explicit_u_gradient(alp3, r0, c9, u1, u2, u3);
+                    // ∂u1/∂R_i = −2(R_j−R_i)，∂u1/∂R_j = +2(R_j−R_i)；u2、u3 同理。
+                    let d_ij = [
+                        positions_bohr[j][0] - positions_bohr[i][0],
+                        positions_bohr[j][1] - positions_bohr[i][1],
+                        positions_bohr[j][2] - positions_bohr[i][2],
+                    ];
+                    let d_ik = [
+                        positions_bohr[k][0] - positions_bohr[i][0],
+                        positions_bohr[k][1] - positions_bohr[i][1],
+                        positions_bohr[k][2] - positions_bohr[i][2],
+                    ];
+                    let d_jk = [
+                        positions_bohr[k][0] - positions_bohr[j][0],
+                        positions_bohr[k][1] - positions_bohr[j][1],
+                        positions_bohr[k][2] - positions_bohr[j][2],
+                    ];
+                    for alpha in 0..3 {
+                        gradient[i][alpha] +=
+                            u_scaled[0] * (-2.0 * d_ij[alpha]) + u_scaled[1] * (-2.0 * d_ik[alpha]);
+                        gradient[j][alpha] +=
+                            u_scaled[0] * (2.0 * d_ij[alpha]) + u_scaled[2] * (-2.0 * d_jk[alpha]);
+                        gradient[k][alpha] +=
+                            u_scaled[1] * (2.0 * d_ik[alpha]) + u_scaled[2] * (2.0 * d_jk[alpha]);
+                    }
+                    // C9 链式：∂C9/∂c6_pq = C9/(2·c6_pq)（对 |c6ij·c6ik·c6jk| 的平方根成立，
+                    // 与三个 C6 的符号无关）。
+                    let scale_ij = if c6_ij != 0.0 {
+                        c9 / (2.0 * c6_ij)
+                    } else {
+                        0.0
+                    };
+                    let scale_ik = if c6_ik != 0.0 {
+                        c9 / (2.0 * c6_ik)
+                    } else {
+                        0.0
+                    };
+                    let scale_jk = if c6_jk != 0.0 {
+                        c9 / (2.0 * c6_jk)
+                    } else {
+                        0.0
+                    };
+                    for a in 0..n {
+                        let dc6_ij = atm_c6_gradient[(i * n + j) * n + a];
+                        let dc6_ik = atm_c6_gradient[(i * n + k) * n + a];
+                        let dc6_jk = atm_c6_gradient[(j * n + k) * n + a];
+                        for alpha in 0..3 {
+                            let dc9 = scale_ij * dc6_ij[alpha]
+                                + scale_ik * dc6_ik[alpha]
+                                + scale_jk * dc6_jk[alpha];
+                            gradient[a][alpha] -= ang_fdmp * dc9;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(D4Gradient {
+        energy_hartree: two_body + atm,
+        two_body_hartree: two_body,
+        atm_hartree: atm,
+        gradient,
+    })
 }
