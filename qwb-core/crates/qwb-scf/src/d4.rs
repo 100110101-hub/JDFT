@@ -341,6 +341,175 @@ pub fn properties(
     })
 }
 
+/// 一层原子的 D4 色散能（两体 + ATM）。
+#[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
+pub struct D4Result {
+    /// 总色散能（两体 + ATM），Hartree（负值）。
+    pub energy_hartree: f64,
+    /// 两体项，Hartree。
+    pub two_body_hartree: f64,
+    /// ATM 三体项，Hartree。
+    pub atm_hartree: f64,
+}
+
+/// 计算 D4 的色散能（两体 + ATM）。**梯度还没做**（见模块文档）。
+///
+/// # 与 D3 的区别（都在能量里体现）
+///
+/// * C6 由 `alpha(iω)` 现算、且随**电荷**与 CN 变（见 [`properties`]）；
+/// * 阻尼是 `s6/(R^6+r0^6) + s8*rrij/(R^8+r0^8)`，**没有**零阻尼的 `alp` 指数；
+/// * ATM 三体项默认开（`s9 = 1`），且它的 C6 必须用 **q = 0** 重建 —— 用分子电荷偏最多 30%。
+///
+/// # Errors
+///
+/// 该泛函在上游没有 D4 参数（`m06-2x` 就是这种）、元素超范围、EEQ 系统奇异。
+pub fn dispersion_energy(
+    data: &D4Dispersion,
+    functional: &str,
+    symbols: &[&str],
+    positions_bohr: &[[f64; 3]],
+    total_charge: f64,
+) -> Result<D4Result, String> {
+    let parameters = data
+        .damping_parameters
+        .get(functional)
+        .ok_or_else(|| missing_functional_message(data, functional))?;
+
+    let intermediates = properties(data, symbols, positions_bohr, total_charge)?;
+    let n = symbols.len();
+    let mut two_body = 0.0_f64;
+    for i in 0..n {
+        for j in 0..n {
+            if i >= j {
+                continue;
+            }
+            two_body -= pair_energy(
+                data,
+                parameters,
+                &intermediates,
+                symbols,
+                positions_bohr,
+                i,
+                j,
+            );
+        }
+    }
+
+    let atm = if data.dispersion.atm.s9.abs() < 1.0e-16 {
+        0.0
+    } else {
+        // ATM 的 C6 用 q = 0 重建（上游 disp.f90:139-141）。q = 0 时参考权重里的 ζ 也按
+        // 0 电荷算，所以整条链重跑一遍 —— 不是"把分子电荷清零再乘"。
+        let neutral = properties(data, symbols, positions_bohr, 0.0)?;
+        atm_energy(data, parameters, &neutral, symbols, positions_bohr)
+    };
+
+    Ok(D4Result {
+        energy_hartree: two_body + atm,
+        two_body_hartree: two_body,
+        atm_hartree: atm,
+    })
+}
+
+/// 泛函缺参数时的报错（`m06-2x` 会带上上游缺失的原因）。
+fn missing_functional_message(data: &D4Dispersion, functional: &str) -> String {
+    let available: Vec<&str> = data.damping_parameters.keys().map(String::as_str).collect();
+    match data.unsupported_functionals.get(functional) {
+        Some(reason) => format!(
+            "no D4 parameters for `{functional}` in `{}` (available: {}): {}",
+            data.name,
+            available.join(", "),
+            reason.reason
+        ),
+        None => format!(
+            "no D4 parameters for `{functional}` in `{}` (available: {})",
+            data.name,
+            available.join(", ")
+        ),
+    }
+}
+
+/// 一对原子的两体能量（正数；调用方减去它）。
+fn pair_energy(
+    data: &D4Dispersion,
+    parameters: &qwb_registry::dispersion::DampingParameters,
+    properties: &D4Properties,
+    symbols: &[&str],
+    positions: &[[f64; 3]],
+    i: usize,
+    j: usize,
+) -> f64 {
+    let c6 = properties.c6[i][j];
+    let r = distance(positions[i], positions[j]);
+    let rrij = 3.0 * r4r2(data, symbols[i]) * r4r2(data, symbols[j]);
+    let r0 = parameters.a1 * rrij.sqrt() + parameters.a2;
+    let t6 = 1.0 / (r.powi(6) + r0.powi(6));
+    let t8 = 1.0 / (r.powi(8) + r0.powi(8));
+    c6 * (parameters.s6 * t6 + parameters.s8 * rrij * t8)
+}
+
+/// 数据的逐元素 `r4r2`（`sqrt(0.5*<r4>/<r2>*sqrt(Z))`）。
+fn r4r2(data: &D4Dispersion, symbol: &str) -> f64 {
+    element_index(data, symbol)
+        .map(|index| data.reference[index].r4r2)
+        .unwrap_or(0.0)
+}
+
+/// ATM 三体项（上游 `damping/atm.f90`）：`E = -sum_{i<j<k} ang*fdmp*C9`。
+fn atm_energy(
+    data: &D4Dispersion,
+    parameters: &qwb_registry::dispersion::DampingParameters,
+    properties: &D4Properties,
+    symbols: &[&str],
+    positions: &[[f64; 3]],
+) -> f64 {
+    let n = symbols.len();
+    let alp3 = data.dispersion.atm.alp / 3.0;
+    let mut total = 0.0_f64;
+    for i in 0..n {
+        for j in 0..n {
+            if j <= i {
+                continue;
+            }
+            for k in 0..n {
+                if k <= j {
+                    continue;
+                }
+                let rij = distance(positions[i], positions[j]);
+                let rik = distance(positions[i], positions[k]);
+                let rjk = distance(positions[j], positions[k]);
+                let r2ij = rij * rij;
+                let r2ik = rik * rik;
+                let r2jk = rjk * rjk;
+                let c9 = -(data.dispersion.atm.s9)
+                    * (properties.c6[i][j] * properties.c6[i][k] * properties.c6[j][k])
+                        .abs()
+                        .sqrt();
+                let r0 = (parameters.a1
+                    * (3.0 * r4r2(data, symbols[i]) * r4r2(data, symbols[j])).sqrt()
+                    + parameters.a2)
+                    * (parameters.a1
+                        * (3.0 * r4r2(data, symbols[i]) * r4r2(data, symbols[k])).sqrt()
+                        + parameters.a2)
+                    * (parameters.a1
+                        * (3.0 * r4r2(data, symbols[j]) * r4r2(data, symbols[k])).sqrt()
+                        + parameters.a2);
+                let r1 = rij * rik * rjk;
+                let r3 = r1.powi(3);
+                let r5 = r3 * r1 * r1;
+                let fdmp = 1.0 / (1.0 + 6.0 * (r0 / r1).powf(alp3));
+                let ang =
+                    0.375 * (r2ij + r2jk - r2ik) * (r2ij - r2jk + r2ik) * (-r2ij + r2jk + r2ik)
+                        / r5
+                        + 1.0 / r3;
+                total += -(ang * fdmp) * c9;
+            }
+        }
+    }
+    total
+}
+
 /// `erf(x)`：全正项幂级数 `(2/√π)·e^{−x²}·Σ (2x²)^n·x/(1·3···(2n+1))`。
 ///
 /// 为什么不用 Abramowitz & Stegun 7.1.26（`|ε| ≤ 1.5e-7`）：CN 进入参考权重是
