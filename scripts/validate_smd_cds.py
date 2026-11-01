@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import json
 import math
+import pathlib
 import sys
 
 import pyscf
@@ -34,6 +35,33 @@ ELEMENTS = [
 ]
 # 只列 `smd.solvent_db` 里确实存在的溶剂（`thf`/`dmso` 在这个版本里用的是别的键名）。
 NONAQUEOUS = ["toluene", "chloroform", "methanol", "acetonitrile", "ethanol"]
+
+
+def solvent_descriptors_from_repo(name: str) -> dict[str, float]:
+    """从**本仓库**的 `qwb-data/solvent/<name>.yaml` 读六个 SMD 描述符。
+
+    这里刻意不用 PySCF 的 `solvent_db`：要验证的是"我们数据文件里的那六个数、叫那六个名字"
+    能不能复现官方 CDS 能量。`mnsol.F` 的参数名与本仓库字段名的对应关系是
+
+        SOLA = abraham_alpha, SOLB = abraham_beta, SOLG = gamma_cal_per_mol_angstrom2,
+        SOLC = phi_sq,        SOLH = psi_sq,        SOLN = refractive_index_20c
+
+    （PySCF 的 `solvent_db` 一行是 `[n20, n25, alpha, beta, gamma, epsilon, phi^2, psi^2]`，
+    与 `get_cds_legacy` 里的解包顺序一致。）
+    """
+    import yaml  # noqa: PLC0415
+
+    text = pathlib.Path(f"qwb-data/solvent/{name}.yaml").read_text(encoding="utf-8")
+    data = yaml.safe_load(text)
+    smd_block = data["smd"]
+    return {
+        "SOLA": smd_block["abraham_alpha"],
+        "SOLB": smd_block["abraham_beta"],
+        "SOLG": smd_block["gamma_cal_per_mol_angstrom2"],
+        "SOLC": smd_block["phi_sq"],
+        "SOLH": smd_block["psi_sq"],
+        "SOLN": smd_block["refractive_index_20c"],
+    }
 
 
 def e_cds_kcal(symbol: str, solvent: str) -> float:
@@ -76,7 +104,15 @@ def main() -> int:
 
     worst_energy = 0.0
     for solvent in NONAQUEOUS:
-        soln, _, sola, solb, solg, _, solc, solh = smd.solvent_db[solvent]
+        # **用本仓库的溶剂数据**（不是 PySCF 的库）：这样这条验证同时钉住"我们的六个描述符
+        # 与上游同一个意思"。
+        descriptors = solvent_descriptors_from_repo(solvent)
+        soln = descriptors["SOLN"]
+        sola = descriptors["SOLA"]
+        solb = descriptors["SOLB"]
+        solg = descriptors["SOLG"]
+        solc = descriptors["SOLC"]
+        solh = descriptors["SOLH"]
         for symbol in ["C", "O", "Cl", "S"]:
             index = ELEMENTS.index(symbol)
             sigma_i = (

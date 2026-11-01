@@ -75,13 +75,21 @@ fn the_nonaqueous_path_requires_the_descriptors() {
     println!("{error}");
     assert!(error.contains("descriptors"), "{error}");
 
-    // 给了描述符就能算（数值本身由 validate_smd_cds.py 对官方验证；这里只钉"能算、形状对"）。
-    // toluene 的 alpha/beta/gamma/n（本仓库 `solvent/toluene.yaml` 里有）；
-    // SOLC/SOLH 还没有进数据，这里取 0 并**明确说明**这是占位，不是溶剂参数。
-    let descriptors = SmdDescriptors::new(0.0, 0.14, 0.0, 40.2, 0.0, 1.4961);
+    // **SOLC/SOLH 不是新数据**：它们就是 MNSOL 一行的 `phi^2` 与 `psi^2`，本仓库的
+    // `solvent/*.yaml` 早就有（`smd.phi_sq` / `smd.psi_sq`）。`mnsol.F` 的参数名与仓库字段的
+    // 对应：SOLA=abraham_alpha、SOLB=abraham_beta、SOLG=gamma、SOLC=phi_sq、SOLH=psi_sq、
+    // SOLN=refractive_index_20c。toluene：n 1.4961、alpha 0.0、beta 0.14、gamma 40.2、
+    // phi^2 0.857、psi^2 0.0。
+    let descriptors = SmdDescriptors::new(0.0, 0.14, 0.857, 40.2, 0.0, 1.4961);
     let energy = cds_energy_kcal(data, &["C"], &[area], false, Some(&descriptors)).expect("cds");
-    println!("toluene-like descriptors: E_CDS(C) = {energy:+.6} kcal/mol");
-    assert!(energy != 0.0 && energy.is_finite());
+    println!("toluene descriptors: E_CDS(C) = {energy:+.9} kcal/mol");
+    // 官方值来自 `scripts/validate_smd_cds.py` 对 PySCF 2.14.0 `libsolvent` 的运行
+    // （单原子 C + toluene；该脚本同一行打印的 predicted/actual 差 ~1e-7）。
+    let oracle = 5.681_304_f64;
+    assert!(
+        (energy - oracle).abs() < 1.0e-5,
+        "E_CDS(C) = {energy} vs oracle {oracle}"
+    );
 }
 
 #[test]
