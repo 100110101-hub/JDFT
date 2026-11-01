@@ -50,11 +50,14 @@ def find_qwb() -> list[str]:
     退回 `cargo run` 是为了让门禁在干净检出上也能跑（`core: test` 会编译 workspace 的
     测试目标，但不保证 `qwb` 可执行文件已经产出）；代价是第一次会多花一次编译时间。
     """
+    # **debug 优先**：门禁里的 `core: test` 每次都会重编 debug target，而 release 二进制
+    # 可能是一个旧构建（本轮就踩到了：数据字段改名后，门禁里 `data verify` 用新编的
+    # 二进制通过，套件却用了陈旧的 release 二进制，报「unknown field」）。
     for candidate in (
-        os.path.join(ROOT, "qwb-core", "target", "release", "qwb.exe"),
-        os.path.join(ROOT, "qwb-core", "target", "release", "qwb"),
         os.path.join(ROOT, "qwb-core", "target", "debug", "qwb.exe"),
         os.path.join(ROOT, "qwb-core", "target", "debug", "qwb"),
+        os.path.join(ROOT, "qwb-core", "target", "release", "qwb.exe"),
+        os.path.join(ROOT, "qwb-core", "target", "release", "qwb"),
     ):
         if os.path.isfile(candidate):
             return [candidate]
