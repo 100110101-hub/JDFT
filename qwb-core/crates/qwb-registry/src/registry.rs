@@ -52,9 +52,12 @@ pub struct RegistryManifest {
     /// 溶剂条目。
     #[serde(default)]
     pub solvents: Vec<RegistryEntry>,
-    /// 色散校正参数条目（DA-06）。
+    /// 色散校正参数条目（DA-06 的 D3）。
     #[serde(default)]
     pub dispersions: Vec<RegistryEntry>,
+    /// D4 的条目（DA-06；形状与 D3 不同，单独一个 section 与类型）。
+    #[serde(default)]
+    pub d4_dispersions: Vec<RegistryEntry>,
     /// 数值路径的精度等级与等价容差条目（阶段二 K10）。
     #[serde(default)]
     pub numerics: Vec<RegistryEntry>,
@@ -63,13 +66,14 @@ pub struct RegistryManifest {
 impl RegistryManifest {
     /// 全部条目，附所属域（域名字与 `qwb-data` 子目录一致）。
     pub fn all_entries(&self) -> impl Iterator<Item = (&'static str, &RegistryEntry)> {
-        let groups: [(&'static str, &Vec<RegistryEntry>); 7] = [
+        let groups: [(&'static str, &Vec<RegistryEntry>); 8] = [
             ("basis", &self.bases),
             ("ecp", &self.ecps),
             ("functional", &self.functionals),
             ("grid", &self.grids),
             ("solvent", &self.solvents),
             ("dispersion", &self.dispersions),
+            ("d4dispersion", &self.d4_dispersions),
             ("numerics", &self.numerics),
         ];
         groups
@@ -154,6 +158,7 @@ mod tests {
             grids: Vec::new(),
             solvents: Vec::new(),
             dispersions: Vec::new(),
+            d4_dispersions: Vec::new(),
             numerics: Vec::new(),
         }
     }

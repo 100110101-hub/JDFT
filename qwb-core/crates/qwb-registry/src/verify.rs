@@ -37,8 +37,10 @@ pub enum DataKind {
     Grid,
     /// `solvent/`，`solvent.schema.*`。
     Solvent,
-    /// `dispersion/`，`dispersion.schema.*`（DA-06）。
+    /// `dispersion/`，`dispersion.schema.*`（DA-06 的 D3）。
     Dispersion,
+    /// `dispersion/d4.yaml`，`d4dispersion.schema.*`（DA-06 的 D4：形状与 D3 不同，单独一个类型）。
+    D4Dispersion,
     /// `solvent/`，`solvent.schema.*`（已在上方）。
     /// `molecule/`，`molecule.schema.*`。
     Molecule,
@@ -50,13 +52,14 @@ pub enum DataKind {
 
 impl DataKind {
     /// 全部类别（schema 生成顺序即此顺序）。
-    pub const ALL: [DataKind; 9] = [
+    pub const ALL: [DataKind; 10] = [
         DataKind::Basis,
         DataKind::Ecp,
         DataKind::Functional,
         DataKind::Grid,
         DataKind::Solvent,
         DataKind::Dispersion,
+        DataKind::D4Dispersion,
         DataKind::Numerics,
         DataKind::Molecule,
         DataKind::Registry,
@@ -72,6 +75,7 @@ impl DataKind {
             DataKind::Grid => "grid",
             DataKind::Solvent => "solvent",
             DataKind::Dispersion => "dispersion",
+            DataKind::D4Dispersion => "d4dispersion",
             DataKind::Numerics => "numerics",
             DataKind::Molecule => "molecule",
             DataKind::Registry => "registry",
@@ -252,6 +256,13 @@ pub fn verify_bytes(kind: DataKind, path: &str, bytes: &[u8]) -> Report {
         DataKind::Grid => verify_data::<GridLevelDef>(&mut report, bytes, GridLevelDef::check),
         DataKind::Solvent => verify_data::<Solvent>(&mut report, bytes, Solvent::check),
         DataKind::Dispersion => verify_data::<Dispersion>(&mut report, bytes, Dispersion::check),
+        DataKind::D4Dispersion => {
+            verify_data::<crate::d4::D4Dispersion>(
+                &mut report,
+                bytes,
+                crate::d4::D4Dispersion::check,
+            );
+        }
         DataKind::Numerics => verify_data::<NumericsDef>(&mut report, bytes, NumericsDef::check),
         DataKind::Molecule => verify_molecule(&mut report, bytes),
         DataKind::Registry => verify_manifest(&mut report, bytes),
@@ -278,6 +289,13 @@ pub fn verify_file(path: &Path) -> Result<Report, VerifyError> {
 /// 由路径推断数据类别：先看父目录名，再看文件名 `registry.yaml`。
 #[must_use]
 pub fn infer_kind(path: &Path) -> Option<DataKind> {
+    let stem = path.file_stem()?.to_str()?;
+    // **文件名先于目录名**：D4 与 D3 同住 `dispersion/`，目录名分不开，只有文件名分得开
+    // （`dispersion/d4.yaml`）。顺序反了就会把 D4 文件按 D3 的类型去解析，报一堆
+    // 「unknown field constants」—— 实测过。
+    if stem == "d4" {
+        return Some(DataKind::D4Dispersion);
+    }
     if let Some(parent) = path
         .parent()
         .and_then(Path::file_name)
@@ -286,7 +304,6 @@ pub fn infer_kind(path: &Path) -> Option<DataKind> {
     {
         return Some(kind);
     }
-    let stem = path.file_stem()?.to_str()?;
     if stem == "registry" {
         return Some(DataKind::Registry);
     }

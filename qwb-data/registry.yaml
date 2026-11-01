@@ -3,7 +3,7 @@
 # （否则 grid 的 normal 等级会有两个定义、get_grid_by_level 歧义）。
 schema_version: 1.0.0
 name: qwb-data
-version: 0.14.0
+version: 0.15.0
 created: 2026-10-22T22:53:00Z
 features:
   - "jobtype:sp"
@@ -102,6 +102,16 @@ dispersions:
   - name: d3zero
     path: dispersion/d3zero.yaml
     sha256: 28d0ad0091ecb9bbb35a016b2ba3b7e2b46e1d8b852dc3e53f61bf8f790b987a
+
+# DFT-D4（Caldeweyher et al. 2019）：与 D3 是两套**数据形状** —— C6 不是元素对常量，而是每个
+# 参考体系一对 alpha(iω)（23 个虚频）在加载时用 3/pi*trapzd 现算；每个参考权重带电荷缩放
+# zeta(ga, eta_i*gc, q_ref+zeff_i, q_i+zeff_i)，所以 D4 需要 EEQ 电荷。因此它有独立的 K1 类型
+# （`d4dispersion.schema.*`）与独立的 section。M06-2X 在上游没有 D4 参数，记在文件里的
+# `unsupported_functionals`，不编造数值。
+d4_dispersions:
+  - name: d4
+    path: dispersion/d4.yaml
+    sha256: 150676400ae138f58900fa989ffdfd6c73c897bbb0693dc4e42aaea417d739b3
 
 # 阶段二 K10：数值路径的精度等级与等价容差（project-phase2.md 4.5 / 8.5）。
 # 文件里只引用 grid 的名字，网格参数仍然只有 grid/*.yaml 一份。

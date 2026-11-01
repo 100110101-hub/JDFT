@@ -6359,3 +6359,38 @@ D3 的字段一个不动）、`qwb-gen-schemas` 重新生成、`qwb-stamp-data` 
 
 `aatoau` 这件事也没有手写：生成器 import 了 `validate_d4_data.py` 里那份 CODATA-2018 推导
 （`mctc_aatoau()`），并断言等于 1.8897261257783122 —— 一个来源，不抄两遍。CPU 基准没有动。
+
+## 一百五十四、D4 的 K1 契约：新开一支而不是给 D3 加字段，以及两个只有真跑才暴露的顺序坑（2026-11-10）
+
+上一轮把 `d4.yaml` 生成好了，但 `qwb-stamp-data --check` 直接拒收（`unknown field constants`）：
+K1 的 `Dispersion` 是为 D3 设计的（`reference_c6` 是 666 对 × 49 值的表、阻尼是 `s6/s8/a1/a2`），
+而 D4 的形状根本不是"多几列"：
+
+* C6 **不是**元素对常量，而是每个参考体系一对 `alpha(iω)`（23 个虚频），加载时用
+  `3/π·trapzd` 的 Casimir–Polder 积分现算；
+* 每个参考权重带电荷缩放 `ζ(ga, η_i·gc, q_ref+zeff, q+zeff)`，所以模型需要 EEQ 电荷；
+* 阻尼是**有理型但没有零阻尼的 `alp` 指数**（`alp = 16` 只是 ATM 的指数）；
+* CN 参数、参考体系数、`zeff`/`r4r2` 的语义都与 D3 不同。
+
+两条路：给 `Dispersion` 加一堆 `Option` 字段（D3 的必需字段全得变 `Option`，而 D3 的加载路径
+本来是对的、已经过两套参考验收），或者**新开一支**。选后者：`DataKind::D4Dispersion` +
+`d4.rs` 的 `D4Dispersion` + `d4dispersion.schema.*` + `registry.yaml` 的 `d4_dispersions` section。
+加性扩展的代价是多了 10 处小改动（enum、ALL、dir_name、infer_kind、verify 分发、schema 分发、
+manifest 字段、all_entries、loader 字段、访问器），收益是 **D3 一个字都不用动**。
+
+**坑一：`infer_kind` 必须先看文件名、再看目录名。** D4 与 D3 同住 `dispersion/`，我第一版把
+文件名检查放在目录检查**之后**，于是 `dispersion/d4.yaml` 被判定成 D3，`qwb-stamp-data` 报
+`unknown field constants, expected one of name, version, kind, ...` —— 错误信息看起来像"schema
+没写对"，其实是"文件被当成另一类"。顺序调过来就好了，但这条只有在**真去 stamp 一个同目录
+新类型**时才会暴露。
+
+**坑二：Rust 写的 `1e-6`，YAML 1.1 读成字符串。** `qwb-stamp-data` 用 serde_yaml 重新序列化，
+小量级浮点写成 `1e-6`；而 PyYAML 按 YAML 1.1 解析，只认带小数点的 `1.0e-6`，于是生成器的
+`--check` 看到 `1e-06` vs `'1e-6'`。处置：`--check` 对 float 允许"字符串能转成浮点"再比较
+（**值仍要求逐位相等，容差 0**）。这条值得记，因为任何以后的 Python 侧消费者都会踩。
+
+**验收**：`qwb data verify` **33/33**（`d4dispersion ../qwb-data/dispersion/d4.yaml` 0 error
+0 warning）、`DATA_LICENSES` 32 → 33、`registry.yaml` 0.14.0 → 0.15.0、新测试
+`da06_d4_data.rs` 两例（加载路径 + 36 元素/119 参考体系/5 泛函 + `r4r2` 派生自洽 < 1e-12；
+D3/D4 两个访问器不串）。CPU 基准没有动（D3 的类型与内核一行未改，`qwb data verify` 与
+全部 D3 测试照旧）。

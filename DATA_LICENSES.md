@@ -3,7 +3,7 @@
 本文件由 `scripts/gen_data_licenses.py` 生成。重跑必须得到**逐字节相同**的结果
 （排序固定 + 不含时间戳），所以它可以直接进 CI 比对。
 
-共 32 个生产数据文件。`qwb-data/examples/` 下的 SPECIMEN 不计入
+共 33 个生产数据文件。`qwb-data/examples/` 下的 SPECIMEN 不计入
 （它们是形状示例，不在 manifest 里）。
 
 其中 `qwb-data/basis/` 与 `qwb-data/ecp/` 的部分文件是从 Basis Set Exchange 导出的
@@ -24,6 +24,7 @@
 | `qwb-data/basis/sto-3g.yaml` | 1.0.0 | Apache-2.0 | true | true | `fce3af14b8b3ea12` |
 | `qwb-data/dispersion/d3bj.yaml` | 1.0.0 | LGPL-3.0-or-later | true | true | `85607c132bef00c4` |
 | `qwb-data/dispersion/d3zero.yaml` | 1.0.0 | LGPL-3.0-or-later | true | true | `28d0ad0091ecb9bb` |
+| `qwb-data/dispersion/d4.yaml` | 1.0.0 | LGPL-3.0-or-later | true | true | `150676400ae138f5` |
 | `qwb-data/ecp/lanl2dz-cu.yaml` | 1.0.0 | NOASSERTION | false | false | `a44df71fd56eea38` |
 | `qwb-data/ecp/lanl2dz-zn.yaml` | 1.0.0 | NOASSERTION | false | false | `55b3391680aaad1d` |
 | `qwb-data/functional/b88.yaml` | 1.0.0 | Apache-2.0 | true | true | `efa0fa7b9f8aa98d` |
@@ -37,7 +38,7 @@
 | `qwb-data/grid/grid-normal.yaml` | 1.0.0 | Apache-2.0 | true | true | `a792b362b1fdb278` |
 | `qwb-data/grid/grid-veryfine.yaml` | 1.0.0 | Apache-2.0 | true | true | `5c630f5a1ec0688d` |
 | `qwb-data/numerics/numerics.yaml` | 1.1.0 | Apache-2.0 | true | true | `7013e40da43be893` |
-| `qwb-data/registry.yaml` | 0.14.0 | ? | ? | ? | `—（manifest，条目各自带` |
+| `qwb-data/registry.yaml` | 0.15.0 | ? | ? | ? | `—（manifest，条目各自带` |
 | `qwb-data/solvent/acetonitrile.yaml` | 2.1.0 | Apache-2.0 | true | true | `56d58923014a0c54` |
 | `qwb-data/solvent/chloroform.yaml` | 2.1.0 | Apache-2.0 | true | true | `c38ee6eaf924c523` |
 | `qwb-data/solvent/dmso.yaml` | 2.1.0 | Apache-2.0 | true | true | `0279f71b9c5d60bc` |
@@ -90,6 +91,11 @@
 
 - A consistent and accurate ab initio parametrization of density functional dispersion correction (DFT-D) for the 94 elements H-Pu
 - Molecular Single-Bond Covalent Radii for Elements 1-118
+
+### `qwb-data/dispersion/d4.yaml`（d4 1.0.0）
+
+- A generally applicable atomic-charge dependent London dispersion correction
+- Extension of the D3 dispersion coefficient model
 
 ### `qwb-data/ecp/lanl2dz-cu.yaml`（lanl2dz-cu 1.0.0）
 
@@ -155,7 +161,7 @@
 - A multicenter numerical integration scheme for polyatomic molecules (Becke partitioning)
 - New Methods For Electronic Structure Calculations on Large Molecules (pseudospectral approach)
 
-### `qwb-data/registry.yaml`（qwb-data 0.14.0）
+### `qwb-data/registry.yaml`（qwb-data 0.15.0）
 
 
 ### `qwb-data/solvent/acetonitrile.yaml`（acetonitrile 2.1.0）

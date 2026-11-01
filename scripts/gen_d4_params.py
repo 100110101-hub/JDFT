@@ -33,11 +33,7 @@ import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 STAGING = os.path.join(ROOT, "qwb-data", "dispersion", "_d4_staging")
-# 目的地**暂时**是 staging：`qwb-data/dispersion/*.yaml` 的存在意味着它已经能被 registry
-# 加载，而 D4 的 `Dispersion` 类型（EEQ / alpha(iw) / ATM 那些块）还没进 K1 schema。
-# 等 `qwb-registry` 的 D4 类型落地、`qwb-gen-schemas` 重新生成、`qwb-stamp-data` 通过之后，
-# 把这一行改成 `qwb-data/dispersion/d4.yaml`（同一次提交里加 registry.yaml 的条目）。
-OUTPUT = os.path.join(ROOT, "qwb-data", "dispersion", "_d4_staging", "d4-staged.yaml")
+OUTPUT = os.path.join(ROOT, "qwb-data", "dispersion", "d4.yaml")
 
 REFERENCE = os.path.join(STAGING, "reference_systems.json")
 EEQ = os.path.join(STAGING, "eeq2019.json")
@@ -346,6 +342,15 @@ def semantic_diff(want, got, where: str = "") -> list[str]:
         if want != text:
             problems.append(f"{where}: {want!r} vs {text!r}")
     elif isinstance(want, float):
+        # `qwb-stamp-data` 会用 Rust 的 serde_yaml 重新序列化：小量级浮点写成 `1e-6`，
+        # 而 YAML 1.1（PyYAML）把 `1e-6` 读成**字符串**（要 `1.0e-6` 才是浮点）。
+        # 所以这里按数值比较，字符串只在能转成浮点时接受 —— 值必须相等，容差仍是 0。
+        if isinstance(got, str):
+            try:
+                got = float(got)
+            except ValueError:
+                problems.append(f"{where}: {want!r} vs non-numeric {got!r}")
+                return problems
         if not isinstance(got, (int, float)) or float(want) != float(got):
             problems.append(f"{where}: {want!r} vs {got!r}")
     else:

@@ -16,8 +16,16 @@
       "description": "创建时间，ISO 8601 UTC。",
       "type": "string"
     },
+    "d4_dispersions": {
+      "description": "D4 的条目（DA-06；形状与 D3 不同，单独一个 section 与类型）。",
+      "type": "array",
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/RegistryEntry"
+      }
+    },
     "dispersions": {
-      "description": "色散校正参数条目（DA-06）。",
+      "description": "色散校正参数条目（DA-06 的 D3）。",
       "type": "array",
       "default": [],
       "items": {

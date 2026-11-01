@@ -21,6 +21,7 @@ mod macros;
 
 pub mod basis;
 pub mod common;
+pub mod d4;
 pub mod dispersion;
 pub mod ecp;
 pub mod elements;
@@ -38,6 +39,7 @@ pub mod verify;
 
 pub use basis::{Angular, BasisRole, BasisSet, ContractionType, Normalization, Shell, ShellBlock};
 pub use common::{Citation, DataCommon, License};
+pub use d4::{D4Dispersion, D4Eeq, D4ElementReference, D4ReferenceSystem};
 pub use dispersion::{
     CoordinationModel, CoordinationNumber, DampingModel, DampingParameters, Dispersion,
     PairwiseSettings, Provenance, ReferenceInterpolation, UpstreamSource, WeightModel,

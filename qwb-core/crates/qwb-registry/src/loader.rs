@@ -63,6 +63,7 @@ pub struct Registry {
     grids: BTreeMap<String, GridLevelDef>,
     solvents: BTreeMap<String, Solvent>,
     dispersions: BTreeMap<String, Dispersion>,
+    d4_dispersions: BTreeMap<String, crate::d4::D4Dispersion>,
     numerics: BTreeMap<String, NumericsDef>,
     missing: Vec<MissingData>,
 }
@@ -143,6 +144,14 @@ impl Registry {
             None,
             &mut missing,
         )?;
+        let d4_dispersions = load_all::<crate::d4::D4Dispersion>(
+            &root,
+            "d4dispersion",
+            &manifest.d4_dispersions,
+            crate::d4::D4Dispersion::check_structure,
+            None,
+            &mut missing,
+        )?;
         let numerics = load_all::<NumericsDef>(
             &root,
             "numerics",
@@ -175,6 +184,7 @@ impl Registry {
             grids,
             solvents,
             dispersions,
+            d4_dispersions,
             numerics,
             missing,
         })
@@ -242,6 +252,15 @@ impl Registry {
     /// [`EngineError::Data`]：未索引该名字（消息里列出可用名字）。
     pub fn get_dispersion(&self, name: &str) -> Result<&Dispersion, EngineError> {
         self.lookup_checked(&self.dispersions, "dispersion", name)
+    }
+
+    /// 按名字取 D4 参数（DA-06 的 D4；与 D3 是两套类型）。
+    ///
+    /// # Errors
+    ///
+    /// [`EngineError::Data`]：未索引该名字（消息里列出可用名字）。
+    pub fn get_d4_dispersion(&self, name: &str) -> Result<&crate::d4::D4Dispersion, EngineError> {
+        self.lookup_checked(&self.d4_dispersions, "d4dispersion", name)
     }
 
     /// 数值路径配置键名（阶段二 K10；字典序）。

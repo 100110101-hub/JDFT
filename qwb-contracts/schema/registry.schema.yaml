@@ -32,9 +32,15 @@ properties:
   created:
     description: 创建时间，ISO 8601 UTC。
     type: string
+  d4_dispersions:
+    default: []
+    description: D4 的条目（DA-06；形状与 D3 不同，单独一个 section 与类型）。
+    items:
+      $ref: '#/$defs/RegistryEntry'
+    type: array
   dispersions:
     default: []
-    description: 色散校正参数条目（DA-06）。
+    description: 色散校正参数条目（DA-06 的 D3）。
     items:
       $ref: '#/$defs/RegistryEntry'
     type: array

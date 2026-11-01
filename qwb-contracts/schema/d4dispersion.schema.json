@@ -1,0 +1,626 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "D4Dispersion",
+  "description": "`kind: d4` 的数据文件。",
+  "type": "object",
+  "properties": {
+    "citation": {
+      "description": "引用来源。",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Citation"
+      }
+    },
+    "constants": {
+      "description": "标量常数。",
+      "$ref": "#/$defs/D4Constants"
+    },
+    "coordination_number": {
+      "description": "CN 参数。",
+      "$ref": "#/$defs/D4CoordinationNumber"
+    },
+    "created": {
+      "description": "创建时间（ISO 8601 UTC）。",
+      "type": "string"
+    },
+    "damping_parameters": {
+      "description": "各泛函的阻尼参数（`s6/s8/a1/a2`；**没有**电荷响应系数）。",
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/DampingParameters"
+      }
+    },
+    "dispersion": {
+      "description": "两体项与 ATM。",
+      "$ref": "#/$defs/D4PairwiseSettings"
+    },
+    "eeq": {
+      "description": "EEQ 参数。",
+      "$ref": "#/$defs/D4Eeq"
+    },
+    "elements": {
+      "description": "覆盖的元素（符号，按原子序数升序）。",
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "frequency_grid": {
+      "description": "频率网格。",
+      "$ref": "#/$defs/D4FrequencyGrid"
+    },
+    "kind": {
+      "description": "数据种类（恒为 `d4`）。",
+      "type": "string"
+    },
+    "license": {
+      "description": "许可声明。",
+      "$ref": "#/$defs/License"
+    },
+    "name": {
+      "description": "数据键名。",
+      "type": "string"
+    },
+    "notes": {
+      "description": "备注。",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "provenance": {
+      "description": "溯源。",
+      "$ref": "#/$defs/D4Provenance"
+    },
+    "reference": {
+      "description": "逐元素参考体系。",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/D4ElementReference"
+      }
+    },
+    "sha256": {
+      "description": "内容摘要（工具生成）。",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "unsupported_functionals": {
+      "description": "上游没有参数的泛函。",
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/D4UnsupportedFunctional"
+      },
+      "default": {}
+    },
+    "version": {
+      "description": "数据版本。",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "name",
+    "version",
+    "kind",
+    "citation",
+    "license",
+    "created",
+    "elements",
+    "constants",
+    "eeq",
+    "coordination_number",
+    "frequency_grid",
+    "reference",
+    "damping_parameters",
+    "dispersion",
+    "provenance"
+  ],
+  "$defs": {
+    "Citation": {
+      "description": "一条引用来源（§4 K1：每项 `title` + `doi`/`url`）。",
+      "type": "object",
+      "properties": {
+        "doi": {
+          "description": "DOI（与 `url` 至少给一个）。",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "title": {
+          "description": "文献/数据标题。",
+          "type": "string"
+        },
+        "url": {
+          "description": "URL（与 `doi` 至少给一个）。",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "title"
+      ]
+    },
+    "D4AtmSettings": {
+      "description": "ATM 三体项（上游默认开，`s9 = 1`）。",
+      "type": "object",
+      "properties": {
+        "alp": {
+          "description": "阻尼指数（上游 `alp = 16`；**不是**零阻尼那个 `alp`）。",
+          "type": "number",
+          "format": "double"
+        },
+        "charge_for_c6": {
+          "description": "ATM 里重建 C6 用的电荷：上游是 **0**（`disp.f90:139-141`）。",
+          "type": "number",
+          "format": "double"
+        },
+        "enabled_by_default": {
+          "description": "默认是否启用。",
+          "type": "boolean"
+        },
+        "s9": {
+          "description": "`s9`。",
+          "type": "number",
+          "format": "double"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "enabled_by_default",
+        "s9",
+        "alp",
+        "charge_for_c6"
+      ]
+    },
+    "D4Constants": {
+      "description": "D4 的标量常数（全部来自上游，见数据文件的 `provenance`）。",
+      "type": "object",
+      "properties": {
+        "aatoau": {
+          "description": "Å→Bohr，mctc-lib 的 `aatoau`（CODATA-2018 推导，**不是** K2 的 `BOHR_PER_ANGSTROM`）。",
+          "type": "number",
+          "format": "double"
+        },
+        "ga": {
+          "description": "`ζ` 的宽度参数。",
+          "type": "number",
+          "format": "double"
+        },
+        "gc": {
+          "description": "`ζ` 的硬度缩放。",
+          "type": "number",
+          "format": "double"
+        },
+        "thopi": {
+          "description": "`3/π`（Casimir–Polder 积分的前因子）。",
+          "type": "number",
+          "format": "double"
+        },
+        "wf": {
+          "description": "参考权重的 CN 高斯宽度。",
+          "type": "number",
+          "format": "double"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "aatoau",
+        "thopi",
+        "ga",
+        "gc",
+        "wf"
+      ]
+    },
+    "D4CoordinationNumber": {
+      "description": "D4 的配位数参数（电负性加权的误差函数 CN）。",
+      "type": "object",
+      "properties": {
+        "cutoff_bohr": {
+          "description": "截断半径（Bohr）。",
+          "type": "number",
+          "format": "double"
+        },
+        "k4": {
+          "description": "电负性加权的 `k4`。",
+          "type": "number",
+          "format": "double"
+        },
+        "k5": {
+          "description": "电负性加权的 `k5`。",
+          "type": "number",
+          "format": "double"
+        },
+        "k6": {
+          "description": "电负性加权的 `k6`。",
+          "type": "number",
+          "format": "double"
+        },
+        "kcn": {
+          "description": "计数函数 `½(1+erf(−kcn(R−rc)/rc))` 的 `kcn`。",
+          "type": "number",
+          "format": "double"
+        },
+        "norm_exp": {
+          "description": "计数函数的长度幂（上游 `norm_exp`，当前为 1）。",
+          "type": "number",
+          "format": "double"
+        },
+        "radius_scaling": {
+          "description": "共价半径缩放（上游 4/3）。",
+          "type": "number",
+          "format": "double"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "kcn",
+        "cutoff_bohr",
+        "norm_exp",
+        "radius_scaling",
+        "k4",
+        "k5",
+        "k6"
+      ]
+    },
+    "D4Eeq": {
+      "description": "EEQ(2019) 的逐元素参数（数组下标 = 原子序数 − 1，与 `elements` 同序）。",
+      "type": "object",
+      "properties": {
+        "chi": {
+          "description": "电负性 χ。",
+          "type": "array",
+          "items": {
+            "type": "number",
+            "format": "double"
+          }
+        },
+        "eta": {
+          "description": "化学硬度 η（对角项；可以为负，上游如此）。",
+          "type": "array",
+          "items": {
+            "type": "number",
+            "format": "double"
+          }
+        },
+        "kcnchi": {
+          "description": "χ 的 CN 缩放。",
+          "type": "array",
+          "items": {
+            "type": "number",
+            "format": "double"
+          }
+        },
+        "model": {
+          "description": "模型名（当前只有 `eeq2019`）。",
+          "type": "string"
+        },
+        "rad": {
+          "description": "电荷宽度/阻尼半径（**不做** CN 缩放）。",
+          "type": "array",
+          "items": {
+            "type": "number",
+            "format": "double"
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "model",
+        "chi",
+        "eta",
+        "kcnchi",
+        "rad"
+      ]
+    },
+    "D4ElementReference": {
+      "description": "一个元素的全部参考体系与其元素级参数。",
+      "type": "object",
+      "properties": {
+        "chemical_hardness": {
+          "description": "化学硬度（上游 `hardness`）。",
+          "type": "number",
+          "format": "double"
+        },
+        "covalent_rad_2009_angstrom": {
+          "description": "2009 版共价半径（Å，上游字面值）。",
+          "type": "number",
+          "format": "double"
+        },
+        "element": {
+          "description": "元素符号。",
+          "type": "string"
+        },
+        "pauling_en": {
+          "description": "Pauling 电负性（CN 的 EN 加权用）。",
+          "type": "number",
+          "format": "double"
+        },
+        "r4_over_r2": {
+          "description": "公布的 `<r⁴>/<r²>`（透明起见一并落盘）。",
+          "type": "number",
+          "format": "double"
+        },
+        "r4r2": {
+          "description": "模型消费的 `sqrt(0.5·<r⁴>/<r²>·sqrt(Z))`。",
+          "type": "number",
+          "format": "double"
+        },
+        "reference_systems": {
+          "description": "参考体系列表。",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/D4ReferenceSystem"
+          }
+        },
+        "zeff": {
+          "description": "有效核电荷。",
+          "type": "number",
+          "format": "double"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "element",
+        "r4_over_r2",
+        "r4r2",
+        "pauling_en",
+        "chemical_hardness",
+        "zeff",
+        "covalent_rad_2009_angstrom",
+        "reference_systems"
+      ]
+    },
+    "D4FrequencyGrid": {
+      "description": "`alpha(iω)` 的积分网格（23 个虚频）。",
+      "type": "object",
+      "properties": {
+        "hartree": {
+          "description": "虚频（Hartree），升序。",
+          "type": "array",
+          "items": {
+            "type": "number",
+            "format": "double"
+          }
+        },
+        "trapzd_weights": {
+          "description": "`trapzd` 的权重。",
+          "type": "array",
+          "items": {
+            "type": "number",
+            "format": "double"
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "hartree",
+        "trapzd_weights"
+      ]
+    },
+    "D4PairwiseSettings": {
+      "description": "D4 的两体项设置与 ATM 三体项参数。",
+      "type": "object",
+      "properties": {
+        "atm": {
+          "description": "ATM 三体项。",
+          "$ref": "#/$defs/D4AtmSettings"
+        },
+        "cutoff_bohr": {
+          "description": "两体项截断（Bohr）。",
+          "type": "number",
+          "format": "double"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "cutoff_bohr",
+        "atm"
+      ]
+    },
+    "D4Provenance": {
+      "description": "溯源：文件清单 + 每个仓库的 tag/commit。",
+      "type": "object",
+      "properties": {
+        "pinned": {
+          "description": "仓库 → `tag / commit`。",
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "upstream": {
+          "description": "上游文件。",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/D4UpstreamSource"
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "upstream",
+        "pinned"
+      ]
+    },
+    "D4ReferenceSystem": {
+      "description": "一个元素的一个参考体系。",
+      "type": "object",
+      "properties": {
+        "alpha_iw": {
+          "description": "原始 `alpha(iω)`。",
+          "type": "array",
+          "items": {
+            "type": "number",
+            "format": "double"
+          }
+        },
+        "alpha_iw_eeq": {
+          "description": "电荷缩放后的 `alpha(iω)`（`alpha_iw_eeq`）。",
+          "type": "array",
+          "items": {
+            "type": "number",
+            "format": "double"
+          }
+        },
+        "ascale": {
+          "description": "极化率缩放因子。",
+          "type": "number",
+          "format": "double"
+        },
+        "clsq": {
+          "description": "该参考体系的 EEQ 电荷。",
+          "type": "number",
+          "format": "double"
+        },
+        "ref": {
+          "description": "参考序号（1-based，与上游 `refsys` 一致）。",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "refcovcn": {
+          "description": "该参考体系的 CN（上游 `refcovcn`，权重用它）。",
+          "type": "number",
+          "format": "double"
+        },
+        "refsys": {
+          "description": "全局 SE 参考集里的槽位号。",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "ref",
+        "refsys",
+        "refcovcn",
+        "clsq",
+        "ascale",
+        "alpha_iw",
+        "alpha_iw_eeq"
+      ]
+    },
+    "D4UnsupportedFunctional": {
+      "description": "上游没有参数的泛函（**不编造数值**，只记原因）。",
+      "type": "object",
+      "properties": {
+        "checked_files": {
+          "description": "查过哪些文件。",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "reason": {
+          "description": "为什么没有。",
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "reason",
+        "checked_files"
+      ]
+    },
+    "D4UpstreamSource": {
+      "description": "上游文件的一条来源记录。",
+      "type": "object",
+      "properties": {
+        "bytes": {
+          "description": "字节数。",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "file": {
+          "description": "上游相对路径。",
+          "type": "string"
+        },
+        "sha256": {
+          "description": "逐字节 sha256。",
+          "type": "string"
+        },
+        "url": {
+          "description": "抓取 URL（钉到 commit）。",
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "file",
+        "url",
+        "sha256",
+        "bytes"
+      ]
+    },
+    "DampingParameters": {
+      "description": "一个泛函的 BJ 阻尼参数。",
+      "type": "object",
+      "properties": {
+        "a1": {
+          "description": "`a1`（乘 `sqrt(C8/C6)`）。",
+          "type": "number",
+          "format": "double"
+        },
+        "a2": {
+          "description": "`a2`，单位 Bohr。",
+          "type": "number",
+          "format": "double"
+        },
+        "doi": {
+          "description": "该组参数的出处（DOI）。",
+          "type": "string"
+        },
+        "s6": {
+          "description": "`s6`（BJ 下恒为 1）。",
+          "type": "number",
+          "format": "double"
+        },
+        "s8": {
+          "description": "`s8`。",
+          "type": "number",
+          "format": "double"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "s6",
+        "s8",
+        "a1",
+        "a2",
+        "doi"
+      ]
+    },
+    "License": {
+      "description": "许可声明（§4 K1 / §8.6：`commercial_ok` / `redistribute_ok` 必须显式）。",
+      "type": "object",
+      "properties": {
+        "commercial_ok": {
+          "description": "是否允许商用。",
+          "type": "boolean"
+        },
+        "redistribute_ok": {
+          "description": "是否允许再分发。",
+          "type": "boolean"
+        },
+        "spdx": {
+          "description": "SPDX 标识（如 `Apache-2.0`、`CC-BY-4.0`）。",
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "spdx",
+        "commercial_ok",
+        "redistribute_ok"
+      ]
+    }
+  }
+}
