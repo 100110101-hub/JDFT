@@ -40,12 +40,12 @@ use qwb_registry::smd_atomic::SmdAtomic;
 use crate::smd::{SmdDescriptors, cds_constant_term, cds_sigma};
 
 /// 默认成键带宽度 `Δ`（Å）。上游 `SMXCDS`：`DELTAR = 0.30D0`。
-const DEFAULT_DELTA: f64 = 0.30;
+pub(crate) const DEFAULT_DELTA: f64 = 0.30;
 /// 上游 `SMXCDS` 里硬写的 `ISTS`；它打开 O–O 与 O–C 两处特例（见模块文档）。
-const ISTS: usize = 6;
+pub(crate) const ISTS: usize = 6;
 
 /// 成键接触权重 `COT = exp(Δ/(d − (R + Δ)))`；`d ≥ R + Δ` 时为 0。
-fn cot_weight(distance: f64, reference: f64, delta: f64) -> f64 {
+pub(crate) fn cot_weight(distance: f64, reference: f64, delta: f64) -> f64 {
     let cutoff = reference + delta;
     if distance >= cutoff {
         0.0
@@ -55,7 +55,7 @@ fn cot_weight(distance: f64, reference: f64, delta: f64) -> f64 {
 }
 
 /// 上游的软核 `W = exp(1 − 1/(1 − x))/e`，`x = (d − R)/Δ`；`d ≥ R + Δ` 时为 0。
-fn soft_weight(distance: f64, reference: f64, delta: f64) -> f64 {
+pub(crate) fn soft_weight(distance: f64, reference: f64, delta: f64) -> f64 {
     let cutoff = reference + delta;
     if distance >= cutoff {
         0.0
@@ -141,6 +141,81 @@ pub fn smd_cds_energy_kcal(
     let sts = smd_sts(data, molecule, water, descriptors)?;
     let cssigm = cds_constant_term(data, water, descriptors);
     cds_energy_kcal_from_sts(&sts, cssigm, areas_angstrom2).map_err(EngineError::Data)
+}
+
+/// `HSIGMA(Z_j)`：水相查表；非水相 `HSIGMA_N·SOLN + HSIGMA_A·SOLA + HSIGMA_B·SOLB`。
+///
+/// 公开给 [`crate::smd_gradient`] 用（解析梯度要同一份查表，不能另抄一份）。
+///
+/// # Errors
+///
+/// 元素不在表内、非水相缺描述符。
+pub(crate) fn hsigma_at(
+    data: &SmdAtomic,
+    symbol: &str,
+    water: bool,
+    descriptors: Option<&SmdDescriptors>,
+) -> Result<f64, EngineError> {
+    if water {
+        return data
+            .cds
+            .water
+            .hsigma_cal_per_mol_angstrom2
+            .get(symbol)
+            .copied()
+            .ok_or_else(|| EngineError::Data(format!("smd: no aqueous HSIGMA for `{symbol}`")));
+    }
+    let descriptors = descriptors.ok_or_else(|| {
+        EngineError::Data(
+            "smd: the nonaqueous HSIGMA needs the solvent Abraham descriptors".to_string(),
+        )
+    })?;
+    let index = data
+        .elements
+        .iter()
+        .position(|candidate| candidate == symbol)
+        .ok_or_else(|| EngineError::Data(format!("smd: `{symbol}` outside the HSIGMA table")))?;
+    let table = &data.cds.nonaqueous;
+    Ok(table.hsigma_n[index] * descriptors.soln
+        + table.hsigma_a[index] * descriptors.sola
+        + table.hsigma_b[index] * descriptors.solb)
+}
+
+/// 成对修正 `SIGMA(100 + pair)`（`pair` 为上游的 1 基编号）。
+///
+/// # Errors
+///
+/// `pair` 超出 1..=50、非水相缺描述符。
+pub(crate) fn pair_sigma_at(
+    data: &SmdAtomic,
+    pair: usize,
+    water: bool,
+    descriptors: Option<&SmdDescriptors>,
+) -> Result<f64, EngineError> {
+    let slot = pair
+        .checked_sub(1)
+        .filter(|index| *index < 50)
+        .ok_or_else(|| EngineError::Data(format!("smd: pair index {pair} outside 1..=50")))?;
+    if water {
+        return data
+            .cds
+            .water
+            .pair_sigma_cal_per_mol_angstrom2
+            .get(slot)
+            .copied()
+            .ok_or_else(|| {
+                EngineError::Data(format!("smd: the aqueous pair block has no slot {slot}"))
+            });
+    }
+    let descriptors = descriptors.ok_or_else(|| {
+        EngineError::Data(
+            "smd: the nonaqueous pair sigma needs the solvent Abraham descriptors".to_string(),
+        )
+    })?;
+    let table = &data.cds.nonaqueous;
+    Ok(table.pair_sigma_n[slot] * descriptors.soln
+        + table.pair_sigma_a[slot] * descriptors.sola
+        + table.pair_sigma_b[slot] * descriptors.solb)
 }
 
 /// 一次调用的公共上下文（符号、原子序数、坐标、键长）。
@@ -233,66 +308,14 @@ impl<'a> Context<'a> {
         }
     }
 
-    /// `HSIGMA(Z_j)`：水相查表；非水相 `HSIGMA_N·SOLN + HSIGMA_A·SOLA + HSIGMA_B·SOLB`。
+    /// `HSIGMA(Z_j)`（见 [`hsigma_at`]）。
     fn hsigma_at(&self, symbol: &str) -> Result<f64, EngineError> {
-        if self.water {
-            return self
-                .data
-                .cds
-                .water
-                .hsigma_cal_per_mol_angstrom2
-                .get(symbol)
-                .copied()
-                .ok_or_else(|| {
-                    EngineError::Data(format!("smd: no aqueous HSIGMA for `{symbol}`"))
-                });
-        }
-        let descriptors = self.descriptors.ok_or_else(|| {
-            EngineError::Data(
-                "smd: the nonaqueous HSIGMA needs the solvent Abraham descriptors".to_string(),
-            )
-        })?;
-        let index = self
-            .data
-            .elements
-            .iter()
-            .position(|candidate| candidate == symbol)
-            .ok_or_else(|| {
-                EngineError::Data(format!("smd: `{symbol}` outside the HSIGMA table"))
-            })?;
-        let table = &self.data.cds.nonaqueous;
-        Ok(table.hsigma_n[index] * descriptors.soln
-            + table.hsigma_a[index] * descriptors.sola
-            + table.hsigma_b[index] * descriptors.solb)
+        hsigma_at(self.data, symbol, self.water, self.descriptors)
     }
 
-    /// 成对修正 `SIGMA(100 + pair)`（`pair` 为上游的 1 基编号）。
+    /// 成对修正（见 [`pair_sigma_at`]）。
     fn pair_sigma(&self, pair: usize) -> Result<f64, EngineError> {
-        let slot = pair
-            .checked_sub(1)
-            .filter(|index| *index < 50)
-            .ok_or_else(|| EngineError::Data(format!("smd: pair index {pair} outside 1..=50")))?;
-        if self.water {
-            return self
-                .data
-                .cds
-                .water
-                .pair_sigma_cal_per_mol_angstrom2
-                .get(slot)
-                .copied()
-                .ok_or_else(|| {
-                    EngineError::Data(format!("smd: the aqueous pair block has no slot {slot}"))
-                });
-        }
-        let descriptors = self.descriptors.ok_or_else(|| {
-            EngineError::Data(
-                "smd: the nonaqueous pair sigma needs the solvent Abraham descriptors".to_string(),
-            )
-        })?;
-        let table = &self.data.cds.nonaqueous;
-        Ok(table.pair_sigma_n[slot] * descriptors.soln
-            + table.pair_sigma_a[slot] * descriptors.sola
-            + table.pair_sigma_b[slot] * descriptors.solb)
+        pair_sigma_at(self.data, pair, self.water, self.descriptors)
     }
 
     /// H：`Σ_j COT_ij·HSIGMA(Z_j)`，外加两条"未使用"的二阶项（`SIGMA(112/113)`，数据为 0）。
