@@ -1,0 +1,48 @@
+# 苯二聚体相互作用能的单体（`benzene_dimer_d3.yaml` 的前 12 个原子，几何完全相同）。
+# ⚠ 实测：M06-2X/def2-SVP/normal 在这个 12 原子体系上 1077 s 仍未收敛完，见
+# `benzene_dimer_d3.yaml` 的说明；它不是门禁的一部分。
+molecule:
+  atoms:
+    - symbol: C
+      position_angstrom: [1.390000, 0.000000, 0.000000]
+    - symbol: C
+      position_angstrom: [0.695000, 1.203775, 0.000000]
+    - symbol: C
+      position_angstrom: [-0.695000, 1.203775, 0.000000]
+    - symbol: C
+      position_angstrom: [-1.390000, 0.000000, 0.000000]
+    - symbol: C
+      position_angstrom: [-0.695000, -1.203775, 0.000000]
+    - symbol: C
+      position_angstrom: [0.695000, -1.203775, 0.000000]
+    - symbol: H
+      position_angstrom: [2.480000, 0.000000, 0.000000]
+    - symbol: H
+      position_angstrom: [1.240000, 2.147743, 0.000000]
+    - symbol: H
+      position_angstrom: [-1.240000, 2.147743, 0.000000]
+    - symbol: H
+      position_angstrom: [-2.480000, 0.000000, 0.000000]
+    - symbol: H
+      position_angstrom: [-1.240000, -2.147743, 0.000000]
+    - symbol: H
+      position_angstrom: [1.240000, -2.147743, 0.000000]
+  charge: 0
+  multiplicity: 1
+basis_name: def2-svp
+method_name: m06-2x
+grid_level: normal
+solvent: vacuum
+jobtype: sp
+options:
+  scf_max_iter: 200
+  scf_energy_threshold_hartree: 1.0e-8
+  scf_density_threshold: 1.0e-6
+  diis_history: 8
+  threads: 0
+  max_opt_steps: 100
+  opt_gradient_threshold_hartree_per_bohr: 4.5e-4
+  freq_step_angstrom: 0.01
+  ecp_name: null
+  dispersion:
+    data: d3zero

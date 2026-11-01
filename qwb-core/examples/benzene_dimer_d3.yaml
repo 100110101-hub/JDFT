@@ -1,0 +1,85 @@
+# M2 的验收命令之一：苯二聚体 + D3 色散。
+#
+# 几何：`qwb-core/crates/qwb-scf/tests/reference/d3_dimers.csv` 的
+# `benzene_dimer_parallel_displaced` —— **理想化构象**（苯环 C-C 1.39 Å、C-H 1.09 Å，
+# 一个环沿 z 平移 3.5 Å、沿 x 错开 1.4 Å），与色散参考值是同一份坐标。它**不是**
+# S22 的平衡构象，所以相互作用能只能与"我们自己这个构象"的其它方法比，
+# 不与文献的 S22 值直接比（见 docs/status-v2.yaml 的 M2）。
+#
+# 方法：M06-2X + **零阻尼** D3(0)（M06 系列上游只有这一套参数，见 DA-06）。
+# def2-SVP 上 BSSE 没有校正（引擎还没有 ghost 原子），这一点写在 M2 的 note 里。
+#
+# ⚠ 实测成本（2026-11-09，release 构建、8 物理核）：**苯单体的 M06-2X/def2-SVP/normal
+# 单点跑了 1077 s 还没收敛完**（水在同一设置下 8.6 s 就收敛），与「格点 XC 的
+# O(n_points·n_ao²) 标度」一致：苯 114 个基函数、6 倍格点数 → 约 135× 水的每步成本。
+# 所以这条命令**不适合当门禁或快速验证**，跑一次二聚体（+两个单体）需要小时量级；
+# 把 meta-GGA 的格点收缩做快（EX-03 的 CPU 半边或 GPU 自定义核）才是让它可用的前提。
+molecule:
+  atoms:
+    - symbol: C
+      position_angstrom: [1.390000, 0.000000, 0.000000]
+    - symbol: C
+      position_angstrom: [0.695000, 1.203775, 0.000000]
+    - symbol: C
+      position_angstrom: [-0.695000, 1.203775, 0.000000]
+    - symbol: C
+      position_angstrom: [-1.390000, 0.000000, 0.000000]
+    - symbol: C
+      position_angstrom: [-0.695000, -1.203775, 0.000000]
+    - symbol: C
+      position_angstrom: [0.695000, -1.203775, 0.000000]
+    - symbol: H
+      position_angstrom: [2.480000, 0.000000, 0.000000]
+    - symbol: H
+      position_angstrom: [1.240000, 2.147743, 0.000000]
+    - symbol: H
+      position_angstrom: [-1.240000, 2.147743, 0.000000]
+    - symbol: H
+      position_angstrom: [-2.480000, 0.000000, 0.000000]
+    - symbol: H
+      position_angstrom: [-1.240000, -2.147743, 0.000000]
+    - symbol: H
+      position_angstrom: [1.240000, -2.147743, 0.000000]
+    - symbol: C
+      position_angstrom: [2.790000, 0.000000, 3.500000]
+    - symbol: C
+      position_angstrom: [2.095000, 1.203775, 3.500000]
+    - symbol: C
+      position_angstrom: [0.705000, 1.203775, 3.500000]
+    - symbol: C
+      position_angstrom: [0.010000, 0.000000, 3.500000]
+    - symbol: C
+      position_angstrom: [0.705000, -1.203775, 3.500000]
+    - symbol: C
+      position_angstrom: [2.095000, -1.203775, 3.500000]
+    - symbol: H
+      position_angstrom: [3.880000, 0.000000, 3.500000]
+    - symbol: H
+      position_angstrom: [2.640000, 2.147743, 3.500000]
+    - symbol: H
+      position_angstrom: [0.160000, 2.147743, 3.500000]
+    - symbol: H
+      position_angstrom: [-1.080000, 0.000000, 3.500000]
+    - symbol: H
+      position_angstrom: [0.160000, -2.147743, 3.500000]
+    - symbol: H
+      position_angstrom: [2.640000, -2.147743, 3.500000]
+  charge: 0
+  multiplicity: 1
+basis_name: def2-svp
+method_name: m06-2x
+grid_level: normal
+solvent: vacuum
+jobtype: sp
+options:
+  scf_max_iter: 200
+  scf_energy_threshold_hartree: 1.0e-8
+  scf_density_threshold: 1.0e-6
+  diis_history: 8
+  threads: 0
+  max_opt_steps: 100
+  opt_gradient_threshold_hartree_per_bohr: 4.5e-4
+  freq_step_angstrom: 0.01
+  ecp_name: null
+  dispersion:
+    data: d3zero
