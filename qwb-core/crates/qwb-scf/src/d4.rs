@@ -376,6 +376,13 @@ pub fn dispersion_energy(
         .get(functional)
         .ok_or_else(|| missing_functional_message(data, functional))?;
 
+    let mut indices = Vec::with_capacity(symbols.len());
+    for symbol in symbols {
+        indices.push(
+            element_index(data, symbol)
+                .ok_or_else(|| format!("d4: element `{symbol}` outside the data range"))?,
+        );
+    }
     let intermediates = properties(data, symbols, positions_bohr, total_charge)?;
     let n = symbols.len();
     let mut two_body = 0.0_f64;
@@ -399,10 +406,12 @@ pub fn dispersion_energy(
     let atm = if data.dispersion.atm.s9.abs() < 1.0e-16 {
         0.0
     } else {
-        // ATM 的 C6 用 q = 0 重建（上游 disp.f90:139-141）。q = 0 时参考权重里的 ζ 也按
-        // 0 电荷算，所以整条链重跑一遍 —— 不是"把分子电荷清零再乘"。
-        let neutral = properties(data, symbols, positions_bohr, 0.0)?;
-        atm_energy(data, parameters, &neutral, symbols, positions_bohr)
+        // ATM 的 C6 用 **原子电荷 = 0** 重建（上游 disp.f90:139-141）。注意"电荷 = 0"指的是
+        // 每个原子的**部分电荷**为零，不是"把体系总电荷设成 0 再解一遍 EEQ"——后者仍然给出
+        // ±0.6 的分电荷，实测会让水二聚体的 ATM 从 −3.2866e-7 变成 −9.6076e-8（差 3.42 倍，
+        // 这正是 `choices` 一百五十七里那个"常数 2.4"的真身）。
+        let atm_c6 = zero_charge_c6(data, &indices, symbols, positions_bohr)?;
+        atm_energy(data, parameters, &atm_c6, symbols, positions_bohr)
     };
 
     Ok(D4Result {
@@ -457,10 +466,26 @@ fn r4r2(data: &D4Dispersion, symbol: &str) -> f64 {
 }
 
 /// ATM 三体项（上游 `damping/atm.f90`）：`E = -sum_{i<j<k} ang*fdmp*C9`。
+/// ATM 用的 C6：参考权重的电荷缩放按 **原子部分电荷 = 0** 求值（上游 `disp.f90:139-141`）。
+fn zero_charge_c6(
+    data: &D4Dispersion,
+    indices: &[usize],
+    symbols: &[&str],
+    positions: &[[f64; 3]],
+) -> Result<Vec<Vec<f64>>, String> {
+    if symbols.len() != positions.len() {
+        return Err("d4: element count does not match positions".into());
+    }
+    let cn = coordination_numbers(data, indices, positions);
+    let zero_charges = vec![0.0_f64; indices.len()];
+    let weights = reference_weights(data, indices, &zero_charges, &cn);
+    c6_matrix(data, indices, &weights)
+}
+
 fn atm_energy(
     data: &D4Dispersion,
     parameters: &qwb_registry::dispersion::DampingParameters,
-    properties: &D4Properties,
+    c6: &[Vec<f64>],
     symbols: &[&str],
     positions: &[[f64; 3]],
 ) -> f64 {
@@ -482,10 +507,7 @@ fn atm_energy(
                 let r2ij = rij * rij;
                 let r2ik = rik * rik;
                 let r2jk = rjk * rjk;
-                let c9 = -(data.dispersion.atm.s9)
-                    * (properties.c6[i][j] * properties.c6[i][k] * properties.c6[j][k])
-                        .abs()
-                        .sqrt();
+                let c9 = -(data.dispersion.atm.s9) * (c6[i][j] * c6[i][k] * c6[j][k]).abs().sqrt();
                 let r0 = (parameters.a1
                     * (3.0 * r4r2(data, symbols[i]) * r4r2(data, symbols[j])).sqrt()
                     + parameters.a2)

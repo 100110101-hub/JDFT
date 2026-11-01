@@ -3,16 +3,14 @@
 //! 对照物 `tests/reference/d4_dispersion.csv`：官方 dftd4 4.3.1 的 `get_dispersion()`
 //! （默认变体 `bj-eeq-atm`，`s9 = 1` 即 **ATM 开**），9 个二聚体 × 5 个泛函 + `water_dimer` 的 q = ±1。
 //!
-//! # 当前状态（如实）
+//! # 实测
 //!
-//! 中间量（CN/电荷/C6）已在 `da06_d4_properties.rs` 钉到 1e-9/1e-10。实测：
+//! 60 行的最差 |ΔE| = **6.435e-13 Ha**（m06-l 单独 4.8e-13），判据 1e-9。
 //!
-//! * **两体项是对的**：`m06-l`（`s8 = 0`、ATM 只 1.6e-10）10 行的总差 ≤ **4.2e-10**；
-//! * **ATM 还差一个整体因子**：误差 / ATM 在各泛函上都是常数 **2.4**
-//!   （b3lyp 2.33e-7/9.61e-8、pbe 1.44e-7/6.04e-8、pbe0 7.15e-8/3.01e-8、hf 4.04e-6/1.70e-6、
-//!   m06-l 4.18e-10/1.64e-10），且与电荷无关（q = 0/±1 三行一样）——问题在 `ang·fdmp·C9` 的装配。
-//!
-//! 所以两体项断言 1e-9 Ha；ATM 那半边**不设通过断言、也不放宽容差**（见 `docs/choices.md` 一百五十七）。
+//! 达到这个精度的关键是 **ATM 的 C6 用"原子部分电荷 = 0"重建** —— 注意这里的"0"是每个原子
+//! 的分电荷为零，而不是"把体系总电荷设成 0 再解一遍 EEQ"（后者仍给出 ±0.6 的分电荷，实测让
+//! 水二聚体的 ATM 从 −3.2866e-7 变成 −9.6076e-8，差 3.42 倍；见 `docs/choices.md` 一百五十七、
+//! 一百五十八）。
 
 use std::collections::BTreeMap;
 use std::path::PathBuf;
@@ -96,7 +94,6 @@ fn d4_energies_against_the_official_reference() {
 
     let mut worst = 0.0_f64;
     let mut worst_row = String::new();
-    let mut worst_two_body_only = 0.0_f64;
     let mut worst_atm_share = 0.0_f64;
     for row in &rows {
         let dimer = field(row, "dimer");
@@ -114,9 +111,6 @@ fn d4_energies_against_the_official_reference() {
             worst = delta;
             worst_row = format!("{dimer}/{method}/q={charge:+}");
         }
-        if method == "m06-l" {
-            worst_two_body_only = worst_two_body_only.max(delta);
-        }
         if result.energy_hartree != 0.0 {
             worst_atm_share =
                 worst_atm_share.max((result.atm_hartree / result.energy_hartree).abs());
@@ -127,21 +121,16 @@ fn d4_energies_against_the_official_reference() {
             result.energy_hartree, expected, result.two_body_hartree, result.atm_hartree
         );
     }
-    println!(
-        "worst |ΔE| = {worst:.3e} Ha ({worst_row}); m06-l only = {worst_two_body_only:.3e}; \
-         max |ATM/E| = {worst_atm_share:.4}"
-    );
+    println!("worst |ΔE| = {worst:.3e} Ha ({worst_row}); max |ATM/E| = {worst_atm_share:.4}");
 
     assert!(
-        worst_two_body_only < 2.0e-6,
-        "the m06-l rows differ from the oracle by (two-body + residual ATM, ATM factor unresolved) {worst_two_body_only:.3e} Ha"
+        worst < 1.0e-9,
+        "the D4 energy differs from the oracle by {worst:.3e} Ha at {worst_row}"
     );
     assert!(
         worst_atm_share > 0.01,
         "the ATM contribution looks unplugged (max |ATM/E| = {worst_atm_share:.3e})"
     );
-    // ATM 的半边不设通过断言：误差 / ATM 是常数 2.4 —— 装配差一个整体因子。
-    // 不放宽容差把错的测绿，也不删这一行（`worst` 已在上面打印）。
 }
 
 #[test]
