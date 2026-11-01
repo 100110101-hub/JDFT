@@ -10,5 +10,10 @@ description = "QWB 交换相关泛函（X-01 trait + LDA 项，X-02 有限差分
 [dependencies]
 thiserror.workspace = true
 
+[dev-dependencies]
+# SC-06：逐点参考测试要走**生产同一条**路径构造组件
+# （`Registry::get_functional` → `qwb_xc::build_term`），而不是在测试里复制参数常数。
+qwb-registry.workspace = true
+
 [lints]
 workspace = true

@@ -1487,6 +1487,7 @@ dependencies = [
 name = "qwb-xc"
 version = "0.1.0"
 dependencies = [
+ "qwb-registry",
  "thiserror 2.0.21",
 ]
 
