@@ -1,6 +1,11 @@
 #!/usr/bin/env python3
-"""r330 -- spin-resolved (zeta-dependent) M06 / M06-L / M06-2X *correlation*:
-candidate formula + point-by-point numerical validation against libxc (PySCF).
+"""SC-06：自旋分辨（ζ 依赖）的 M06 (zeta-dependent) M06 / M06-L / M06-2X *correlation*:
+相关项 —— 候选公式 + 对 libxc（PySCF）的逐点数值验证。
+
+**这份脚本的作用**：`qwb-xc` 的 `M06Correlation` 目前只有闭壳层/非极化形式（Stoll
+分解在 ζ=0 处求值）。自旋化的公式不是猜出来的：它由下面的上游实现逐项读出，并在
+这里对着 libxc 逐点验证（能量到 3e-16、导数 ~1e-12，另有两个近空通道的病态点单独说明）。
+Rust 侧的转写（`M06Correlation::spin_point`）以这份脚本为准。
 
 Sources actually read (see also the header of the final report):
   * libxc 4.3.4  src/mgga_c_m06l.c  -- parameter tables (par_m06l/par_m06/
@@ -15,7 +20,7 @@ Sources actually read (see also the header of the final report):
       https://raw.githubusercontent.com/nwchemgit/nwchem/master/src/nwxc/nwxc_c_vs98.F
 
 Run from Windows:
-  wsl -e bash -lc "cd /mnt/d/python_II/Jaguar && python3 scripts/r330_m06corr_spin.py"
+  wsl -e bash -lc "cd /mnt/d/python_II/Jaguar && python3 scripts/validate_m06_spin_correlation.py"
 
 Dependencies: numpy + pyscf only.
 
@@ -333,12 +338,44 @@ def compare(libxc_id, samples, verbose=True):
         print(f"\n=== {libxc_id} ===")
         print(f"{'#':>2} {'rho_a':>9} {'rho_b':>9} {'zeta':>7} {'x2_a':>9} {'x2_b':>9}"
               f" {'t_a':>7} {'t_b':>7} | {'|de|':>9} {'|dv_rho|':>9}"
-              f" {'|dv_sig|':>9} {'|dv_tau|':>9}")
+              f" {'|dv_sig|':>9} {'|dv_tau|':>9} | {'rel_e':>8} {'rel_vsig':>8}")
         for i in range(n):
             print(f"{i:>2} {rho_a[i]:9.3e} {rho_b[i]:9.3e} {zeta[i]:7.3f} {sav[i]:9.2e}"
                   f" {sbv[i]:9.2e} {tav[i]:7.3f} {tbv[i]:7.3f} | {dev['e'][i]:9.2e}"
-                  f" {dev['v_rho'][i]:9.2e} {dev['v_sigma'][i]:9.2e} {dev['v_tau'][i]:9.2e}")
+                  f" {dev['v_rho'][i]:9.2e} {dev['v_sigma'][i]:9.2e} {dev['v_tau'][i]:9.2e}"
+                  f" | {dev['e'][i] / max(abs(e_ref[i]), 1e-300):8.1e}"
+                  f" {dev['v_sigma'][i] / max(np.abs(vxc[1][i]).max(), 1e-300):8.1e}")
     return {k: float(np.max(v)) for k, v in dev.items()}
+
+
+def relative_summary(libxc_id, samples):
+    """per-point *relative* deviations, to separate real errors from
+    ill-conditioned (tiny-channel / huge-derivative) rounding."""
+    p = PARAMS[libxc_id]
+    cols = list(zip(*samples))
+    rho_a, rho_b, saa, sab, sbb, ta, tb = [np.asarray(c, dtype=float) for c in cols]
+    e_ref, vxc = libxc_eval(libxc_id, rho_a, rho_b, saa, sab, sbb, ta, tb)
+    e_mine = m06_corr_e_vol(p, D.var(rho_a, I_RA), D.var(rho_b, I_RB),
+                            D.var(saa, I_SAA), D.var(sab, I_SAB), D.var(sbb, I_SBB),
+                            D.var(ta, I_TA), D.var(tb, I_TB))
+    scale = {
+        "e": np.maximum(np.abs(e_ref), 1e-300),
+        "v_rho": np.maximum(np.abs(vxc[0]).max(axis=1), 1e-300),
+        "v_sigma": np.maximum(np.abs(vxc[1]).max(axis=1), 1e-300),
+        "v_tau": np.maximum(np.abs(vxc[3]).max(axis=1), 1e-300),
+    }
+    dev = {
+        "e": e_mine.v - e_ref,
+        "v_rho": np.maximum(np.abs(e_mine.d[:, I_RA] - vxc[0][:, 0]),
+                            np.abs(e_mine.d[:, I_RB] - vxc[0][:, 1])),
+        "v_sigma": np.maximum.reduce([np.abs(e_mine.d[:, I_SAA] - vxc[1][:, 0]),
+                                      np.abs(e_mine.d[:, I_SAB] - vxc[1][:, 1]),
+                                      np.abs(e_mine.d[:, I_SBB] - vxc[1][:, 2])]),
+        "v_tau": np.maximum(np.abs(e_mine.d[:, I_TA] - vxc[3][:, 0]),
+                            np.abs(e_mine.d[:, I_TB] - vxc[3][:, 1])),
+    }
+    rel = {k: np.abs(v) / scale[k] for k, v in dev.items()}
+    return rel
 
 
 def invented_points():
@@ -355,6 +392,7 @@ def invented_points():
         (0.5, 0.8, 0.2, 3.0e-2, 1.25),
         (0.5, 0.8, 20.0, 2.0, 1.60),
         (0.9, 0.999, 0.5, 1.0e-4, 1.30),
+        (1.0, 1.0 - 2.0e-6, 0.30, 0.05, 1.20),
         (2.5, 0.0, 30.0, 30.0, 1.80),
         (0.35, 0.35, 1.5, 0.4, 1.15),
         (3.0, 0.65, 0.05, 6.0, 1.45),
@@ -372,17 +410,90 @@ def invented_points():
     return pts
 
 
+def closed_shell_point(p, rho, sigma, tau):
+    """verbatim replica of qwb-xc::meta_gga::M06Correlation::point
+    (total-density variables, 2^(2/3) rescaling), per electron."""
+    n = rho.v.shape[0]
+    one = D.const(1.0, n)
+    scale = 2.0 ** (2.0 / 3.0)
+    rs = (D.const(3.0 / (4.0 * PI), n) / rho).powf(1.0 / 3.0)
+    xs_sq = scale * sigma / rho.powf(8.0 / 3.0)
+    t = scale * tau / rho.powf(5.0 / 3.0)
+    k = scale * K_FACTOR
+    par_same = 0.5 * f_pw(rs * D.const(2.0, n).powf(1.0 / 3.0), one, D.const(2.0, n),
+                          D.const(0.0, n))
+    perp = f_pw(rs, D.const(0.0, n), one, one) - par_same - par_same
+    same = 2.0 * par_same * (b97_g(p["gamma_ss"], p["css"], xs_sq) * fermi_d_corrected(xs_sq, t)
+                            + gtv4(p["alpha_ss"], p["dss"], xs_sq, 2.0 * (t - k))
+                            * fermi_d(xs_sq, t))
+    w_opp = xs_sq + xs_sq
+    z_opp = 2.0 * (t + t - 2.0 * k)
+    opp = perp * (b97_g(p["gamma_ab"], p["cab"], w_opp)
+                  + gtv4(p["alpha_ab"], p["dab"], w_opp, z_opp))
+    return same + opp
+
+
+def closed_shell_selfcheck():
+    """the spin formula at zeta=0 must reproduce the existing unpolarized point().
+
+    eps_spin = E_vol/rho and d eps/d rho_total = (dE/drho_a * rho - E)/rho^2
+    (equals (1/2)(dE/drho_a + dE/drho_b) by symmetry)."""
+    print("\n=== backward compatibility: spin_point at zeta=0 vs existing point() ===")
+    cases = [(2.0, 3.174802103936e-01, 6.890961600452),
+             (0.002, 1.269920841575e-13, 6.029591400396e-05),
+             (1.7, 4.447385882297e-01, 6.683672555750),
+             (3.0, 2.0, 1.0e-1)]
+    for libxc_id in ("MGGA_C_M06_L", "MGGA_C_M06", "MGGA_C_M06_2X"):
+        p = PARAMS[libxc_id]
+        worst_e = worst_d = 0.0
+        for rho_tot, sigma_tot, tau_tot in cases:
+            rho_d = D.var(np.array([rho_tot]), I_RA)
+            sig_d = D.var(np.array([sigma_tot]), I_SAA)
+            tau_d = D.var(np.array([tau_tot]), I_TA)
+            cs = closed_shell_point(p, rho_d, sig_d, tau_d)
+            spin = m06_corr_e_vol(p,
+                                  D.var(np.array([rho_tot / 2.0]), I_RA),
+                                  D.var(np.array([rho_tot / 2.0]), I_RB),
+                                  D.var(np.array([sigma_tot / 4.0]), I_SAA),
+                                  D.var(np.array([sigma_tot / 4.0]), I_SAB),
+                                  D.var(np.array([sigma_tot / 4.0]), I_SBB),
+                                  D.var(np.array([tau_tot / 2.0]), I_TA),
+                                  D.var(np.array([tau_tot / 2.0]), I_TB))
+            eps_spin = spin.v[0] / rho_tot
+            d_eps = (spin.d[0, I_RA] * rho_tot - spin.v[0]) / rho_tot ** 2
+            worst_e = max(worst_e, abs(eps_spin - cs.v[0]))
+            worst_d = max(worst_d, abs(d_eps - cs.d[0, 0]))
+        print(f"{libxc_id:<16} max |eps_spin-eps_closed| = {worst_e:.3e}"
+              f"   max |deps/drho| = {worst_d:.3e}")
+
+
 def main():
     pts = CSV_POINTS + invented_points()
     print(f"{len(pts)} points = {len(CSV_POINTS)} from spin_mgga_pointwise.csv"
           f" + {len(invented_points())} invented")
     worst = {}
+    rel = {}
     for libxc_id in ("MGGA_C_M06_L", "MGGA_C_M06", "MGGA_C_M06_2X"):
         worst[libxc_id] = compare(libxc_id, pts)
+        rel[libxc_id] = relative_summary(libxc_id, pts)
     print("\n=========== max |deviation| over all points (energy per volume) ===========")
     print(f"{'component':<16} {'|de|':>12} {'|dv_rho|':>12} {'|dv_sigma|':>12} {'|dv_tau|':>12}")
     for k, m in worst.items():
         print(f"{k:<16} {m['e']:12.3e} {m['v_rho']:12.3e} {m['v_sigma']:12.3e} {m['v_tau']:12.3e}")
+    print("\n--------- same, with the ill-conditioned fully_polarized samples removed ---------")
+    for i_drop in ([3], [3, 14]):
+        keep = [p for j, p in enumerate(pts) if j not in i_drop]
+        print(f"[drop indices {i_drop}]")
+        for libxc_id in ("MGGA_C_M06_L", "MGGA_C_M06", "MGGA_C_M06_2X"):
+            m = compare(libxc_id, keep, verbose=False)
+            print(f"{libxc_id:<16} {m['e']:12.3e} {m['v_rho']:12.3e} "
+                  f"{m['v_sigma']:12.3e} {m['v_tau']:12.3e}")
+    print("\n--------- max *relative* deviation per component (all points) ---------")
+    print(f"{'component':<16} {'rel_e':>10} {'rel_v_rho':>11} {'rel_v_sigma':>12} {'rel_v_tau':>11}")
+    for k, m in rel.items():
+        print(f"{k:<16} {np.max(m['e']):10.2e} {np.max(m['v_rho']):11.2e} "
+              f"{np.max(m['v_sigma']):12.2e} {np.max(m['v_tau']):11.2e}")
+    closed_shell_selfcheck()
 
 
 if __name__ == "__main__":
