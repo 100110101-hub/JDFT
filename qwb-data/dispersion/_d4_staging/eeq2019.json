@@ -1,0 +1,1613 @@
+{
+  "schema_version": 1,
+  "description": "EEQ(2019) charge model of DFT-D4: per-element chi, eta, CN scaling and charge widths, plus the equations actually implemented (damped erf Coulomb kernel, electronegativity RHS, Lagrange multiplier for the total charge).",
+  "generated_by": "extract_eeq2019.py (stdlib only; --check compares byte-for-byte)",
+  "upstream": {
+    "multicharge": {
+      "repo": "https://github.com/grimme-lab/multicharge",
+      "tag": "v0.6.0",
+      "commit": "576f499b49eb57f8c2dc1ba6f7017800f1e332d9",
+      "license_spdx": "Apache-2.0",
+      "note": "pinned by dftd4 subprojects/multicharge.wrap"
+    },
+    "mctc-lib": {
+      "repo": "https://github.com/grimme-lab/mctc-lib",
+      "tag": "v0.7.0",
+      "commit": "aec7f40ccf1b0dceb9156ae6dc6667fd61206916",
+      "license_spdx": "Apache-2.0",
+      "note": "pinned by dftd4 subprojects/mctc-lib.wrap"
+    }
+  },
+  "citation": {
+    "doi": "10.1063/1.5090222",
+    "note": "EEQ introduced in the DFT-D4 paper; cited in eeq2019.f90:16-20"
+  },
+  "element_range": {
+    "max_elem": 103,
+    "note": "eeq2019.f90:56  integer, parameter :: max_elem = 103"
+  },
+  "parameters": {
+    "chi": {
+      "array": "eeq_chi",
+      "file": "raw/multicharge/src/multicharge/param/eeq2019.f90",
+      "lines": "60-81",
+      "units": "hartree/e",
+      "meaning": "element electronegativity entering the RHS x_i = -chi_i + ..."
+    },
+    "eta": {
+      "array": "eeq_eta",
+      "file": "raw/multicharge/src/multicharge/param/eeq2019.f90",
+      "lines": "84-105",
+      "units": "hartree/e^2",
+      "meaning": "chemical hardness, diagonal of the Coulomb matrix; can be negative"
+    },
+    "kcnchi": {
+      "array": "eeq_kcnchi",
+      "file": "raw/multicharge/src/multicharge/param/eeq2019.f90",
+      "lines": "108-129",
+      "units": "hartree/e",
+      "meaning": "CN scaling of the electronegativity (x_i = -chi_i + kcnchi_i*sqrt(CN_i))"
+    },
+    "rad": {
+      "array": "eeq_rad",
+      "file": "raw/multicharge/src/multicharge/param/eeq2019.f90",
+      "lines": "132-153",
+      "units": "bohr",
+      "meaning": "charge width; enters the diagonal as sqrt(2/pi)/rad and the off-diagonal as gamma_ij = 1/(rad_i^2+rad_j^2). These radii are static: no charge or CN scaling is applied in the kernel."
+    }
+  },
+  "equations": {
+    "coulomb_matrix": {
+      "diagonal": "A_ii = eta_i + sqrt(2/pi)/rad_i",
+      "off_diagonal": "A_ij = erf(sqrt(r_ij^2 * gamma_ij)) / sqrt(r_ij^2),  gamma_ij = 1/(rad_i^2 + rad_j^2)",
+      "source": "raw/multicharge/src/multicharge/model/eeq.f90:331-366",
+      "quote": {
+        "file": "raw/multicharge/src/multicharge/model/eeq.f90",
+        "lines": "344-366",
+        "text": "   do ipair = 1, npair\n      iat = int(0.5_wp*(sqrt(8.0_wp*real(ipair, wp)+1.0_wp)-1.0_wp))\n      if (iat*(iat+1)/2 < ipair) iat = iat+1\n      jat = ipair-iat*(iat-1)/2\n      izp = mol%id(iat)\n      if (iat == jat) then\n         tmp = self%eta(izp) + sqrt2pi / self%rad(izp)\n      else\n         jzp = mol%id(jat)\n         vec = mol%xyz(:, jat) - mol%xyz(:, iat)\n         r2 = vec(1)**2 + vec(2)**2 + vec(3)**2\n         gam = 1.0_wp / (self%rad(izp)**2 + self%rad(jzp)**2)\n         tmp = erf(sqrt(r2 * gam)) / sqrt(r2)\n      end if\n      amat(jat, iat) = tmp\n      amat(iat, jat) = tmp\n   end do\n   !$omp end parallel do\n\n   amat(mol%nat + 1, 1:mol%nat + 1) = 1.0_wp\n   amat(1:mol%nat + 1, mol%nat + 1) = 1.0_wp\n   amat(mol%nat + 1, mol%nat + 1) = 0.0_wp\nend subroutine get_amat_0d"
+      },
+      "radii_scaled": false,
+      "radii_note": "The kernel uses self%rad(izp) unchanged (eeq.f90:350 and eeq.f90:355); the only charge dependence of the model sits in the RHS via CN and in the reference weighting of D4, not in these radii."
+    },
+    "rhs": {
+      "formula": "x_i = -chi_i + kcnchi_i * CN_i / sqrt(CN_i + 1e-14);  x_{N+1} = Q_total",
+      "source": "raw/multicharge/src/multicharge/model/eeq.f90:132-155",
+      "quote": {
+        "file": "raw/multicharge/src/multicharge/model/eeq.f90",
+        "lines": "139-155",
+        "text": "   integer :: iat, izp\n   real(wp) :: tmp\n\n   type(eeq_cache), pointer :: ptr\n\n   call view(cache, ptr)\n\n   !$omp parallel do default(none) schedule(runtime) &\n   !$omp shared(mol, self, xvec, ptr) private(iat, izp, tmp)\n   do iat = 1, mol%nat\n      izp = mol%id(iat)\n      tmp = self%kcnchi(izp) / sqrt(ptr%cn(iat) + reg)\n      xvec(iat) = -self%chi(izp) + tmp * ptr%cn(iat)\n   end do\n   xvec(mol%nat + 1) = mol%charge\n\nend subroutine get_xvec"
+      },
+      "regularization": "reg = 1.0e-14_wp (eeq.f90:137, 163)"
+    },
+    "linear_system": {
+      "formula": "A q = x with A (N+1)x(N+1) and x (N+1); q = first N entries",
+      "source": "raw/multicharge/src/multicharge/model/type.F90:227-273",
+      "quote": {
+        "file": "raw/multicharge/src/multicharge/model/type.F90",
+        "lines": "227-273",
+        "text": "   ! Setup the Coulomb matrix\n   ndim = mol%nat + 1\n   allocate(amat(ndim, ndim))\n   call self%get_coulomb_matrix(mol, cache, amat)\n\n   ! Get RHS of ES equation\n   allocate(xvec(ndim))\n   call self%get_xvec(mol, cache, xvec)\n\n   vrhs = xvec\n   ainv = amat\n\n   ! Factorize the Coulomb matrix\n   allocate(ipiv(ndim))\n   call sytrf(ainv, ipiv, info=info, uplo=\"l\")\n   if (info /= 0) then\n      call fatal_error(error, \"Bunch-Kaufman factorization failed.\")\n      return\n   end if\n\n   if (cpq) then\n      ! Inverted matrix is needed for coupled-perturbed equations\n      call sytri(ainv, ipiv, info=info, uplo=\"l\")\n      if (info /= 0) then\n         call fatal_error(error, \"Inversion of factorized matrix failed.\")\n         return\n      end if\n      ! Solve the linear system\n      call symv(ainv, xvec, vrhs, uplo=\"l\")\n      do ic = 1, ndim\n         do jc = ic + 1, ndim\n            ainv(ic, jc) = ainv(jc, ic)\n         end do\n      end do\n   else\n      ! Solve the linear system\n      call sytrs(ainv, vrhs, ipiv, info=info, uplo=\"l\")\n      if (info /= 0) then\n         call fatal_error(error, \"Solution of linear system failed.\")\n         return\n      end if\n\n   end if\n\n   if (present(qvec)) then\n      qvec(:) = vrhs(:mol%nat)\n   end if"
+      }
+    },
+    "constraint": {
+      "formula": "the extra row/column of ones with a zero corner is a Lagrange multiplier enforcing sum_i q_i = Q_total; A q = x therefore solves the constrained electronegativity equilibration",
+      "source": "raw/multicharge/src/multicharge/model/eeq.f90:363-365",
+      "quote": {
+        "file": "raw/multicharge/src/multicharge/model/eeq.f90",
+        "lines": "363-365",
+        "text": "   amat(mol%nat + 1, 1:mol%nat + 1) = 1.0_wp\n   amat(1:mol%nat + 1, mol%nat + 1) = 1.0_wp\n   amat(mol%nat + 1, mol%nat + 1) = 0.0_wp"
+      },
+      "constraint_rhs": "x_{N+1} = mol%charge (eeq.f90:153)"
+    },
+    "cn_model_used_by_eeq": {
+      "model": "plain error-function CN (cn_count%erf), no electronegativity weighting",
+      "counting_function": "CN_i = sum_{j!=i} 0.5*(1 + erf(-kcn*(r_ij-rc)/rc)), rc = rcov_i+rcov_j",
+      "kcn": 7.5,
+      "kcn_default_in_mctc": 3.15,
+      "cutoff_bohr": 25.0,
+      "cn_max": 8.0,
+      "cn_max_application": "CN is smoothly capped with cn' = log(1+exp(cn_max)) - log(1+exp(cn_max-CN)) (mctc-lib ncoord/type.f90:1124-1134); the D4 dispersion CN does NOT use this cap.",
+      "rcov_source": "multicharge/src/multicharge/param.f90:65 rcov = get_covalent_rad(mol%num); mctc-lib's accessor returns covalent_rad_d3 = 4/3 * covalent_rad_2009 (mctc-lib data/covrad.f90:63-65, 90-104), i.e. the same 4/3-scaled Pyykko radii the D4 dispersion CN uses",
+      "source": "raw/multicharge/src/multicharge/model/eeq.f90:97-98",
+      "quote": {
+        "file": "raw/multicharge/src/multicharge/model/eeq.f90",
+        "lines": "92-99",
+        "text": "   self%chi = chi\n   self%rad = rad\n   self%eta = eta\n   self%kcnchi = kcnchi\n\n   call new_ncoord(self%ncoord, mol, cn_count%erf, error, &\n      & cutoff=cutoff, kcn=cn_exp, rcov=rcov, cut=cn_max)\n"
+      },
+      "setup_constants": {
+        "cutoff": 25.0,
+        "cn_exp": 7.5,
+        "cn_max": 8.0,
+        "source": "raw/multicharge/src/multicharge/param.f90:54-56"
+      }
+    },
+    "d4_reference_charge": {
+      "formula": "q_ref(Z, ref) = clsq(ref, Z)  (set_refq_eeq)",
+      "source": "raw/dftd4/src/dftd4/reference.f90:222-239",
+      "note": "The same EEQ model is used to build the D4 reference charges; the molecular charges q_i enter the reference weighting as q_i + zeff_i."
+    }
+  },
+  "constants": {
+    "sqrt2pi": "sqrt(2/pi), used in A_ii",
+    "pi_source_line": 61
+  },
+  "elements": [
+    {
+      "Z": 1,
+      "symbol": "H",
+      "chi": 1.23695041,
+      "eta": -0.35015861,
+      "kcnchi": 0.0491611,
+      "rad": 0.55159092,
+      "source_lines": {
+        "chi": 61,
+        "eta": 85,
+        "kcnchi": 109,
+        "rad": 133
+      }
+    },
+    {
+      "Z": 2,
+      "symbol": "He",
+      "chi": 1.26590957,
+      "eta": 1.04121227,
+      "kcnchi": 0.10937243,
+      "rad": 0.66205886,
+      "source_lines": {
+        "chi": 61,
+        "eta": 85,
+        "kcnchi": 109,
+        "rad": 133
+      }
+    },
+    {
+      "Z": 3,
+      "symbol": "Li",
+      "chi": 0.54341808,
+      "eta": 0.09281243,
+      "kcnchi": -0.12349591,
+      "rad": 0.90529132,
+      "source_lines": {
+        "chi": 61,
+        "eta": 85,
+        "kcnchi": 109,
+        "rad": 133
+      }
+    },
+    {
+      "Z": 4,
+      "symbol": "Be",
+      "chi": 0.99666991,
+      "eta": 0.0941238,
+      "kcnchi": -0.02665108,
+      "rad": 1.51710827,
+      "source_lines": {
+        "chi": 61,
+        "eta": 85,
+        "kcnchi": 109,
+        "rad": 133
+      }
+    },
+    {
+      "Z": 5,
+      "symbol": "B",
+      "chi": 1.26691604,
+      "eta": 0.26629137,
+      "kcnchi": -0.02631658,
+      "rad": 2.86070364,
+      "source_lines": {
+        "chi": 61,
+        "eta": 85,
+        "kcnchi": 109,
+        "rad": 133
+      }
+    },
+    {
+      "Z": 6,
+      "symbol": "C",
+      "chi": 1.40028282,
+      "eta": 0.19408787,
+      "kcnchi": 0.06005196,
+      "rad": 1.88862966,
+      "source_lines": {
+        "chi": 62,
+        "eta": 86,
+        "kcnchi": 110,
+        "rad": 134
+      }
+    },
+    {
+      "Z": 7,
+      "symbol": "N",
+      "chi": 1.55819364,
+      "eta": 0.05317918,
+      "kcnchi": 0.09279548,
+      "rad": 1.3225029,
+      "source_lines": {
+        "chi": 62,
+        "eta": 86,
+        "kcnchi": 110,
+        "rad": 134
+      }
+    },
+    {
+      "Z": 8,
+      "symbol": "O",
+      "chi": 1.5686644,
+      "eta": 0.03151644,
+      "kcnchi": 0.11689703,
+      "rad": 1.23166285,
+      "source_lines": {
+        "chi": 62,
+        "eta": 86,
+        "kcnchi": 110,
+        "rad": 134
+      }
+    },
+    {
+      "Z": 9,
+      "symbol": "F",
+      "chi": 1.57540015,
+      "eta": 0.32275132,
+      "kcnchi": 0.15704746,
+      "rad": 1.77503721,
+      "source_lines": {
+        "chi": 62,
+        "eta": 86,
+        "kcnchi": 110,
+        "rad": 134
+      }
+    },
+    {
+      "Z": 10,
+      "symbol": "Ne",
+      "chi": 1.15056627,
+      "eta": 1.30996037,
+      "kcnchi": 0.07987901,
+      "rad": 1.11955204,
+      "source_lines": {
+        "chi": 62,
+        "eta": 86,
+        "kcnchi": 110,
+        "rad": 134
+      }
+    },
+    {
+      "Z": 11,
+      "symbol": "Na",
+      "chi": 0.5593622,
+      "eta": 0.2420651,
+      "kcnchi": -0.10002962,
+      "rad": 1.28263182,
+      "source_lines": {
+        "chi": 63,
+        "eta": 87,
+        "kcnchi": 111,
+        "rad": 135
+      }
+    },
+    {
+      "Z": 12,
+      "symbol": "Mg",
+      "chi": 0.72373742,
+      "eta": 0.04147733,
+      "kcnchi": -0.07712863,
+      "rad": 1.22344336,
+      "source_lines": {
+        "chi": 63,
+        "eta": 87,
+        "kcnchi": 111,
+        "rad": 135
+      }
+    },
+    {
+      "Z": 13,
+      "symbol": "Al",
+      "chi": 1.12910844,
+      "eta": 0.11634126,
+      "kcnchi": -0.02170561,
+      "rad": 1.70936266,
+      "source_lines": {
+        "chi": 63,
+        "eta": 87,
+        "kcnchi": 111,
+        "rad": 135
+      }
+    },
+    {
+      "Z": 14,
+      "symbol": "Si",
+      "chi": 1.1230684,
+      "eta": 0.13155266,
+      "kcnchi": -0.04964052,
+      "rad": 1.54075036,
+      "source_lines": {
+        "chi": 63,
+        "eta": 87,
+        "kcnchi": 111,
+        "rad": 135
+      }
+    },
+    {
+      "Z": 15,
+      "symbol": "P",
+      "chi": 1.52672442,
+      "eta": 0.1535065,
+      "kcnchi": 0.14250599,
+      "rad": 1.38200579,
+      "source_lines": {
+        "chi": 63,
+        "eta": 87,
+        "kcnchi": 111,
+        "rad": 135
+      }
+    },
+    {
+      "Z": 16,
+      "symbol": "S",
+      "chi": 1.40768172,
+      "eta": 0.15250997,
+      "kcnchi": 0.0712666,
+      "rad": 2.18849322,
+      "source_lines": {
+        "chi": 64,
+        "eta": 88,
+        "kcnchi": 112,
+        "rad": 136
+      }
+    },
+    {
+      "Z": 17,
+      "symbol": "Cl",
+      "chi": 1.48154584,
+      "eta": 0.17523529,
+      "kcnchi": 0.1368275,
+      "rad": 1.36779065,
+      "source_lines": {
+        "chi": 64,
+        "eta": 88,
+        "kcnchi": 112,
+        "rad": 136
+      }
+    },
+    {
+      "Z": 18,
+      "symbol": "Ar",
+      "chi": 1.31062963,
+      "eta": 0.2877445,
+      "kcnchi": 0.14877121,
+      "rad": 1.27039703,
+      "source_lines": {
+        "chi": 64,
+        "eta": 88,
+        "kcnchi": 112,
+        "rad": 136
+      }
+    },
+    {
+      "Z": 19,
+      "symbol": "K",
+      "chi": 0.4037414,
+      "eta": 0.42937314,
+      "kcnchi": -0.10219289,
+      "rad": 1.64466502,
+      "source_lines": {
+        "chi": 64,
+        "eta": 88,
+        "kcnchi": 112,
+        "rad": 136
+      }
+    },
+    {
+      "Z": 20,
+      "symbol": "Ca",
+      "chi": 0.75442607,
+      "eta": 0.01896455,
+      "kcnchi": -0.08979338,
+      "rad": 1.58859404,
+      "source_lines": {
+        "chi": 64,
+        "eta": 88,
+        "kcnchi": 112,
+        "rad": 136
+      }
+    },
+    {
+      "Z": 21,
+      "symbol": "Sc",
+      "chi": 0.76482096,
+      "eta": 0.07179178,
+      "kcnchi": -0.08273597,
+      "rad": 1.65357953,
+      "source_lines": {
+        "chi": 65,
+        "eta": 89,
+        "kcnchi": 113,
+        "rad": 137
+      }
+    },
+    {
+      "Z": 22,
+      "symbol": "Ti",
+      "chi": 0.98457281,
+      "eta": -0.01121381,
+      "kcnchi": -0.01754829,
+      "rad": 1.50021521,
+      "source_lines": {
+        "chi": 65,
+        "eta": 89,
+        "kcnchi": 113,
+        "rad": 137
+      }
+    },
+    {
+      "Z": 23,
+      "symbol": "V",
+      "chi": 0.96702598,
+      "eta": -0.0309337,
+      "kcnchi": -0.0276546,
+      "rad": 1.30104175,
+      "source_lines": {
+        "chi": 65,
+        "eta": 89,
+        "kcnchi": 113,
+        "rad": 137
+      }
+    },
+    {
+      "Z": 24,
+      "symbol": "Cr",
+      "chi": 1.05266584,
+      "eta": 0.02716319,
+      "kcnchi": -0.02558926,
+      "rad": 1.46301827,
+      "source_lines": {
+        "chi": 65,
+        "eta": 89,
+        "kcnchi": 113,
+        "rad": 137
+      }
+    },
+    {
+      "Z": 25,
+      "symbol": "Mn",
+      "chi": 0.93274875,
+      "eta": -0.01843812,
+      "kcnchi": -0.08010286,
+      "rad": 1.32928147,
+      "source_lines": {
+        "chi": 65,
+        "eta": 89,
+        "kcnchi": 113,
+        "rad": 137
+      }
+    },
+    {
+      "Z": 26,
+      "symbol": "Fe",
+      "chi": 1.04025281,
+      "eta": -0.15270393,
+      "kcnchi": -0.04163215,
+      "rad": 1.02766713,
+      "source_lines": {
+        "chi": 66,
+        "eta": 90,
+        "kcnchi": 114,
+        "rad": 138
+      }
+    },
+    {
+      "Z": 27,
+      "symbol": "Co",
+      "chi": 0.92738624,
+      "eta": -0.09192645,
+      "kcnchi": -0.09369631,
+      "rad": 1.02291377,
+      "source_lines": {
+        "chi": 66,
+        "eta": 90,
+        "kcnchi": 114,
+        "rad": 138
+      }
+    },
+    {
+      "Z": 28,
+      "symbol": "Ni",
+      "chi": 1.0741921,
+      "eta": -0.13418723,
+      "kcnchi": -0.03774117,
+      "rad": 0.94343886,
+      "source_lines": {
+        "chi": 66,
+        "eta": 90,
+        "kcnchi": 114,
+        "rad": 138
+      }
+    },
+    {
+      "Z": 29,
+      "symbol": "Cu",
+      "chi": 1.07900668,
+      "eta": -0.09861139,
+      "kcnchi": -0.05759708,
+      "rad": 1.14881311,
+      "source_lines": {
+        "chi": 66,
+        "eta": 90,
+        "kcnchi": 114,
+        "rad": 138
+      }
+    },
+    {
+      "Z": 30,
+      "symbol": "Zn",
+      "chi": 1.04712861,
+      "eta": 0.18338109,
+      "kcnchi": 0.02431998,
+      "rad": 1.47080755,
+      "source_lines": {
+        "chi": 66,
+        "eta": 90,
+        "kcnchi": 114,
+        "rad": 138
+      }
+    },
+    {
+      "Z": 31,
+      "symbol": "Ga",
+      "chi": 1.15018618,
+      "eta": 0.08299615,
+      "kcnchi": -0.0105627,
+      "rad": 1.76901636,
+      "source_lines": {
+        "chi": 67,
+        "eta": 91,
+        "kcnchi": 115,
+        "rad": 139
+      }
+    },
+    {
+      "Z": 32,
+      "symbol": "Ge",
+      "chi": 1.15388455,
+      "eta": 0.11370033,
+      "kcnchi": -0.02692862,
+      "rad": 1.98724061,
+      "source_lines": {
+        "chi": 67,
+        "eta": 91,
+        "kcnchi": 115,
+        "rad": 139
+      }
+    },
+    {
+      "Z": 33,
+      "symbol": "As",
+      "chi": 1.36313743,
+      "eta": 0.19005278,
+      "kcnchi": 0.07657769,
+      "rad": 2.41244711,
+      "source_lines": {
+        "chi": 67,
+        "eta": 91,
+        "kcnchi": 115,
+        "rad": 139
+      }
+    },
+    {
+      "Z": 34,
+      "symbol": "Se",
+      "chi": 1.36485106,
+      "eta": 0.10980677,
+      "kcnchi": 0.06561608,
+      "rad": 2.26739524,
+      "source_lines": {
+        "chi": 67,
+        "eta": 91,
+        "kcnchi": 115,
+        "rad": 139
+      }
+    },
+    {
+      "Z": 35,
+      "symbol": "Br",
+      "chi": 1.39801837,
+      "eta": 0.12327841,
+      "kcnchi": 0.08006749,
+      "rad": 2.95378999,
+      "source_lines": {
+        "chi": 67,
+        "eta": 91,
+        "kcnchi": 115,
+        "rad": 139
+      }
+    },
+    {
+      "Z": 36,
+      "symbol": "Kr",
+      "chi": 1.18695346,
+      "eta": 0.25345554,
+      "kcnchi": 0.141392,
+      "rad": 1.20807752,
+      "source_lines": {
+        "chi": 68,
+        "eta": 92,
+        "kcnchi": 116,
+        "rad": 140
+      }
+    },
+    {
+      "Z": 37,
+      "symbol": "Rb",
+      "chi": 0.3627387,
+      "eta": 0.58615231,
+      "kcnchi": -0.05351029,
+      "rad": 1.65941046,
+      "source_lines": {
+        "chi": 68,
+        "eta": 92,
+        "kcnchi": 116,
+        "rad": 140
+      }
+    },
+    {
+      "Z": 38,
+      "symbol": "Sr",
+      "chi": 0.58797255,
+      "eta": 0.16093861,
+      "kcnchi": -0.06701705,
+      "rad": 1.6273388,
+      "source_lines": {
+        "chi": 68,
+        "eta": 92,
+        "kcnchi": 116,
+        "rad": 140
+      }
+    },
+    {
+      "Z": 39,
+      "symbol": "Y",
+      "chi": 0.71961946,
+      "eta": 0.0454853,
+      "kcnchi": -0.07377246,
+      "rad": 1.61344972,
+      "source_lines": {
+        "chi": 68,
+        "eta": 92,
+        "kcnchi": 116,
+        "rad": 140
+      }
+    },
+    {
+      "Z": 40,
+      "symbol": "Zr",
+      "chi": 0.96158233,
+      "eta": -0.02478645,
+      "kcnchi": -0.02927768,
+      "rad": 1.63220728,
+      "source_lines": {
+        "chi": 68,
+        "eta": 92,
+        "kcnchi": 116,
+        "rad": 140
+      }
+    },
+    {
+      "Z": 41,
+      "symbol": "Nb",
+      "chi": 0.89585296,
+      "eta": 0.01909943,
+      "kcnchi": -0.03867291,
+      "rad": 1.60899928,
+      "source_lines": {
+        "chi": 69,
+        "eta": 93,
+        "kcnchi": 117,
+        "rad": 141
+      }
+    },
+    {
+      "Z": 42,
+      "symbol": "Mo",
+      "chi": 0.81360499,
+      "eta": 0.01402541,
+      "kcnchi": -0.06929825,
+      "rad": 1.43501286,
+      "source_lines": {
+        "chi": 69,
+        "eta": 93,
+        "kcnchi": 117,
+        "rad": 141
+      }
+    },
+    {
+      "Z": 43,
+      "symbol": "Tc",
+      "chi": 1.00794665,
+      "eta": -0.03595279,
+      "kcnchi": -0.04485293,
+      "rad": 1.54559205,
+      "source_lines": {
+        "chi": 69,
+        "eta": 93,
+        "kcnchi": 117,
+        "rad": 141
+      }
+    },
+    {
+      "Z": 44,
+      "symbol": "Ru",
+      "chi": 0.92613682,
+      "eta": 0.01137752,
+      "kcnchi": -0.04800824,
+      "rad": 1.32663678,
+      "source_lines": {
+        "chi": 69,
+        "eta": 93,
+        "kcnchi": 117,
+        "rad": 141
+      }
+    },
+    {
+      "Z": 45,
+      "symbol": "Rh",
+      "chi": 1.09152285,
+      "eta": -0.03697213,
+      "kcnchi": -0.01484022,
+      "rad": 1.37644152,
+      "source_lines": {
+        "chi": 69,
+        "eta": 93,
+        "kcnchi": 117,
+        "rad": 141
+      }
+    },
+    {
+      "Z": 46,
+      "symbol": "Pd",
+      "chi": 1.1490707,
+      "eta": 0.08009416,
+      "kcnchi": 0.07917502,
+      "rad": 1.36051851,
+      "source_lines": {
+        "chi": 70,
+        "eta": 94,
+        "kcnchi": 118,
+        "rad": 142
+      }
+    },
+    {
+      "Z": 47,
+      "symbol": "Ag",
+      "chi": 1.13508911,
+      "eta": 0.02274892,
+      "kcnchi": 0.06619243,
+      "rad": 1.23395526,
+      "source_lines": {
+        "chi": 70,
+        "eta": 94,
+        "kcnchi": 118,
+        "rad": 142
+      }
+    },
+    {
+      "Z": 48,
+      "symbol": "Cd",
+      "chi": 1.08853785,
+      "eta": 0.12801822,
+      "kcnchi": 0.02434095,
+      "rad": 1.65734544,
+      "source_lines": {
+        "chi": 70,
+        "eta": 94,
+        "kcnchi": 118,
+        "rad": 142
+      }
+    },
+    {
+      "Z": 49,
+      "symbol": "In",
+      "chi": 1.11005982,
+      "eta": -0.02078702,
+      "kcnchi": -0.01505548,
+      "rad": 1.5389524,
+      "source_lines": {
+        "chi": 70,
+        "eta": 94,
+        "kcnchi": 118,
+        "rad": 142
+      }
+    },
+    {
+      "Z": 50,
+      "symbol": "Sn",
+      "chi": 1.12452195,
+      "eta": 0.05284319,
+      "kcnchi": -0.03030768,
+      "rad": 1.97542736,
+      "source_lines": {
+        "chi": 70,
+        "eta": 94,
+        "kcnchi": 118,
+        "rad": 142
+      }
+    },
+    {
+      "Z": 51,
+      "symbol": "Sb",
+      "chi": 1.21642129,
+      "eta": 0.0758119,
+      "kcnchi": 0.01418235,
+      "rad": 1.97636542,
+      "source_lines": {
+        "chi": 71,
+        "eta": 95,
+        "kcnchi": 119,
+        "rad": 143
+      }
+    },
+    {
+      "Z": 52,
+      "symbol": "Te",
+      "chi": 1.36507125,
+      "eta": 0.09663758,
+      "kcnchi": 0.08953411,
+      "rad": 2.05432381,
+      "source_lines": {
+        "chi": 71,
+        "eta": 95,
+        "kcnchi": 119,
+        "rad": 143
+      }
+    },
+    {
+      "Z": 53,
+      "symbol": "I",
+      "chi": 1.4034,
+      "eta": 0.09547417,
+      "kcnchi": 0.08967527,
+      "rad": 3.80138135,
+      "source_lines": {
+        "chi": 71,
+        "eta": 95,
+        "kcnchi": 119,
+        "rad": 143
+      }
+    },
+    {
+      "Z": 54,
+      "symbol": "Xe",
+      "chi": 1.16653482,
+      "eta": 0.07803344,
+      "kcnchi": 0.07277771,
+      "rad": 1.43893803,
+      "source_lines": {
+        "chi": 71,
+        "eta": 95,
+        "kcnchi": 119,
+        "rad": 143
+      }
+    },
+    {
+      "Z": 55,
+      "symbol": "Cs",
+      "chi": 0.34125098,
+      "eta": 0.64913257,
+      "kcnchi": -0.02129476,
+      "rad": 1.75505957,
+      "source_lines": {
+        "chi": 71,
+        "eta": 95,
+        "kcnchi": 119,
+        "rad": 143
+      }
+    },
+    {
+      "Z": 56,
+      "symbol": "Ba",
+      "chi": 0.58884173,
+      "eta": 0.15348654,
+      "kcnchi": -0.06188828,
+      "rad": 1.59815118,
+      "source_lines": {
+        "chi": 72,
+        "eta": 96,
+        "kcnchi": 120,
+        "rad": 144
+      }
+    },
+    {
+      "Z": 57,
+      "symbol": "La",
+      "chi": 0.68441115,
+      "eta": 0.05054344,
+      "kcnchi": -0.06568203,
+      "rad": 1.76401732,
+      "source_lines": {
+        "chi": 72,
+        "eta": 96,
+        "kcnchi": 120,
+        "rad": 144
+      }
+    },
+    {
+      "Z": 58,
+      "symbol": "Ce",
+      "chi": 0.56999999,
+      "eta": 0.11,
+      "kcnchi": -0.11,
+      "rad": 1.63999999,
+      "source_lines": {
+        "chi": 72,
+        "eta": 96,
+        "kcnchi": 120,
+        "rad": 144
+      }
+    },
+    {
+      "Z": 59,
+      "symbol": "Pr",
+      "chi": 0.56999999,
+      "eta": 0.11,
+      "kcnchi": -0.11,
+      "rad": 1.63999999,
+      "source_lines": {
+        "chi": 72,
+        "eta": 96,
+        "kcnchi": 120,
+        "rad": 144
+      }
+    },
+    {
+      "Z": 60,
+      "symbol": "Nd",
+      "chi": 0.56999999,
+      "eta": 0.11,
+      "kcnchi": -0.11,
+      "rad": 1.63999999,
+      "source_lines": {
+        "chi": 72,
+        "eta": 96,
+        "kcnchi": 120,
+        "rad": 144
+      }
+    },
+    {
+      "Z": 61,
+      "symbol": "Pm",
+      "chi": 0.56999999,
+      "eta": 0.11,
+      "kcnchi": -0.11,
+      "rad": 1.63999999,
+      "source_lines": {
+        "chi": 73,
+        "eta": 97,
+        "kcnchi": 121,
+        "rad": 145
+      }
+    },
+    {
+      "Z": 62,
+      "symbol": "Sm",
+      "chi": 0.56999999,
+      "eta": 0.11,
+      "kcnchi": -0.11,
+      "rad": 1.63999999,
+      "source_lines": {
+        "chi": 73,
+        "eta": 97,
+        "kcnchi": 121,
+        "rad": 145
+      }
+    },
+    {
+      "Z": 63,
+      "symbol": "Eu",
+      "chi": 0.56999999,
+      "eta": 0.11,
+      "kcnchi": -0.11,
+      "rad": 1.63999999,
+      "source_lines": {
+        "chi": 73,
+        "eta": 97,
+        "kcnchi": 121,
+        "rad": 145
+      }
+    },
+    {
+      "Z": 64,
+      "symbol": "Gd",
+      "chi": 0.56999999,
+      "eta": 0.11,
+      "kcnchi": -0.11,
+      "rad": 1.63999999,
+      "source_lines": {
+        "chi": 73,
+        "eta": 97,
+        "kcnchi": 121,
+        "rad": 145
+      }
+    },
+    {
+      "Z": 65,
+      "symbol": "Tb",
+      "chi": 0.56999999,
+      "eta": 0.11,
+      "kcnchi": -0.11,
+      "rad": 1.63999999,
+      "source_lines": {
+        "chi": 73,
+        "eta": 97,
+        "kcnchi": 121,
+        "rad": 145
+      }
+    },
+    {
+      "Z": 66,
+      "symbol": "Dy",
+      "chi": 0.56999999,
+      "eta": 0.11,
+      "kcnchi": -0.11,
+      "rad": 1.63999999,
+      "source_lines": {
+        "chi": 74,
+        "eta": 98,
+        "kcnchi": 122,
+        "rad": 146
+      }
+    },
+    {
+      "Z": 67,
+      "symbol": "Ho",
+      "chi": 0.56999999,
+      "eta": 0.11,
+      "kcnchi": -0.11,
+      "rad": 1.63999999,
+      "source_lines": {
+        "chi": 74,
+        "eta": 98,
+        "kcnchi": 122,
+        "rad": 146
+      }
+    },
+    {
+      "Z": 68,
+      "symbol": "Er",
+      "chi": 0.56999999,
+      "eta": 0.11,
+      "kcnchi": -0.11,
+      "rad": 1.63999999,
+      "source_lines": {
+        "chi": 74,
+        "eta": 98,
+        "kcnchi": 122,
+        "rad": 146
+      }
+    },
+    {
+      "Z": 69,
+      "symbol": "Tm",
+      "chi": 0.56999999,
+      "eta": 0.11,
+      "kcnchi": -0.11,
+      "rad": 1.63999999,
+      "source_lines": {
+        "chi": 74,
+        "eta": 98,
+        "kcnchi": 122,
+        "rad": 146
+      }
+    },
+    {
+      "Z": 70,
+      "symbol": "Yb",
+      "chi": 0.56999999,
+      "eta": 0.11,
+      "kcnchi": -0.11,
+      "rad": 1.63999999,
+      "source_lines": {
+        "chi": 74,
+        "eta": 98,
+        "kcnchi": 122,
+        "rad": 146
+      }
+    },
+    {
+      "Z": 71,
+      "symbol": "Lu",
+      "chi": 0.56999999,
+      "eta": 0.11,
+      "kcnchi": -0.11,
+      "rad": 1.63999999,
+      "source_lines": {
+        "chi": 75,
+        "eta": 99,
+        "kcnchi": 123,
+        "rad": 147
+      }
+    },
+    {
+      "Z": 72,
+      "symbol": "Hf",
+      "chi": 0.87936784,
+      "eta": -0.02786741,
+      "kcnchi": -0.03585873,
+      "rad": 1.47055223,
+      "source_lines": {
+        "chi": 75,
+        "eta": 99,
+        "kcnchi": 123,
+        "rad": 147
+      }
+    },
+    {
+      "Z": 73,
+      "symbol": "Ta",
+      "chi": 1.02761808,
+      "eta": 0.01057858,
+      "kcnchi": -0.031324,
+      "rad": 1.81127084,
+      "source_lines": {
+        "chi": 75,
+        "eta": 99,
+        "kcnchi": 123,
+        "rad": 147
+      }
+    },
+    {
+      "Z": 74,
+      "symbol": "W",
+      "chi": 0.93297476,
+      "eta": -0.03892226,
+      "kcnchi": -0.05902379,
+      "rad": 1.40189963,
+      "source_lines": {
+        "chi": 75,
+        "eta": 99,
+        "kcnchi": 123,
+        "rad": 147
+      }
+    },
+    {
+      "Z": 75,
+      "symbol": "Re",
+      "chi": 1.10172128,
+      "eta": -0.04574364,
+      "kcnchi": -0.02827592,
+      "rad": 1.54015481,
+      "source_lines": {
+        "chi": 75,
+        "eta": 99,
+        "kcnchi": 123,
+        "rad": 147
+      }
+    },
+    {
+      "Z": 76,
+      "symbol": "Os",
+      "chi": 0.97350071,
+      "eta": -0.0387408,
+      "kcnchi": -0.0760626,
+      "rad": 1.33721475,
+      "source_lines": {
+        "chi": 76,
+        "eta": 100,
+        "kcnchi": 124,
+        "rad": 148
+      }
+    },
+    {
+      "Z": 77,
+      "symbol": "Ir",
+      "chi": 1.16695666,
+      "eta": -0.03782372,
+      "kcnchi": -0.02123839,
+      "rad": 1.57165422,
+      "source_lines": {
+        "chi": 76,
+        "eta": 100,
+        "kcnchi": 124,
+        "rad": 148
+      }
+    },
+    {
+      "Z": 78,
+      "symbol": "Pt",
+      "chi": 1.23997927,
+      "eta": -0.07046855,
+      "kcnchi": 0.03814822,
+      "rad": 1.04815857,
+      "source_lines": {
+        "chi": 76,
+        "eta": 100,
+        "kcnchi": 124,
+        "rad": 148
+      }
+    },
+    {
+      "Z": 79,
+      "symbol": "Au",
+      "chi": 1.18464453,
+      "eta": 0.09546597,
+      "kcnchi": 0.02146834,
+      "rad": 1.78342098,
+      "source_lines": {
+        "chi": 76,
+        "eta": 100,
+        "kcnchi": 124,
+        "rad": 148
+      }
+    },
+    {
+      "Z": 80,
+      "symbol": "Hg",
+      "chi": 1.14191734,
+      "eta": 0.21953269,
+      "kcnchi": 0.01580538,
+      "rad": 2.79106396,
+      "source_lines": {
+        "chi": 76,
+        "eta": 100,
+        "kcnchi": 124,
+        "rad": 148
+      }
+    },
+    {
+      "Z": 81,
+      "symbol": "Tl",
+      "chi": 1.12334192,
+      "eta": 0.02522348,
+      "kcnchi": -0.00894298,
+      "rad": 1.7816084,
+      "source_lines": {
+        "chi": 77,
+        "eta": 101,
+        "kcnchi": 125,
+        "rad": 149
+      }
+    },
+    {
+      "Z": 82,
+      "symbol": "Pb",
+      "chi": 1.01485321,
+      "eta": 0.1526305,
+      "kcnchi": -0.05864876,
+      "rad": 2.47588882,
+      "source_lines": {
+        "chi": 77,
+        "eta": 101,
+        "kcnchi": 125,
+        "rad": 149
+      }
+    },
+    {
+      "Z": 83,
+      "symbol": "Bi",
+      "chi": 1.12950808,
+      "eta": 0.08042611,
+      "kcnchi": -0.01817842,
+      "rad": 2.37670734,
+      "source_lines": {
+        "chi": 77,
+        "eta": 101,
+        "kcnchi": 125,
+        "rad": 149
+      }
+    },
+    {
+      "Z": 84,
+      "symbol": "Po",
+      "chi": 1.30804834,
+      "eta": 0.01878626,
+      "kcnchi": 0.07721851,
+      "rad": 1.76613217,
+      "source_lines": {
+        "chi": 77,
+        "eta": 101,
+        "kcnchi": 125,
+        "rad": 149
+      }
+    },
+    {
+      "Z": 85,
+      "symbol": "At",
+      "chi": 1.33689961,
+      "eta": 0.08715453,
+      "kcnchi": 0.07936083,
+      "rad": 2.66172302,
+      "source_lines": {
+        "chi": 77,
+        "eta": 101,
+        "kcnchi": 125,
+        "rad": 149
+      }
+    },
+    {
+      "Z": 86,
+      "symbol": "Rn",
+      "chi": 1.27465977,
+      "eta": 0.10500484,
+      "kcnchi": 0.05849285,
+      "rad": 2.82773085,
+      "source_lines": {
+        "chi": 78,
+        "eta": 102,
+        "kcnchi": 126,
+        "rad": 150
+      }
+    },
+    {
+      "Z": 87,
+      "symbol": "Fr",
+      "chi": 1.06598299,
+      "eta": 0.10034731,
+      "kcnchi": 0.00013506,
+      "rad": 1.04059593,
+      "source_lines": {
+        "chi": 78,
+        "eta": 102,
+        "kcnchi": 126,
+        "rad": 150
+      }
+    },
+    {
+      "Z": 88,
+      "symbol": "Ra",
+      "chi": 0.68184178,
+      "eta": 0.15801991,
+      "kcnchi": -0.00020631,
+      "rad": 0.60550051,
+      "source_lines": {
+        "chi": 78,
+        "eta": 102,
+        "kcnchi": 126,
+        "rad": 150
+      }
+    },
+    {
+      "Z": 89,
+      "symbol": "Ac",
+      "chi": 1.04581665,
+      "eta": -0.00071039,
+      "kcnchi": 0.00473118,
+      "rad": 1.22262145,
+      "source_lines": {
+        "chi": 78,
+        "eta": 102,
+        "kcnchi": 126,
+        "rad": 150
+      }
+    },
+    {
+      "Z": 90,
+      "symbol": "Th",
+      "chi": 1.09888688,
+      "eta": -0.00170887,
+      "kcnchi": 0.01590519,
+      "rad": 1.28736399,
+      "source_lines": {
+        "chi": 78,
+        "eta": 102,
+        "kcnchi": 126,
+        "rad": 150
+      }
+    },
+    {
+      "Z": 91,
+      "symbol": "Pa",
+      "chi": 1.07206461,
+      "eta": -0.00133327,
+      "kcnchi": 0.00369763,
+      "rad": 1.44431317,
+      "source_lines": {
+        "chi": 79,
+        "eta": 103,
+        "kcnchi": 127,
+        "rad": 151
+      }
+    },
+    {
+      "Z": 92,
+      "symbol": "U",
+      "chi": 1.09821942,
+      "eta": -0.00104386,
+      "kcnchi": 0.00417543,
+      "rad": 1.29032833,
+      "source_lines": {
+        "chi": 79,
+        "eta": 103,
+        "kcnchi": 127,
+        "rad": 151
+      }
+    },
+    {
+      "Z": 93,
+      "symbol": "Np",
+      "chi": 1.10900303,
+      "eta": -0.00094936,
+      "kcnchi": 0.00706682,
+      "rad": 1.41009404,
+      "source_lines": {
+        "chi": 79,
+        "eta": 103,
+        "kcnchi": 127,
+        "rad": 151
+      }
+    },
+    {
+      "Z": 94,
+      "symbol": "Pu",
+      "chi": 1.01039812,
+      "eta": -0.0011139,
+      "kcnchi": 0.00488679,
+      "rad": 1.25501213,
+      "source_lines": {
+        "chi": 79,
+        "eta": 103,
+        "kcnchi": 127,
+        "rad": 151
+      }
+    },
+    {
+      "Z": 95,
+      "symbol": "Am",
+      "chi": 1.00095966,
+      "eta": -0.00125257,
+      "kcnchi": 0.00505103,
+      "rad": 1.15181468,
+      "source_lines": {
+        "chi": 79,
+        "eta": 103,
+        "kcnchi": 127,
+        "rad": 151
+      }
+    },
+    {
+      "Z": 96,
+      "symbol": "Cm",
+      "chi": 1.11003303,
+      "eta": -0.00095936,
+      "kcnchi": 0.00710682,
+      "rad": 1.42010424,
+      "source_lines": {
+        "chi": 80,
+        "eta": 104,
+        "kcnchi": 128,
+        "rad": 152
+      }
+    },
+    {
+      "Z": 97,
+      "symbol": "Bk",
+      "chi": 1.16831853,
+      "eta": -0.00102814,
+      "kcnchi": 0.0046305,
+      "rad": 1.4395553,
+      "source_lines": {
+        "chi": 80,
+        "eta": 104,
+        "kcnchi": 128,
+        "rad": 152
+      }
+    },
+    {
+      "Z": 98,
+      "symbol": "Cf",
+      "chi": 1.00887482,
+      "eta": -0.0010445,
+      "kcnchi": 0.00387799,
+      "rad": 1.28565237,
+      "source_lines": {
+        "chi": 80,
+        "eta": 104,
+        "kcnchi": 128,
+        "rad": 152
+      }
+    },
+    {
+      "Z": 99,
+      "symbol": "Es",
+      "chi": 1.05928842,
+      "eta": -0.00112666,
+      "kcnchi": 0.00296795,
+      "rad": 1.35017463,
+      "source_lines": {
+        "chi": 80,
+        "eta": 104,
+        "kcnchi": 128,
+        "rad": 152
+      }
+    },
+    {
+      "Z": 100,
+      "symbol": "Fm",
+      "chi": 1.07672363,
+      "eta": -0.00101529,
+      "kcnchi": 0.00400648,
+      "rad": 1.33011749,
+      "source_lines": {
+        "chi": 80,
+        "eta": 104,
+        "kcnchi": 128,
+        "rad": 152
+      }
+    },
+    {
+      "Z": 101,
+      "symbol": "Md",
+      "chi": 1.11308426,
+      "eta": -0.00059592,
+      "kcnchi": 0.00548481,
+      "rad": 1.30745135,
+      "source_lines": {
+        "chi": 81,
+        "eta": 105,
+        "kcnchi": 129,
+        "rad": 153
+      }
+    },
+    {
+      "Z": 102,
+      "symbol": "No",
+      "chi": 1.1434009,
+      "eta": -0.00012585,
+      "kcnchi": 0.013504,
+      "rad": 1.26526071,
+      "source_lines": {
+        "chi": 81,
+        "eta": 105,
+        "kcnchi": 129,
+        "rad": 153
+      }
+    },
+    {
+      "Z": 103,
+      "symbol": "Lr",
+      "chi": 1.1371411,
+      "eta": -0.00140896,
+      "kcnchi": 0.0067538,
+      "rad": 1.34071499,
+      "source_lines": {
+        "chi": 81,
+        "eta": 105,
+        "kcnchi": 129,
+        "rad": 153
+      }
+    }
+  ],
+  "validation": {
+    "script": "validate_d4_data.py",
+    "reference": "qwb-core/crates/qwb-scf/tests/reference/d4_properties.csv (official dftd4 4.3.1 via scripts/dftd4_dispersion_reference.py)",
+    "quantities": [
+      "coordination number",
+      "EEQ charge"
+    ],
+    "result": "reproduced to <= 4e-8 relative for all 9 reference dimers when the 4/3-scaled Pyykko radii are used for the EEQ CN"
+  },
+  "quotes": [
+    {
+      "file": "raw/multicharge/src/multicharge/param/eeq2019.f90",
+      "lines": "56-56",
+      "text": "   integer, parameter :: max_elem = 103"
+    },
+    {
+      "file": "raw/multicharge/src/multicharge/param/eeq2019.f90",
+      "lines": "107-108",
+      "text": "   !> Element-specific CN scaling constant for the electronegativity equilibration charges.\n   real(wp), parameter :: eeq_kcnchi(max_elem) = [&"
+    },
+    {
+      "file": "raw/multicharge/src/multicharge/param/eeq2019.f90",
+      "lines": "131-132",
+      "text": "   !> Element-specific charge widths for the electronegativity equilibration charges.\n   real(wp), parameter :: eeq_rad(max_elem) = [&"
+    },
+    {
+      "file": "raw/multicharge/src/multicharge/param.f90",
+      "lines": "54-70",
+      "text": "   real(wp), parameter :: cutoff = 25.0_wp\n   real(wp), parameter :: cn_exp = 7.5_wp\n   real(wp), parameter :: cn_max = 8.0_wp\n\n   real(wp), allocatable :: chi(:), eta(:), kcnchi(:), rad(:), rcov(:)\n   type(eeq_model), allocatable :: eeq\n\n   chi = get_eeq_chi(mol%num)\n   eta = get_eeq_eta(mol%num)\n   kcnchi = get_eeq_kcnchi(mol%num)\n   rad = get_eeq_rad(mol%num)\n   rcov = get_covalent_rad(mol%num)\n\n   allocate(eeq)\n   call new_eeq_model(eeq, mol=mol, error=error, chi=chi, &\n      & rad=rad, eta=eta, kcnchi=kcnchi, cutoff=cutoff, &\n      & cn_exp=cn_exp, rcov=rcov, cn_max=cn_max)"
+    },
+    {
+      "file": "raw/mctc-lib/src/mctc/ncoord/erf.f90",
+      "lines": "106-122",
+      "text": "   elemental function ncoord_count(self, izp, jzp, r) result(count)\n      !> Coordination number container\n      class(erf_ncoord_type), intent(in) :: self\n      !> Atom i index\n      integer, intent(in)  :: izp\n      !> Atom j index\n      integer, intent(in)  :: jzp\n      !> Current distance.\n      real(wp), intent(in) :: r\n\n      real(wp) :: rc, count\n\n      rc = (self%rcov(izp) + self%rcov(jzp))\n\n      count = 0.5_wp * (1.0_wp + erf(-self%kcn*(r-rc)/rc**self%norm_exp))\n\n   end function ncoord_count"
+    }
+  ]
+}

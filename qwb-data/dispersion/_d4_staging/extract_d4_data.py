@@ -23,14 +23,36 @@ Run:  python extract_d4_data.py
 
 from __future__ import annotations
 
+import argparse
 import bisect
 import hashlib
 import json
 import re
+import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
 RAW = ROOT / "raw"
+
+parser = argparse.ArgumentParser()
+parser.add_argument("--check", action="store_true")
+CHECK = parser.parse_args().check
+_OK = True
+
+
+def emit(path: Path, obj) -> None:
+    """Write JSON or, with --check, compare byte-for-byte with the file on disk."""
+    global _OK
+    text = json.dumps(obj, indent=2, ensure_ascii=False) + "\n"
+    if CHECK:
+        if path.exists() and path.read_text(encoding="utf-8") == text:
+            print(f"OK   {path.name}")
+        else:
+            print(f"FAIL {path.name}: differs or missing")
+            _OK = False
+    else:
+        path.write_text(text, encoding="utf-8")
+        print(f"wrote {path.name}")
 
 DFTD4_COMMIT = "1107ea7c7c2131719e306fd57a5f4a1579e2577e"
 MULTICHARGE_COMMIT = "576f499b49eb57f8c2dc1ba6f7017800f1e332d9"
@@ -305,9 +327,7 @@ eeq_doc = {
     "elements": elements,
 }
 
-(ROOT / "eeq_elements.json").write_text(
-    json.dumps(eeq_doc, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
-)
+emit(ROOT / "eeq_elements.json", eeq_doc)
 
 # ---------------------------------------------------------------------------
 # damping parameters
@@ -539,9 +559,7 @@ damping_doc = {
     "functionals": functionals,
 }
 
-(ROOT / "damping_parameters.json").write_text(
-    json.dumps(damping_doc, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
-)
+emit(ROOT / "damping_parameters.json", damping_doc)
 
 # ---------------------------------------------------------------------------
 # manifest of raw files
@@ -566,9 +584,7 @@ for path in sorted(RAW.rglob("*")):
             "sha256": sha256_file(path),
         }
     )
-(ROOT / "raw_manifest.json").write_text(
-    json.dumps({"files": manifest}, indent=2) + "\n", encoding="utf-8"
-)
+emit(ROOT / "raw_manifest.json", {"files": manifest})
 
 print(f"elements: {len(elements)}")
 for key, entry in functionals.items():
@@ -581,3 +597,4 @@ for key, entry in functionals.items():
             f"a2={entry['a2']:<12} toml_match={check}"
         )
 print(f"raw files: {len(manifest)}")
+sys.exit(0 if _OK else 1)

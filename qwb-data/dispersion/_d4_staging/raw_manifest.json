@@ -21,6 +21,16 @@
       "sha256": "70404d8fc7f6a76f5dd4a6611efdfabde793a3816bb282b79678879461aac730"
     },
     {
+      "local_path": "raw/dftd4/COPYING",
+      "repo": "dftd4/dftd4",
+      "tag": "v4.3.1",
+      "commit": "1107ea7c7c2131719e306fd57a5f4a1579e2577e",
+      "repo_path": "COPYING",
+      "url": "https://raw.githubusercontent.com/dftd4/dftd4/1107ea7c7c2131719e306fd57a5f4a1579e2577e/COPYING",
+      "bytes": 35149,
+      "sha256": "3972dc9744f6499f0f9b2dbf76696f2ae7ad8af9b23dde66d6af86c9dfb36986"
+    },
+    {
       "local_path": "raw/dftd4/COPYING.LESSER",
       "repo": "dftd4/dftd4",
       "tag": "v4.3.1",
@@ -41,6 +51,16 @@
       "sha256": "9494867d4b23f1926ca3c8a3355ef18d6c65d2e424e3d5f41fa51623fa757b18"
     },
     {
+      "local_path": "raw/dftd4/python/dftd4/interface.py",
+      "repo": "dftd4/dftd4",
+      "tag": "v4.3.1",
+      "commit": "1107ea7c7c2131719e306fd57a5f4a1579e2577e",
+      "repo_path": "python/dftd4/interface.py",
+      "url": "https://raw.githubusercontent.com/dftd4/dftd4/1107ea7c7c2131719e306fd57a5f4a1579e2577e/python/dftd4/interface.py",
+      "bytes": 17955,
+      "sha256": "81324fae0044f54e996258f0df557f4ace400000f8d1cf14df338141680c704c"
+    },
+    {
       "local_path": "raw/dftd4/README.md",
       "repo": "dftd4/dftd4",
       "tag": "v4.3.1",
@@ -49,6 +69,16 @@
       "url": "https://raw.githubusercontent.com/dftd4/dftd4/1107ea7c7c2131719e306fd57a5f4a1579e2577e/README.md",
       "bytes": 17764,
       "sha256": "017434d086f4a273b46bcb80cf127f63cbbcc779bd303274eb5668083e2dcdad"
+    },
+    {
+      "local_path": "raw/dftd4/src/dftd4/api.f90",
+      "repo": "dftd4/dftd4",
+      "tag": "v4.3.1",
+      "commit": "1107ea7c7c2131719e306fd57a5f4a1579e2577e",
+      "repo_path": "src/dftd4/api.f90",
+      "url": "https://raw.githubusercontent.com/dftd4/dftd4/1107ea7c7c2131719e306fd57a5f4a1579e2577e/src/dftd4/api.f90",
+      "bytes": 29026,
+      "sha256": "21b98f088fc60018fe41214f538c58097545e8619f11dbdd9af983ffb62e4ad5"
     },
     {
       "local_path": "raw/dftd4/src/dftd4/cutoff.f90",
@@ -299,6 +329,16 @@
       "url": "https://raw.githubusercontent.com/grimme-lab/mctc-lib/aec7f40ccf1b0dceb9156ae6dc6667fd61206916/src/mctc/data/paulingen.f90",
       "bytes": 3597,
       "sha256": "8ccd4c9688fbb733888e8a2622de0d8b67d6a348ed400b1a41686d6268f06d1b"
+    },
+    {
+      "local_path": "raw/mctc-lib/src/mctc/io/codata2018.f90",
+      "repo": "grimme-lab/mctc-lib",
+      "tag": "v0.7.0",
+      "commit": "aec7f40ccf1b0dceb9156ae6dc6667fd61206916",
+      "repo_path": "src/mctc/io/codata2018.f90",
+      "url": "https://raw.githubusercontent.com/grimme-lab/mctc-lib/aec7f40ccf1b0dceb9156ae6dc6667fd61206916/src/mctc/io/codata2018.f90",
+      "bytes": 45863,
+      "sha256": "47c4abbc7f9dddb3bba1c89563b45e792304bc56723f1c4b05fc978aa5d3704d"
     },
     {
       "local_path": "raw/mctc-lib/src/mctc/io/constants.f90",

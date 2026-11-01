@@ -32,7 +32,7 @@
       "repo": "grimme-lab/multicharge",
       "commit": "576f499b49eb57f8c2dc1ba6f7017800f1e332d9",
       "tag": "v0.6.0",
-      "url": "https://raw.githubusercontent.com/grimme-lab/multicharge/576f499b49eb57f8c2dc1ba6f7017800f1e332d9/multicharge/src/multicharge/param/eeq2019.f90"
+      "url": "https://raw.githubusercontent.com/grimme-lab/multicharge/576f499b49eb57f8c2dc1ba6f7017800f1e332d9/src/multicharge/param/eeq2019.f90"
     },
     "eta": {
       "file": "raw/multicharge/src/multicharge/param/eeq2019.f90",
@@ -41,7 +41,7 @@
       "repo": "grimme-lab/multicharge",
       "commit": "576f499b49eb57f8c2dc1ba6f7017800f1e332d9",
       "tag": "v0.6.0",
-      "url": "https://raw.githubusercontent.com/grimme-lab/multicharge/576f499b49eb57f8c2dc1ba6f7017800f1e332d9/multicharge/src/multicharge/param/eeq2019.f90"
+      "url": "https://raw.githubusercontent.com/grimme-lab/multicharge/576f499b49eb57f8c2dc1ba6f7017800f1e332d9/src/multicharge/param/eeq2019.f90"
     },
     "kcnchi": {
       "file": "raw/multicharge/src/multicharge/param/eeq2019.f90",
@@ -50,7 +50,7 @@
       "repo": "grimme-lab/multicharge",
       "commit": "576f499b49eb57f8c2dc1ba6f7017800f1e332d9",
       "tag": "v0.6.0",
-      "url": "https://raw.githubusercontent.com/grimme-lab/multicharge/576f499b49eb57f8c2dc1ba6f7017800f1e332d9/multicharge/src/multicharge/param/eeq2019.f90"
+      "url": "https://raw.githubusercontent.com/grimme-lab/multicharge/576f499b49eb57f8c2dc1ba6f7017800f1e332d9/src/multicharge/param/eeq2019.f90"
     },
     "rad": {
       "file": "raw/multicharge/src/multicharge/param/eeq2019.f90",
@@ -59,7 +59,7 @@
       "repo": "grimme-lab/multicharge",
       "commit": "576f499b49eb57f8c2dc1ba6f7017800f1e332d9",
       "tag": "v0.6.0",
-      "url": "https://raw.githubusercontent.com/grimme-lab/multicharge/576f499b49eb57f8c2dc1ba6f7017800f1e332d9/multicharge/src/multicharge/param/eeq2019.f90"
+      "url": "https://raw.githubusercontent.com/grimme-lab/multicharge/576f499b49eb57f8c2dc1ba6f7017800f1e332d9/src/multicharge/param/eeq2019.f90"
     },
     "pauling_en": {
       "file": "raw/dftd4/src/dftd4/data/en.f90",
@@ -68,7 +68,7 @@
       "repo": "dftd4/dftd4",
       "commit": "1107ea7c7c2131719e306fd57a5f4a1579e2577e",
       "tag": "v4.3.1",
-      "url": "https://raw.githubusercontent.com/dftd4/dftd4/1107ea7c7c2131719e306fd57a5f4a1579e2577e/dftd4/src/dftd4/data/en.f90"
+      "url": "https://raw.githubusercontent.com/dftd4/dftd4/1107ea7c7c2131719e306fd57a5f4a1579e2577e/src/dftd4/data/en.f90"
     },
     "chemical_hardness": {
       "file": "raw/dftd4/src/dftd4/data/hardness.f90",
@@ -77,7 +77,7 @@
       "repo": "dftd4/dftd4",
       "commit": "1107ea7c7c2131719e306fd57a5f4a1579e2577e",
       "tag": "v4.3.1",
-      "url": "https://raw.githubusercontent.com/dftd4/dftd4/1107ea7c7c2131719e306fd57a5f4a1579e2577e/dftd4/src/dftd4/data/hardness.f90"
+      "url": "https://raw.githubusercontent.com/dftd4/dftd4/1107ea7c7c2131719e306fd57a5f4a1579e2577e/src/dftd4/data/hardness.f90"
     },
     "covalent_rad_2009_angstrom": {
       "file": "raw/dftd4/src/dftd4/data/covrad.f90",
@@ -86,7 +86,7 @@
       "repo": "dftd4/dftd4",
       "commit": "1107ea7c7c2131719e306fd57a5f4a1579e2577e",
       "tag": "v4.3.1",
-      "url": "https://raw.githubusercontent.com/dftd4/dftd4/1107ea7c7c2131719e306fd57a5f4a1579e2577e/dftd4/src/dftd4/data/covrad.f90"
+      "url": "https://raw.githubusercontent.com/dftd4/dftd4/1107ea7c7c2131719e306fd57a5f4a1579e2577e/src/dftd4/data/covrad.f90"
     },
     "zeff": {
       "file": "raw/dftd4/src/dftd4/data/zeff.f90",
@@ -95,7 +95,7 @@
       "repo": "dftd4/dftd4",
       "commit": "1107ea7c7c2131719e306fd57a5f4a1579e2577e",
       "tag": "v4.3.1",
-      "url": "https://raw.githubusercontent.com/dftd4/dftd4/1107ea7c7c2131719e306fd57a5f4a1579e2577e/dftd4/src/dftd4/data/zeff.f90"
+      "url": "https://raw.githubusercontent.com/dftd4/dftd4/1107ea7c7c2131719e306fd57a5f4a1579e2577e/src/dftd4/data/zeff.f90"
     },
     "r4r2": {
       "file": "raw/dftd4/src/dftd4/data/r4r2.f90",
@@ -104,7 +104,7 @@
       "repo": "dftd4/dftd4",
       "commit": "1107ea7c7c2131719e306fd57a5f4a1579e2577e",
       "tag": "v4.3.1",
-      "url": "https://raw.githubusercontent.com/dftd4/dftd4/1107ea7c7c2131719e306fd57a5f4a1579e2577e/dftd4/src/dftd4/data/r4r2.f90"
+      "url": "https://raw.githubusercontent.com/dftd4/dftd4/1107ea7c7c2131719e306fd57a5f4a1579e2577e/src/dftd4/data/r4r2.f90"
     }
   },
   "units": {
@@ -133,7 +133,7 @@
       "covalent_rad_2009_angstrom": 0.32,
       "zeff": 1.0,
       "r4r2": 8.0589,
-      "covalent_rad_d3_angstrom": 0.42666666666666664,
+      "covalent_rad_d3_angstrom": 0.426666666667,
       "source_lines": {
         "chi": 61,
         "eta": 85,
@@ -159,7 +159,7 @@
       "covalent_rad_2009_angstrom": 0.46,
       "zeff": 2.0,
       "r4r2": 3.4698,
-      "covalent_rad_d3_angstrom": 0.6133333333333333,
+      "covalent_rad_d3_angstrom": 0.613333333333,
       "source_lines": {
         "chi": 61,
         "eta": 85,
@@ -185,7 +185,7 @@
       "covalent_rad_2009_angstrom": 1.2,
       "zeff": 3.0,
       "r4r2": 29.0974,
-      "covalent_rad_d3_angstrom": 1.5999999999999999,
+      "covalent_rad_d3_angstrom": 1.6,
       "source_lines": {
         "chi": 61,
         "eta": 85,
@@ -211,7 +211,7 @@
       "covalent_rad_2009_angstrom": 0.94,
       "zeff": 4.0,
       "r4r2": 14.8517,
-      "covalent_rad_d3_angstrom": 1.2533333333333332,
+      "covalent_rad_d3_angstrom": 1.253333333333,
       "source_lines": {
         "chi": 61,
         "eta": 85,
@@ -237,7 +237,7 @@
       "covalent_rad_2009_angstrom": 0.77,
       "zeff": 5.0,
       "r4r2": 11.8799,
-      "covalent_rad_d3_angstrom": 1.0266666666666666,
+      "covalent_rad_d3_angstrom": 1.026666666667,
       "source_lines": {
         "chi": 61,
         "eta": 85,
@@ -289,7 +289,7 @@
       "covalent_rad_2009_angstrom": 0.71,
       "zeff": 7.0,
       "r4r2": 5.5588,
-      "covalent_rad_d3_angstrom": 0.9466666666666665,
+      "covalent_rad_d3_angstrom": 0.946666666667,
       "source_lines": {
         "chi": 62,
         "eta": 86,
@@ -341,7 +341,7 @@
       "covalent_rad_2009_angstrom": 0.64,
       "zeff": 9.0,
       "r4r2": 3.8025,
-      "covalent_rad_d3_angstrom": 0.8533333333333333,
+      "covalent_rad_d3_angstrom": 0.853333333333,
       "source_lines": {
         "chi": 62,
         "eta": 86,
@@ -367,7 +367,7 @@
       "covalent_rad_2009_angstrom": 0.67,
       "zeff": 10.0,
       "r4r2": 3.1036,
-      "covalent_rad_d3_angstrom": 0.8933333333333333,
+      "covalent_rad_d3_angstrom": 0.893333333333,
       "source_lines": {
         "chi": 62,
         "eta": 86,
@@ -393,7 +393,7 @@
       "covalent_rad_2009_angstrom": 1.4,
       "zeff": 11.0,
       "r4r2": 26.1552,
-      "covalent_rad_d3_angstrom": 1.8666666666666665,
+      "covalent_rad_d3_angstrom": 1.866666666667,
       "source_lines": {
         "chi": 63,
         "eta": 87,
@@ -419,7 +419,7 @@
       "covalent_rad_2009_angstrom": 1.25,
       "zeff": 12.0,
       "r4r2": 17.2304,
-      "covalent_rad_d3_angstrom": 1.6666666666666665,
+      "covalent_rad_d3_angstrom": 1.666666666667,
       "source_lines": {
         "chi": 63,
         "eta": 87,
@@ -445,7 +445,7 @@
       "covalent_rad_2009_angstrom": 1.13,
       "zeff": 13.0,
       "r4r2": 17.721,
-      "covalent_rad_d3_angstrom": 1.5066666666666664,
+      "covalent_rad_d3_angstrom": 1.506666666667,
       "source_lines": {
         "chi": 63,
         "eta": 87,
@@ -471,7 +471,7 @@
       "covalent_rad_2009_angstrom": 1.04,
       "zeff": 14.0,
       "r4r2": 12.7442,
-      "covalent_rad_d3_angstrom": 1.3866666666666667,
+      "covalent_rad_d3_angstrom": 1.386666666667,
       "source_lines": {
         "chi": 63,
         "eta": 87,
@@ -497,7 +497,7 @@
       "covalent_rad_2009_angstrom": 1.1,
       "zeff": 15.0,
       "r4r2": 9.5361,
-      "covalent_rad_d3_angstrom": 1.4666666666666668,
+      "covalent_rad_d3_angstrom": 1.466666666667,
       "source_lines": {
         "chi": 63,
         "eta": 87,
@@ -523,7 +523,7 @@
       "covalent_rad_2009_angstrom": 1.02,
       "zeff": 16.0,
       "r4r2": 8.1652,
-      "covalent_rad_d3_angstrom": 1.3599999999999999,
+      "covalent_rad_d3_angstrom": 1.36,
       "source_lines": {
         "chi": 64,
         "eta": 88,
@@ -549,7 +549,7 @@
       "covalent_rad_2009_angstrom": 0.99,
       "zeff": 17.0,
       "r4r2": 6.7463,
-      "covalent_rad_d3_angstrom": 1.3199999999999998,
+      "covalent_rad_d3_angstrom": 1.32,
       "source_lines": {
         "chi": 64,
         "eta": 88,
@@ -575,7 +575,7 @@
       "covalent_rad_2009_angstrom": 0.96,
       "zeff": 18.0,
       "r4r2": 5.6004,
-      "covalent_rad_d3_angstrom": 1.2799999999999998,
+      "covalent_rad_d3_angstrom": 1.28,
       "source_lines": {
         "chi": 64,
         "eta": 88,
@@ -601,7 +601,7 @@
       "covalent_rad_2009_angstrom": 1.76,
       "zeff": 19.0,
       "r4r2": 29.2012,
-      "covalent_rad_d3_angstrom": 2.3466666666666667,
+      "covalent_rad_d3_angstrom": 2.346666666667,
       "source_lines": {
         "chi": 64,
         "eta": 88,
@@ -627,7 +627,7 @@
       "covalent_rad_2009_angstrom": 1.54,
       "zeff": 20.0,
       "r4r2": 22.3934,
-      "covalent_rad_d3_angstrom": 2.0533333333333332,
+      "covalent_rad_d3_angstrom": 2.053333333333,
       "source_lines": {
         "chi": 64,
         "eta": 88,
@@ -653,7 +653,7 @@
       "covalent_rad_2009_angstrom": 1.33,
       "zeff": 21.0,
       "r4r2": 19.0598,
-      "covalent_rad_d3_angstrom": 1.7733333333333334,
+      "covalent_rad_d3_angstrom": 1.773333333333,
       "source_lines": {
         "chi": 65,
         "eta": 89,
@@ -679,7 +679,7 @@
       "covalent_rad_2009_angstrom": 1.22,
       "zeff": 22.0,
       "r4r2": 16.859,
-      "covalent_rad_d3_angstrom": 1.6266666666666665,
+      "covalent_rad_d3_angstrom": 1.626666666667,
       "source_lines": {
         "chi": 65,
         "eta": 89,
@@ -705,7 +705,7 @@
       "covalent_rad_2009_angstrom": 1.21,
       "zeff": 23.0,
       "r4r2": 15.4023,
-      "covalent_rad_d3_angstrom": 1.6133333333333333,
+      "covalent_rad_d3_angstrom": 1.613333333333,
       "source_lines": {
         "chi": 65,
         "eta": 89,
@@ -731,7 +731,7 @@
       "covalent_rad_2009_angstrom": 1.1,
       "zeff": 24.0,
       "r4r2": 12.5589,
-      "covalent_rad_d3_angstrom": 1.4666666666666668,
+      "covalent_rad_d3_angstrom": 1.466666666667,
       "source_lines": {
         "chi": 65,
         "eta": 89,
@@ -757,7 +757,7 @@
       "covalent_rad_2009_angstrom": 1.07,
       "zeff": 25.0,
       "r4r2": 13.4788,
-      "covalent_rad_d3_angstrom": 1.4266666666666667,
+      "covalent_rad_d3_angstrom": 1.426666666667,
       "source_lines": {
         "chi": 65,
         "eta": 89,
@@ -783,7 +783,7 @@
       "covalent_rad_2009_angstrom": 1.04,
       "zeff": 26.0,
       "r4r2": 12.2309,
-      "covalent_rad_d3_angstrom": 1.3866666666666667,
+      "covalent_rad_d3_angstrom": 1.386666666667,
       "source_lines": {
         "chi": 66,
         "eta": 90,
@@ -809,7 +809,7 @@
       "covalent_rad_2009_angstrom": 1.0,
       "zeff": 27.0,
       "r4r2": 11.2809,
-      "covalent_rad_d3_angstrom": 1.3333333333333333,
+      "covalent_rad_d3_angstrom": 1.333333333333,
       "source_lines": {
         "chi": 66,
         "eta": 90,
@@ -835,7 +835,7 @@
       "covalent_rad_2009_angstrom": 0.99,
       "zeff": 28.0,
       "r4r2": 10.5569,
-      "covalent_rad_d3_angstrom": 1.3199999999999998,
+      "covalent_rad_d3_angstrom": 1.32,
       "source_lines": {
         "chi": 66,
         "eta": 90,
@@ -861,7 +861,7 @@
       "covalent_rad_2009_angstrom": 1.01,
       "zeff": 29.0,
       "r4r2": 10.1428,
-      "covalent_rad_d3_angstrom": 1.3466666666666667,
+      "covalent_rad_d3_angstrom": 1.346666666667,
       "source_lines": {
         "chi": 66,
         "eta": 90,
@@ -887,7 +887,7 @@
       "covalent_rad_2009_angstrom": 1.09,
       "zeff": 30.0,
       "r4r2": 9.4907,
-      "covalent_rad_d3_angstrom": 1.4533333333333334,
+      "covalent_rad_d3_angstrom": 1.453333333333,
       "source_lines": {
         "chi": 66,
         "eta": 90,
@@ -913,7 +913,7 @@
       "covalent_rad_2009_angstrom": 1.12,
       "zeff": 31.0,
       "r4r2": 13.4606,
-      "covalent_rad_d3_angstrom": 1.4933333333333334,
+      "covalent_rad_d3_angstrom": 1.493333333333,
       "source_lines": {
         "chi": 67,
         "eta": 91,
@@ -939,7 +939,7 @@
       "covalent_rad_2009_angstrom": 1.09,
       "zeff": 32.0,
       "r4r2": 10.8544,
-      "covalent_rad_d3_angstrom": 1.4533333333333334,
+      "covalent_rad_d3_angstrom": 1.453333333333,
       "source_lines": {
         "chi": 67,
         "eta": 91,
@@ -965,7 +965,7 @@
       "covalent_rad_2009_angstrom": 1.15,
       "zeff": 33.0,
       "r4r2": 8.9386,
-      "covalent_rad_d3_angstrom": 1.5333333333333332,
+      "covalent_rad_d3_angstrom": 1.533333333333,
       "source_lines": {
         "chi": 67,
         "eta": 91,
@@ -991,7 +991,7 @@
       "covalent_rad_2009_angstrom": 1.1,
       "zeff": 34.0,
       "r4r2": 8.135,
-      "covalent_rad_d3_angstrom": 1.4666666666666668,
+      "covalent_rad_d3_angstrom": 1.466666666667,
       "source_lines": {
         "chi": 67,
         "eta": 91,
@@ -1017,7 +1017,7 @@
       "covalent_rad_2009_angstrom": 1.14,
       "zeff": 35.0,
       "r4r2": 7.1251,
-      "covalent_rad_d3_angstrom": 1.5199999999999998,
+      "covalent_rad_d3_angstrom": 1.52,
       "source_lines": {
         "chi": 67,
         "eta": 91,
@@ -1043,7 +1043,7 @@
       "covalent_rad_2009_angstrom": 1.17,
       "zeff": 36.0,
       "r4r2": 6.1971,
-      "covalent_rad_d3_angstrom": 1.5599999999999998,
+      "covalent_rad_d3_angstrom": 1.56,
       "source_lines": {
         "chi": 68,
         "eta": 92,
