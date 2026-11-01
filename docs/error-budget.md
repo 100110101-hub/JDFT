@@ -24,6 +24,9 @@
 | 网格等级（H2O/SVWN5，normal→fine） | 5.3e-6 Ha | 阶段一 0.1 mHa | ✅ | `qwb-core/crates/qwb-scf/tests/s02_grid_convergence.rs`（明细见 §8.2） |
 | 网格求积能力（解析高斯，α = 1…300） | 相对 6e-12 | 阶段一 0.1 mHa | ✅ | `qwb-core/crates/qwb-grid/tests/x03_weights.rs` |
 | meta-GGA 端到端（M06-2X/def2-SVP/grid-coarse vs PySCF） | 2.3e-5 Ha（M06-L 2.8e-5） | `§9.3` 无专门行；FX-02 判据 0.5 mHa | ✅（小 20 倍） | `qwb-core/crates/qwb-scf/tests/fx02_m06_water.rs` |
+| DFT-D4 色散能（两体 + ATM，60 行 = 10 个二聚体 × 5 泛函 + q = ±1，vs 官方 dftd4 4.3.1） | 最差 **6.435e-13 Ha**（m06-l 单独 4.8e-13） | DA-06 §6：与官方实现同值（D3 那套 1e-3 kcal/mol ≈ 1.6e-6 Ha） | ✅（比判据小 7 个数量级） | `qwb-core/crates/qwb-scf/tests/da06_d4_energy.rs` |
+| DFT-D4 中间量（配位数 / EEQ 电荷 / 电荷相关 C6，9 个二聚体 vs 官方 `get_properties()`） | 2.823e-9 / 1.037e-10 / 2.272e-9 Ha·Bohr⁶ | 无 §9.3 行；判据按实测能力定（1e-7 / 1e-8 / 1e-7） | ✅（留 30~100 倍余量） | `qwb-core/crates/qwb-scf/tests/da06_d4_properties.rs` |
+| DFT-D4 的**近似来源**（不是实现误差）：`alpha(iω)` 只存 7 位小数的上游数据；23 点 `trapzd` 的 Casimir–Polder 积分；EEQ(2019) 的经典电荷；覆盖到 Z = 36；M06-2X 上游无参数 | C6 的可达精度 ~1e-8 相对（被 7 位小数封顶） | 无 §9.3 行，记录项 | ⚠️ 记录（ATM 的 C6 必须按**原子分电荷 = 0** 重建，否则差 3.42 倍） | `docs/choices.md` 一百五十八 |
 | TDA vs PySCF（H2O/STO-3G，5 态） | 4.18e-7…5.89e-7 eV | `§9.3:激发能` 0.2 eV | ✅（小 6 个量级） | `qwb-core/crates/qwb-response/tests/rs02_tda_acceptance.rs` |
 | TDA vs PySCF（H2O/def2-SVP，5 态） | 1.19e-7…2.91e-7 eV | 同上 | ✅ | `qwb-core/crates/qwb-response/tests/rs02_tda_acceptance.rs` |
 | TDA vs PySCF（苯/STO-3G，6 态） | 最差 3.79e-7 eV | `§9.3:激发能` 0.3 eV | ✅ | `qwb-core/crates/qwb-response/tests/rs02_tda_benzene.rs` |
