@@ -18,6 +18,7 @@
 pub mod cavity;
 pub mod cosmo;
 pub mod epr;
+pub mod smd;
 pub mod spectrum;
 
 use qwb_basis::InternalBasis;
