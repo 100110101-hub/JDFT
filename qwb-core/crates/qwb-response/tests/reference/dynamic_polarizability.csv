@@ -1,0 +1,9 @@
+species,basis,omega_au,alpha_iso_au,lowest_excitation_hartree,note,source_doi,source_url
+H2O,sto-3g,0.0000,2.4612008724,0.4835473475,PySCF 2.14.0 RHF + tdscf.rhf.TDHF 的全部态，α_iso(ω) = Σ_n f_n/(ω_n²−ω²)（态求和）,10.1063/5.0006074,https://github.com/pyscf/pyscf
+H2O,sto-3g,0.0500,2.4705424433,0.4835473475,PySCF 2.14.0 RHF + tdscf.rhf.TDHF 的全部态，α_iso(ω) = Σ_n f_n/(ω_n²−ω²)（态求和）,10.1063/5.0006074,https://github.com/pyscf/pyscf
+H2O,sto-3g,0.1000,2.4990445096,0.4835473475,PySCF 2.14.0 RHF + tdscf.rhf.TDHF 的全部态，α_iso(ω) = Σ_n f_n/(ω_n²−ω²)（态求和）,10.1063/5.0006074,https://github.com/pyscf/pyscf
+H2O,sto-3g,0.2000,2.6208010418,0.4835473475,PySCF 2.14.0 RHF + tdscf.rhf.TDHF 的全部态，α_iso(ω) = Σ_n f_n/(ω_n²−ω²)（态求和）,10.1063/5.0006074,https://github.com/pyscf/pyscf
+H2O,def2-svp,0.0000,4.9247724273,0.3394938958,PySCF 2.14.0 RHF + tdscf.rhf.TDHF 的全部态，α_iso(ω) = Σ_n f_n/(ω_n²−ω²)（态求和）,10.1063/5.0006074,https://github.com/pyscf/pyscf
+H2O,def2-svp,0.0500,4.9527143266,0.3394938958,PySCF 2.14.0 RHF + tdscf.rhf.TDHF 的全部态，α_iso(ω) = Σ_n f_n/(ω_n²−ω²)（态求和）,10.1063/5.0006074,https://github.com/pyscf/pyscf
+H2O,def2-svp,0.1000,5.0404554987,0.3394938958,PySCF 2.14.0 RHF + tdscf.rhf.TDHF 的全部态，α_iso(ω) = Σ_n f_n/(ω_n²−ω²)（态求和）,10.1063/5.0006074,https://github.com/pyscf/pyscf
+H2O,def2-svp,0.2000,5.4685968246,0.3394938958,PySCF 2.14.0 RHF + tdscf.rhf.TDHF 的全部态，α_iso(ω) = Σ_n f_n/(ω_n²−ω²)（态求和）,10.1063/5.0006074,https://github.com/pyscf/pyscf

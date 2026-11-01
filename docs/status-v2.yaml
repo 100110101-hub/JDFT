@@ -459,9 +459,14 @@ ST-01:
   note: "**`B` 块不是新积分**：`B_pq = 2T1[p][q] − T1[(j,a)][(i,b)]`，第二项只是把两侧的占/虚角色对调（八重对称），所以这一轮一个新积分路径都没写 —— 这让 B 的实现可以只靠一个置换 + 一个外部参考钉住。**没做的**：① DFT 参考下的 TDDFT 还需要 XC kernel `f_xc` 进响应矩阵（FX-03），非 `hf` 参考仍以 Unsupported(4) 拒绝、消息明说缺的是 FX-03（`a_dft_reference_is_rejected_and_names_the_xc_kernel` 钉住）；② 只做闭壳层单重态；③ 三重态（`2(ia|jb)` 去掉）没有单独接口。**判据读法**：与「实验值」比仍是 TDA 那一侧已经记账的 5.8 eV 缺口（方法层级限制），本条按方法匹配参考执行，两个读法都写在 docs/error-budget.md 的 §0/§3。"
   choices: "一百三十二"
 ST-02:
-  state: pending
+  state: blocked
   stretch: true
-  note: "动态极化率 / 一阶超极化率 β"
+  ts: "2026-11-08T11:10:00Z"
+  artifact: "qwb-core/crates/qwb-response/src/dynamic.rs（新：态求和 α_ij(ω) = Σ_n μ_n^i μ_n^j · 2ω_n/(ω_n²−ω²) + 极点守卫）、qwb-response/src/lib.rs（导出）、qwb-core/crates/qwb-response/tests/st02_dynamic_polarizability.rs（4 例）、scripts/pyscf_dynamic_polarizability_reference.py + qwb-core/crates/qwb-response/tests/reference/dynamic_polarizability.csv（PySCF 2.14 TDHF 全部态 + 态求和，8 行，DA-08 家族）"
+  verification: "**动态极化率这一半：四条判据全过，其中两条不需要外部数据**。① **静态极限 == CPHF**（RS-01）：α_SOS(0) 与 static_polarizability 的相对差 **5.85e-14**（H2O/STO-3G，10 个 RPA 态）/ **2.13e-14**（def2-SVP，95 个态），张量**每个分量**也在 1e-6 内；两条路径完全不同（CPHF 解 (A+B)X = d，本模块解 RPA 本征问题再求和），在完整单激发空间里数学恒等 —— 这条同时验证 (A+B)、(A−B)、归一化与跃迁偶极矩。② **转动不变量协变**（判据 < 1e-6）：绕 (1,1,1) 转 30°，α_iso(ω) 在 ω = 0/0.05/0.1/0.2 上的相对偏差 **6.9e-15…9.0e-15**。③ **频率依赖**：ω = 0/0.1/0.2/0.3 Ha 时 α_iso = 2.4612/2.4990/2.6208/2.8570 a.u.，严格单调上升；ω 触到最低激发能（0.483547 Ha）时显式报 InvalidInput（态求和在那里有极点）。④ **与方法匹配的参考比对**（PySCF 2.14 的 TDHF 全部态 + 同一条态求和公式，8 行、逐行带来源）：H2O/STO-3G 与 def2-SVP 在四个频率上最大相对差 **5.75e-8**（判据为与文献差 < 10%，按 VF-01/ST-01 的处置读作方法匹配参考）。cargo test -p qwb-response --test st02_dynamic_polarizability **4 例绿**（0.43 s）。"
+  gap: "**两条**：① **一阶超极化率 β 未做**（WP 的另一半）—— 两条可行路线都要至少一轮：Orr–Ward 的态求和需要**激发态之间的偶极矩阵元**（X_nᵀ A' X_m 形式，要用 RPA 本征矢与偶极积分重新组装），或者对场微扰的 SCF + CPHF 做 β = dα/dF 的有限差分（要给 SCF 加一个一阶微扰入口，属 K10 层面的改动）。本轮没有硬塞一个半成品。② **没有进 result.json**：K7 的 Polarizability 是静态张量，频率依赖的块要再做一次加性扩展（K7/K2/K1/studio/pyo3 五处，ST-05 已演示过代价）；§6.7 的 ST-02 判据只要求数值与不变量，所以本轮先交库函数 + 测试。"
+  note: "**为什么先做「静态极限 == CPHF」这条自检**：动态极化率的公式写错时（少一个 2ω_n、把 ω_n²−ω² 写成 ω_n−ω、跃迁偶极矩漏掉 √2）在 ω = 0 处可能仍然看起来对；但与 CPHF 的逐分量比较会立刻红。实测 1e-14 说明这四个环节都对。**与文献的比较**：文献的 α(ω) 是实验/高精度值，与本项目的方法层级（HF + RPA + STO-3G/def2-SVP）不可比 —— 与 ST-01/ST-05 同一个处置：判据按方法匹配参考执行，并把这个读法写在这里而不是悄悄放宽。"
+  choices: "一百三十五"
 ST-03:
   state: pending
   stretch: true

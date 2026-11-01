@@ -1,0 +1,654 @@
+Theoretical
+Spectroscopy
+Ahmad Adam 1,
+Per Jensen1,
+Andrey
+Yachmenev2,
+and Sergei
+Yurchenko2
+Introduction
+Electronic
+Structure
+Calculations
+Equilibrium
+Geometry
+Theoretical
+Models and
+HFCC
+Comparison to
+Experiment
+Nuclear
+Motion
+Theory
+Potential Energy
+Surface
+HFCC surface
+Vibrational
+Contribution to
+HFCC
+Eﬀect of
+Temperature
+Summary and
+Conclusions
+Acknowledgement
+Vibrational Averaging of the Isotropic
+Hyperﬁne Coupling Constants for the Methyl
+Radical
+Ahmad Adam 1, Per Jensen 1, Andrey Yachmenev 2, and
+Sergei Yurchenko2
+1Fachbereich C-Physikalische und theoretische Chemie, Bergische Universitt
+Wuppertal,D-42097 Wuppertal, Germany
+2 Department of Physics and Astronomy, University College London, Gower
+Street, London WC1E 6BT, United Kingdom
+aadam@uni-wuppertal.de
+June 19, 2014
+Theoretical
+Spectroscopy
+Ahmad Adam 1,
+Per Jensen1,
+Andrey
+Yachmenev2,
+and Sergei
+Yurchenko2
+Introduction
+Electronic
+Structure
+Calculations
+Equilibrium
+Geometry
+Theoretical
+Models and
+HFCC
+Comparison to
+Experiment
+Nuclear
+Motion
+Theory
+Potential Energy
+Surface
+HFCC surface
+Vibrational
+Contribution to
+HFCC
+Eﬀect of
+Temperature
+Summary and
+Conclusions
+Acknowledgement
+Overview
+1 Introduction
+2 Electronic Structure Calculations
+Equilibrium Geometry
+Theoretical Models and HFCC
+Comparison to Experiment
+3 Nuclear Motion
+Theory
+Potential Energy Surface
+HFCC surface
+Vibrational Contribution to HFCC
+Eﬀect of Temperature
+4 Summary and Conclusions
+5 Acknowledgement
+Theoretical
+Spectroscopy
+Ahmad Adam 1,
+Per Jensen1,
+Andrey
+Yachmenev2,
+and Sergei
+Yurchenko2
+Introduction
+Electronic
+Structure
+Calculations
+Equilibrium
+Geometry
+Theoretical
+Models and
+HFCC
+Comparison to
+Experiment
+Nuclear
+Motion
+Theory
+Potential Energy
+Surface
+HFCC surface
+Vibrational
+Contribution to
+HFCC
+Eﬀect of
+Temperature
+Summary and
+Conclusions
+Acknowledgement
+Introduction
+ESR Spectroscopy
+structure of radicals
+detection of radicals
+chemical kinetics
+chemistry, biology, and medicine
+Theoretical
+Spectroscopy
+Ahmad Adam 1,
+Per Jensen1,
+Andrey
+Yachmenev2,
+and Sergei
+Yurchenko2
+Introduction
+Electronic
+Structure
+Calculations
+Equilibrium
+Geometry
+Theoretical
+Models and
+HFCC
+Comparison to
+Experiment
+Nuclear
+Motion
+Theory
+Potential Energy
+Surface
+HFCC surface
+Vibrational
+Contribution to
+HFCC
+Eﬀect of
+Temperature
+Summary and
+Conclusions
+Acknowledgement
+Introduction
+Simulated spectrum of CH 3 radical with hyperﬁne coupling constant a
+Figure : Bovet, C.; Barron, A. EPR Spectroscopy: An Overview,
+OpenStax-CNX Web site. http//cnx.org/content/m22370/1.3/, May
+23, 2009
+Theoretical
+Spectroscopy
+Ahmad Adam 1,
+Per Jensen1,
+Andrey
+Yachmenev2,
+and Sergei
+Yurchenko2
+Introduction
+Electronic
+Structure
+Calculations
+Equilibrium
+Geometry
+Theoretical
+Models and
+HFCC
+Comparison to
+Experiment
+Nuclear
+Motion
+Theory
+Potential Energy
+Surface
+HFCC surface
+Vibrational
+Contribution to
+HFCC
+Eﬀect of
+Temperature
+Summary and
+Conclusions
+Acknowledgement
+Electronic Structure Calculations
+Equilibrium Geometry
+Bond distance
+CCSD(T)/aVTZ = 1.0762 ˚A
+CCSD(T)/aQTZ = 1.0759 ˚A
+Experiment = 1.079 ˚A
+Figure : from Principles of General
+Chemistry (v.1.0 M) by Bruce A. Averill
+Theoretical
+Spectroscopy
+Ahmad Adam 1,
+Per Jensen1,
+Andrey
+Yachmenev2,
+and Sergei
+Yurchenko2
+Introduction
+Electronic
+Structure
+Calculations
+Equilibrium
+Geometry
+Theoretical
+Models and
+HFCC
+Comparison to
+Experiment
+Nuclear
+Motion
+Theory
+Potential Energy
+Surface
+HFCC surface
+Vibrational
+Contribution to
+HFCC
+Eﬀect of
+Temperature
+Summary and
+Conclusions
+Acknowledgement
+Electronic Structure Calculations
+Theoretical Models and HFCC
+Method/Basis Set A isoeql ,G
+UB3LYP/ERP-III 28.2
+CISD/DZ 25.7
+CCSD(T)/Chipman 28.5
+B3LYP/Huz-IVu4s 30.1
+UB3LYP/EPR-III 28.6
+UB2PLYP/EPR-III 30.0
+OO-RI-MP2/EPR-III 30.0
+OO-SCS-RI-MP2/EPR-III 22.0
+CCSD(T)/EPR-III 24.7
+Table : 13C isotropic HFCC in CH 3 (Table data from Chen X, Rinkevicius Z,
+Ruud K, ˚Agren H., J. Chem. Phys. 2013, 138, 054310. See this paper for original
+references.)
+Theoretical
+Spectroscopy
+Ahmad Adam 1,
+Per Jensen1,
+Andrey
+Yachmenev2,
+and Sergei
+Yurchenko2
+Introduction
+Electronic
+Structure
+Calculations
+Equilibrium
+Geometry
+Theoretical
+Models and
+HFCC
+Comparison to
+Experiment
+Nuclear
+Motion
+Theory
+Potential Energy
+Surface
+HFCC surface
+Vibrational
+Contribution to
+HFCC
+Eﬀect of
+Temperature
+Summary and
+Conclusions
+Acknowledgement
+Electronic Structure Calculations
+Comparison to Experiment
+Method/Basis Set A isoeql ,G
+UB3LYP/ERP-III 28.2
+CISD/DZ 25.7
+CCSD(T)/Chipman 28.5
+B3LYP/Huz-IVu4s 30.1
+UB3LYP/EPR-III 28.6
+UB2PLYP/EPR-III 30.0
+OO-RI-MP2/EPR-III 30.0
+OO-SCS-RI-MP2/EPR-III 22.0
+CCSD(T)/EPR-III 24.7
+Experiment 38.3
+Table : 13C isotropic HFCC in CH 3 (Table data from Chen X, Rinkevicius Z,
+Ruud K, ˚Agren H., J. Chem. Phys. 2013, 138, 054310. See this paper for original
+references.)
+Theoretical
+Spectroscopy
+Ahmad Adam 1,
+Per Jensen1,
+Andrey
+Yachmenev2,
+and Sergei
+Yurchenko2
+Introduction
+Electronic
+Structure
+Calculations
+Equilibrium
+Geometry
+Theoretical
+Models and
+HFCC
+Comparison to
+Experiment
+Nuclear
+Motion
+Theory
+Potential Energy
+Surface
+HFCC surface
+Vibrational
+Contribution to
+HFCC
+Eﬀect of
+Temperature
+Summary and
+Conclusions
+Acknowledgement
+Nuclear Motion
+Thermal Averaging
+Theory
+< P >T = 1Q ∑
+i
+gi exp(− E (i)rvkT ) < P >i
+Q =
+∑
+i
+gi exp(− E (i)rvkT )
+< P >i=< Φ(i)rv|P|Φ(i)rv >
+where ..
+P = operator
+T = absolute temperature
+Q = partition function
+gi = degeneracy
+Theoretical
+Spectroscopy
+Ahmad Adam 1,
+Per Jensen1,
+Andrey
+Yachmenev2,
+and Sergei
+Yurchenko2
+Introduction
+Electronic
+Structure
+Calculations
+Equilibrium
+Geometry
+Theoretical
+Models and
+HFCC
+Comparison to
+Experiment
+Nuclear
+Motion
+Theory
+Potential Energy
+Surface
+HFCC surface
+Vibrational
+Contribution to
+HFCC
+Eﬀect of
+Temperature
+Summary and
+Conclusions
+Acknowledgement
+Nuclear Motion
+Thermal Averaging
+Theory
+< P >T = 1Q ∑
+i
+gi exp(− E (i)rvkT ) < P >i
+Q =
+∑
+i
+gi exp(− E (i)rvkT )
+< P >i=< Φ(i)rv|P|Φ(i)rv >
+where ..
+P = operator
+T = absolute temperature
+Q = partition function
+gi = degeneracy
+E(i)rv = eigenvalues
+Φ(i)rv = eigenvectors
+Theoretical
+Spectroscopy
+Ahmad Adam 1,
+Per Jensen1,
+Andrey
+Yachmenev2,
+and Sergei
+Yurchenko2
+Introduction
+Electronic
+Structure
+Calculations
+Equilibrium
+Geometry
+Theoretical
+Models and
+HFCC
+Comparison to
+Experiment
+Nuclear
+Motion
+Theory
+Potential Energy
+Surface
+HFCC surface
+Vibrational
+Contribution to
+HFCC
+Eﬀect of
+Temperature
+Summary and
+Conclusions
+Acknowledgement
+Nuclear Motion
+Thermal Averaging – more details
+
+Theoretical
+Spectroscopy
+Ahmad Adam 1,
+Per Jensen1,
+Andrey
+Yachmenev2,
+and Sergei
+Yurchenko2
+Introduction
+Electronic
+Structure
+Calculations
+Equilibrium
+Geometry
+Theoretical
+Models and
+HFCC
+Comparison to
+Experiment
+Nuclear
+Motion
+Theory
+Potential Energy
+Surface
+HFCC surface
+Vibrational
+Contribution to
+HFCC
+Eﬀect of
+Temperature
+Summary and
+Conclusions
+Acknowledgement
+Nuclear Motion
+Potential Energy and HFCC Surfaces
+2625 unique symmetry points near equilibrium geometry
+UHF-CCSD(T)/aug-cc-pVTZ for Potential Energy Surface
+UHF-CCSD(T)/EPR-III for HFCC surface
+Least squares ﬁtting
+Theoretical
+Spectroscopy
+Ahmad Adam 1,
+Per Jensen1,
+Andrey
+Yachmenev2,
+and Sergei
+Yurchenko2
+Introduction
+Electronic
+Structure
+Calculations
+Equilibrium
+Geometry
+Theoretical
+Models and
+HFCC
+Comparison to
+Experiment
+Nuclear
+Motion
+Theory
+Potential Energy
+Surface
+HFCC surface
+Vibrational
+Contribution to
+HFCC
+Eﬀect of
+Temperature
+Summary and
+Conclusions
+Acknowledgement
+Nuclear Motion
+Vibrational Contribution to HFCC
+Method/Basis Set A isoeql Aisovib ∆ Aisovib Temp.
+(G) (G) (G) (K)
+B3LYP/Huz-IIIsu3 29.9 42.2 12.3 (41%) 0
+P(CI)/DZ 22.2 35.1 12.9 (58%) 96
+MCSCF/cc-pVTZus2st 27.7 37.3 9.6 (35%) 0
+CCSD(T)/EPR-III 24.7 36.49 11.8 (48%) 0
+CCSD(T)/EPR-III 24.7 36.51 11.8 (48%) 96
+Experiment – 38.3 – 96
+Table : 13C isotropic HFCC in CH 3 (Table data from Chen X, Rinkevicius Z,
+Ruud K, ˚Agren H., J. Chem. Phys. 2013, 138, 054310. See this paper for original
+references.) Our work is in blue color
+Theoretical
+Spectroscopy
+Ahmad Adam 1,
+Per Jensen1,
+Andrey
+Yachmenev2,
+and Sergei
+Yurchenko2
+Introduction
+Electronic
+Structure
+Calculations
+Equilibrium
+Geometry
+Theoretical
+Models and
+HFCC
+Comparison to
+Experiment
+Nuclear
+Motion
+Theory
+Potential Energy
+Surface
+HFCC surface
+Vibrational
+Contribution to
+HFCC
+Eﬀect of
+Temperature
+Summary and
+Conclusions
+Acknowledgement
+Nuclear Motion
+Eﬀect of Temperature
+Method/Basis Set A isoeql Aisovib ∆ Aisovib Temp.
+(G) (G) (G) (K)
+B3LYP/Huz-IIIsu3 29.9 42.2 12.3 (41%) 0
+P(CI)/DZ 22.2 35.1 12.9 (58%) 96
+MCSCF/cc-pVTZus2st 27.7 37.3 9.6 (35%) 0
+CCSD(T)/EPR-III 24.7 36.49 11.8 (48%) 0
+CCSD(T)/EPR-III 24.7 36.51 11.8 (48%) 96
+Experiment – 38.3 – 96
+CCSD(T)/EPR-III 24.7 37.53 12.8 (52%) 300
+Table : 13C isotropic HFCC in CH 3 (Table data from Chen X, Rinkevicius Z,
+Ruud K, ˚Agren H., J. Chem. Phys. 2013, 138, 054310. See this paper for original
+references.) Our work is in blue color
+Theoretical
+Spectroscopy
+Ahmad Adam 1,
+Per Jensen1,
+Andrey
+Yachmenev2,
+and Sergei
+Yurchenko2
+Introduction
+Electronic
+Structure
+Calculations
+Equilibrium
+Geometry
+Theoretical
+Models and
+HFCC
+Comparison to
+Experiment
+Nuclear
+Motion
+Theory
+Potential Energy
+Surface
+HFCC surface
+Vibrational
+Contribution to
+HFCC
+Eﬀect of
+Temperature
+Summary and
+Conclusions
+Acknowledgement
+Summary and Conclusions
+Vibrational eﬀects cannot be ignored in the case of 13C
+isotropic HFCC for CH 3
+Compared to other averaging methods, our averaging
+included the rotational motion and coupling between
+vibrational modes
+With temperature eﬀects, the ro-vibrational contribution
+will exceed the electronic contribution
+Theoretical
+Spectroscopy
+Ahmad Adam 1,
+Per Jensen1,
+Andrey
+Yachmenev2,
+and Sergei
+Yurchenko2
+Introduction
+Electronic
+Structure
+Calculations
+Equilibrium
+Geometry
+Theoretical
+Models and
+HFCC
+Comparison to
+Experiment
+Nuclear
+Motion
+Theory
+Potential Energy
+Surface
+HFCC surface
+Vibrational
+Contribution to
+HFCC
+Eﬀect of
+Temperature
+Summary and
+Conclusions
+Acknowledgement
+Acknowledgment
+Thanks to ..
+Andrey Yachmenev (UCL) for many helpful discussions
+Sergei Yurchenko (UCL) and Per Jensen (BUW)
+Financial support by DFG - Deutsche
+Forschungsgemeinschaft

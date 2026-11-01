@@ -43,12 +43,14 @@
 #![deny(missing_docs)]
 
 pub mod cphf;
+pub mod dynamic;
 pub mod mo_integrals;
 pub mod polarizability;
 pub mod tda;
 pub mod tddft;
 
 pub use cphf::{CphfOptions, CphfResult, orbital_hessian_apply, solve_cphf};
+pub use dynamic::{DynamicPolarizability, dynamic_polarizability};
 pub use polarizability::{Polarizability, static_polarizability};
 pub use tda::{Excitation, TdaResult, tda_singlet};
 pub use tddft::{TddftResult, tddft_singlet};

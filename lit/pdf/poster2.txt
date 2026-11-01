@@ -1,0 +1,165 @@
+See	discussions,	stats,	and	author	profiles	for	this	publication	at:	
+https://www.researchgate.net/publication/280775757
+Theoretical	Study	of	the	Magnetic	Properties	of
+the	Methyl	Radical
+Conference	Paper
+	·	April	2015
+CITATIONS
+0
+READS
+34
+4	authors
+,	including:
+Some	of	the	authors	of	this	publication	are	also	working	on	these	related	projects:
+Energy	cluster	formation	in	H2X	and	H3X	molecules
+	
+View	project
+Molecular	symmetry
+	
+View	project
+Per	Jensen
+Bergische	Universität	Wuppertal
+337
+	
+PUBLICATIONS
+			
+6,814
+	
+CITATIONS
+			
+SEE	PROFILE
+Sergei	N	Yurchenko
+University	College	London
+195
+	
+PUBLICATIONS
+			
+2,554
+	
+CITATIONS
+			
+SEE	PROFILE
+All	content	following	this	page	was	uploaded	by	
+Per	Jensen
+	on	08	August	2015.
+The	user	has	requested	enhancement	of	the	downloaded	file.	
+All	in-text	references	
+underlined	in	blue
+	are	added	to	the	original	document
+and	are	linked	to	publications	on	ResearchGate,	letting	you	access	and	read	them	immediately.
+Theoretical Study of the Magnetic Properties of
+the Methyl Radical
+Ahmad Adam and Per Jensen
+Fachbereich C-Physikalische und theoretische Chemie, Bergische Universit¨ at Wuppertal, D-42097 Wuppertal, Germany
+Andrey Yachmenev and Sergei N. Yurchenko
+Department of Physics and Astronomy, University College London, Gower Street, London WC1E 6BT, United Kingdom
+Introduction
+Electronic contributions to molecular properties such as dipole moments,
+hyperﬁne constants, polarizabilities, etc. are often expected to be dominant
+so that they essentially determine the value of the property in question.
+Thus, theoretical values of properties reported in the literature are often
+purely electronic in that their calculation involves no ro-vibrational
+corrections and thermal averaging. However, there are many cases where
+the nuclear motion contributes signiﬁcantly to the resulting property values;
+sometimes the nuclear contributions dominate over the electronic
+contributions. So, in general, it is necessary to consider the nuclear motion
+in order to obtain accurate theoretical predictions of molecular properties.
+The isotropic hyperﬁne coupling constants of the methyl radical CH 3
+provides an example of this.
+Hyperﬁne Interactions
+http://www.st-andrews.ac.uk; http://wps.prenhall.com; See Ref. [1]
+Ab initio Calculations
+▶ The ab initio energies required for constructing the PES for the electronic
+ground state of CH 3 were calculated with the MOLPRO program package.
+Frozen-core calculations were carried out for 24000 symmetry-unique
+geometries at the ROHF-RCCSD(T)/aug-cc-pVTZ level of theory.
+▶ For the coupling-constant surface, the geometry-dependent values of the
+isotropic hyperﬁne coupling constant (also known as Fermi contact term)
+were obtained at the same set of nuclear geometries used in the PES
+calculation.
+Vibrational and Thermal Averaging
+For an ensemble of molecules in thermal equilibrium at absolute
+temperature T, the thermal average of an operator ˆP is given by
+⟨ˆP⟩T = 1Q∑i gi exp(− E(i)rvkT)⟨ˆP⟩i
+where gi is the degeneracy of the ith state with the energy E(i)rv relative to
+the ground state energy, k is the Boltzmann constant, Q is the internal
+partition function deﬁned as
+Q =
+∑
+i
+gi exp
+(
+− E(i)rv
+kT
+)
+and⟨P⟩i is an expectation value of the operator ˆP in a rovibrational state i
+⟨ˆP⟩i =⟨Φ(i)rv|ˆP|Φ(i)rv⟩
+The calculation of the quantities in the above equations requires the
+eigenvalues E(i)rv and eigenvectors Φ(i)rv which are usually obtained
+variationally, that is, by matrix diagonalization [2].
+Acknowledgments
+▶ This work was supported in part by grant JE 144/24-1 from the Deutsche
+Forschungsgemeinschaft (DFG).
+Results: Vibrational Energies and Contributions
+▶ Calculated vibrational energies
+Irrep Cal. Exp. v 1 v2 v𝓁33 v𝓁44
+A
+′
+1 601.1 606.5 0 1 0 0 00
+E
+′
+1389.0 1397.0 0 0 0 0 11
+A
+′
+1 3003.4 3004.4 1 0 0 0 00
+E
+′
+3159.5 3160.8 0 0 1 1 00
+Table 1: Calculated vibrational energies (in cm −1) for 12CH3
+▶ Carbon-13 isotropic HFCC in the methyl radical
+Method/Basis set Aisoeql(G) Aisovib(G) ∆Aisovib(G) T(K) Ref.
+*other work*
+QCISD(T)/TZVP 27.8 37.7 9.9(36 %) 96 [3]
+MCSCF/cc-pVTZus2st 27.7 37.3 9.6(35 %) 0 [4]
+B3LYP/Huz-IIIsu3 29.9 42.2 12.3(41 %) 0 [5]
+*our work*
+CCSD(T)/aug-cc-pVTZ-J 25.8 37.1 11.3(44 %) 96
+*Experiment*
+Experiment – 38.3 – 96 [6]
+Table 2: Carbon isotropic HFCC in methyl radical CH 3 (2A′′)
+Results: Out-of-Plane Bending Mode
+Level Tvib(cm−1)⟨Aiso13C⟩(G)
+v2
+1 596.2 52.8
+2 1267.7 64.5
+4 2749.6 76.0
+8 6042.1 112.6
+v1
+1 3002.6 39.0
+2 5960.1 41.4
+Table 3: Vibrational term values Tvib (up to
+6000 cm−1) and vibrationally averaged HFCC
+values⟨Aiso13C⟩ of the vibrational levels v2ν2 and
+v1ν1 of 13CH3.
+Figure 1: Carbon-13 isotropic HFCC v.
+out-of-plane bending mode in CH 3 at the
+CCSD(T)/EPR-III level of theory.
+Conclusion
+We conclude that with the high-level electronic structure methods and the
+variational treatment of the vibrational motion used in the present work, we
+are able to obtain a value of the carbon-atom isotropic HFCC of 13CH3 in
+satisfactory agreement with the experimental value (Table II). In particular,
+we calculate realistically the large vibrational contribution to the HFCC
+which we ﬁnd to be 44% of the equilibrium value. We ﬁnd, in agreement
+with previous work, that the large contribution is associated with the
+out-of-plane bending motion and that thermal eﬀects play a minor role.
+References
+[1] F. Gerson and W. Huber, Electron Spin Resonance Spectroscopy of Organic Radicals
+(Wiley-VCH Verlag GmbH & Co. KGaA, Weinheim, 2004)
+[2] S. N. Yurchenko, W. Thiel and P. Jensen, J. Mol. Spectrosc., 245, 126 (2007).
+[3] V. Barone, A. Grand, C. Minichino, and R. Subra, J. Chem. Phys. 99, 6787 (1993)
+[4] B. Fern´ andez, O. Christiansen, O. Bludsky, P. Jørgensen, and K. V. Mikkelsen, J. Chem.
+Phys., 104, 629 (1996).
+[5] X. Chen, Z. Rinkevicius, K. Ruud, and H. ˚Agren, J. Chem. Phys. 138, 054310 (2013).
+[6] R. W. Fessenden, J. Phys.Chem. 71, 74 (1967).
+View publication statsView publication stats
