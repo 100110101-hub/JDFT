@@ -61,3 +61,7 @@ cccbdb-raw.json
 /qwb-data/dispersion/_d4_staging/raw/
 /qwb-data/dispersion/_d4_staging/_work/
 
+
+# SMD 上游 Fortran 快照（Apache-2.0，只作提取来源；数据进 _smd_cds_staging/cds_atomic.json）
+/qwb-data/solvent/_smd_cds_staging/raw/
+
