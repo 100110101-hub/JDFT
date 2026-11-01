@@ -167,8 +167,7 @@ fn eeq_raw_cn(
             let u = -kcn * (r - rcov) / rcov;
             cn[i] += 0.5 * (1.0 + erf(u));
             // d/dR [½(1+erf(u))] = (1/√π)·e^{−u²}·du/dR，du/dR = −kcn/rcov。
-            derivative[i][j] =
-                -kcn / (rcov * std::f64::consts::PI.sqrt()) * (-(u * u)).exp();
+            derivative[i][j] = -kcn / (rcov * std::f64::consts::PI.sqrt()) * (-(u * u)).exp();
         }
     }
     (cn, derivative)
@@ -192,8 +191,8 @@ fn eeq_soft_cap_derivative(cn: f64) -> f64 {
 /// 元素符号不在周期表内。
 fn eeq_radius(data: &D4Dispersion, index: usize) -> Result<f64, String> {
     let symbol = &data.elements[index];
-    let z = elements::atomic_number(symbol)
-        .ok_or_else(|| format!("d4: unknown element `{symbol}`"))?;
+    let z =
+        elements::atomic_number(symbol).ok_or_else(|| format!("d4: unknown element `{symbol}`"))?;
     Ok(data.eeq.rad[(z as usize) - 1])
 }
 
@@ -771,10 +770,7 @@ pub fn cn_gradient(
 /// `pair[j][i]` 自动给出 `∂F_j/∂R_ij`。这也是 `Σ_a ∂F_i/∂R_a = 0` 的来源：
 /// 同一个 `d·R̂` 在一行里以 `−d·R̂` 与 `+d·R̂` 各出现一次。
 #[allow(clippy::needless_range_loop)]
-fn pair_derivative_jacobian(
-    pair: &[Vec<f64>],
-    positions: &[[f64; 3]],
-) -> Vec<[f64; 3]> {
+fn pair_derivative_jacobian(pair: &[Vec<f64>], positions: &[[f64; 3]]) -> Vec<[f64; 3]> {
     let n = positions.len();
     let mut jacobian = vec![[0.0_f64; 3]; n * n];
     for i in 0..n {
@@ -869,8 +865,7 @@ pub fn charge_gradient(
             let r = r2.sqrt();
             let gamma = 1.0 / (radii[i] * radii[i] + radii[j] * radii[j]);
             let root_gamma = gamma.sqrt();
-            dmatrix_dr[i][j] = 2.0 * root_gamma / std::f64::consts::PI.sqrt()
-                * (-r2 * gamma).exp()
+            dmatrix_dr[i][j] = 2.0 * root_gamma / std::f64::consts::PI.sqrt() * (-r2 * gamma).exp()
                 / r
                 - erf(r * root_gamma) / r2;
         }

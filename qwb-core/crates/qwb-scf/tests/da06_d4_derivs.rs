@@ -153,8 +153,7 @@ fn analytic(
 ) -> (Vec<usize>, Analytic) {
     let names: Vec<&str> = symbols.iter().map(String::as_str).collect();
     let indices = element_indices(data, symbols);
-    let properties =
-        d4::properties(data, &names, positions, total_charge).expect("d4 properties");
+    let properties = d4::properties(data, &names, positions, total_charge).expect("d4 properties");
     // 未扰动几何上的权重 = 线性化点（C6 的"冻结权重"导数）。
     let weights = d4::reference_weights(
         data,
@@ -195,7 +194,11 @@ fn d4_derivatives_match_central_differences() {
         let n = positions.len();
         assert_eq!(indices.len(), n);
         assert_eq!(gradient.cn.len(), n * n, "{name}: CN gradient length");
-        assert_eq!(gradient.charge.len(), n * n, "{name}: charge gradient length");
+        assert_eq!(
+            gradient.charge.len(),
+            n * n,
+            "{name}: charge gradient length"
+        );
         assert_eq!(gradient.c6.len(), n * n * n, "{name}: C6 gradient length");
         assert!(!gradient.weights.is_empty());
 
@@ -211,12 +214,15 @@ fn d4_derivatives_match_central_differences() {
                 // ① CN
                 for i in 0..n {
                     let cn_of = |shifted: &[[f64; 3]]| evaluate(shifted).coordination_numbers[i];
-                    raw[0] = raw[0]
-                        .max((gradient.cn[i * n + atom][axis] - central(&positions, atom, axis, STEP, &cn_of)).abs());
+                    raw[0] = raw[0].max(
+                        (gradient.cn[i * n + atom][axis]
+                            - central(&positions, atom, axis, STEP, &cn_of))
+                        .abs(),
+                    );
                     rich[0] = rich[0].max(
                         (gradient.cn[i * n + atom][axis]
                             - richardson(&positions, atom, axis, &cn_of))
-                            .abs(),
+                        .abs(),
                     );
                 }
                 // ② EEQ 电荷
@@ -225,12 +231,12 @@ fn d4_derivatives_match_central_differences() {
                     raw[1] = raw[1].max(
                         (gradient.charge[i * n + atom][axis]
                             - central(&positions, atom, axis, STEP, &q_of))
-                            .abs(),
+                        .abs(),
                     );
                     rich[1] = rich[1].max(
                         (gradient.charge[i * n + atom][axis]
                             - richardson(&positions, atom, axis, &q_of))
-                            .abs(),
+                        .abs(),
                     );
                 }
                 // ③ C6（差分重算 CN/电荷/权重，解析用未扰动权重链式）
@@ -240,12 +246,12 @@ fn d4_derivatives_match_central_differences() {
                         raw[2] = raw[2].max(
                             (gradient.c6[(i * n + j) * n + atom][axis]
                                 - central(&positions, atom, axis, STEP, &c6_of))
-                                .abs(),
+                            .abs(),
                         );
                         rich[2] = rich[2].max(
                             (gradient.c6[(i * n + j) * n + atom][axis]
                                 - richardson(&positions, atom, axis, &c6_of))
-                                .abs(),
+                            .abs(),
                         );
                     }
                 }
@@ -254,12 +260,12 @@ fn d4_derivatives_match_central_differences() {
             for i in 0..n {
                 let mut total = [0.0_f64; 3];
                 for a in 0..n {
-                    for axis in 0..3 {
-                        total[axis] += gradient.cn[i * n + a][axis];
+                    for (axis, slot) in total.iter_mut().enumerate() {
+                        *slot += gradient.cn[i * n + a][axis];
                     }
                 }
-                for axis in 0..3 {
-                    worst_translation = worst_translation.max(total[axis].abs());
+                for value in total {
+                    worst_translation = worst_translation.max(value.abs());
                 }
             }
         }
@@ -396,7 +402,9 @@ fn charge_gradient_respects_the_constraint() {
             }
         }
     }
-    println!("water_dimer: worst |Σ_i ∂q_i/∂R_a| = {worst_total:.3e}, worst |∂q/∂z| = {worst_z:.3e}");
+    println!(
+        "water_dimer: worst |Σ_i ∂q_i/∂R_a| = {worst_total:.3e}, worst |∂q/∂z| = {worst_z:.3e}"
+    );
     assert!(
         worst_total < 1.0e-12,
         "Σ_i ∂q_i/∂R_a must vanish, got {worst_total:.3e}"
