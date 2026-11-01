@@ -7011,3 +7011,35 @@ CUDA 的 runtime 是**惰性初始化**的，进程里还没建过 context 时�
 （`cudaMemGetInfo` 与既有 `cudaMalloc/cudaMemcpy/cudaFree` 来自同一个 `libcudart`，仍属已批准的
 FFI 类别、仍在同一个文件里）、以及 XC 那半（仍然 `blocked`：它要 NVRTC 或 cubin，是**另一类**
 unsafe 面，需要人类批准）。
+
+## 一百七十三、S22 取回并钉住：两个 DOI、一个 sha256，以及"理想构象 vs 平衡构象"的两个数（2026-11-13）
+
+M2 第 ④ 条一直缺"可引用的苯二聚体构象"。上一轮记的是"来源存在但没取回"（ASE 的
+`ase.collections.s22`）。这一轮取回来了，路径其实是 **`ase/data/s22.py`**（不是 collections，
+写成 collections 的那个记录是错的，一并订正）。
+
+**数据链**：`ase/data/s22.py`（3557 行，LGPL-2.1-or-later）复制进
+`qwb-data/reference/_s22_staging/raw/`，sha256 = `930f9cd3…`；`scripts/gen_s22_reference.py`
+只对源码里的 `data = {...}` 与 `s22 = [...]` 两个**字面量**做 `ast.literal_eval`（不 `exec`、
+不需要装 ASE、不 import 任何 PySCF），产出 `qwb-engine/tests/reference/s22_dimers.csv`
+（22 个体系 / 414 行 / 每行带 DOI+URL）；`--check` 逐字比对，`check_reference_sources.py`
+现在报 **21 个家族 / 1917 行**。
+
+**两个 DOI 都过 Crossref 核对**（不是凭记忆写的）：几何出自 Jurečka 等，PCCP 8, 1985 (2006)，
+`10.1039/b600027d`（题名与页码都对上）；参考相互作用能出自 Takatani 等的"基组一致修订"
+JCP 132, 144104 (2010)，`10.1063/1.3378024`。ASE 的文件头把这两件事分开写，我们照抄这个区分：
+**几何**引 Jurečka、**数值**引 Takatani，而不是把两者混成一个"文献值"。单位也照 ASE 的
+docstring —— `get_interaction_energy_cc` 返回 **eV**，CSV 同时存 eV 与 kcal/mol
+（23.060548867 换算），避免下游各自换算。
+
+**量出来的两个数。** 苯二聚体（`Benzene_dimer_parallel_displaced`，24 原子）：
+参考作用能 **−2.619678 kcal/mol**（eV 原值 −0.1136）、**环平面间距 3.3590 Å、滑移 1.7012 Å**、
+最小跨单体距离 3.3748 Å。仓库里 `examples/benzene_dimer_d3.yaml` 那个"理想化"构象是
+**3.5000 / 1.4000 Å**。于是上一轮那句"理想化构象不能冒充 S22"现在是一条断言：
+间距差 0.14 Å、滑移差 0.30 Å —— 而色散能按 `R⁻⁶` 走，这个差值足以让相互作用能差出
+可比的量级。这条测试（`m2_s22_reference.rs`，4 例）同时钉住数据集完整性
+（22 个体系、414 个原子、每行元素合法、eV/kcal 两列自洽）与两个几何的差别。
+
+**没解决的仍是那两条**：def2-SVP 上的 BSSE（引擎还没有 ghost 原子）与 meta-GGA 的格点成本
+（苯单体 1077 s 未收敛）—— 所以 M2 ④ 仍不能给"与文献差 < 1 kcal/mol"的数。数据这一半已经
+不是借口了。

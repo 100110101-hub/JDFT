@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "description": "S22 weakly interacting dimers: geometries and CCSD(T)/CBS CP interaction energies, extracted from ASE's data/s22.py (which in turn cites Jurecka 2006 for the geometries and Takatani 2010 for the revised energies).",
+  "generated_by": "scripts/gen_s22_reference.py",
+  "upstream": {
+    "file": "ase/data/s22.py",
+    "url": "https://gitlab.com/ase/ase/-/raw/master/ase/data/s22.py",
+    "license": "LGPL-2.1-or-later",
+    "sha256": "930f9cd357e1297b9262edb5f7dba050e1391c5644f64d8da3971325e69b59e6"
+  },
+  "citations": [
+    {
+      "role": "geometries (S22 set)",
+      "doi": "10.1039/b600027d",
+      "note": "Jurecka, Sponer, Cerny, Hobza, PCCP 8, 1985 (2006)"
+    },
+    {
+      "role": "reference interaction energies (basis-set consistent revision)",
+      "doi": "10.1063/1.3378024",
+      "note": "Takatani, Hohenstein, Malagoli, Marshall, Sherrill, JCP 132, 144104 (2010); units eV"
+    }
+  ],
+  "dos": "the two DOIs were checked against api.crossref.org on 2026-11-13; the ASE file was fetched from the URL above and pinned by sha256"
+}

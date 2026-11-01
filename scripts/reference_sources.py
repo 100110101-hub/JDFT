@@ -33,6 +33,8 @@ __all__ = [
     "DFTD3_URL",
     "DFTD4_DOI",
     "DFTD4_URL",
+    "S22_DOI",
+    "S22_URL",
     "PYSCF_DOI",
     "PYSCF_URL",
     "SOURCE_COLUMNS",
@@ -62,6 +64,15 @@ DFTD3_URL = "https://github.com/dftd3/simple-dftd3"
 DFTD4_DOI = "10.1063/1.5090222"
 #: 官方 dftd4 实现（D4 参考值的黑盒尺子；本机装的是 pip 包 dftd4 4.3.1）。
 DFTD4_URL = "https://github.com/dftd4/dftd4"
+
+#: S22 弱相互作用二聚体集的**几何**来源（Jurečka, Šponer, Černý, Hobza, PCCP 8, 1985 (2006)）。
+#: 2026-11-13 用 Crossref `api.crossref.org/works/10.1039/b600027d` 核对过题名、卷 8 与页码 1985–1993。
+S22_DOI = "10.1039/b600027d"
+#: 参考相互作用能取自 Takatani 等的"基组一致修订值"（JCP 132, 144104 (2010)），
+#: 同上用 Crossref 核对过（`10.1063/1.3378024`）；数据文件本身从 ASE 的 `ase/data/s22.py`
+#: 取回并按 sha256 钉住（LGPL-2.1-or-later，文件名与引用保留在 staging JSON 里）。
+#: 这里记 URL 用 ASE 的 GitLab 源（数据文件的位置），DOI 用 Takatani 的（数值的位置）。
+S22_URL = "https://gitlab.com/ase/ase/-/raw/master/ase/data/s22.py"
 
 #: 每一行都必须带的两个来源列（加在最后一列之后，位置固定）。
 SOURCE_COLUMNS = ("source_doi", "source_url")
@@ -122,6 +133,10 @@ GENERATORS = {
     # SV-03：SMD 参数化半径（eq. 16）的官方参考值（PySCF 的 `smd.smd_radii`，单位 bohr）。
     "qwb-core/crates/qwb-props/tests/reference/smd_parameterised_radii.csv":
         "scripts/smd_radii_reference.py",
+    # M2 ④：S22 弱相互作用二聚体集（几何 + CCSD(T)/CBS CP 参考相互作用能），
+    # 数据来自 ASE 的 `ase/data/s22.py`（sha256 钉住），DOI 见 `S22_DOI`。
+    "qwb-core/crates/qwb-engine/tests/reference/s22_dimers.csv":
+        "scripts/gen_s22_reference.py",
 }
 
 FAMILIES = tuple(GENERATORS)
