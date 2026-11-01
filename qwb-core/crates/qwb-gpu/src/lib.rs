@@ -35,6 +35,8 @@ pub enum GpuError {
     },
     /// 尺寸超出 `c_int`。
     TooLarge(usize),
+    /// 显存预算不够：**调用方据此退回 CPU**，不重试、不缩小问题。
+    InsufficientMemory { required: u64, available: u64 },
 }
 
 impl std::fmt::Display for GpuError {
@@ -54,6 +56,13 @@ impl std::fmt::Display for GpuError {
                 len_a, len_b
             ),
             Self::TooLarge(size) => write!(f, "尺寸 {size} 超过 c_int 上限"),
+            Self::InsufficientMemory {
+                required,
+                available,
+            } => write!(
+                f,
+                "显存预算不够：需要 {required} B，预算 {available} B（请退回 CPU）"
+            ),
         }
     }
 }
@@ -69,6 +78,7 @@ impl From<std::num::TryFromIntError> for GpuError {
 type CudaMalloc = unsafe extern "C" fn(*mut *mut c_void, usize) -> i32;
 type CudaFree = unsafe extern "C" fn(*mut c_void) -> i32;
 type CudaMemcpy = unsafe extern "C" fn(*mut c_void, *const c_void, usize, i32) -> i32;
+type CudaMemGetInfo = unsafe extern "C" fn(*mut usize, *mut usize) -> i32;
 type CublasCreate = unsafe extern "C" fn(*mut *mut c_void) -> i32;
 type CublasDestroy = unsafe extern "C" fn(*mut c_void) -> i32;
 #[allow(clippy::type_complexity)]
@@ -96,6 +106,7 @@ struct Cuda {
     cuda_malloc: CudaMalloc,
     cuda_free: CudaFree,
     cuda_memcpy: CudaMemcpy,
+    cuda_mem_get_info: CudaMemGetInfo,
     cublas_create: CublasCreate,
     cublas_destroy: CublasDestroy,
     cublas_dgemm: CublasDgemm,
@@ -183,6 +194,9 @@ fn init() -> Result<&'static Cuda, GpuError> {
             let cuda_memcpy = *cudart
                 .get::<CudaMemcpy>(b"cudaMemcpy\0")
                 .map_err(|e| format!("cudaMemcpy: {e}"))?;
+            let cuda_mem_get_info = *cudart
+                .get::<CudaMemGetInfo>(b"cudaMemGetInfo\0")
+                .map_err(|e| format!("cudaMemGetInfo: {e}"))?;
             let cublas_create = *cublas_lib
                 .get::<CublasCreate>(b"cublasCreate_v2\0")
                 .map_err(|e| format!("cublasCreate_v2: {e}"))?;
@@ -192,12 +206,23 @@ fn init() -> Result<&'static Cuda, GpuError> {
             let cublas_dgemm = *cublas_lib
                 .get::<CublasDgemm>(b"cublasDgemm_v2\0")
                 .map_err(|e| format!("cublasDgemm_v2: {e}"))?;
+            // CUDA 的 runtime 是**惰性初始化**的：没有任何 context 时，
+            // `cublasCreate_v2` 会返回 1（`CUBLAS_STATUS_NOT_INITIALIZED`），
+            // `cudaMemGetInfo` 会返回 801（`cudaErrorNotSupported`）。两个测试并发跑时
+            // 这个竞态真的会踩到（第 376 轮实测：`availability_probe_never_panics` 单独跑绿、
+            // 与 `gemm_matches...` 并行跑红）。`cudaFree(0)` 是官方文档里
+            // "初始化 runtime" 的无操作调用 —— 在**一次性**的 `init()` 里踢一脚，
+            // 之后所有入口（gemm / memory_info / available）都不必各自处理。
+            // SAFETY: 这里已经在上面那个 `unsafe { ... }` 块里；传空指针给 cudaFree 是
+            // 文档允许的初始化用法，不释放任何东西。
+            cuda_free(std::ptr::null_mut());
             Ok(Cuda {
                 _cudart: cudart,
                 _cublas_lib: cublas_lib,
                 cuda_malloc,
                 cuda_free,
                 cuda_memcpy,
+                cuda_mem_get_info,
                 cublas_create,
                 cublas_destroy,
                 cublas_dgemm,
@@ -241,6 +266,73 @@ pub fn available() -> Result<(), GpuError> {
 ///
 /// 形状不合法 / 尺寸超 `c_int` / CUDA 不可用 / 调用失败。
 #[allow(unsafe_code)]
+/// 显存快照（字节）。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct MemoryInfo {
+    /// 当前空闲显存。
+    pub free_bytes: u64,
+    /// 总显存。
+    pub total_bytes: u64,
+}
+
+/// 查询当前设备的显存（`cudaMemGetInfo`）。
+///
+/// # Errors
+///
+/// 找不到运行库或调用失败。
+#[allow(unsafe_code)]
+pub fn memory_info() -> Result<MemoryInfo, GpuError> {
+    let cuda = init()?;
+    let mut free: usize = 0;
+    let mut total: usize = 0;
+    // SAFETY: 两个指针都指向本函数内的局部变量，cudaMemGetInfo 只写它们。
+    let status = unsafe { (cuda.cuda_mem_get_info)(&mut free, &mut total) };
+    if status != 0 {
+        return Err(GpuError::Call {
+            what: "cudaMemGetInfo",
+            code: status,
+        });
+    }
+    Ok(MemoryInfo {
+        free_bytes: free as u64,
+        total_bytes: total as u64,
+    })
+}
+
+/// 一次 `gemm` 的显存需求（字节）：`A`、`B`、`C` 三块 `f64`。
+#[must_use]
+pub fn gemm_bytes(m: usize, k: usize, n: usize) -> u64 {
+    (m * k + k * n + m * n) as u64 * 8
+}
+
+/// 默认显存预算：**空闲显存的 75 %**（给 cuBLAS 的 workspace 与驱动留余量）。
+///
+/// 75 % 不是调出来的"魔法系数"，而是一个**预算**：算力路径要么在预算内走 GPU，要么立刻
+/// 退回 CPU —— 不允许"试着分配、失败了再说"，因为失败点可能在第三次 `cudaMalloc` 上，
+/// 那时前两块已经分出去了（现在有清理路径，但预算检查更早、更好测）。
+///
+/// # Errors
+///
+/// 取不到显存信息（没有 CUDA）。
+pub fn memory_budget_bytes() -> Result<u64, GpuError> {
+    let info = memory_info()?;
+    Ok(info.free_bytes / 4 * 3)
+}
+
+/// 一次 `gemm` 走了哪条路。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum GemmRoute {
+    /// 走 GPU（cuBLAS）。
+    Gpu,
+    /// 退回 CPU，附带 GPU 不可用的原因（无运行库 / 预算不够 / 调用失败）。
+    Cpu(GpuError),
+}
+
+/// 行主序 `f64` 的 `gemm`，**用默认预算**（空闲显存的 75 %）。
+///
+/// # Errors
+///
+/// 形状不合法、CUDA 不可用、显存预算不够、cuBLAS 调用失败 —— **全部可回退**。
 pub fn gemm_f64(m: usize, k: usize, n: usize, a: &[f64], b: &[f64]) -> Result<Vec<f64>, GpuError> {
     if a.len() != m * k || b.len() != k * n {
         return Err(GpuError::Dimension {
@@ -249,6 +341,40 @@ pub fn gemm_f64(m: usize, k: usize, n: usize, a: &[f64], b: &[f64]) -> Result<Ve
             n,
             len_a: a.len(),
             len_b: b.len(),
+        });
+    }
+    gemm_f64_budgeted(m, k, n, a, b, memory_budget_bytes()?)
+}
+
+/// 带**显式显存预算**的 `gemm`：`gemm_bytes(m, k, n) > budget_bytes` 时直接返回
+/// [`GpuError::InsufficientMemory`]，一次显存都不碰（所以这条路径可以脱离真实 OOM 测试）。
+///
+/// # Errors
+///
+/// 同 [`gemm_f64`]。
+#[allow(unsafe_code)]
+pub fn gemm_f64_budgeted(
+    m: usize,
+    k: usize,
+    n: usize,
+    a: &[f64],
+    b: &[f64],
+    budget_bytes: u64,
+) -> Result<Vec<f64>, GpuError> {
+    if a.len() != m * k || b.len() != k * n {
+        return Err(GpuError::Dimension {
+            m,
+            k,
+            n,
+            len_a: a.len(),
+            len_b: b.len(),
+        });
+    }
+    let required = gemm_bytes(m, k, n);
+    if required > budget_bytes {
+        return Err(GpuError::InsufficientMemory {
+            required,
+            available: budget_bytes,
         });
     }
     let (m_i, k_i, n_i) = (i32::try_from(m)?, i32::try_from(k)?, i32::try_from(n)?);
@@ -352,4 +478,40 @@ pub fn gemm_f64(m: usize, k: usize, n: usize, a: &[f64], b: &[f64]) -> Result<Ve
         (cuda.cublas_destroy)(handle);
         result
     }
+}
+
+/// 行主序 `f64` 的 `gemm`，**任何 GPU 失败都自动退回 CPU**，返回结果与走的路。
+///
+/// CPU 侧用与测试参考实现同款的朴素三重循环（`c = a·b`，按 `p` 累加），所以退回时的数值
+/// 与"一开始就走 CPU"逐位相同 —— 这正是附录 A.3 要的"CPU 永远是基准"。
+#[must_use]
+pub fn gemm_f64_with_fallback(
+    m: usize,
+    k: usize,
+    n: usize,
+    a: &[f64],
+    b: &[f64],
+) -> (Vec<f64>, GemmRoute) {
+    match gemm_f64(m, k, n, a, b) {
+        Ok(result) => (result, GemmRoute::Gpu),
+        Err(reason) => (gemm_cpu(m, k, n, a, b), GemmRoute::Cpu(reason)),
+    }
+}
+
+/// 朴素三重循环 `gemm`（行主序）：GPU 不可用时的基准路径。
+#[must_use]
+pub fn gemm_cpu(m: usize, k: usize, n: usize, a: &[f64], b: &[f64]) -> Vec<f64> {
+    let mut c = vec![0.0_f64; m * n];
+    for i in 0..m {
+        for p in 0..k {
+            let a_ip = a[i * k + p];
+            if a_ip == 0.0 {
+                continue;
+            }
+            for j in 0..n {
+                c[i * n + j] += a_ip * b[p * n + j];
+            }
+        }
+    }
+    c
 }

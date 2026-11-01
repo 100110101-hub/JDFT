@@ -6982,3 +6982,32 @@ Abraham α）。这一轮把后者落地：K1 的 `smd-atomic` 多了 `parameter
 
 顺带确认了一件容易忘的事：`debug-assertions` 关掉才会改变数值行为（有些浮点断言只在 debug 下跑），
 这次**只关调试符号**；`Cargo.toml` 的注释里写清了这一点，免得下一个人顺手把 `debug-assertions` 也关了。
+
+## 一百七十二、GPU 的显存预算与自动回退；以及两个 CUDA 错误码（1 与 801）背后的惰性初始化（2026-11-13）
+
+附录 A.3 对 GPU 的要求不止"算得对"，还有"**显存不够要能退回 CPU**"。原来的 `gemm_f64` 是
+"先 `cudaMalloc` 三块，失败就返回错误"——调用方虽然能退回，但**什么时候会缺显存**完全不可
+预知，也没法测（要真把 8 GiB 吃满）。这一轮把"缺显存"变成可预算、可复现的一等公民：
+
+* `gemm_bytes(m,k,n) = 8·(mk + kn + mn)` —— 三块 `f64` 都得算，少算一块就是真 OOM；
+* `memory_info()` 读 `cudaMemGetInfo`，默认预算取**空闲显存的 75 %**（留给 cuBLAS 的
+  workspace 与驱动）；实测本机 `free 7116 MiB / total 8191 MiB` → 预算 5337 MiB；
+* `gemm_f64_budgeted(..., budget)` 在 `gemm_bytes > budget` 时**一次显存都不碰**，直接返回
+  `GpuError::InsufficientMemory { required, available }` —— 于是这条路径可以脱离真实 OOM 测；
+* `GemmRoute { Gpu, Cpu(reason) }` + `gemm_f64_with_fallback` 把**任意** GPU 失败（没有运行库、
+  预算不够、cuBLAS 报错）接到朴素 CPU 三重循环上。退回时用的是与测试参考实现同一段循环，
+  所以结果**逐位相同**（不是 1e-12）——这才是"CPU 永远是基准路径"的可执行含义。
+
+**两个错误码教了一课。** 写测试时第一次跑就红：`cudaMemGetInfo` 返回 **801**
+（`cudaErrorNotSupported`），`availability_probe_never_panics` 在与其他测试**并发**跑时
+`cublasCreate_v2` 返回 **1**（`CUBLAS_STATUS_NOT_INITIALIZED`），单独跑却绿。原因同一个：
+CUDA 的 runtime 是**惰性初始化**的，进程里还没建过 context 时，这两个调用都会"拒绝工作"。
+修法不是在各处 try 一次重试，而是在**一次性**的 `init()` 里调一次 `cudaFree(0)`（官方文档里
+"初始化 runtime"的无操作调用），之后 gemm / memory_info / available 三个入口都不必再处理。
+这条竞态原本就存在（只是两个测试恰好没有同时踩到），新增的四个测试把它顶了出来 —— 记在这里
+是因为"单独跑绿、一起跑红"最容易被人当成 flaky 而忽略。
+
+**没动的**：CPU 的位模式（`gemm_cpu` 是新增的公开函数，既有调用点一行未改）、`unsafe_allowlist.txt`
+（`cudaMemGetInfo` 与既有 `cudaMalloc/cudaMemcpy/cudaFree` 来自同一个 `libcudart`，仍属已批准的
+FFI 类别、仍在同一个文件里）、以及 XC 那半（仍然 `blocked`：它要 NVRTC 或 cubin，是**另一类**
+unsafe 面，需要人类批准）。
