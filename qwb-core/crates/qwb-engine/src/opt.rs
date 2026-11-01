@@ -345,6 +345,11 @@ pub(crate) fn uks_scf_with_convergence_aids(
     // （`docs/choices.md` 七十六）。所以按「先严后松」依次试，接受第一个残差 < 1e-6 的解。
     for (energy_threshold, density_threshold) in [
         (base.energy_threshold, base.density_threshold),
+        // **更严的一档**：hybrid + τ 的交换子残差对密度阈值很敏感 —— OH/M06-2X 在
+        // 1e-8 的密度阈值上收敛得「正常」，但 `‖FPS−SPF‖` 只到 5.9e-6（判据 1e-6），
+        // 同一体系收到 1e-10 就降到 1.8e-10（123 步，`max_iter` 默认 200 够用）。
+        // 它排在松档之前：先试把解压到真驻点，压不下去再退回松阈值。
+        (1.0e-9, 1.0e-10),
         (1.0e-9, 1.0e-7),
         (1.0e-8, 1.0e-6),
     ] {
