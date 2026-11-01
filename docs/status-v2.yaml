@@ -169,16 +169,12 @@ FX-03:
   gap: "等 DA-03；数据面（ω、混合系数）已取回并验证。"
   choices: "一百二十七"
 FX-04:
-  state: blocked
-  ts: "2026-11-07T08:40:00Z"
-  artifact: "（未落地）D3(BJ) 作为可加项 + 解析梯度 + dispersion_energy_hartree 落盘"
-  verification: "**依赖 DA-06**：C6 表与阻尼参数已定位/可解析，但 r4r2 缺（见 DA-06 的 note），且 CN 约定未钉死。**第 15 轮的四项实测**：（a）**配对索引已判定**：C6 表用**列主序下三角**（Fortran `i + (j-1)j/2`），不是行主序上三角 —— 用「远距离异核二聚体」区分：Ne-Ar 与 Ar-Kr 的 oracle 纯 C6 能量与我方**逐位相同**（−4.730810547e-9 / −2.237377930e-8），上三角约定则差 27 倍；C-O/N-O/O-S 只差第 4 位（因为 C/N/O 的 CN≈0 处权重略偏离 1）。（b）**权重公式已确认**：s-dftd3 的 `weight_references` 用的是**高斯/log-sum-exp**权重 `gw_k = exp(−wf·(ref_cn_k − CN)²)`（`wf_default = 4.0`，model.f90 第 79 行），不是拉格朗日插值；但两种权重对水二聚体的纯 C6 只差 1e-4 量级（权重很尖），所以它不是主要误差源。（c）**残余误差定位到 CN**：水二聚体（Bohr 坐标，O–O = 5.7）的纯 C6，oracle −2.561170642422 Ha，我方最好的组合（kcn=16、半径按 Bohr）−2.947877671614（差 −0.387 Ha，15%）；换 Å→Bohr 或 kcn∈{16/3, 4} 更糟。（d）**r4r2 仍缺**：闭环反解只有 He/Ne/Ar/Kr（<1e-18）与 H（3.5e-9）通过，其余元素因 CN 未定而不成立。⇒ 剩下的未知量就是 CN 的具体实现（kcn 常量与 `get_covalent_rad` 的单位/取值），不是表、不是单位、不是索引。"
-  note: "**§2.5 的处理决定（第 15 轮）**：不再无限期在 D3 上消耗轮次。本轮把 M2 的判据**拆分固定**：meta-GGA 的一半（DA-01/DA-02/FX-01/FX-02）已 done 且有实测（逐点 <1e-9、H2O 端到端 <3e-5 Ha），色散的一半（DA-06/FX-04）记 blocked —— `docs/status-v2.yaml` 里 M2 保持 pending 并注明「meta-GGA 过 / 色散未过」。D3 若要继续，最小路径是：拿到 `mctc-lib` 的 CN 实现（`get_covalent_rad` 的确切表与 kcn）或直接从 D3 原文附录转录 r4r2+rcov，然后按已就位的自校验脚本判据（纯 C6 在水/苯二聚体上 <1e-9、E 闭环 <1e-9）验收。**没有写任何 D3 代码，也没有用近似表充数。**"
-  note: "判据（D3 梯度 vs 有限差分 < 1e-6 Ha/Bohr；10 个二聚体与官方实现差 < 1e-3 kcal/mol）尚未开始测量，因为参数不全。黑盒尺子已就位：WSL 里 pip install dftd3（1.6.0），DispersionModel(...).get_dispersion(RationalDampingParam(method=...), grad=True) 同时给能量与梯度（实测：B3LYP-D3(BJ) 的水分子 E = −5.6816898568e-4 Ha，梯度 3×3）。"
-
-
-# ───────────────────── SCF / 相关 / 开壳层轨（SC，6）─────────────────────
-
+  state: in_progress
+  ts: "2026-11-09T09:40:00Z"
+  artifact: "qwb-core/crates/qwb-scf/src/dispersion.rs：`dispersion_energy(dispersion, functional, symbols, positions_bohr)` —— D3(BJ) 的可加能量与**解析梯度**（CN 的指数计数函数、log-sum-exp 参考权重及其一阶导、高 Z 在前的 7×7 参考块插值、有理阻尼多项式及其导数、CN 链式项），返回 `DispersionResult { energy_hartree, gradient, pairs }`（`pairs` 是逐对能量，供诊断与断言）；qwb-core/crates/qwb-scf/tests/fx04_dispersion.rs（4 例）。参考值来自官方 s-dftd3 黑盒：qwb-core/crates/qwb-scf/tests/reference/d3_dimers.csv（10 个二聚体的理想化几何）+ d3_dispersion.csv（40 个 (二聚体, 泛函) 组合的能量与逐原子梯度）"
+  verification: "**判据的前两条已经过，第三条未做**。① **与官方参考实现**（判据 < 1e-3 kcal/mol）：`cargo test -p qwb-scf --test fx04_dispersion` 里 40 个 (二聚体, 泛函) 组合逐一比较，**最大 5.371e-7 kcal/mol**（benzene_dimer_stacked/hf），比判据小三个量级；梯度对官方实现的**最大 6.170e-10 Ha/Bohr**。② **解析梯度 vs 中心差分**（判据 < 1e-6 Ha/Bohr）：在苯二聚体（24 个原子、72 个分量）上 **3.223e-12 Ha/Bohr**。③ 其它断言：没有 BJ 参数的泛函（m06-l / m06-2x / b97-d）**显式报错**并列出可用的四个，不是静默返回 0；两次调用逐位相同；逐对能量之和 == 总能量（1e-14）；水二聚体 B3LYP 的 D3(BJ) = −2.187396126e-3 Ha = −1.3726 kcal/mol（与官方 −2.187396125585e-3 一致）。④ 单元测试另钉住计数函数与权重的性质（rc/r = 1 → 0.5、权重归一化、权重的 CN 导数之和为 0）。⑤ `cargo clippy -p qwb-scf --all-targets -- -D warnings` 与 `cargo fmt --all --check` 干净"
+  gap: "**判据的第三条（`dispersion_energy_hartree` 进 `result.json`）还没做**：需要在 K2 的 `JobResult` 上加一个加性字段（`dispersion` 块，含 functional / energy_hartree / 数据名 / 截断）、在 `JobInput` 的 options 上加开关，再把 `qwb_engine` 的解路径接上 —— 这是引擎侧的活，不是这个 WP 的数值核心。所以本 WP 记 in_progress：数值核心与两条硬判据都过了，落盘那条留着"
+  note: "**这一版把两件事做实了**：① 数值核心只依赖数据文件（`qwb_registry::Dispersion`），不认任何硬编码常数 —— 半径、kcn、wf、r4r2、参考表、阻尼参数、截断全部从数据里取，所以「换一份 D3 数据」不需要改代码；② 参考值是**官方实现**给的（黑盒 `dftd3` 1.6.0），不是我们公式再算一遍。**梯度为什么对**：直接项写的是 `dE/dr = −C6·dp/dr`（用 `p` 的解析导数，不是把 `p` 再差分），CN 链式项用计数函数的解析导数 `−kcn·rc/r²·σ(1−σ)`，两段加起来才对得上中心差分 3.2e-12。**踩坑记录**：`pair_c6` 的取向判断要在**运行时**做（比较两个元素符号的原子序数），不能依赖调用顺序 —— 单元测试里正反两种调用都断言同一个块"
 SC-01:
   state: done
   ts: "2026-11-06T16:30:00Z"

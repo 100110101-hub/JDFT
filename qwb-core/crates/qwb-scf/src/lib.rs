@@ -25,6 +25,7 @@ pub mod analytic_gradient;
 pub mod checkpoint;
 pub mod cphf_hessian;
 pub mod diis;
+pub mod dispersion;
 pub mod ecp;
 pub mod guess;
 pub mod mp2;
