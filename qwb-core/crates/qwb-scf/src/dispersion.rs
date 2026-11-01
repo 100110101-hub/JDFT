@@ -51,19 +51,48 @@ pub fn dispersion_energy(
     symbols: &[&str],
     positions_bohr: &[[f64; 3]],
 ) -> Result<DispersionResult, String> {
-    let params = dispersion.damping(functional).ok_or_else(|| {
-        let available: Vec<&str> = dispersion
-            .damping_parameters
-            .keys()
-            .map(String::as_str)
-            .collect();
-        format!(
-            "no D3(BJ) parameters for `{functional}` in `{}` (available: {}); \
-             M06-L and M06-2X have no published BJ parameters, only zero damping",
-            dispersion.name,
-            available.join(", ")
-        )
-    })?;
+    // 两套阻尼对应两套参数；`kind` 决定数据里有哪一套（`check_structure` 已经保证
+    // 两者与 `dispersion.damping` 自洽）。
+    let params = match dispersion.dispersion.damping {
+        qwb_registry::dispersion::DampingModel::Rational => {
+            let bj = dispersion.damping(functional).ok_or_else(|| {
+                let available: Vec<&str> = dispersion
+                    .damping_parameters
+                    .keys()
+                    .map(String::as_str)
+                    .collect();
+                format!(
+                    "no D3(BJ) parameters for `{functional}` in `{}` (available: {}); \
+                     M06-L and M06-2X have no published BJ parameters, only zero damping",
+                    dispersion.name,
+                    available.join(", ")
+                )
+            })?;
+            Damping::Bj(bj)
+        }
+        qwb_registry::dispersion::DampingModel::Zero => {
+            let zero = dispersion.zero_damping(functional).ok_or_else(|| {
+                let available: Vec<&str> = dispersion
+                    .zero_damping_parameters
+                    .keys()
+                    .map(String::as_str)
+                    .collect();
+                format!(
+                    "no D3(0) parameters for `{functional}` in `{}` (available: {})",
+                    dispersion.name,
+                    available.join(", ")
+                )
+            })?;
+            Damping::Zero(zero)
+        }
+        // `DampingModel` 是 non_exhaustive：以后新增阻尼模型时这里必须显式实现，
+        // 而不是悄悄退回 BJ。
+        other => {
+            return Err(format!(
+                "damping model {other:?} is not implemented in the Rust kernel"
+            ));
+        }
+    };
     if symbols.len() != positions_bohr.len() {
         return Err(format!(
             "symbols ({}) and positions ({}) must have the same length",
@@ -151,7 +180,13 @@ pub fn dispersion_energy(
                 &weight_derivs[j],
             )?;
             let rrij = 3.0 * r4r2[i] * r4r2[j];
-            let (p, dp) = damping_polynomial(params, rrij, r);
+            let (p, dp) = match &params {
+                Damping::Bj(bj) => damping_polynomial(bj, rrij, r),
+                Damping::Zero(zero) => {
+                    let r0 = dispersion.vdw_radius_bohr(symbols[i], symbols[j])?;
+                    zero_damping_polynomial(zero, r0, rrij, r)
+                }
+            };
             energy -= c6 * p;
             // 直接项：E_ij = -C6·p → dE/dr = -C6·dp/dr，方向 j→i。
             let magnitude = -c6 * dp;
@@ -275,6 +310,41 @@ fn pair_c6(
         }
     }
     Ok((c6, dc6_i, dc6_j))
+}
+
+/// 数据里可用的阻尼参数（按模型分派）。
+enum Damping<'a> {
+    /// 有理阻尼（Becke–Johnson / D3(BJ)）。
+    Bj(&'a qwb_registry::dispersion::DampingParameters),
+    /// 零阻尼（D3(0)）。
+    Zero(&'a qwb_registry::dispersion::ZeroDampingParameters),
+}
+
+/// 零阻尼多项式 `p = s6·f6/r⁶ + s8·(C8/C6)·f8/r⁸` 与它对 `r` 的导数。
+///
+/// `zero.f90` 第 197–212 行：`t6 = (rs6·R0/r)^alp`、`t8 = (rs8·R0/r)^(alp+2)`、
+/// `f6 = 1/(1+6·t6)`、`f8 = 1/(1+6·t8)`。这里的 `r0` 是**成对** vdW 半径。
+fn zero_damping_polynomial(
+    params: &qwb_registry::dispersion::ZeroDampingParameters,
+    r0: f64,
+    rrij: f64,
+    r: f64,
+) -> (f64, f64) {
+    let alp6 = params.alp;
+    let alp8 = params.alp + 2.0;
+    let t6 = (params.rs6 * r0 / r).powf(alp6);
+    let t8 = (params.rs8 * r0 / r).powf(alp8);
+    let f6 = 1.0 / (1.0 + 6.0 * t6);
+    let f8 = 1.0 / (1.0 + 6.0 * t8);
+    // dt/dr = −alp·t/r；df/dr = −6·(dt/dr)·f²
+    let dt6 = -alp6 * t6 / r;
+    let dt8 = -alp8 * t8 / r;
+    let df6 = -6.0 * dt6 * f6 * f6;
+    let df8 = -6.0 * dt8 * f8 * f8;
+    let p = params.s6 * f6 / r.powi(6) + params.s8 * rrij * f8 / r.powi(8);
+    let dp = params.s6 * (df6 / r.powi(6) - 6.0 * f6 / r.powi(7))
+        + params.s8 * rrij * (df8 / r.powi(8) - 8.0 * f8 / r.powi(9));
+    (p, dp)
 }
 
 /// 阻尼多项式 `p = s6/(r⁶+R0⁶) + s8·(C8/C6)/(r⁸+R0⁸)` 与它对 `r` 的导数。

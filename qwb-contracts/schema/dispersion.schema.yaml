@@ -186,6 +186,47 @@ $defs:
     - const: gaussian
       description: '`w ∝ exp(−wf·(CN_ref − CN)²)`，按最邻近参考点平移后归一化（log-sum-exp）。'
       type: string
+  ZeroDampingParameters:
+    additionalProperties: false
+    description: |-
+      零阻尼（D3(0)）的参数：`E = −(s6·C6·f6/r⁶ + s8·C8·f8/r⁸)`，
+      `f = 1/(1 + 6·t)`、`t6 = (rs6·R0/r)^alp`、`t8 = (rs8·R0/r)^(alp+2)`，
+      `R0` 是**成对** vdW 半径（[`Dispersion::vdw_radii_angstrom`]）。
+
+      为什么是单独一套字段而不是复用 `DampingParameters`：BJ 用 `a1/a2`，零阻尼用
+      `rs6/rs8/alp`，硬塞进一个结构会让「哪个字段对应哪种阻尼」变成约定而不是类型。
+    properties:
+      alp:
+        description: '`alp`（默认 14；`t8` 的指数是 `alp + 2`）。'
+        format: double
+        type: number
+      doi:
+        description: 该组参数的出处（DOI）。
+        type: string
+      rs6:
+        description: '`rs6`（D3(0) 的主参数，例如 M06-2X 的 1.619）。'
+        format: double
+        type: number
+      rs8:
+        description: '`rs8`。'
+        format: double
+        type: number
+      s6:
+        description: '`s6`（D3(0) 下通常为 1）。'
+        format: double
+        type: number
+      s8:
+        description: '`s8`（M06-L / M06-2X 是 0）。'
+        format: double
+        type: number
+    required:
+    - s6
+    - s8
+    - rs6
+    - rs8
+    - alp
+    - doi
+    type: object
 $schema: https://json-schema.org/draft/2020-12/schema
 additionalProperties: false
 description: 色散参数（`qwb-data/dispersion/*.yaml` 的形态）。
@@ -204,7 +245,8 @@ properties:
   damping_parameters:
     additionalProperties:
       $ref: '#/$defs/DampingParameters'
-    description: 各泛函的阻尼参数。
+    default: {}
+    description: '各泛函的 BJ 阻尼参数（`kind: d3bj` 时非空）。'
     type: object
   dispersion:
     $ref: '#/$defs/PairwiseSettings'
@@ -267,9 +309,22 @@ properties:
     type:
     - string
     - 'null'
+  vdw_radii_angstrom:
+    additionalProperties:
+      format: double
+      type: number
+    default: {}
+    description: 成对 vdW 半径，单位 Å（键 `高Z-低Z`，666 个元素对；零阻尼要它，BJ 不要）。
+    type: object
   version:
     description: 数据版本（独立 semver）。
     type: string
+  zero_damping_parameters:
+    additionalProperties:
+      $ref: '#/$defs/ZeroDampingParameters'
+    default: {}
+    description: '各泛函的零阻尼参数（`kind: d3zero` 时非空）。'
+    type: object
 required:
 - name
 - version
@@ -284,7 +339,6 @@ required:
 - r4r2_published
 - reference_cn
 - reference_c6
-- damping_parameters
 - dispersion
 - provenance
 title: Dispersion

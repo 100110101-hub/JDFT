@@ -200,6 +200,12 @@ Step -Name 'DA-06: dispersion data reproduces s-dftd3' -Dir '.' -Body {
     & $script:ledgerPython scripts/validate_d3_data.py
 }
 
+# 零阻尼（D3(0)）那一份单独跑：M06-L / M06-2X 只有这一套参数。容差 1e-8 Ha 而不是
+# 1e-9：零阻尼的 R0 来自 vdW 半径（2–4 Å），Å→Bohr 常数代差被放大，实测 2.1e-9 Ha。
+Step -Name 'DA-06: zero-damping data reproduces s-dftd3' -Dir '.' -Body {
+    & $script:ledgerPython scripts/validate_d3_data.py --zero --tolerance 1e-8
+}
+
 # ---- 10.6: the project ledger must stay machine-readable ----
 Step -Name '10.6: docs/status.yaml ledger validity' -Dir '.' -Body {
     & $script:ledgerPython scripts/check_status.py

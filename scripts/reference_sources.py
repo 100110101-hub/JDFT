@@ -89,6 +89,8 @@ GENERATORS = {
         "scripts/dftd3_dispersion_reference.py",
     "qwb-core/crates/qwb-scf/tests/reference/d3_dispersion.csv":
         "scripts/dftd3_dispersion_reference.py",
+    "qwb-core/crates/qwb-scf/tests/reference/d3zero_dispersion.csv":
+        "scripts/dftd3_dispersion_reference.py",
 }
 
 FAMILIES = tuple(GENERATORS)

@@ -153,14 +153,31 @@ fn fx04_unknown_data_and_functionals_are_reported() {
     println!("unknown data: {message}");
     assert!(message.contains("d4"), "{message}");
 
-    // M06-2X 没有 BJ 参数：必须报错并指出可用的四个泛函。
+    // M06-2X 没有 BJ 参数：用 `d3bj` 必须报错并指出可用的四个泛函。
     let mut request = input(JobType::Sp, "m06-2x");
     request.options.dispersion = Some(DispersionOptions::default());
     let error = backend
         .run(&request, &NullReporter)
         .expect_err("a functional without BJ parameters must be rejected");
     let message = format!("{error}");
-    println!("m06-2x + dispersion: {message}");
+    println!("m06-2x + d3bj: {message}");
     assert!(message.contains("no D3(BJ) parameters"), "{message}");
     assert!(message.contains("b3lyp"), "{message}");
+
+    // 换成零阻尼那份就能算 —— M06-L / M06-2X 在上游只有这一套参数（DA-06）。
+    let mut options = DispersionOptions::default();
+    options.data = "d3zero".into();
+    request.options.dispersion = Some(options);
+    let result = backend
+        .run(&request, &NullReporter)
+        .expect("m06-2x + d3zero must work");
+    let dispersion = result
+        .dispersion_energy_hartree
+        .expect("the d3zero block must be reported");
+    println!(
+        "m06-2x + d3zero: E_disp = {:.3e} Ha ({:.4} kcal/mol)",
+        dispersion,
+        dispersion * 627.509_474_063_1
+    );
+    assert!(dispersion < 0.0 && dispersion > -1.0e-2);
 }

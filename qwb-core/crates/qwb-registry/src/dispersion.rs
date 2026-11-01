@@ -119,6 +119,30 @@ pub struct DampingParameters {
     pub doi: String,
 }
 
+/// 零阻尼（D3(0)）的参数：`E = −(s6·C6·f6/r⁶ + s8·C8·f8/r⁸)`，
+/// `f = 1/(1 + 6·t)`、`t6 = (rs6·R0/r)^alp`、`t8 = (rs8·R0/r)^(alp+2)`，
+/// `R0` 是**成对** vdW 半径（[`Dispersion::vdw_radii_angstrom`]）。
+///
+/// 为什么是单独一套字段而不是复用 `DampingParameters`：BJ 用 `a1/a2`，零阻尼用
+/// `rs6/rs8/alp`，硬塞进一个结构会让「哪个字段对应哪种阻尼」变成约定而不是类型。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+#[non_exhaustive]
+pub struct ZeroDampingParameters {
+    /// `s6`（D3(0) 下通常为 1）。
+    pub s6: f64,
+    /// `s8`（M06-L / M06-2X 是 0）。
+    pub s8: f64,
+    /// `rs6`（D3(0) 的主参数，例如 M06-2X 的 1.619）。
+    pub rs6: f64,
+    /// `rs8`。
+    pub rs8: f64,
+    /// `alp`（默认 14；`t8` 的指数是 `alp + 2`）。
+    pub alp: f64,
+    /// 该组参数的出处（DOI）。
+    pub doi: String,
+}
+
 /// 两点项的整体设置。
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
@@ -191,8 +215,15 @@ pub struct Dispersion {
     pub reference_cn: BTreeMap<String, Vec<f64>>,
     /// 元素对的参考 C6 表，键是 `高Z-低Z`（如 `H-H`、`O-H`），值 49 个（Ha·Bohr⁶）。
     pub reference_c6: BTreeMap<String, Vec<f64>>,
-    /// 各泛函的阻尼参数。
+    /// 各泛函的 BJ 阻尼参数（`kind: d3bj` 时非空）。
+    #[serde(default)]
     pub damping_parameters: BTreeMap<String, DampingParameters>,
+    /// 各泛函的零阻尼参数（`kind: d3zero` 时非空）。
+    #[serde(default)]
+    pub zero_damping_parameters: BTreeMap<String, ZeroDampingParameters>,
+    /// 成对 vdW 半径，单位 Å（键 `高Z-低Z`，666 个元素对；零阻尼要它，BJ 不要）。
+    #[serde(default)]
+    pub vdw_radii_angstrom: BTreeMap<String, f64>,
     /// 两点项设置。
     pub dispersion: PairwiseSettings,
     /// 溯源。
@@ -237,10 +268,32 @@ impl Dispersion {
             .ok_or_else(|| format!("reference_c6 has no entry for {key}"))
     }
 
-    /// 取一个泛函的阻尼参数。
+    /// 取一个泛函的 BJ 阻尼参数。
     #[must_use]
     pub fn damping(&self, functional: &str) -> Option<&DampingParameters> {
         self.damping_parameters.get(functional)
+    }
+
+    /// 取一个泛函的零阻尼参数。
+    #[must_use]
+    pub fn zero_damping(&self, functional: &str) -> Option<&ZeroDampingParameters> {
+        self.zero_damping_parameters.get(functional)
+    }
+
+    /// 取一个元素对的 vdW 半径（Bohr，已做 Å→Bohr）。
+    ///
+    /// 上游的 `R0_ij` 是**成对**表值，不是两原子半径相加。
+    ///
+    /// # Errors
+    ///
+    /// 元素符号不认识，或该元素对不在表里。
+    pub fn vdw_radius_bohr(&self, symbol_a: &str, symbol_b: &str) -> Result<f64, String> {
+        let key = Self::pair_key(symbol_a, symbol_b)
+            .ok_or_else(|| format!("unknown element symbol in pair ({symbol_a}, {symbol_b})"))?;
+        self.vdw_radii_angstrom
+            .get(&key)
+            .map(|value| value * qwb_engine_api::molecule::BOHR_PER_ANGSTROM)
+            .ok_or_else(|| format!("vdw_radii_angstrom has no entry for {key}"))
     }
 
     /// 某元素的参考点个数。
@@ -268,9 +321,11 @@ impl Dispersion {
     pub fn check_structure(&self) -> Vec<String> {
         let mut issues = Vec::new();
 
-        if self.kind.trim() != "d3bj" {
+        let zero = self.kind.trim() == "d3zero";
+        if !zero && self.kind.trim() != "d3bj" {
             issues.push(format!(
-                "kind must be `d3bj` (this loader only implements D3(BJ)), got {:?}",
+                "kind must be `d3bj` or `d3zero` (this loader implements D3(BJ) and D3(0)), \
+                 got {:?}",
                 self.kind
             ));
         }
@@ -430,9 +485,11 @@ impl Dispersion {
             }
         }
 
-        // ── 阻尼参数 ──
-        if self.damping_parameters.is_empty() {
-            issues.push("damping_parameters must not be empty".into());
+        // ── 阻尼参数（按 kind 选哪一套）──
+        if zero {
+            issues.extend(self.check_zero_parameters());
+        } else if self.damping_parameters.is_empty() {
+            issues.push("damping_parameters must not be empty for kind `d3bj`".into());
         }
         for (functional, params) in &self.damping_parameters {
             if !params.s6.is_finite() || params.s6 < 0.0 {
@@ -464,12 +521,17 @@ impl Dispersion {
         if !self.dispersion.cutoff_bohr.is_finite() || self.dispersion.cutoff_bohr <= 0.0 {
             issues.push("dispersion.cutoff_bohr must be positive and finite".into());
         }
-        if self.dispersion.damping == DampingModel::Zero {
-            issues.push(
-                "dispersion.damping = zero is not implemented (needs vdW radii); only rational \
-                 (BJ) data is accepted"
-                    .into(),
-            );
+        let expected_damping = if zero {
+            DampingModel::Zero
+        } else {
+            DampingModel::Rational
+        };
+        if self.dispersion.damping != expected_damping {
+            issues.push(format!(
+                "dispersion.damping = {:?} does not match kind {:?} (d3bj → rational, \
+                 d3zero → zero)",
+                self.dispersion.damping, self.kind
+            ));
         }
 
         // ── 溯源 ──
@@ -498,6 +560,68 @@ impl Dispersion {
             }
         }
 
+        issues
+    }
+}
+
+impl Dispersion {
+    /// 零阻尼专用的结构检查：参数表非空、vdW 半径表覆盖所有元素对。
+    fn check_zero_parameters(&self) -> Vec<String> {
+        let mut issues = Vec::new();
+        if self.zero_damping_parameters.is_empty() {
+            issues.push("zero_damping_parameters must not be empty for kind `d3zero`".into());
+        }
+        for (functional, params) in &self.zero_damping_parameters {
+            for (field, value) in [
+                ("s6", params.s6),
+                ("s8", params.s8),
+                ("rs6", params.rs6),
+                ("rs8", params.rs8),
+                ("alp", params.alp),
+            ] {
+                if !value.is_finite() || value < 0.0 {
+                    issues.push(format!(
+                        "zero_damping_parameters.{functional}.{field} must be finite and >= 0"
+                    ));
+                }
+            }
+            if params.alp <= 0.0 {
+                issues.push(format!(
+                    "zero_damping_parameters.{functional}.alp must be positive"
+                ));
+            }
+            if params.doi.trim().is_empty() {
+                issues.push(format!(
+                    "zero_damping_parameters.{functional}.doi must not be empty"
+                ));
+            }
+        }
+        // vdW 半径表与 C6 表同一套配对键，必须是「每个元素对都有」。
+        let n = self.elements.len();
+        let expected_pairs = n * (n + 1) / 2;
+        if self.vdw_radii_angstrom.len() != expected_pairs {
+            issues.push(format!(
+                "vdw_radii_angstrom must hold {expected_pairs} element pairs ({} elements), \
+                 got {}",
+                n,
+                self.vdw_radii_angstrom.len()
+            ));
+        }
+        for (index, high) in self.elements.iter().enumerate() {
+            for low in &self.elements[..=index] {
+                let key = format!("{high}-{low}");
+                match self.vdw_radii_angstrom.get(&key) {
+                    None => issues.push(format!("vdw_radii_angstrom is missing the pair `{key}`")),
+                    Some(value) => {
+                        if !value.is_finite() || *value <= 0.0 {
+                            issues.push(format!(
+                                "vdw_radii_angstrom.{key} must be positive and finite (Angstrom)"
+                            ));
+                        }
+                    }
+                }
+            }
+        }
         issues
     }
 }
@@ -600,6 +724,8 @@ mod tests {
             reference_cn,
             reference_c6,
             damping_parameters,
+            zero_damping_parameters: BTreeMap::new(),
+            vdw_radii_angstrom: BTreeMap::new(),
             dispersion: super::PairwiseSettings {
                 damping: super::DampingModel::Rational,
                 cutoff_bohr: 60.0,

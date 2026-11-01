@@ -3,7 +3,7 @@
 # （否则 grid 的 normal 等级会有两个定义、get_grid_by_level 歧义）。
 schema_version: 1.0.0
 name: qwb-data
-version: 0.12.0
+version: 0.13.0
 created: 2026-10-22T22:53:00Z
 features:
   - "jobtype:sp"
@@ -96,6 +96,12 @@ dispersions:
   - name: d3bj
     path: dispersion/d3bj.yaml
     sha256: 85607c132bef00c4a88ee143e8be4c6f6478abe1c892bd3498dc08289b7aebed
+  # 零阻尼（D3(0)）：M06-L / M06-2X 在上游**只有这一套参数**（rs6 = 1.581 / 1.619、
+  # s8 = 0），所以 M2 那条「M06-2X-D3」断言走的是这一份。它多带一张成对 vdW 半径表
+  # （`R0_ij` 是查表值，不是两原子半径相加）。
+  - name: d3zero
+    path: dispersion/d3zero.yaml
+    sha256: 28d0ad0091ecb9bbb35a016b2ba3b7e2b46e1d8b852dc3e53f61bf8f790b987a
 
 # 阶段二 K10：数值路径的精度等级与等价容差（project-phase2.md 4.5 / 8.5）。
 # 文件里只引用 grid 的名字，网格参数仍然只有 grid/*.yaml 一份。

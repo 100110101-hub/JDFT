@@ -41,6 +41,7 @@ pub use common::{Citation, DataCommon, License};
 pub use dispersion::{
     CoordinationModel, CoordinationNumber, DampingModel, DampingParameters, Dispersion,
     PairwiseSettings, Provenance, ReferenceInterpolation, UpstreamSource, WeightModel,
+    ZeroDampingParameters,
 };
 pub use ecp::{Ecp, EcpLocalPart, EcpNonlocalPart, EcpTerm, RPowerConvention};
 pub use functional::{Functional, FunctionalComponent, FunctionalRequires, StabilityRules};

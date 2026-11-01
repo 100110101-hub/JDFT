@@ -73,6 +73,7 @@ step "data: 误差预算逐行可核（VF-05）" python scripts/check_error_budg
 # 前者读 .d3-upstream 缓存（缺失时取回），后者只读仓库里的参考 CSV，都不需要 WSL。
 step "data: 色散数据与上游逐项一致（DA-06）" "$PY" scripts/gen_d3_params.py --check
 step "data: 色散数据复现官方 s-dftd3（DA-06）" "$PY" scripts/validate_d3_data.py
+step "data: 零阻尼数据复现官方 s-dftd3（DA-06）" "$PY" scripts/validate_d3_data.py --zero --tolerance 1e-8
 step "data: status.yaml 账本可解析（§10.6）"
 python scripts/check_status.py
 step "data: status-v2.yaml 账本可解析（阶段二 §10.6）"

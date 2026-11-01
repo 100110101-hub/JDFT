@@ -20,11 +20,12 @@
       "type": "string"
     },
     "damping_parameters": {
-      "description": "各泛函的阻尼参数。",
+      "description": "各泛函的 BJ 阻尼参数（`kind: d3bj` 时非空）。",
       "type": "object",
       "additionalProperties": {
         "$ref": "#/$defs/DampingParameters"
-      }
+      },
+      "default": {}
     },
     "dispersion": {
       "description": "两点项设置。",
@@ -109,9 +110,26 @@
         "null"
       ]
     },
+    "vdw_radii_angstrom": {
+      "description": "成对 vdW 半径，单位 Å（键 `高Z-低Z`，666 个元素对；零阻尼要它，BJ 不要）。",
+      "type": "object",
+      "additionalProperties": {
+        "type": "number",
+        "format": "double"
+      },
+      "default": {}
+    },
     "version": {
       "description": "数据版本（独立 semver）。",
       "type": "string"
+    },
+    "zero_damping_parameters": {
+      "description": "各泛函的零阻尼参数（`kind: d3zero` 时非空）。",
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/ZeroDampingParameters"
+      },
+      "default": {}
     }
   },
   "additionalProperties": false,
@@ -129,7 +147,6 @@
     "r4r2_published",
     "reference_cn",
     "reference_c6",
-    "damping_parameters",
     "dispersion",
     "provenance"
   ],
@@ -384,6 +401,50 @@
           "type": "string",
           "const": "gaussian"
         }
+      ]
+    },
+    "ZeroDampingParameters": {
+      "description": "零阻尼（D3(0)）的参数：`E = −(s6·C6·f6/r⁶ + s8·C8·f8/r⁸)`，\n`f = 1/(1 + 6·t)`、`t6 = (rs6·R0/r)^alp`、`t8 = (rs8·R0/r)^(alp+2)`，\n`R0` 是**成对** vdW 半径（[`Dispersion::vdw_radii_angstrom`]）。\n\n为什么是单独一套字段而不是复用 `DampingParameters`：BJ 用 `a1/a2`，零阻尼用\n`rs6/rs8/alp`，硬塞进一个结构会让「哪个字段对应哪种阻尼」变成约定而不是类型。",
+      "type": "object",
+      "properties": {
+        "alp": {
+          "description": "`alp`（默认 14；`t8` 的指数是 `alp + 2`）。",
+          "type": "number",
+          "format": "double"
+        },
+        "doi": {
+          "description": "该组参数的出处（DOI）。",
+          "type": "string"
+        },
+        "rs6": {
+          "description": "`rs6`（D3(0) 的主参数，例如 M06-2X 的 1.619）。",
+          "type": "number",
+          "format": "double"
+        },
+        "rs8": {
+          "description": "`rs8`。",
+          "type": "number",
+          "format": "double"
+        },
+        "s6": {
+          "description": "`s6`（D3(0) 下通常为 1）。",
+          "type": "number",
+          "format": "double"
+        },
+        "s8": {
+          "description": "`s8`（M06-L / M06-2X 是 0）。",
+          "type": "number",
+          "format": "double"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "s6",
+        "s8",
+        "rs6",
+        "rs8",
+        "alp",
+        "doi"
       ]
     }
   }

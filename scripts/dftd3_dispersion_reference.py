@@ -39,6 +39,11 @@ GEOMETRY = os.path.join(
 REFERENCE = os.path.join(
     ROOT, "qwb-core", "crates", "qwb-scf", "tests", "reference", "d3_dispersion.csv"
 )
+#: 零阻尼（D3(0)）的参考值：**M06-L 与 M06-2X 只有这一套参数**，所以这份 CSV 是
+#: M2 那条「M06-2X-D3」断言唯一能对上的官方尺子。
+REFERENCE_ZERO = os.path.join(
+    ROOT, "qwb-core", "crates", "qwb-scf", "tests", "reference", "d3zero_dispersion.csv"
+)
 
 SOURCE_DOI = "10.1063/1.3382344"
 SOURCE_URL = "https://github.com/dftd3/simple-dftd3"
@@ -71,6 +76,9 @@ BOHR_PER_ANGSTROM = 1.889726089838572
 
 #: 方法（QWB 侧同名的泛函；只有官方 BJ 参数表里有的这四个）。
 METHODS = ("b3lyp", "pbe", "pbe0", "hf")
+
+#: 零阻尼覆盖的方法：BJ 的四个 + **M06-L / M06-2X**（它们上游只有零阻尼参数）。
+METHODS_ZERO = ("b3lyp", "pbe0", "m06-l", "m06-2x")
 
 _Z = {
     "H": 1,
@@ -264,6 +272,54 @@ def dispersion_rows(geometry):
     return rows
 
 
+def zero_dispersion_rows(geometry):
+    """调官方 `dftd3` 算 **零阻尼**（D3(0)）的能量与解析梯度。"""
+    import numpy as np  # noqa: PLC0415
+    import dftd3  # noqa: PLC0415
+    from dftd3.interface import DispersionModel, ZeroDampingParam  # noqa: PLC0415
+
+    version = dftd3.__version__
+    rows = []
+    by_dimer = {}
+    for row in geometry:
+        by_dimer.setdefault(row["dimer"], []).append(row)
+    for name, _ in DIMERS:
+        atoms = by_dimer[name]
+        numbers = np.array([_Z[atom["element"]] for atom in atoms], dtype=int)
+        positions = np.array(
+            [
+                [
+                    float(atom["x_angstrom"]) * BOHR_PER_ANGSTROM,
+                    float(atom["y_angstrom"]) * BOHR_PER_ANGSTROM,
+                    float(atom["z_angstrom"]) * BOHR_PER_ANGSTROM,
+                ]
+                for atom in atoms
+            ],
+            dtype=float,
+        )
+        model = DispersionModel(numbers, positions)
+        for method in METHODS_ZERO:
+            result = model.get_dispersion(ZeroDampingParam(method=method), grad=True)
+            energy = float(result.get("energy"))
+            gradient = result.get("gradient")
+            for index, atom in enumerate(atoms):
+                gx, gy, gz = (float(gradient[index][axis]) for axis in range(3))
+                rows.append(
+                    {
+                        "dimer": name,
+                        "method": method,
+                        "atom": atom["atom"],
+                        "element": atom["element"],
+                        "energy_hartree": f"{energy:.12e}",
+                        "gradient_x": f"{gx:.12e}",
+                        "gradient_y": f"{gy:.12e}",
+                        "gradient_z": f"{gz:.12e}",
+                        "generator_version": version,
+                    }
+                )
+    return rows
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--check", action="store_true")
@@ -273,11 +329,16 @@ def main() -> int:
     if args.check:
         status = check_csv(GEOMETRY, GEOMETRY_FIELDS, geometry)
         reference = stamp(dispersion_rows(geometry), SOURCE_DOI, SOURCE_URL)
-        return status | check_csv(REFERENCE, REFERENCE_FIELDS, reference)
+        status |= check_csv(REFERENCE, REFERENCE_FIELDS, reference)
+        zero = stamp(zero_dispersion_rows(geometry), SOURCE_DOI, SOURCE_URL)
+        return status | check_csv(REFERENCE_ZERO, REFERENCE_FIELDS, zero)
 
     write_csv(GEOMETRY, GEOMETRY_FIELDS, geometry)
     reference = stamp(dispersion_rows(geometry), SOURCE_DOI, SOURCE_URL)
     write_csv(REFERENCE, REFERENCE_FIELDS, reference)
+    zero = stamp(zero_dispersion_rows(geometry), SOURCE_DOI, SOURCE_URL)
+    write_csv(REFERENCE_ZERO, REFERENCE_FIELDS, zero)
+    print(f"wrote {REFERENCE_ZERO}（{len(zero)} 行 = 原子数 × {len(METHODS_ZERO)} 个方法）")
     print(f"wrote {GEOMETRY}（{len(geometry)} 行，{len(DIMERS)} 个二聚体）")
     print(f"wrote {REFERENCE}（{len(reference)} 行 = 原子数 × {len(METHODS)} 个方法）")
     for name, _ in DIMERS[:3]:

@@ -3,6 +3,30 @@
 数据仓独立 semver（§8.6）。**任何数据改动都必须 bump version 并在此登记**，
 否则 CI 拒绝（§8.6「变更必须 bump version」）。
 
+## 0.13.0 — 2026-11-09
+
+### 新增：`dispersion/d3zero.yaml`（DA-06 的零阻尼那一半）
+
+M06-L 与 M06-2X 在上游**没有 BJ 参数**，只有零阻尼（D3(0)）：`rs6 = 1.581 / 1.619`、
+`s8 = 0`。这份数据把零阻尼补齐，元素范围与参考表与 `d3bj.yaml` 完全一致（同一个生成器
+从同一个解析结果写出来，参考 C6/CN/r4r2 逐位相同）：
+
+- **零阻尼参数**：6 个泛函的 `s6/s8/rs6/rs8/alp`（b3lyp / pbe / pbe0 / hf / m06-l / m06-2x）；
+- **成对 vdW 半径表**（666 个元素对，Å）：上游的 `R0_ij` 是**查表值**，不是两原子半径相加
+  —— `get_vdw_rad_pair_num` 直接读 `vdwrad(i + j(j-1)/2)`，只有 `get_vdw_rad_num(i)` 才是
+  `0.5*vdwrad(i,i)`；
+- **阻尼函数**（`damping/zero.f90`）：`t6 = (rs6·R0/r)^alp`、`t8 = (rs8·R0/r)^(alp+2)`、
+  `f = 1/(1+6·t)`、`E = −(s6·C6·f6/r⁶ + s8·C8·f8/r⁸)`。
+
+`registry.yaml` 0.12.0 → 0.13.0（新增 `d3zero` 条目）；`dispersion.schema.*` 增加
+`zero_damping_parameters` 与 `vdw_radii_angstrom`（K1 加性扩展）；`DATA_LICENSES.md`
+重新生成（31 → 32 个文件）。
+
+**验证**：`cargo test -p qwb-scf --test fx04_dispersion_zero` 3 例绿 —— 40 个 (二聚体, 泛函)
+组合与官方 `ZeroDampingParam` 的最大偏差 **1.302e-6 kcal/mol**、梯度 **2.755e-10 Ha/Bohr**；
+解析梯度 vs 中心差分 **1.29e-13 Ha/Bohr**；引擎侧 `m06-2x + data: d3zero` 能算（用 `d3bj`
+仍显式报错）。门禁新增 `DA-06: zero-damping data reproduces s-dftd3` 一步。
+
 ## 0.12.0 — 2026-11-09
 
 ### 新增：`dispersion/d3bj.yaml`（DA-06）

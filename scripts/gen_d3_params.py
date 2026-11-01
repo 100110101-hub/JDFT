@@ -45,6 +45,8 @@ UPSTREAM = {
     "model": "https://raw.githubusercontent.com/dftd3/simple-dftd3/main/src/dftd3/model.f90",
     "rational": "https://raw.githubusercontent.com/dftd3/simple-dftd3/main/src/dftd3/damping/rational.f90",
     "covrad": "https://raw.githubusercontent.com/awvwgk/mctc-lib/main/src/mctc/data/covrad.f90",
+    "vdwrad": "https://raw.githubusercontent.com/dftd3/simple-dftd3/main/src/dftd3/data/vdwrad.f90",
+    "zero": "https://raw.githubusercontent.com/dftd3/simple-dftd3/main/src/dftd3/damping/zero.f90",
 }
 
 #: D3 原始论文（C6 参考表与 BJ 阻尼的出处）。2026-11-09 用 api.crossref.org 核对过。
@@ -63,6 +65,17 @@ COVRAD_TITLE = "Molecular Single-Bond Covalent Radii for Elements 1-118"
 
 #: CN 计数函数的常量（`ncoord.f90` 的 `default_kcn`）。
 CN_KCN = 16.0
+#: 零阻尼（D3(0)）覆盖的泛函：**比 BJ 多两个** —— M06-L 与 M06-2X 在上游只有零阻尼
+#: 参数（rs6 = 1.581 / 1.619、s8 = 0），这也是 M2 那条「M06-2X-D3」断言唯一可用的路径。
+METHODS_ZERO = {
+    "b3lyp": "b3lyp",
+    "pbe": "pbe",
+    "pbe0": "pbe0",
+    "hf": "hf",
+    "m06-l": "m06l",
+    "m06-2x": "m062x",
+}
+
 #: 参考体系权重的宽度因子（`model.f90` 的 `wf_default`）。
 REFERENCE_WF = 4.0
 #: 两点项的实空间截断（`cutoff.f90` 的 `disp2_default`，Bohr）。
@@ -74,6 +87,10 @@ MAX_REF = 7
 
 CACHE = ".d3-upstream"
 OUTPUT = os.path.join("qwb-data", "dispersion", "d3bj.yaml")
+#: 零阻尼（D3(0)）那一份：它需要**成对 vdW 半径表**与 rs6/rs8/alp，所以是独立文件
+#: （K1 的一份数据 = 一个自包含文件）。参考 C6/CN/r4r2 与 BJ 那份逐字节相同 ——
+#: 同一个生成器从同一个解析结果写出来，不可能漂移。
+OUTPUT_ZERO = os.path.join("qwb-data", "dispersion", "d3zero.yaml")
 
 # H–Kr：DA-06 覆盖的元素范围（与 registry 的 `elements` 一致）。
 ELEMENTS = [
@@ -198,6 +215,54 @@ def parse_covrad(text: str):
     if len(values) != 118:
         raise SystemExit(f"covalent_rad_2009: expected 118 values, got {len(values)}")
     return values
+
+
+def parse_vdwrad(text: str):
+    """成对 vdW 半径表（`vdwrad`，Å；上游乘 `aatoau` 转 Bohr）。
+
+    这是一张 **元素对** 表（`i + j(j-1)/2` 列主序下三角，与 C6 表同一套配对索引），
+    不是「两原子半径相加」—— `get_vdw_rad_pair_num` 直接查表（`get_vdw_rad_num(i)`
+    才是 `0.5*vdwrad(i,i)`）。零阻尼的 `R0_ij` 用的就是这张表的成对值。
+    """
+    clean = strip_fortran_comments(text)
+    start = clean.index("vdwrad(max_elem*(1+max_elem)/2) = aatoau * [")
+    end = clean.index("]", start)
+    values = floats(clean[start:end])
+    pairs = (103 * 104) // 2
+    if len(values) != pairs:
+        raise SystemExit(f"vdwrad: expected {pairs} pair values, got {len(values)}")
+    return values
+
+
+def parse_zero_damping(text: str, method_ids):
+    """`get_zero_damping` 的 `p_*` → (s6, s8, rs6, rs8, alp)。
+
+    `d3_param` 的缺省值是 s6 = 1、s8 = 1、rs6 = 1、rs8 = 1、alp = 14（`param.f90` 顶部的
+    类型定义），上游对每个方法只写非缺省的那几项（M06-L 只写 rs6=1.581、s8=0）。
+    """
+    clean = strip_fortran_comments(text).replace("_wp", "").replace("_dp", "")
+    start = clean.index("subroutine get_zero_damping")
+    table = clean[start : clean.index("end subroutine get_zero_damping", start)]
+    result = {}
+    for labels, body in select_cases(table)[0]:
+        match = re.search(r"d3_param\(([^)]*)\)", body)
+        if not match:
+            continue
+        arguments = {
+            key: float(value)
+            for key, value in re.findall(r"(\w+)\s*=\s*([-+0-9.eEdD]+)", match.group(1))
+        }
+        params = {
+            "s6": arguments.get("s6", 1.0),
+            "s8": arguments.get("s8", 1.0),
+            "rs6": arguments.get("rs6", 1.0),
+            "rs8": arguments.get("rs8", 1.0),
+            "alp": arguments.get("alp", 14.0),
+        }
+        for label in labels:
+            if label in method_ids.values() and label not in result:
+                result[label] = params
+    return result
 
 
 def parse_method_ids(text: str):
@@ -344,7 +409,50 @@ def build():
             raise SystemExit(f"{functional}: no BJ damping in param.f90 (token {token})")
         data["damping_parameters"][functional] = dict(damping_all[token])
 
-    return data, digests
+    # ── 零阻尼（D3(0)）那一份 ──
+    vdwrad_all = parse_vdwrad(text["vdwrad"])
+    zero_all = parse_zero_damping(text["param"], method_ids)
+    data_zero = {
+        key: value
+        for key, value in data.items()
+        if key in (
+            "elements",
+            "coordination_number",
+            "reference",
+            "r4r2",
+            "r4r2_published",
+            "reference_cn",
+            "reference_c6",
+        )
+    }
+    data_zero["name"] = "d3zero"
+    data_zero["version"] = "1.0.0"
+    data_zero["kind"] = "d3zero"
+    data_zero["zero_damping_parameters"] = {}
+    data_zero["vdw_radii_angstrom"] = {}
+    data_zero["dispersion"] = {"cutoff_bohr": DISP2_CUTOFF_BOHR, "damping": "zero"}
+    data_zero["provenance"] = {
+        "generator": data["provenance"]["generator"],
+        "upstream": data["provenance"]["upstream"]
+        + [
+            {"file": UPSTREAM["vdwrad"].split("/", 3)[-1], "url": UPSTREAM["vdwrad"],
+             "sha256": digests["vdwrad"]},
+            {"file": UPSTREAM["zero"].split("/", 3)[-1], "url": UPSTREAM["zero"],
+             "sha256": digests["zero"]},
+        ],
+    }
+    for functional, method in METHODS_ZERO.items():
+        token = method_ids.get(method)
+        if token is None or token not in zero_all:
+            raise SystemExit(f"{functional}: no zero damping in param.f90 (token {token})")
+        data_zero["zero_damping_parameters"][functional] = dict(zero_all[token])
+    for z_hi in range(1, n_elements + 1):
+        for z_lo in range(1, z_hi + 1):
+            ic = c6_pair_index(z_hi, z_lo)
+            key = f"{ELEMENTS[z_hi - 1]}-{ELEMENTS[z_lo - 1]}"
+            data_zero["vdw_radii_angstrom"][key] = vdwrad_all[ic - 1]
+
+    return data, data_zero, digests
 
 
 def format_float(value: float) -> str:
@@ -419,12 +527,24 @@ def emit(data) -> str:
     for key, values in data["reference_c6"].items():
         lines.append(f"  {key}: [" + ", ".join(format_float(value) for value in values) + "]")
 
-    lines.append("damping_parameters:")
-    for functional, params in data["damping_parameters"].items():
-        lines.append(f"  {functional}:")
-        for field in ("s6", "s8", "a1", "a2"):
-            lines.append(f"    {field}: {format_float(params[field])}")
-        lines.append(f"    doi: {D3_DOI}")
+    if data["kind"] == "d3bj":
+        lines.append("damping_parameters:")
+        for functional, params in data["damping_parameters"].items():
+            lines.append(f"  {functional}:")
+            for field in ("s6", "s8", "a1", "a2"):
+                lines.append(f"    {field}: {format_float(params[field])}")
+            lines.append(f"    doi: {D3_DOI}")
+    else:
+        # 成对 vdW 半径：零阻尼的 R0_ij 直接查这张表（**不是**两原子半径相加）。
+        lines.append("vdw_radii_angstrom:")
+        for key, value in data["vdw_radii_angstrom"].items():
+            lines.append(f"  {key}: {format_float(value)}")
+        lines.append("zero_damping_parameters:")
+        for functional, params in data["zero_damping_parameters"].items():
+            lines.append(f"  {functional}:")
+            for field in ("s6", "s8", "rs6", "rs8", "alp"):
+                lines.append(f"    {field}: {format_float(params[field])}")
+            lines.append(f"    doi: {D3_DOI}")
 
     lines.append("dispersion:")
     lines.append(f"  damping: {data['dispersion']['damping']}")
@@ -461,7 +581,7 @@ def compare(expected: str, path: str) -> int:
             for key in b:
                 # 顶层 `sha256` 是 `qwb-stamp-data` 打的内容摘要，生成器不管它
                 # （它由 Rust 侧的规范化规则算，见 qwb-registry 的 sha256 模块）。
-                if key not in a and not (where == "d3bj" and key == "sha256"):
+                if key not in a and not (where in ("d3bj", "d3zero") and key == "sha256"):
                     problems.append(f"{where}.{key}: not produced by the generator")
         elif isinstance(a, list):
             if not isinstance(b, list):
@@ -508,8 +628,9 @@ def main() -> int:
     parser.add_argument("--check", action="store_true")
     args = parser.parse_args()
 
-    data, digests = build()
+    data, data_zero, digests = build()
     body = emit(data)
+    body_zero = emit(data_zero)
 
     print("上游 sha256：")
     for name, digest in digests.items():
@@ -532,18 +653,32 @@ def main() -> int:
     print(f"  C6(H,H) 第 1 个参考点 = {data['reference_c6']['H-H'][0]}")
     print(f"  C6(C,C) 第 1 个参考点 = {data['reference_c6']['C-C'][0]}")
 
-    if args.check:
-        if not os.path.exists(OUTPUT):
-            print(f"FAIL: {OUTPUT} does not exist (run without --check first)")
-            return 1
-        return compare(body, OUTPUT)
+    print(f"  零阻尼 vdW 半径（成对）：{len(data_zero['vdw_radii_angstrom'])} 个元素对，"
+          f"H-H = {data_zero['vdw_radii_angstrom']['H-H']} A")
+    for functional, params in data_zero["zero_damping_parameters"].items():
+        print(
+            f"  零阻尼 {functional}: s6={params['s6']} s8={params['s8']} "
+            f"rs6={params['rs6']} rs8={params['rs8']} alp={params['alp']}"
+        )
 
-    os.makedirs(os.path.dirname(OUTPUT), exist_ok=True)
-    if os.path.exists(OUTPUT):
-        os.remove(OUTPUT)  # 旧文件可能带 sha256：整份重写，避免残留字段
-    with open(OUTPUT, "w", encoding="utf-8", newline="\n") as handle:
-        handle.write(body)
-    print(f"wrote {OUTPUT}（{len(body)} bytes）；下一步：qwb-stamp-data {OUTPUT}")
+    if args.check:
+        status = 0
+        for body_text, path in ((body, OUTPUT), (body_zero, OUTPUT_ZERO)):
+            if not os.path.exists(path):
+                print(f"FAIL: {path} does not exist (run without --check first)")
+                status = 1
+                continue
+            print(f"--- {path} ---")
+            status |= compare(body_text, path)
+        return status
+
+    for body_text, path in ((body, OUTPUT), (body_zero, OUTPUT_ZERO)):
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        if os.path.exists(path):
+            os.remove(path)  # 旧文件可能带 sha256：整份重写，避免残留字段
+        with open(path, "w", encoding="utf-8", newline="\n") as handle:
+            handle.write(body_text)
+        print(f"wrote {path}（{len(body_text)} bytes）；下一步：qwb-stamp-data {path}")
     return 0
 
 
