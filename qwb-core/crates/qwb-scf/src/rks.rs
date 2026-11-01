@@ -669,16 +669,18 @@ pub fn evaluate_xc_cached(
     let mut sigma_values = Vec::with_capacity(grid.len());
     let mut laplacian_values = Vec::with_capacity(grid.len());
     let mut tau_values = Vec::with_capacity(grid.len());
-    let mut ao_values: Vec<Vec<f64>> = Vec::with_capacity(grid.len());
-    let mut ao_gradients: Vec<Vec<[f64; 3]>> = Vec::with_capacity(grid.len());
-    let mut ao_laplacians: Vec<Vec<f64>> = Vec::with_capacity(grid.len());
     let mut grad_rho: Vec<[f64; 3]> = Vec::with_capacity(grid.len());
 
     for (index, GridPoint { .. }) in grid.points.iter().enumerate() {
         // AO 三元组来自预取缓存（见 GridAoCached）：与密度无关，SCF 各步复用。
-        let values = cache.values[index].clone();
-        let gradients = cache.gradients[index].clone();
-        let ao_laplacian_here = cache.laplacians[index].clone();
+        //
+        // **借用而不是 clone**：这里曾经每个网格点 clone 三个 `Vec`（φ、∇φ、∇²φ），随后又把
+        // 它们 push 进 `ao_values` 一类的 Vec-of-Vec 里 —— 相当于每个点拷两遍、每步付 2·n_points·5n
+        // 个双精度的分配与拷贝（苯/def2-SVP、grid-normal 约 70 MB/步）。去掉之后算术一行没动，
+        // 所以 `xc_grid_bit_pattern` 那条位级锚点仍然逐位相同。
+        let values = &cache.values[index];
+        let gradients = &cache.gradients[index];
+        let ao_laplacian_here = &cache.laplacians[index];
         // ∇²ρ = Σ_μν P_μν (∇²φ_μ φ_ν + 2 ∇φ_μ·∇φ_ν + φ_μ ∇²φ_ν)
         let laplacian_here = if needs_laplacian {
             let mut total = 0.0;
@@ -793,9 +795,6 @@ pub fn evaluate_xc_cached(
         };
         tau_values.push(tau_here);
         grad_rho.push(gradient_here);
-        ao_values.push(values);
-        ao_gradients.push(gradients);
-        ao_laplacians.push(ao_laplacian_here);
     }
 
     let batch = match (needs_laplacian, needs_sigma, needs_tau) {
@@ -885,9 +884,9 @@ pub fn evaluate_xc_cached(
                 d_epsilon[index], d_sigma[index], d_laplacian[index]
             )));
         }
-        let values = &ao_values[index];
-        let gradients = &ao_gradients[index];
-        let laplacians = &ao_laplacians[index];
+        let values = &cache.values[index];
+        let gradients = &cache.gradients[index];
+        let laplacians = &cache.laplacians[index];
         let gradient_rho = grad_rho[index];
         for i in 0..n {
             if values[i] == 0.0 {
