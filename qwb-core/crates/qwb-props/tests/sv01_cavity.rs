@@ -179,27 +179,83 @@ fn analytic_caps_are_exactly_rotation_invariant() {
 }
 
 #[test]
-fn analytic_caps_agree_with_dense_sampling() {
+fn analytic_caps_are_exact_for_two_spheres() {
     use qwb_props::cavity::analytic_area_volume;
-    let molecule = water();
+    // 只有两个球时球帽公式**精确**：`h = R − d/2`、`A = 2(4πR² − 2πR h)`。
+    // 锚点必须能抓住"把切片位置 z 当帽高"这类错（那样 H₂ 会偏大 15 %）。
+    let molecule = Molecule::new(
+        vec![
+            Atom::new("H", [0.0, 0.0, 0.0]),
+            Atom::new("H", [0.0, 0.0, 1.2]),
+        ],
+        0,
+        1,
+    );
     let radii = bondi_radii();
-    let (analytic_area, analytic_volume) =
-        analytic_area_volume(&molecule, &radii, 1.0).expect("analytic");
+    let (area, volume) = analytic_area_volume(&molecule, &radii, 1.0).expect("analytic");
+    let r = 1.20_f64;
+    let hand_area =
+        2.0 * (4.0 * std::f64::consts::PI * r * r - 2.0 * std::f64::consts::PI * r * 0.6);
+    // 体积：整球 − 帽，帽 V = πh²(3R − h)/3，h = 0.6
+    let cap = std::f64::consts::PI * 0.36 * (3.0 * r - 0.6) / 3.0;
+    let hand_volume = 2.0 * (4.0 * std::f64::consts::PI * r * r * r / 3.0 - cap);
+    println!(
+        "H2 analytic: area {area:.10} (hand {hand_area:.10}), volume {volume:.10} (hand {hand_volume:.10})"
+    );
+    assert!((area - hand_area).abs() / hand_area < 1e-12);
+    assert!((volume - hand_volume).abs() / hand_volume < 1e-12);
+}
+
+#[test]
+fn analytic_caps_agree_with_dense_sampling_for_two_spheres() {
+    use qwb_props::cavity::analytic_area_volume;
+    // 转动过的双原子（不让球心连线与 Fibonacci 的 z 分档对齐）才是真正的采样检验。
+    let molecule = Molecule::new(
+        vec![
+            Atom::new("H", [0.0, 0.0, 0.0]),
+            Atom::new("H", [0.97, 0.71, 0.0]),
+        ],
+        0,
+        1,
+    );
+    let radii = bondi_radii();
+    let (analytic_area, _) = analytic_area_volume(&molecule, &radii, 1.0).expect("analytic");
     let sampled = cavity(&molecule, &radii, 1.0, 200_000).expect("cavity");
     let area_relative = (sampled.surface_area_angstrom2 - analytic_area).abs() / analytic_area;
-    let volume_relative = (sampled.volume_angstrom3 - analytic_volume).abs() / analytic_volume;
     println!(
-        "analytic {analytic_area:.6} / {analytic_volume:.6} vs sampled {:.6} / {:.6}: rel {area_relative:.3e} / {volume_relative:.3e}",
-        sampled.surface_area_angstrom2, sampled.volume_angstrom3
-    );
-    // 逐对球帽会重复扣除三重交叠（水里有），所以两者只能对到 1e-3 量级。
-    assert!(
-        area_relative < 5e-2,
-        "analytic and densely sampled areas disagree by {area_relative:.3e}"
+        "two spheres: analytic {analytic_area:.6} vs sampled {:.6}: rel {area_relative:.3e}",
+        sampled.surface_area_angstrom2
     );
     assert!(
-        volume_relative < 5e-2,
-        "analytic and densely sampled volumes disagree by {volume_relative:.3e}"
+        area_relative < 5e-3,
+        "analytic and densely sampled two-sphere areas disagree by {area_relative:.3e}"
+    );
+}
+
+#[test]
+fn pairwise_caps_over_subtract_when_three_spheres_overlap() {
+    use qwb_props::cavity::analytic_area_volume;
+    // 水的三个球有两块共享的三重交叠，逐对相减会把它们扣两次 —— 这是近似口径，
+    // 不是舍入误差。这里把它**量出来**，同时钉住方向（总是偏小）。
+    let molecule = water();
+    let radii = bondi_radii();
+    let (analytic_area, _) = analytic_area_volume(&molecule, &radii, 1.0).expect("analytic");
+    let sampled = cavity(&molecule, &radii, 1.0, 200_000).expect("cavity");
+    let shortfall =
+        (sampled.surface_area_angstrom2 - analytic_area) / sampled.surface_area_angstrom2;
+    println!(
+        "water: pairwise analytic {analytic_area:.6} vs sampled {:.6}: pairwise is {:.2} % low",
+        sampled.surface_area_angstrom2,
+        100.0 * shortfall
+    );
+    assert!(
+        shortfall > 0.0,
+        "pairwise subtraction must never exceed the true union area"
+    );
+    assert!(
+        shortfall < 0.25,
+        "the over-subtraction must stay a documented-order approximation, got {:.3}",
+        shortfall
     );
 }
 
