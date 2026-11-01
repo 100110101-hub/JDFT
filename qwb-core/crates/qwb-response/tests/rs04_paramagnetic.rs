@@ -15,7 +15,6 @@ use std::path::PathBuf;
 use qwb_engine_api::{Atom, Molecule};
 use qwb_integrals::dipole::dipole_integrals;
 use qwb_registry::Registry;
-use qwb_response::cphf::CphfOptions;
 use qwb_response::mo_integrals::build_cphf_integrals;
 use qwb_response::paramagnetic_shielding_ppm;
 use qwb_scf::rks::{RksOptions, rks_scf};
@@ -105,7 +104,6 @@ fn shielding(molecule: &Molecule, basis_name: &str) -> Vec<f64> {
         &energies,
         n_occ,
         &integrals,
-        CphfOptions::default(),
     )
     .expect("paramagnetic")
     .iter()
@@ -155,23 +153,17 @@ fn the_angular_momentum_operator_annihilates_a_spherical_orbital() {
     );
 }
 
-/// **目前对不上，所以标 `#[ignore]`**（判据没有放宽，测试也没有删）：
+/// 与**独立实现**（PySCF 2.14 复 GHF 有限场，`tests/reference/paramagnetic.csv`）比对。
 ///
-/// | 核 | 本实现（CPHF 耦合） | 有限场参考 | 相对差 |
-/// | --- | --- | --- | --- |
-/// | O（水/STO-3G） | **+104.872401** ppm | −236.764662 ppm | 1.44 |
-/// | H（水/STO-3G） | **+1.332326** ppm | −3.891219 ppm | 1.34 |
+/// 两边的路线完全不同：那边是 `E(λ,μ)` 的数值混合二阶导（`λ = μ = 0.0025`，步长已收敛到
+/// 3e-4 以内，见 `docs/choices.md` 一百三十九的步长扫描），这边是 `(A−B)⁻¹` 的耦合 CPHF。
 ///
-/// 两个核需要的**修正因子不同**（O 要 ×(−2.26)、H 要 ×(−2.92)），所以这不是"差一个符号/常数"，
-/// 而是少了一块**与核有关的项**。候选解释记在 `docs/status-v2.yaml` 的 RS-04 条目里
-/// （最可能的是共原规范下顺磁张量的"非对称部分"/`⟨L⟩⟨V⟩` 型一阶项，或者 `(A+B)` 的
-/// 闭壳层因子在交叉项里要取一半）。转动不变性已经通过（6.1e-9），说明收缩与积分链路是自洽的。
-#[ignore = "与有限场参考差 1.3–1.4（相对），缺一块核相关项；见文档表格与 RS-04 账本"]
+/// 实测：水/STO-3G 的 O **−239.3397** ppm vs 参考 −239.2978（相对 1.8e-4）、H **−3.89186**
+/// vs −3.89185（4e-6）。残余的 1.8e-4 是参考自身在 λ = 0.0025 的截断（λ = 0.00125 时它还
+/// 会再降 1.3e-4 量级）。
 #[test]
 fn water_paramagnetic_shielding_matches_the_finite_field_reference() {
-    // 参考（tests/reference/paramagnetic.csv，PySCF 2.14 复 GHF 有限场，水/STO-3G）：
-    // O -236.764662 ppm、H -3.891219 ppm。
-    let expected = [(-236.764_662_f64), (-3.891_219), (-3.891_219)];
+    let expected = [-239.297_795_f64, -3.891_853, -3.891_853];
     let values = shielding(&water(), "sto-3g");
     let mut worst = 0.0_f64;
     for (index, (ours, reference)) in values.iter().zip(expected.iter()).enumerate() {
@@ -181,9 +173,9 @@ fn water_paramagnetic_shielding_matches_the_finite_field_reference() {
             "  nucleus {index}: ours {ours:+.6} ppm vs finite field {reference:+.6} (rel {relative:.2e})"
         );
     }
-    // 判据取 2%：有限场一侧的步长（λ = μ = 0.02）带来的离散误差在 1% 量级。
+    // 判据 1e-3：参考一侧的 λ 截断贡献 1.3e-4，实现一侧应当小得多。
     assert!(
-        worst < 2.0e-2,
+        worst < 1.0e-3,
         "paramagnetic shielding differs from the finite-field reference by {worst:.3e}"
     );
 }
@@ -202,5 +194,46 @@ fn the_paramagnetic_shielding_is_rotation_invariant() {
     assert!(
         worst < 1.0e-8,
         "isotropic sigma_p must be rotation invariant, got {worst:.3e}"
+    );
+}
+
+/// 总屏蔽 = 抗磁 + 顺磁：两条量现在都在手上，合起来应当与参考 CSV 的 `sigma_total_ppm` 一致。
+///
+/// 这条同时验证两件事：① 两个量用的是同一套单位/常数（c、ppm 换算）；② 它们的符号约定一致
+/// （顺磁是负的、抗磁是正的，合起来 171.8 ppm —— 这是水里的氧，实际 NMR 化学位移参考值
+/// 就在这个量级附近）。
+#[test]
+fn the_total_shielding_is_diamagnetic_plus_paramagnetic() {
+    let registry = Registry::open(data_root()).expect("qwb-data");
+    let molecule = water();
+    let basis =
+        qwb_basis::InternalBasis::build(registry.get_basis("sto-3g").expect("sto-3g"), &molecule)
+            .expect("basis");
+    let tensor = qwb_integrals::two_electron::two_electron(&basis, &molecule).expect("2e");
+    let grid = qwb_grid::molecular_grid(registry.get_grid("grid-coarse").expect("grid"), &molecule)
+        .expect("grid");
+    let mut options = RksOptions::default();
+    options.max_iter = 400;
+    options.energy_threshold = 1.0e-11;
+    options.density_threshold = 1.0e-9;
+    let scf = rks_scf(&basis, &molecule, &tensor, &grid, &[], options).expect("HF");
+    let diamagnetic =
+        qwb_props::diamagnetic_shielding_ppm(&basis, &molecule, &scf.density).expect("dia");
+    let paramagnetic = shielding(&molecule, "sto-3g");
+    // 参考（paramagnetic.csv 的 sigma_total_ppm，λ = 0.0025）：O 171.821354、H 99.568667。
+    let expected = [171.821_354_f64, 99.568_667, 99.568_667];
+    let mut worst = 0.0_f64;
+    for index in 0..3 {
+        let total = diamagnetic[index] + paramagnetic[index];
+        let relative = (total - expected[index]).abs() / expected[index].abs();
+        worst = worst.max(relative);
+        println!(
+            "  nucleus {index}: dia {:+.6} + p {:+.6} = {total:+.6} ppm vs reference {:+.6} (rel {relative:.2e})",
+            diamagnetic[index], paramagnetic[index], expected[index]
+        );
+    }
+    assert!(
+        worst < 1.0e-3,
+        "the total shielding differs from the reference by {worst:.3e}"
     );
 }

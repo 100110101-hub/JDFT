@@ -12,8 +12,12 @@
 //!   cint 的 `int1e_prinvxp` 逐元素对照过）；
 //! * `L_α(O_A)` 是**以核 A 为原点**的角动量算符（[`angular_momentum_integrals`]，`L = −iN`）；
 //!   `^ov` 表示取占据-虚（`i`↔`a`）块；
-//! * `(A+B)⁻¹ V` 就是线性响应方程的解 —— 顺磁项必须**含轨道弛豫**，把 `⟨a|V|i⟩/(ε_i−ε_a)`
+//! * `(A−B)⁻¹ V` 就是线性响应方程的解 —— 顺磁项必须**含轨道弛豫**，把 `⟨a|V|i⟩/(ε_i−ε_a)`
 //!   的未耦合求和当结果会差 10% 以上（`docs/choices.md` 七十八的反面）。
+//! * **耦合矩阵是 `A−B` 而不是 `A+B`**：实微扰（电场）的轨道旋转是实变、密度变化对称，耦合是
+//!   `(A+B)`；核磁微扰的轨道旋转是**纯虚**的（current 型），密度变化反对称，耦合变成 `(A−B)`。
+//!   这一条是 RS-04 卡了四轮的根因：用 `(A+B)` 时两个核的表观偏差因子不同（2.28 vs 2.92），
+//!   换成 `(A−B)` 之后**两核同为 2.0**，说明形状对了、只剩常数。
 //!
 //! 系数 `1/(3c²)` 与 `1/3` 的迹平均、以及 `(A+B)` 里闭壳层的自旋因子都沿用与
 //! [`crate::polarizability`] 同一套约定（那里 `α = 4 dᵀ (A+B)⁻¹ d` 已被有限场验证到 1e-7）。
@@ -22,7 +26,7 @@
 //! 于是 `σ_p = −(1/(3c²)) Σ_α E^{(2)}`（其中 `W_α = ½L_α`，与有限场脚本的约定一致）：
 //!
 //! ```text
-//! σ_p(A) = (1/(3c²)) Σ_α L_α^ovᵀ (A+B)⁻¹ V_α^ov × 1e6   [ppm]
+//! σ_p(A) = (2/(3c²)) Σ_α L_α^ovᵀ (A−B)⁻¹ V_α^ov × 1e6   [ppm]
 //! ```
 //!
 //! # 必须核对的符号
@@ -34,7 +38,6 @@ use qwb_engine_api::{EngineError, Molecule};
 use qwb_integrals::angmom::{angular_momentum_integrals, hyperfine_integrals};
 use qwb_linalg::Matrix;
 
-use crate::cphf::{CphfOptions, solve_cphf};
 use crate::mo_integrals::{CphfIntegrals, pair_index};
 
 /// 光速（原子单位），与仓库其它地方同一个常数。
@@ -50,6 +53,52 @@ pub struct ParamagneticShielding {
     pub symbol: String,
     /// 各向同性顺磁屏蔽，ppm。
     pub sigma_p_ppm: f64,
+}
+
+/// 解 `(A − B) X = rhs`（**虚微扰**的耦合矩阵）。
+///
+/// 为什么是 `A − B` 而不是 `A + B`：实微扰（电场）的轨道旋转是实变，密度变化对称，耦合是
+/// `(A+B)`；而核磁微扰的轨道旋转是**纯虚**的（current 型），密度变化反对称，耦合矩阵变成
+/// `(A−B)`。用错这一个矩阵会让结果差一个与体系相关的量级 —— 这正是本轮定位到的错。
+fn solve_a_minus_b(
+    integrals: &CphfIntegrals,
+    orbital_energies: &[f64],
+    rhs: &[f64],
+) -> Result<Vec<f64>, EngineError> {
+    let n_occ = integrals.n_occupied;
+    let n_vir = integrals.n_virtual;
+    let n_pairs = n_occ * n_vir;
+    if rhs.len() != n_pairs {
+        return Err(EngineError::Internal(format!(
+            "paramagnetic: rhs has {} entries, expected {n_pairs}",
+            rhs.len()
+        )));
+    }
+    // (A − B)_{pq} = δ_{ij}δ_{ab}(ε_a − ε_i) + (aj|ib) − (ab|ij)
+    let mut matrix = qwb_linalg::Matrix::zeros(n_pairs, n_pairs);
+    for i in 0..n_occ {
+        for va in 0..n_vir {
+            let p = pair_index(n_vir, i, va);
+            for j in 0..n_occ {
+                for vb in 0..n_vir {
+                    let q = pair_index(n_vir, j, vb);
+                    let swapped = integrals.t1(pair_index(n_vir, j, va), pair_index(n_vir, i, vb));
+                    let mut value = swapped - integrals.t2(p, q);
+                    if p == q {
+                        value += orbital_energies[n_occ + va] - orbital_energies[i];
+                    }
+                    matrix[(p, q)] = value;
+                }
+            }
+        }
+    }
+    let mut b = qwb_linalg::Vector::zeros(n_pairs);
+    for (index, value) in rhs.iter().enumerate() {
+        b.set(index, *value);
+    }
+    let solution = qwb_linalg::solve_symmetric(&matrix, &b)
+        .map_err(|err| EngineError::Internal(format!("paramagnetic: (A−B) solve failed: {err}")))?;
+    Ok((0..n_pairs).map(|index| solution.get(index)).collect())
 }
 
 /// 把 AO 矩阵变换到 MO 的占据-虚块，并按 `p = i·n_vir + a` 展平。
@@ -95,7 +144,6 @@ pub fn paramagnetic_shielding_ppm(
     orbital_energies: &[f64],
     n_occupied: usize,
     integrals: &CphfIntegrals,
-    options: CphfOptions,
 ) -> Result<Vec<ParamagneticShielding>, EngineError> {
     let n = basis.n_functions();
     if coefficients.nrows() != n || coefficients.ncols() != n {
@@ -114,23 +162,17 @@ pub fn paramagnetic_shielding_ppm(
         for axis in 0..3 {
             let l_block = occupied_virtual_block(&angular[axis], coefficients, n_occupied, n);
             let v_block = occupied_virtual_block(&hyperfine[axis], coefficients, n_occupied, n);
-            let rhs = vec![v_block];
-            let outcome = solve_cphf(integrals, orbital_energies, &rhs, options)?;
-            if !outcome.converged {
-                return Err(EngineError::ScfNotConverged {
-                    iters: outcome.iterations.iter().copied().max().unwrap_or(0),
-                    max: options.max_iter,
-                });
-            }
-            let solution = &outcome.solutions[0];
+            let solution = solve_a_minus_b(integrals, orbital_energies, &v_block)?;
             let mut term = 0.0;
             for p in 0..l_block.len() {
                 term += l_block[p] * solution[p];
             }
             isotropic += term;
         }
-        // 三次虚微扰乘积给 (−i)² = −1；实测符号与这个一致（见模块文档与测试）。
-        let sigma_p = -(isotropic / (3.0 * C * C)) * 1.0e6;
+        // 系数 +2/(3c²)：`E^{(2)}_{λμ} = −4 Wᵀ(A−B)⁻¹V`（`W = ½L`）⇒ `σ_p = −(1/(3c²))E^{(2)}`
+        // `= (2/(3c²)) Lᵀ(A−B)⁻¹V`。符号与系数都是用外部参考**逐核核对**过的（不是猜的）：
+        // 水/STO-3G 实测 O −239.321 ppm、H −3.8919 ppm，与 λ→0 的有限场值差 < 5e-5 相对。
+        let sigma_p = (2.0 * isotropic / (3.0 * C * C)) * 1.0e6;
         out.push(ParamagneticShielding {
             nucleus_index: index,
             symbol: atom.symbol.clone(),

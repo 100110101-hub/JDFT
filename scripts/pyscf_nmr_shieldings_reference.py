@@ -94,7 +94,9 @@ PARA_FIELDS = (
 )
 
 
-def shielding(label, basis, atoms, geometry_rows, dia_rows, para_rows, lam=0.02, mu=0.02):
+def shielding(label, basis, atoms, geometry_rows, dia_rows, para_rows, lam=0.0025, mu=0.0025):
+    """`lam`/`mu` 取 0.0025：`0.02` 对 −239 ppm 量级的响应已经落在非线性区（实测 O 偏 1.1%），
+    而 0.0025 与 0.00125 只差 3e-4 —— 见 docs/choices.md 一百三十九的步长扫描。"""
     """算一个体系的逐核 dia/para，往提供的行列表里追加（None = 该文件不要这些行）。"""
     mol = gto.M(atom=atoms, basis=basis, verbose=0)
     solver = scf.RHF(mol)
