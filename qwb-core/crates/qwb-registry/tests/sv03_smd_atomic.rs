@@ -147,3 +147,42 @@ fn the_smd_atomic_kind_is_separate_from_the_solvent_kind() {
     assert!(registry.get_solvent("smd-atomic").is_err());
     assert!(registry.get_smd_atomic("water").is_err());
 }
+
+#[test]
+fn the_pair_sigma_blocks_match_upstream() {
+    // 成对修正 `SIGMA(101..150)`：水相六个非零项、非水三张表各几项。这些数是从
+    // `mnsol.F` 的 `SIGMA_DATA` / `SIGMA_N/A/B` 逐字提的，`smd_sigma` 的成对分支靠它们。
+    let registry = Registry::open(data_root()).expect("qwb-data");
+    let data = registry.get_smd_atomic("smd-atomic").expect("smd-atomic");
+    let water = &data.cds.water.pair_sigma_cal_per_mol_angstrom2;
+    assert_eq!(water.len(), 50);
+    // pair 编号 p ↔ 下标 p − 1 ↔ 上游 `SIGMA(100 + p)`。
+    for (pair, value) in [
+        (1usize, -72.95),
+        (3, 68.69),
+        (5, -48.22),
+        (6, 121.98),
+        (14, 68.85),
+        (16, 84.10),
+    ] {
+        assert_eq!(water[pair - 1], value, "aqueous SIGMA({})", 100 + pair);
+    }
+    let table = &data.cds.nonaqueous;
+    for values in [
+        &table.pair_sigma_n,
+        &table.pair_sigma_a,
+        &table.pair_sigma_b,
+    ] {
+        assert_eq!(values.len(), 50);
+    }
+    assert_eq!(table.pair_sigma_n[0], -62.05, "SIGMA_N(101)");
+    assert_eq!(table.pair_sigma_n[2], -15.70, "SIGMA_N(103)");
+    assert_eq!(table.pair_sigma_n[9], -99.76, "SIGMA_N(110)");
+    assert_eq!(table.pair_sigma_a[2], 95.99, "SIGMA_A(103)");
+    assert_eq!(table.pair_sigma_a[4], -41.00, "SIGMA_A(105)");
+    assert_eq!(table.pair_sigma_a[9], 152.20, "SIGMA_A(110)");
+    assert_eq!(table.pair_sigma_b[3], -128.16, "SIGMA_B(104)");
+    assert_eq!(table.pair_sigma_b[5], 79.13, "SIGMA_B(106)");
+    let issues = data.check();
+    assert!(issues.is_empty(), "{issues:?}");
+}

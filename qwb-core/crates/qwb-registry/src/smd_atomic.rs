@@ -37,6 +37,10 @@ pub struct SmdWaterSigma {
     pub sigma_cal_per_mol_angstrom2: BTreeMap<String, f64>,
     /// 逐元素的氢修正 `HSIGMA`（cal/(mol·Å²)）。
     pub hsigma_cal_per_mol_angstrom2: BTreeMap<String, f64>,
+    /// 成对修正 `SIGMA(101..150)`：第 `k` 项对应 `SIGMA(101 + k)`，即上游的 pair 编号
+    /// `1 + k`（1 = C–C(1)、3 = O–C、5 = N–C(1)、6 = O–N、14 = O–P、16 = N–C 三键）。
+    /// 长度固定 50；上游只文档化了 17 个 pair，其余为 0。
+    pub pair_sigma_cal_per_mol_angstrom2: Vec<f64>,
 }
 
 /// CDS 的非水相参数：σ 是「三张表 × 溶剂 Abraham 描述符」的线性组合，外加一个常数项。
@@ -64,6 +68,12 @@ pub struct SmdNonaqueousSigma {
     pub hsigma_a: Vec<f64>,
     /// `HSIGMA_B`。
     pub hsigma_b: Vec<f64>,
+    /// 成对修正 `SIGMA_N(101..150)`（50 项，含义同 [`SmdWaterSigma`] 的同名字段）。
+    pub pair_sigma_n: Vec<f64>,
+    /// 成对修正 `SIGMA_A(101..150)`。
+    pub pair_sigma_a: Vec<f64>,
+    /// 成对修正 `SIGMA_B(101..150)`。
+    pub pair_sigma_b: Vec<f64>,
     /// `SIGMA_MOL`（四个系数）。
     pub sigma_mol: Vec<f64>,
 }
@@ -71,7 +81,7 @@ pub struct SmdNonaqueousSigma {
 /// CDS 的**成键接触规则**（上游 `SMXCDS`）：15×15 的参考键长表 + 元素类型映射。
 ///
 /// 成键权重是 `COT_ij = exp(Δ/(d_ij − (R_ij + Δ)))`（`d ≥ R + Δ` 时为 0），
-/// `R_ij = rkkval_angstrom[type_i − 1][type_j − 1]`、`Δ = 0.30 Å`；两处特例（O–S 用
+/// `R_ij = rkkval_angstrom[type_i − 1][type_j − 1]`、`Δ = 0.30 Å`；两处特例（O–C 用
 /// `Δ = 0.10 / R = 1.330`、`ISTS = 6` 时 O–O 用 `Δ = 0.30 / R = 1.80`）写在 `note` 里，
 /// 由实现侧按上游正文落实。类型编号为 0 的元素**不参与**成键权重（`COT ≡ 0`）——
 /// 本文件覆盖的 36 个元素里有 26 个是 0，这与上游 `NATCNV` 一致。
@@ -244,6 +254,26 @@ impl SmdAtomic {
                 "cds.nonaqueous.sigma_mol has {} entries, expected 4",
                 self.cds.nonaqueous.sigma_mol.len()
             ));
+        }
+        // 成对修正块：两边各 50 项（`SIGMA(101..150)` = pair 1..50）。
+        for (label, values) in [
+            ("pair_sigma_n", &self.cds.nonaqueous.pair_sigma_n),
+            ("pair_sigma_a", &self.cds.nonaqueous.pair_sigma_a),
+            ("pair_sigma_b", &self.cds.nonaqueous.pair_sigma_b),
+            (
+                "water.pair_sigma",
+                &self.cds.water.pair_sigma_cal_per_mol_angstrom2,
+            ),
+        ] {
+            if values.len() != 50 {
+                issues.push(format!(
+                    "cds.{label} has {} entries, expected 50",
+                    values.len()
+                ));
+            }
+            if values.iter().any(|value| !value.is_finite()) {
+                issues.push(format!("cds.{label} has a non-finite entry"));
+            }
         }
         if self.cds.nonaqueous.descriptor_names.len() != 6 {
             issues.push(format!(

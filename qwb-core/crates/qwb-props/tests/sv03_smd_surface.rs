@@ -456,8 +456,18 @@ fn the_multi_atom_cds_energy_matches_the_oracle_when_the_sigma_is_zero_order_onl
     // 8192 点/原子：实测最差 1.86e-4（H₂S），水 1.25e-4、HF 6.8e-5、HCl 3.4e-5。
     // 低点数下会看到 1e-3 量级的漂移，那是 Fibonacci 采样的 `O(1/√N)` 噪声（不是模型差）。
     let points = 8192;
+    // 只取"零阶即全部"的四个体系：含 C/N 的体系在 `sv03_smd_sts.rs` 里连 σ 组装一起验。
+    let zero_order = [
+        "water",
+        "hydrogen-fluoride",
+        "hydrogen-chloride",
+        "hydrogen-sulfide",
+    ];
     let mut worst = 0.0_f64;
     for oracle in read_oracle_systems() {
+        if !zero_order.contains(&oracle.name.as_str()) {
+            continue;
+        }
         let atoms = oracle
             .atoms
             .iter()

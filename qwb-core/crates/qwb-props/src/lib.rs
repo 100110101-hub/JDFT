@@ -19,6 +19,7 @@ pub mod cavity;
 pub mod cosmo;
 pub mod epr;
 pub mod smd;
+pub mod smd_sigma;
 pub mod smd_surface;
 pub mod spectrum;
 

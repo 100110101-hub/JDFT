@@ -85,6 +85,11 @@ def build() -> dict:
             "water": {
                 "sigma_cal_per_mol_angstrom2": dict(water["sigma"]),
                 "hsigma_cal_per_mol_angstrom2": dict(water["hsigma"]),
+                # 成对修正块：上游 `SIGMA(101..150)` 是「原子 X 与 Y 成键」的一阶修正，
+                # 按 pair 编号索引（`SIGMA(100 + pair)`，pair 1 = C–C(1)、3 = O–C、
+                # 105 = N–C、106 = O–N、114 = O–P、116 = N–C 三键 …，见 `mnsol.F` 注释）。
+                # 只有 50 项（pair 1..50），超过上游文档说明的 17 个 pair 的部分全为 0。
+                "pair_sigma_cal_per_mol_angstrom2": list(water["sigma_raw_150"][100:150]),
             },
             "nonaqueous": {
                 "sigma_formula": naq["sigma_formula"],
@@ -100,6 +105,10 @@ def build() -> dict:
                 "hsigma_n": list(naq["raw_tables"]["hsigma_n"])[: len(element_symbols)],
                 "hsigma_a": list(naq["raw_tables"]["hsigma_a"])[: len(element_symbols)],
                 "hsigma_b": list(naq["raw_tables"]["hsigma_b"])[: len(element_symbols)],
+                # 成对修正：同样按 pair 编号（`SIGMA_N/A/B(100 + pair)`），50 项。
+                "pair_sigma_n": list(naq["raw_tables"]["sigma_n"])[100:150],
+                "pair_sigma_a": list(naq["raw_tables"]["sigma_a"])[100:150],
+                "pair_sigma_b": list(naq["raw_tables"]["sigma_b"])[100:150],
                 "sigma_mol": list(naq["sigma_mol"]),
             },
             "bonds": {

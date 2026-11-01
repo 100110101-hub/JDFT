@@ -232,7 +232,7 @@ def build_rows() -> dict:
     }
 
     # CDS 的**成键接触权重**（`SMXCDS` 用）：`COT_ij = exp(Δ/(d_ij − (R_ij + Δ)))`，
-    # 其中 `R_ij` 来自 15×15 的 `RKKVAL`、`Δ = 0.30 Å`（O–S 特例 0.10 / 1.330，O–O 特例
+    # 其中 `R_ij` 来自 15×15 的 `RKKVAL`、`Δ = 0.30 Å`（O–C 特例 0.10 / 1.330，O–O 特例
     # 0.30 / 1.80，见 `SMXCDS` 正文）。`NATCNV` 把核电荷映射到 11 个「类型」，类型 0
     # 表示「不参与成键权重」，此时 `COT ≡ 0`；本文件覆盖的 36 个元素里有 26 个是 0。
     natcnv = extract_table(source, "NATCNV", limit=None)
@@ -249,7 +249,7 @@ def build_rows() -> dict:
         "table": "RKKVAL",
         "note": (
             "bond-contact reference lengths used by SMXCDS: "
-            "COT = exp(delta/(d - (R + delta))) with delta = 0.30 A; the O-S pair overrides "
+            "COT = exp(delta/(d - (R + delta))) with delta = 0.30 A; the O-C pair overrides "
             "delta = 0.10 / R = 1.330 and the O-O pair (ISTS = 6) delta = 0.30 / R = 1.80. "
             "Element types come from NATCNV; type 0 means 'no bond weight'."
         ),

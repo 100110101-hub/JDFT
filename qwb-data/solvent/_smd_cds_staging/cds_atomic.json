@@ -1472,7 +1472,7 @@
    0.0,
    0.0
   ],
-  "note": "bond-contact reference lengths used by SMXCDS: COT = exp(delta/(d - (R + delta))) with delta = 0.30 A; the O-S pair overrides delta = 0.10 / R = 1.330 and the O-O pair (ISTS = 6) delta = 0.30 / R = 1.80. Element types come from NATCNV; type 0 means 'no bond weight'.",
+  "note": "bond-contact reference lengths used by SMXCDS: COT = exp(delta/(d - (R + delta))) with delta = 0.30 A; the O-C pair overrides delta = 0.10 / R = 1.330 and the O-O pair (ISTS = 6) delta = 0.30 / R = 1.80. Element types come from NATCNV; type 0 means 'no bond weight'.",
   "rkkval_angstrom": [
    [
     0.0,

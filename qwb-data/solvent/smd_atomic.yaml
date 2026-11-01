@@ -1,4 +1,4 @@
-sha256: 28e06ce7f1eb868201685db393b5f15b046c2e6dc377aa8766e62475ae0b6af4
+sha256: 6add01069bf415e969e054b3bee8e1c2e44088c13c9a9ffe8ca59ccb45537980
 name: smd-atomic
 version: 1.0.0
 kind: smd-atomic
@@ -165,6 +165,57 @@ cds:
       Ti: 0.0
       V: 0.0
       Zn: 0.0
+    pair_sigma_cal_per_mol_angstrom2:
+    - -72.95
+    - 0.0
+    - 68.69
+    - 0.0
+    - -48.22
+    - 121.98
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 68.85
+    - 0.0
+    - 84.1
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
   nonaqueous:
     sigma_formula: SIGMA_N(i)*SOLN + SIGMA_A(i)*SOLA + SIGMA_B(i)*SOLB
     hsigma_formula: HSIGMA_N(i)*SOLN + HSIGMA_A(i)*SOLA + HSIGMA_B(i)*SOLB
@@ -398,6 +449,159 @@ cds:
     - 0.0
     - 0.0
     - 0.0
+    pair_sigma_n:
+    - -62.05
+    - 0.0
+    - -15.7
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - -99.76
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    pair_sigma_a:
+    - 0.0
+    - 0.0
+    - 95.99
+    - 0.0
+    - -41.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 152.2
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    pair_sigma_b:
+    - 0.0
+    - 0.0
+    - 0.0
+    - -128.16
+    - 0.0
+    - 79.13
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
     sigma_mol:
     - 0.35
     - 0.0
@@ -405,7 +609,7 @@ cds:
     - -6.68
   bonds:
     table: RKKVAL
-    note: 'bond-contact reference lengths used by SMXCDS: COT = exp(delta/(d - (R + delta))) with delta = 0.30 A; the O-S pair overrides delta = 0.10 / R = 1.330 and the O-O pair (ISTS = 6) delta = 0.30 / R = 1.80. Element types come from NATCNV; type 0 means ''no bond weight''.'
+    note: 'bond-contact reference lengths used by SMXCDS: COT = exp(delta/(d - (R + delta))) with delta = 0.30 A; the O-C pair overrides delta = 0.10 / R = 1.330 and the O-O pair (ISTS = 6) delta = 0.30 / R = 1.80. Element types come from NATCNV; type 0 means ''no bond weight''.'
     element_types:
       Al: 0
       Ar: 0
