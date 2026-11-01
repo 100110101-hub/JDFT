@@ -671,6 +671,21 @@ pub fn evaluate_xc_cached(
     let mut tau_values = Vec::with_capacity(grid.len());
     let mut grad_rho: Vec<[f64; 3]> = Vec::with_capacity(grid.len());
 
+    // 密度的**行主序**扁平副本（一次性 O(n²)）。
+    //
+    // 为什么：`Matrix` 是列主序，而这里的累加顺序是「i 外层、j 内层」。直接写
+    // `density[(i, j)]` 时，内层 j 的步长是 n 个 double —— 每个元素命中一条新的
+    // cache line，却只用到其中一个 double。摊平之后内层是连续的，**求和顺序一个没动**
+    // （仍是 i 外层、j 内层的同一串加法），所以 `xc_grid_bit_pattern` 的位级锚点不变。
+    // 这是 EX-03 量出来的瓶颈（格点 XC 的收缩段占每步 85–96%）能拿到的、不破坏
+    // 「CPU 位级回归」约束的那部分收益。
+    let mut flat_density = vec![0.0_f64; n * n];
+    for i in 0..n {
+        for j in 0..n {
+            flat_density[i * n + j] = density[(i, j)];
+        }
+    }
+
     for (index, GridPoint { .. }) in grid.points.iter().enumerate() {
         // AO 三元组来自预取缓存（见 GridAoCached）：与密度无关，SCF 各步复用。
         //
@@ -685,18 +700,18 @@ pub fn evaluate_xc_cached(
         let laplacian_here = if needs_laplacian {
             let mut total = 0.0;
             for i in 0..n {
+                let g_i = gradients[i];
+                let v_i = values[i];
+                let l_i = ao_laplacian_here[i];
+                let base = i * n;
                 for j in 0..n {
-                    let p = density[(i, j)];
+                    let p = flat_density[base + j];
                     if p == 0.0 {
                         continue;
                     }
-                    let dot = gradients[i][0] * gradients[j][0]
-                        + gradients[i][1] * gradients[j][1]
-                        + gradients[i][2] * gradients[j][2];
-                    total += p
-                        * (ao_laplacian_here[i] * values[j]
-                            + 2.0 * dot
-                            + values[i] * ao_laplacian_here[j]);
+                    let g_j = gradients[j];
+                    let dot = g_i[0] * g_j[0] + g_i[1] * g_j[1] + g_i[2] * g_j[2];
+                    total += p * (l_i * values[j] + 2.0 * dot + v_i * ao_laplacian_here[j]);
                 }
             }
             if !total.is_finite() {
@@ -728,8 +743,10 @@ pub fn evaluate_xc_cached(
         laplacian_values.push(laplacian_here);
         let mut rho = 0.0;
         for i in 0..n {
+            let v_i = values[i];
+            let base = i * n;
             for j in 0..n {
-                rho += values[i] * density[(i, j)] * values[j];
+                rho += v_i * flat_density[base + j] * values[j];
             }
         }
         // 防御：网格坐标或 AO 求值一旦产生非有限值，这里必须报错。
@@ -745,14 +762,18 @@ pub fn evaluate_xc_cached(
         let mut gradient_here = [0.0_f64; 3];
         if needs_sigma {
             for i in 0..n {
+                let g_i = gradients[i];
+                let v_i = values[i];
+                let base = i * n;
                 for j in 0..n {
-                    let p = density[(i, j)];
+                    let p = flat_density[base + j];
                     if p == 0.0 {
                         continue;
                     }
+                    let v_j = values[j];
+                    let g_j = gradients[j];
                     for axis in 0..3 {
-                        gradient_here[axis] +=
-                            p * (gradients[i][axis] * values[j] + values[i] * gradients[j][axis]);
+                        gradient_here[axis] += p * (g_i[axis] * v_j + v_i * g_j[axis]);
                     }
                 }
             }
@@ -772,14 +793,15 @@ pub fn evaluate_xc_cached(
         let tau_here = if needs_tau {
             let mut total = 0.0;
             for i in 0..n {
+                let g_i = gradients[i];
+                let base = i * n;
                 for j in 0..n {
-                    let p = density[(i, j)];
+                    let p = flat_density[base + j];
                     if p == 0.0 {
                         continue;
                     }
-                    let dot = gradients[i][0] * gradients[j][0]
-                        + gradients[i][1] * gradients[j][1]
-                        + gradients[i][2] * gradients[j][2];
+                    let g_j = gradients[j];
+                    let dot = g_i[0] * g_j[0] + g_i[1] * g_j[1] + g_i[2] * g_j[2];
                     total += p * dot;
                 }
             }
