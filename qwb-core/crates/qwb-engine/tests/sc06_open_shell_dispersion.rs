@@ -108,11 +108,24 @@ fn sc06_open_shell_with_dispersion_runs_and_is_thread_deterministic() {
 }
 
 #[test]
-fn sc06_meta_gga_with_an_open_shell_is_rejected_with_a_reason() {
+fn sc06_open_shell_meta_gga_with_dispersion_runs_end_to_end() {
+    // 判据 ①「至少 1 个开壳层体系在 M06-2X/D3 下跑通」：`uks + m06-2x + d3zero` 在 O2 三重态
+    // 上跑通，色散块进结果、总能量 = SCF + 色散。参考值来自 PySCF 2.14.0（同一几何/基组，
+    // `qwb-scf/tests/reference/uks_mgga.csv`，O2/STO-3G 的 M06-2X = −148.274954768331 Ha）；
+    // 这里只断言「跑通 + 可加性」这条判据本身，能量对表在
+    // `qwb-scf/tests/sc06_uks_mgga.rs` 里做（0.5 mHa 判据，实测 4.5e-5）。
     let backend = backend();
     let mut options = TaskOptions::default();
-    options.scf_max_iter = 50;
+    options.scf_max_iter = 200;
     options.scf_type = Some(ScfType::Uks);
+    // M06-L / M06-2X **没有发表的 D3(BJ) 参数**，只有零阻尼（`d3zero`）那套
+    // （见 `qwb-data/dispersion/d3zero.yaml` 的 `zero_damping_parameters`）；
+    // 所以 SC-06 这条判据在 M06-2X 上只能配 D3(0)，不是配 D3(BJ)。
+    options.dispersion = Some({
+        let mut dispersion = DispersionOptions::default();
+        dispersion.data = "d3zero".to_string();
+        dispersion
+    });
     let input = JobInput::new(
         dioxygen(),
         "sto-3g",
@@ -122,15 +135,34 @@ fn sc06_meta_gga_with_an_open_shell_is_rejected_with_a_reason() {
         JobType::Sp,
         options,
     );
-    let error = backend
+    let result = backend
         .run(&input, &NullReporter)
-        .expect_err("spin-resolved meta-GGA is not implemented");
-    let message = format!("{error}");
-    println!("uks + m06-2x: {message}");
-    // 实际报的是「这个组件没有自旋分辨实现」——`MggaXM062x` 连 spin_supported 都没过，
-    // 所以还轮不到那条更具体的 τ 报错。两条都属于「开壳层 meta-GGA 不存在」。
-    assert!(
-        message.contains("no spin-resolved implementation") && message.contains("uks"),
-        "the rejection must explain why open-shell meta-GGA is unavailable: {message}"
+        .expect("uks + m06-2x + d3zero must run (SC-06 τ wiring)");
+    let dispersion = result
+        .dispersion_energy_hartree
+        .expect("the dispersion block must be present");
+    println!(
+        "uks + m06-2x + d3zero on O2: E_total = {:.10} Ha, E_disp = {:+.6e} Ha, \
+         E_scf = {:.10} Ha",
+        result.energy_hartree,
+        dispersion,
+        result.energy_hartree - dispersion
     );
+    assert!(
+        result.energy_hartree.is_finite(),
+        "the total energy must be finite"
+    );
+    // 色散是负的吸引项，但在 O2 的键长（1.207 Å）上 **D3(0) 几乎为零**：
+    // m06-2x 的参数集是 s6 = 1、s8 = 0、rs6 = 1.619、alp = 14（Grimme 2010 的零阻尼表），
+    // 而零阻尼的 `f = 1/(1 + 6(R/(s_r6·R0))^{−14})` 在 R ≈ 2.28 Bohr、R0(O,O) ≈ 6.4 Bohr 处
+    // 已经被压到 ~1e-9。所以这条断言量的是**通路**（色散块进结果、总能量可加），不是量级；
+    // 量级由 `sc06_open_shell_with_dispersion_runs_and_is_thread_deterministic`
+    // （PBE/HF + D3(BJ)：−2.67e-4 / −3.39e-3 Ha）负责。
+    assert!(
+        dispersion <= 0.0,
+        "D3(0) cannot raise the energy: {dispersion:e}"
+    );
+    // K9 的可加性：引擎不覆盖 SCF 能量，只在总能量上加一项。
+    let scf_only = result.energy_hartree - dispersion;
+    assert!(scf_only < 0.0 && scf_only > result.energy_hartree);
 }

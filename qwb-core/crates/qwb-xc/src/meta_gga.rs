@@ -322,13 +322,15 @@ impl FunctionalTerm for M06Exchange {
         crate::exchange_spin_scaling(self, batch, out)
     }
 
-    /// 自旋**且** τ：能自旋化，但要求调用方同时给出 `τ_α/τ_β`。
-    ///
-    /// 与 [`FunctionalTerm::spin_supported`] 分开是刻意的：`spin_supported` 表示
-    /// 「当前 `uks` 路径已经能喂它」，而 `uks` 还没有积累 τ（那一步是 UKS 的
-    /// meta-GGA 接线）。所以这一位只表示**组件本身**已经具备自旋+τ 的求值能力，
-    /// 逐点测试直接调 [`FunctionalTerm::evaluate_spin`] 验证它。
+    /// 自旋**且** τ：这一位表示**组件本身**已经具备自旋+τ 的求值能力，逐点测试直接调
+    /// [`FunctionalTerm::evaluate_spin`] 验证它。
     fn spin_meta_supported(&self) -> bool {
+        true
+    }
+
+    /// `uks` 现在会从 `P^σ` 积累 `τ_σ = ½ Σ_μν P^σ_μν ∇φ_μ·∇φ_ν` 并在 Fock 里加
+    /// `½(∂e/∂τ_σ)∇φ_μ·∇φ_ν`（SC-06 的 τ 接线），所以交换项对 UKS 可用。
+    fn spin_supported(&self) -> bool {
         true
     }
 
@@ -691,6 +693,11 @@ impl FunctionalTerm for M06Correlation {
     }
 
     fn spin_meta_supported(&self) -> bool {
+        true
+    }
+
+    /// `uks` 的 τ 接线之后，相关项也能走 UKS（见 [`Self::evaluate_spin`]）。
+    fn spin_supported(&self) -> bool {
         true
     }
 

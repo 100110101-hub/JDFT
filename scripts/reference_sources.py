@@ -93,6 +93,10 @@ GENERATORS = {
         "scripts/pyscf_spin_mgga_reference.py",
     "qwb-core/crates/qwb-scf/tests/reference/d3zero_dispersion.csv":
         "scripts/dftd3_dispersion_reference.py",
+    # SC-06：开壳层 UKS × meta-GGA 的 **SCF 总能量**（O2 三重态 / STO-3G），走 PySCF 的
+    # `dft.UKS` 黑盒。逐点参考（`spin_mgga_pointwise.csv`）钉公式，这一份钉接线。
+    "qwb-core/crates/qwb-scf/tests/reference/uks_mgga.csv":
+        "scripts/pyscf_uks_mgga_reference.py",
 }
 
 FAMILIES = tuple(GENERATORS)

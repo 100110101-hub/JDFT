@@ -183,6 +183,15 @@ pub fn require_spin_support(terms: &[Box<dyn FunctionalTerm>]) -> Result<(), Eng
                 term.id()
             )));
         }
+        // τ 依赖的项必须是**自旋 + τ**都能求值：否则 `uks` 会喂一个 τ 进去、拿到静默的
+        // 假势（这正是 SC-06 之前 `uks + M06-2X` 被拒的原因，拒绝点已从「全拒」收到这里）。
+        if term.requires().kinetic_density && !term.spin_meta_supported() {
+            return Err(EngineError::Unsupported(format!(
+                "functional component `{}` needs the spin kinetic energy density (τ_α/τ_β) \
+                 but has no spin-resolved meta-GGA evaluation (SC-06)",
+                term.id()
+            )));
+        }
     }
     Ok(())
 }
@@ -204,6 +213,7 @@ pub fn evaluate_xc_spin_cached(
     let n = basis.n_functions();
     let points = grid.len();
     let needs_sigma = terms.iter().any(|term| term.requires().sigma);
+    let needs_tau = terms.iter().any(|term| term.requires().kinetic_density);
     if terms.iter().any(|term| term.requires().laplacian) {
         return Err(EngineError::Unsupported(
             "spin-resolved XC does not have a ∇²ρ channel yet (LYP-class functionals); \
@@ -220,6 +230,9 @@ pub fn evaluate_xc_spin_cached(
     let mut sigma_alpha_beta = vec![0.0_f64; points];
     let mut grad_alpha = vec![[0.0_f64; 3]; points];
     let mut grad_beta = vec![[0.0_f64; 3]; points];
+    // `τ_σ = ½ Σ_μν P^σ_μν ∇φ_μ·∇φ_ν`：与 σ 共用同一份 AO 梯度，所以两者同一次循环更省。
+    let mut tau_alpha = vec![0.0_f64; points];
+    let mut tau_beta = vec![0.0_f64; points];
 
     for index in 0..points {
         let values = cache.values_at(index);
@@ -240,10 +253,12 @@ pub fn evaluate_xc_spin_cached(
         }
         rho_alpha[index] = alpha.max(0.0);
         rho_beta[index] = beta.max(0.0);
-        if needs_sigma {
+        if needs_sigma || needs_tau {
             let gradients = cache.gradients_at(index);
             let mut ga = [0.0_f64; 3];
             let mut gb = [0.0_f64; 3];
+            let mut kinetic_alpha = 0.0;
+            let mut kinetic_beta = 0.0;
             for i in 0..n {
                 for j in 0..n {
                     let pa = density_alpha[(i, j)];
@@ -251,11 +266,27 @@ pub fn evaluate_xc_spin_cached(
                     if pa == 0.0 && pb == 0.0 {
                         continue;
                     }
+                    let mut grad_phi = [0.0_f64; 3];
                     for axis in 0..3 {
-                        let grad_phi =
+                        grad_phi[axis] =
                             gradients[i][axis] * values[j] + values[i] * gradients[j][axis];
-                        ga[axis] += pa * grad_phi;
-                        gb[axis] += pb * grad_phi;
+                    }
+                    if needs_sigma {
+                        for axis in 0..3 {
+                            ga[axis] += pa * grad_phi[axis];
+                            gb[axis] += pb * grad_phi[axis];
+                        }
+                    }
+                    if needs_tau {
+                        // **不是** `|∇(φ_μ φ_ν)|²`：τ 的矩阵元是纯粹的 `∇φ_μ·∇φ_ν`
+                        // （`∂τ/∂P_μν = ½∇φ_μ·∇φ_ν`），而密度要的是 `∇(φ_μ φ_ν)`。
+                        // 两者混用在密度上是「先做乘积再求梯度」，实测能量差 63 倍。
+                        let mut grad_dot = 0.0;
+                        for (left, right) in gradients[i].iter().zip(gradients[j].iter()) {
+                            grad_dot += left * right;
+                        }
+                        kinetic_alpha += pa * grad_dot;
+                        kinetic_beta += pb * grad_dot;
                     }
                 }
             }
@@ -266,15 +297,34 @@ pub fn evaluate_xc_spin_cached(
                     "spin density gradient is not finite at a grid point".to_string(),
                 ));
             }
+            if !kinetic_alpha.is_finite() || !kinetic_beta.is_finite() {
+                return Err(EngineError::Internal(format!(
+                    "spin kinetic energy density is not finite at grid point {index} \
+                     ({kinetic_alpha}, {kinetic_beta})"
+                )));
+            }
             grad_alpha[index] = ga;
             grad_beta[index] = gb;
             sigma_alpha[index] = ga[0] * ga[0] + ga[1] * ga[1] + ga[2] * ga[2];
             sigma_beta[index] = gb[0] * gb[0] + gb[1] * gb[1] + gb[2] * gb[2];
             sigma_alpha_beta[index] = ga[0] * gb[0] + ga[1] * gb[1] + ga[2] * gb[2];
+            // 闭壳层的「½ ∫∇φ∇φ = K」约定在这里同样成立：τ_σ 定义的 ½ 就在这一行。
+            tau_alpha[index] = 0.5 * kinetic_alpha;
+            tau_beta[index] = 0.5 * kinetic_beta;
         }
     }
 
-    let batch = if needs_sigma {
+    let batch = if needs_tau {
+        SpinDensityBatch::with_tau(
+            &rho_alpha,
+            &rho_beta,
+            &sigma_alpha,
+            &sigma_beta,
+            &sigma_alpha_beta,
+            &tau_alpha,
+            &tau_beta,
+        )
+    } else if needs_sigma {
         SpinDensityBatch::with_sigma(
             &rho_alpha,
             &rho_beta,
@@ -296,9 +346,11 @@ pub fn evaluate_xc_spin_cached(
     let mut d_sigma_alpha = vec![0.0_f64; points];
     let mut d_sigma_beta = vec![0.0_f64; points];
     let mut d_sigma_alpha_beta = vec![0.0_f64; points];
+    let mut d_tau_alpha = vec![0.0_f64; points];
+    let mut d_tau_beta = vec![0.0_f64; points];
 
     for term in terms {
-        let mut out = SpinXcOutput::new(
+        let out = SpinXcOutput::new(
             &mut energy_density,
             &mut potential_alpha,
             &mut potential_beta,
@@ -306,6 +358,11 @@ pub fn evaluate_xc_spin_cached(
             &mut d_sigma_beta,
             &mut d_sigma_alpha_beta,
         );
+        let mut out = if needs_tau {
+            out.with_tau(&mut d_tau_alpha, &mut d_tau_beta)
+        } else {
+            out
+        };
         term.evaluate_spin(&batch, &mut out)
             .map_err(|err| EngineError::Unsupported(format!("{}: {err}", term.id())))?;
 
@@ -329,7 +386,7 @@ pub fn evaluate_xc_spin_cached(
             } else {
                 ([0.0_f64; 3], [0.0_f64; 3])
             };
-            let gradients = if needs_sigma {
+            let gradients = if needs_sigma || needs_tau {
                 Some(cache.gradients_at(index))
             } else {
                 None
@@ -352,6 +409,18 @@ pub fn evaluate_xc_spin_cached(
                         for axis in 0..3 {
                             element_alpha += coefficient_alpha[axis] * grad_phi[axis];
                             element_beta += coefficient_beta[axis] * grad_phi[axis];
+                        }
+                        if needs_tau {
+                            // τ 通道**不需要分部积分**：∂τ_σ/∂P^σ_μν = ½∇φ_μ·∇φ_ν，
+                            // 所以矩阵元就是 ½·(∂e/∂τ_σ)·∇φ_μ·∇φ_ν（与 `rks.rs` 同形）。
+                            // 注意这里用的是 `∇φ_μ·∇φ_ν`，不是上面 σ 通道的 `∇(φ_μφ_ν)`。
+                            let gradients = cache.gradients_at(index);
+                            let mut grad_dot = 0.0;
+                            for (left, right) in gradients[i].iter().zip(gradients[j].iter()) {
+                                grad_dot += left * right;
+                            }
+                            element_alpha += 0.5 * d_tau_alpha[index] * grad_dot;
+                            element_beta += 0.5 * d_tau_beta[index] * grad_dot;
                         }
                     }
                     v_alpha_matrix[(i, j)] += weight * element_alpha;
@@ -439,17 +508,11 @@ pub fn uks_scf(
     let e_nuc = nuclear_repulsion(&charges, molecule)?;
 
     // AO 三元组整次 SCF 只算一次。
-    // 自旋分辨的 meta-GGA（τ_α/τ_β）还没做：这里显式拒绝，而不是把 τ=0 喂给泛函。
-    if terms.iter().any(|term| term.requires().kinetic_density) {
-        return Err(EngineError::Unsupported(
-            "spin-resolved meta-GGA (τ_α/τ_β) is not implemented yet; `scf_type = uks` \
-             supports LDA and GGA without τ (SC-01b). Closed-shell meta-GGA works through \
-             `scf_type = rks` (FX-01)."
-                .to_string(),
-        ));
-    }
+    // meta-GGA 需要 τ_α/τ_β：`evaluate_xc_spin_cached` 会从 P^σ 直接积累（SC-06 已接线），
+    // 所以这里只要求缓存里有 AO 梯度。
     let needs_sigma = terms.iter().any(|term| term.requires().sigma);
-    let cache = GridAoCached::build(basis, grid, needs_sigma, false, false)?;
+    let needs_tau = terms.iter().any(|term| term.requires().kinetic_density);
+    let cache = GridAoCached::build(basis, grid, needs_sigma, false, needs_tau)?;
 
     let guess_hcore = if (options.initial_guess_scale - 1.0).abs() < f64::EPSILON {
         hcore.clone()

@@ -256,6 +256,7 @@ fn brillouin_residual(
     tensor: &qwb_integrals::two_electron::TwoElectronIntegrals,
     grid: &qwb_grid::Grid,
     terms: &[Box<dyn qwb_xc::FunctionalTerm>],
+    hf_exchange: f64,
     result: &qwb_scf::uks::UksResult,
 ) -> Result<f64, EngineError> {
     let one = qwb_integrals::one_electron::one_electron(basis, molecule)?;
@@ -282,15 +283,33 @@ fn brillouin_residual(
         &result.density_beta,
         terms,
     )?;
+    // hybrid 的精确交换必须进 Fock：漏了 `−α_hf·K` 时任何 `α_hf != 0` 的泛函都**永远**
+    // 过不了这条判据（实测 OH/M06-2X 报 7.7e-2、O2/M06-2X 报 4.4e-2，全都来自这里）。
+    let (k_alpha, k_beta) = if hf_exchange.abs() > 0.0 {
+        (
+            qwb_scf::build_fock(&one.core_hamiltonian, tensor, &result.density_alpha)
+                .map_err(|err| EngineError::Internal(format!("uks: K_alpha: {err}")))?
+                .exchange,
+            qwb_scf::build_fock(&one.core_hamiltonian, tensor, &result.density_beta)
+                .map_err(|err| EngineError::Internal(format!("uks: K_beta: {err}")))?
+                .exchange,
+        )
+    } else {
+        (
+            qwb_linalg::Matrix::zeros(n, n),
+            qwb_linalg::Matrix::zeros(n, n),
+        )
+    };
     let mut worst = 0.0_f64;
-    for (density, potential) in [
-        (&result.density_alpha, &xc.v_alpha),
-        (&result.density_beta, &xc.v_beta),
+    for (density, potential, exchange) in [
+        (&result.density_alpha, &xc.v_alpha, &k_alpha),
+        (&result.density_beta, &xc.v_beta, &k_beta),
     ] {
         let mut fock = qwb_linalg::Matrix::zeros(n, n);
         for i in 0..n {
             for j in 0..n {
-                fock[(i, j)] = one.core_hamiltonian[(i, j)] + coulomb[(i, j)] + potential[(i, j)];
+                fock[(i, j)] = one.core_hamiltonian[(i, j)] + coulomb[(i, j)] + potential[(i, j)]
+                    - hf_exchange * exchange[(i, j)];
             }
         }
         let fp = qwb_linalg::matmul(&fock, density)
@@ -336,7 +355,15 @@ pub(crate) fn uks_scf_with_convergence_aids(
         plain.energy_threshold = energy_threshold;
         plain.density_threshold = density_threshold;
         if let Ok(result) = qwb_scf::uks::uks_scf(basis, molecule, tensor, grid, terms, plain)
-            && brillouin_residual(basis, molecule, tensor, grid, terms, &result)? < 1.0e-6
+            && brillouin_residual(
+                basis,
+                molecule,
+                tensor,
+                grid,
+                terms,
+                base.hf_exchange,
+                &result,
+            )? < 1.0e-6
         {
             return Ok(result);
         }
@@ -369,7 +396,15 @@ pub(crate) fn uks_scf_with_convergence_aids(
                         }
                     }
                 }
-                let residual = brillouin_residual(basis, molecule, tensor, grid, terms, &current)?;
+                let residual = brillouin_residual(
+                    basis,
+                    molecule,
+                    tensor,
+                    grid,
+                    terms,
+                    base.hf_exchange,
+                    &current,
+                )?;
                 if residual < 1.0e-6 {
                     return Ok(current);
                 }

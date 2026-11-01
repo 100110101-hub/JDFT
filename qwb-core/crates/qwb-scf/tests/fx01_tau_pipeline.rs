@@ -109,10 +109,16 @@ impl FunctionalTerm for TauLinear {
     }
 }
 
-/// 有自旋实现、但同时需要 τ 的项：只为触发 `uks_scf` 里的 τ 门禁。
+/// 线性 τ 项的**自旋**版本：`e = c·(τ_α + τ_β)`（每体积）。
 ///
-/// `evaluate_spin` 故意给全零 —— 门禁必须在求值**之前**拒绝，所以它永远不会被调用；
-/// 写成 `Ok` 是为了让"自旋实现缺失"那道门禁不先触发。
+/// 闭壳层侧对应 `ε = c·τ/ρ`（即 `e = c·τ`，与 [`TauLinear`] 同一规范），所以它有闭式参考：
+///
+/// ```text
+/// E = c(Tr[P_α·K] + Tr[P_β·K]),   V_α = V_β = c·K,   K_μν = ½∫∇φ_μ·∇φ_ν
+/// ```
+///
+/// 这条断言同时钉住「`τ_σ` 从 `P^σ` 积累对了」与「τ 的 Fock 矩阵元 `½(∂e/∂τ_σ)∇φ∇φ` 组装对了」，
+/// 而且两个自旋用**不同**的密度矩阵，α/β 通道写混了就会红。
 struct TauSpinCapable {
     c: f64,
 }
@@ -134,23 +140,29 @@ impl FunctionalTerm for TauSpinCapable {
         true
     }
 
+    fn spin_meta_supported(&self) -> bool {
+        true
+    }
+
     fn evaluate_spin(
         &self,
         batch: &SpinDensityBatch<'_>,
         out: &mut SpinXcOutput<'_>,
     ) -> Result<(), XcError> {
         let points = batch.len();
-        let _ = self.c;
-        for slice in [
-            &mut *out.energy,
-            &mut *out.v_alpha,
-            &mut *out.v_beta,
-            &mut *out.d_sigma_alpha,
-            &mut *out.d_sigma_beta,
-            &mut *out.d_sigma_alpha_beta,
-        ] {
-            assert_eq!(slice.len(), points);
-            slice.fill(0.0);
+        assert!(
+            !batch.tau_alpha.is_empty() && !batch.tau_beta.is_empty(),
+            "TauSpinCapable 需要 τ_α/τ_β"
+        );
+        for index in 0..points {
+            out.energy[index] = self.c * (batch.tau_alpha[index] + batch.tau_beta[index]);
+            out.v_alpha[index] = 0.0;
+            out.v_beta[index] = 0.0;
+            out.d_sigma_alpha[index] = 0.0;
+            out.d_sigma_beta[index] = 0.0;
+            out.d_sigma_alpha_beta[index] = 0.0;
+            out.d_tau_alpha[index] = self.c;
+            out.d_tau_beta[index] = self.c;
         }
         Ok(())
     }
@@ -335,8 +347,83 @@ fn nonlinear_tau_term_converges_a_real_scf() {
 }
 
 #[test]
-fn open_shell_meta_gga_is_rejected_explicitly() {
-    // 自旋分辨的 τ_α/τ_β 还没做：UKS + τ 项必须 Unsupported（不是 panic，也不是静默按 0）。
+fn open_shell_tau_channel_matches_the_kinetic_matrix() {
+    // 自旋版 τ 管线的闭式判据（换算见 `TauSpinCapable` 的注释）：
+    //   E = c(Tr[P_α·K] + Tr[P_β·K]),  V_α = V_β = c·K
+    // 两个自旋故意用**不同**的密度矩阵 —— α/β 写混时这条会红，能量差值也能看出来。
+    let registry = Registry::open(data_root()).expect("qwb-data");
+    let molecule = o2();
+    let basis = qwb_basis::InternalBasis::build(registry.get_basis("sto-3g").unwrap(), &molecule)
+        .expect("basis");
+    let grid = qwb_grid::molecular_grid(registry.get_grid("grid-veryfine").unwrap(), &molecule)
+        .expect("grid");
+    let n = basis.n_functions();
+
+    let mut density_alpha = Matrix::zeros(n, n);
+    density_alpha[(0, 0)] = 1.05;
+    density_alpha[(1, 1)] = 0.95;
+    density_alpha[(0, 1)] = 0.05;
+    density_alpha[(1, 0)] = 0.05;
+    let mut density_beta = Matrix::zeros(n, n);
+    density_beta[(0, 0)] = 0.85;
+    density_beta[(2, 2)] = 0.55;
+    density_beta[(0, 2)] = -0.03;
+    density_beta[(2, 0)] = -0.03;
+
+    let c = 0.31;
+    let terms: Vec<Box<dyn FunctionalTerm>> = vec![Box::new(TauSpinCapable { c })];
+    let cache = GridAoCached::build(&basis, &grid, true, false, true).expect("cache");
+    let evaluation = qwb_scf::uks::evaluate_xc_spin_cached(
+        &basis,
+        &grid,
+        &cache,
+        &density_alpha,
+        &density_beta,
+        &terms,
+    )
+    .expect("spin-resolved τ evaluation");
+
+    let kinetic = &qwb_integrals::one_electron::one_electron(&basis, &molecule)
+        .expect("1e")
+        .kinetic;
+    let mut trace_alpha = 0.0;
+    let mut trace_beta = 0.0;
+    for i in 0..n {
+        for j in 0..n {
+            trace_alpha += density_alpha[(i, j)] * kinetic[(i, j)];
+            trace_beta += density_beta[(i, j)] * kinetic[(i, j)];
+        }
+    }
+    let expected_energy = c * (trace_alpha + trace_beta);
+    println!(
+        "O2/STO-3G τ 通道: E = {:.12}, 闭式 c(Tr[P_α K]+Tr[P_β K]) = {:.12}",
+        evaluation.energy_hartree, expected_energy
+    );
+    assert!(
+        (evaluation.energy_hartree - expected_energy).abs() < 1.0e-9,
+        "E = {:.12}，闭式 {:.12}",
+        evaluation.energy_hartree,
+        expected_energy
+    );
+    let mut worst_alpha = 0.0_f64;
+    let mut worst_beta = 0.0_f64;
+    for i in 0..n {
+        for j in 0..n {
+            worst_alpha = worst_alpha.max((evaluation.v_alpha[(i, j)] - c * kinetic[(i, j)]).abs());
+            worst_beta = worst_beta.max((evaluation.v_beta[(i, j)] - c * kinetic[(i, j)]).abs());
+        }
+    }
+    println!("V_α 与 c·K 的最大偏差 {worst_alpha:.3e}、V_β {worst_beta:.3e}");
+    assert!(
+        worst_alpha < 1.0e-9 && worst_beta < 1.0e-9,
+        "τ 通道的矩阵元组装不对：V_α {worst_alpha:.3e}、V_β {worst_beta:.3e}"
+    );
+}
+
+#[test]
+fn open_shell_meta_gga_runs_a_real_uks_scf() {
+    // 接线之后 UKS + τ 项必须**跑得通**（SC-06 的判据是「开壳层 + meta-GGA 可用」）：
+    // 用同一个线性 τ 项在 O2 三重态上跑一次完整 SCF，断言收敛且能量有限。
     let registry = Registry::open(data_root()).expect("qwb-data");
     let molecule = o2();
     let basis = qwb_basis::InternalBasis::build(registry.get_basis("sto-3g").unwrap(), &molecule)
@@ -345,6 +432,37 @@ fn open_shell_meta_gga_is_rejected_explicitly() {
     let grid = qwb_grid::molecular_grid(registry.get_grid("grid-coarse").unwrap(), &molecule)
         .expect("grid");
     let terms: Vec<Box<dyn FunctionalTerm>> = vec![Box::new(TauSpinCapable { c: 0.1 })];
+    let mut options = qwb_scf::uks::UksOptions::default();
+    options.max_iter = 200;
+    let result = qwb_scf::uks::uks_scf(&basis, &molecule, &tensor, &grid, &terms, options)
+        .expect("UKS + τ 项必须跑通");
+    println!(
+        "O2 + TestTauSpinCapable: E = {:.10} Ha, E_xc = {:.10} Ha, iters = {}, converged = {}",
+        result.energy_hartree, result.xc_energy_hartree, result.iterations, result.scf_converged
+    );
+    assert!(result.scf_converged, "UKS + τ 项没有收敛");
+    assert!(result.energy_hartree.is_finite());
+    // e = c(τ_α+τ_β) > 0 ⇒ E_xc > 0；为 0 说明 τ 通道根本没进去。
+    assert!(
+        result.xc_energy_hartree > 0.0,
+        "线性 τ 项必须给正的 E_xc，实测 {}",
+        result.xc_energy_hartree
+    );
+}
+
+#[test]
+fn open_shell_meta_gga_without_a_spin_implementation_is_rejected() {
+    // 拒绝点从「所有 meta 项」收到「**没有自旋+τ 实现**的 meta 项」：
+    // 只实现了闭壳层 `energy_density`/`potential_derivatives_full` 的项（`TauLinear`）
+    // 仍然必须被显式拒绝，而不是让 UKS 喂一个 τ 进去拿到静默的假势。
+    let registry = Registry::open(data_root()).expect("qwb-data");
+    let molecule = o2();
+    let basis = qwb_basis::InternalBasis::build(registry.get_basis("sto-3g").unwrap(), &molecule)
+        .expect("basis");
+    let tensor = two_electron(&basis, &molecule).expect("2e");
+    let grid = qwb_grid::molecular_grid(registry.get_grid("grid-coarse").unwrap(), &molecule)
+        .expect("grid");
+    let terms: Vec<Box<dyn FunctionalTerm>> = vec![Box::new(TauLinear { c: 0.1 })];
     let error = qwb_scf::uks::uks_scf(
         &basis,
         &molecule,
@@ -353,10 +471,10 @@ fn open_shell_meta_gga_is_rejected_explicitly() {
         &terms,
         qwb_scf::uks::UksOptions::default(),
     )
-    .expect_err("UKS + τ 项必须被拒");
+    .expect_err("没有自旋实现 + τ 的项必须被拒");
     let message = error.to_string();
     assert!(
-        message.contains("meta-GGA") || message.contains('τ'),
-        "错误信息要点明 τ 通道缺失：{message}"
+        message.contains("spin-resolved implementation"),
+        "错误信息要点名缺的是自旋实现：{message}"
     );
 }
