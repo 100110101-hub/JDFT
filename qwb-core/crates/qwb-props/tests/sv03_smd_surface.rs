@@ -401,3 +401,87 @@ fn out_of_range_inputs_are_reported_instead_of_silently_degrading() {
         "the radius lookup must report the missing element"
     );
 }
+
+/// 一个来自 `scripts/smd_cds_legacy_reference.py` 的体系（PySCF `get_cds_legacy`）。
+struct OracleSystem {
+    name: String,
+    atoms: Vec<(String, [f64; 3])>,
+    energy_kcal: f64,
+}
+
+/// 读 `tests/reference/smd_cds_legacy.csv`（长表：一行一个原子）。
+///
+/// 梯度四列先不解析：CDS 的**梯度**还没实现，那几个数留给下一步的验收用。
+fn read_oracle_systems() -> Vec<OracleSystem> {
+    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/reference/smd_cds_legacy.csv");
+    let text = std::fs::read_to_string(&path).expect("smd_cds_legacy.csv");
+    let mut systems: Vec<OracleSystem> = Vec::new();
+    for (index, line) in text.lines().enumerate() {
+        if index == 0 || line.trim().is_empty() {
+            continue;
+        }
+        let fields: Vec<&str> = line.split(',').collect();
+        assert_eq!(fields.len(), 13, "line {}: expected 13 columns", index + 1);
+        let name = fields[0].to_string();
+        let symbol = fields[3].to_string();
+        let position = [
+            fields[4].parse::<f64>().expect("x"),
+            fields[5].parse::<f64>().expect("y"),
+            fields[6].parse::<f64>().expect("z"),
+        ];
+        let energy_kcal = fields[7].parse::<f64>().expect("e_cds");
+        match systems.last_mut() {
+            Some(last) if last.name == name => last.atoms.push((symbol, position)),
+            _ => systems.push(OracleSystem {
+                name,
+                atoms: vec![(symbol, position)],
+                energy_kcal,
+            }),
+        }
+    }
+    assert!(
+        systems.len() >= 4,
+        "the oracle file must cover several systems"
+    );
+    systems
+}
+
+#[test]
+fn the_multi_atom_cds_energy_matches_the_oracle_when_the_sigma_is_zero_order_only() {
+    // 这是这一层**唯一**对上游的死差判据，而且只对"表面张力只有零阶项"的体系成立：
+    // 水的 H–O、HF 的 H–F、HCl 的 H–Cl、H₂S 的 H–S 都不触发 `HSIGMA` 与成对修正
+    // （`HSIGMA(9)/HSIGMA(17)/HSIGMA(16)` 全为 0，成对项只对 C/N/Si/P 邻居生效），
+    // 于是 `E_CDS = Σ σ_i·A_i` 只差**表面分解**。含 C–H/C–O/C–N 的分子要等修正进数据。
+    let data = smd();
+    // 8192 点/原子：实测最差 1.86e-4（H₂S），水 1.25e-4、HF 6.8e-5、HCl 3.4e-5。
+    // 低点数下会看到 1e-3 量级的漂移，那是 Fibonacci 采样的 `O(1/√N)` 噪声（不是模型差）。
+    let points = 8192;
+    let mut worst = 0.0_f64;
+    for oracle in read_oracle_systems() {
+        let atoms = oracle
+            .atoms
+            .iter()
+            .map(|(symbol, position)| Atom::new(symbol, *position))
+            .collect();
+        let molecule = Molecule::new(atoms, 0, 1);
+        let symbols: Vec<&str> = molecule
+            .atoms
+            .iter()
+            .map(|atom| atom.symbol.as_str())
+            .collect();
+        let surface = smd_surface(&data, &molecule, points, 0.0).expect("surface");
+        let ours =
+            cds_energy_kcal(&data, &symbols, &surface.areas_angstrom2, true, None).expect("cds");
+        let difference = (ours - oracle.energy_kcal).abs() / oracle.energy_kcal.abs();
+        println!(
+            "{:20} ours {ours:.6} vs oracle {:.6} kcal/mol (rel {difference:.2e})",
+            oracle.name, oracle.energy_kcal
+        );
+        worst = worst.max(difference);
+    }
+    println!("worst zero-order relative deviation: {worst:.3e}");
+    assert!(
+        worst < 1.0e-3,
+        "the multi-atom CDS energy must reproduce the oracle to 0.1 %, got {worst:.3e}"
+    );
+}

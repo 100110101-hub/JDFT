@@ -114,6 +114,11 @@ GENERATORS = {
         "scripts/dftd4_dispersion_reference.py",
     "qwb-core/crates/qwb-scf/tests/reference/d4_properties.csv":
         "scripts/dftd4_dispersion_reference.py",
+    # SV-03：多原子 CDS 能量的官方参考（PySCF 2.14.0 `libsolvent` 的 `get_cds_legacy`，
+    # 返回能量 + 梯度、**不含**面积）。只收「表面张力只有零阶项」的体系（H/F/Cl/S），
+    # 于是差异只剩表面分解本身。
+    "qwb-core/crates/qwb-props/tests/reference/smd_cds_legacy.csv":
+        "scripts/smd_cds_legacy_reference.py",
 }
 
 FAMILIES = tuple(GENERATORS)
