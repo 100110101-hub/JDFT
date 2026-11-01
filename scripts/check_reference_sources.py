@@ -27,6 +27,8 @@ DOI_PATTERN = re.compile(r"^10\.\d{4,9}/\S+$")
 URL_PREFIX = "https://"
 KNOWN_SOURCES = {
     (reference_sources.PYSCF_DOI, reference_sources.PYSCF_URL),
+    # DA-06 / FX-04：色散校正的参考值来自官方 s-dftd3 实现（不是 PySCF）。
+    (reference_sources.DFTD3_DOI, reference_sources.DFTD3_URL),
 }
 
 

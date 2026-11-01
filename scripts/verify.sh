@@ -68,6 +68,11 @@ step "data: DATA_LICENSES.md 与数据一致（D-15）"
 python scripts/gen_data_licenses.py --check
 step "data: 参考集逐行带来源（DA-08）" python scripts/check_reference_sources.py
 step "data: 误差预算逐行可核（VF-05）" python scripts/check_error_budget.py
+
+# DA-06：色散数据能从上游源码重新生成（容差 0），且能复现官方 s-dftd3 的能量与梯度。
+# 前者读 .d3-upstream 缓存（缺失时取回），后者只读仓库里的参考 CSV，都不需要 WSL。
+step "data: 色散数据与上游逐项一致（DA-06）" "$PY" scripts/gen_d3_params.py --check
+step "data: 色散数据复现官方 s-dftd3（DA-06）" "$PY" scripts/validate_d3_data.py
 step "data: status.yaml 账本可解析（§10.6）"
 python scripts/check_status.py
 step "data: status-v2.yaml 账本可解析（阶段二 §10.6）"

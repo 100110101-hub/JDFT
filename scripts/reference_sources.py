@@ -29,6 +29,8 @@ import os
 __all__ = [
     "FAMILIES",
     "GENERATORS",
+    "DFTD3_DOI",
+    "DFTD3_URL",
     "PYSCF_DOI",
     "PYSCF_URL",
     "SOURCE_COLUMNS",
@@ -43,6 +45,12 @@ __all__ = [
 PYSCF_DOI = "10.1063/5.0006074"
 #: PySCF 源码仓库（参考值的实际执行环境是这里的 2.14.0）。
 PYSCF_URL = "https://github.com/pyscf/pyscf"
+
+#: D3(BJ) 的原始论文（Grimme et al., J. Chem. Phys. 132, 154104 (2010)）。
+#: 2026-11-09 用 Crossref `api.crossref.org/works/10.1063/1.3382344` 核对过题名与卷号。
+DFTD3_DOI = "10.1063/1.3382344"
+#: 官方 s-dftd3 实现（色散参考值的黑盒尺子）。
+DFTD3_URL = "https://github.com/dftd3/simple-dftd3"
 
 #: 每一行都必须带的两个来源列（加在最后一列之后，位置固定）。
 SOURCE_COLUMNS = ("source_doi", "source_url")
@@ -75,6 +83,12 @@ GENERATORS = {
         "scripts/pyscf_nmr_shieldings_reference.py",
     "qwb-core/crates/qwb-response/tests/reference/paramagnetic.csv":
         "scripts/pyscf_nmr_shieldings_reference.py",
+    # DA-06 / FX-04：色散校正的参考能量与解析梯度来自官方 s-dftd3（黑盒），几何与参考值
+    # 出自同一个脚本（`d3_dimers.csv` 是几何的单一真相源）。
+    "qwb-core/crates/qwb-scf/tests/reference/d3_dimers.csv":
+        "scripts/dftd3_dispersion_reference.py",
+    "qwb-core/crates/qwb-scf/tests/reference/d3_dispersion.csv":
+        "scripts/dftd3_dispersion_reference.py",
 }
 
 FAMILIES = tuple(GENERATORS)

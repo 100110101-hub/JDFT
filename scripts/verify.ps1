@@ -189,6 +189,17 @@ Step -Name 'VF-05: docs/error-budget.md rows are measured' -Dir '.' -Body {
     & python scripts/check_error_budget.py
 }
 
+# DA-06：色散数据必须能从上游源码重新生成（逐项比较，容差 0），并且能与官方实现的
+# 参考值对上（能量与解析梯度）。两条都是离线可跑的：前者读 `.d3-upstream` 缓存
+# （缺失时按 `UPSTREAM` 取回），后者只读仓库里的 CSV。
+Step -Name 'DA-06: dispersion data matches upstream sources' -Dir '.' -Body {
+    & $script:ledgerPython scripts/gen_d3_params.py --check
+}
+
+Step -Name 'DA-06: dispersion data reproduces s-dftd3' -Dir '.' -Body {
+    & $script:ledgerPython scripts/validate_d3_data.py
+}
+
 # ---- 10.6: the project ledger must stay machine-readable ----
 Step -Name '10.6: docs/status.yaml ledger validity' -Dir '.' -Body {
     & $script:ledgerPython scripts/check_status.py
