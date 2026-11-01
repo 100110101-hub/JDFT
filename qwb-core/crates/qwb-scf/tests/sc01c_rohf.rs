@@ -1,5 +1,9 @@
 //! SC-01c 验收：**ROHF（纯自旋）**对 5 个开壳层体系给出正确的驻点与 `⟨S²⟩ = S(S+1)`。
 //!
+//! **初猜必须用原子密度叠加（SAD）**：NH2 有两个 ROHF 驻点，从 H_core 出发会落到较高的那个
+//! （−54.7418，比正确值高 90 mHa）—— PySCF 的默认初猜也不是 H_core，所以这一条要按
+//! `UhfOptions::initial_guess` 的默认值（SAD）来跑，才有可比性。
+//!
 //! 参考值来自 PySCF 2.14.0 的 `scf.ROHF`（STO-3G、同一批几何、`conv_tol = 1e-10`）：
 //!
 //! ```text
@@ -103,13 +107,8 @@ fn options() -> UhfOptions {
     options
 }
 
-/// NH2 是**已知的开放项**：我们的 ROHF 会落到一个比 PySCF 高 ~90 mHa 的驻点（自洽性没问题、
-/// `⟨S²⟩` 也对，但我们的 UHF 比它低 92 mHa，而 PySCF 的 ROHF 只在 UHF 上方 3.6 mHa ——
-/// 所以是我们的解落进了错的盆地）。台账 SC-01c 的 gap 记着这件事，这里只钉住另外四个。
-const KNOWN_OPEN_CASES: [&str; 1] = ["NH2"];
-
 #[test]
-fn rohf_matches_pyscf_for_the_four_converged_systems() {
+fn rohf_matches_pyscf_for_five_open_shell_systems() {
     let registry = Registry::open(data_root()).expect("qwb-data");
     let basis_set = registry.get_basis("sto-3g").expect("sto-3g").clone();
     let mut worst = 0.0_f64;
@@ -128,14 +127,10 @@ fn rohf_matches_pyscf_for_the_four_converged_systems() {
             result.s_squared,
             spin * (spin + 1.0)
         );
-        if KNOWN_OPEN_CASES.contains(&name) {
-            println!("{name:4} 已知开放项（台账 SC-01c 的 gap）：与 PySCF 差 {deviation:.2e} Ha");
-        } else {
-            assert!(
-                deviation < 1.0e-5,
-                "{name}: ROHF 能量与 PySCF 差 {deviation:.2e} Ha"
-            );
-        }
+        assert!(
+            deviation < 1.0e-5,
+            "{name}: ROHF 能量与 PySCF 差 {deviation:.2e} Ha"
+        );
         // 纯自旋：`⟨S²⟩` 必须是**精确的** S(S+1)，不是 UHF 那种 2.0034 之类的污染值。
         assert_eq!(
             result.s_squared,

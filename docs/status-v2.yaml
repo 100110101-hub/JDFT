@@ -193,12 +193,11 @@ SC-01b:
   note: "**三件必须记下来的事**：① 命名 —— `svwn5.yaml` 的参数集其实是 libxc 的 **VWN RPA**（`LDA_C_VWN_RPA`），与社区通常说的 VWN5（libxc `LDA_C_VWN`）差 0.02 Ha/e；CCCBDB 的 LSDA 参考行与本实现一致，所以不改名，但所有与 PySCF 的对照都写成 `LDA_X,LDA_C_VWN_RPA`（docs/choices.md 五十）。② 数据精度 —— `pbe_mu` 原来只有 6 位（0.21951），把 PBE 总能量顶在 2.6e-5 Ha 的偏差上；换成由 β 算出的精确值后逐点差从 2.3e-5 掉到 1e-12（docs/choices.md 五十一）。③ 接口 —— 自旋 XC 用**一次求值六通道**（能量与势必须同源），ζ = ±1 的导数真实发散所以要夹紧，`ρ_σ = 0` 的通道必须显式守卫（靠乘 0 会漏 7.4e-5）（docs/choices.md 五十二）。**未完成/交接**：B88 与 LYP 还没有自旋实现，所以 BLYP/B3LYP 的 UKS 仍然显式拒绝；K2 的 `mo_coeffs` 只有 α 集，所以开壳层的 Mulliken 布居/cube 现在**跳过并打印原因**（补 β 轨道集是加性契约扩展，留给 SC-02 那批）；OH + VWN-RPA 的 UKS 在 PySCF（DIIS/能级移动/Newton）与我们的实现（400 步）里都不收敛，参考 CSV 里如实写 `nan`。"
 
 SC-01c:
-  state: in_progress
-  ts: "2026-11-13T14:10:00Z"
-  artifact: "`qwb-scf/src/rohf.rs`（Roothaan 等效 Fock：`Fa/Fb` 由 `P_α = D_c + D_o`、`P_β = D_c` 构造，三个对角块乘 ½、交叉块用 `P_leftᵀ F P_right` 后对称化；占据按「闭壳层 = 等效 Fock 本征值最低、开壳层 = 其余中 `⟨φ|F_a|φ⟩` 最低」；`⟨S²⟩` 直接报 `S(S+1)`）+ `qwb-scf/tests/sc01c_rohf.rs`（2 例：4 个体系对 PySCF < 1e-5、闭壳层多重度被拒） + `qwb-engine/src/lib.rs` 的 `run_rohf_single_point`（第 383 轮接线：`scf_type: rohf` 走独立路径，输出 spin 块 / 偶极矩 / 等效 Fock 本征值；`options.epr` 用 `P_α − P_β = D_o` 作为自旋密度） + `qwb-engine/tests/sc01c_rohf_engine.rs`（2 例）与 `kv_phase2_options.rs` 的口径更新（ROHF 不再是「被拒的未实现选项」，改成「HF 可算、DFT 被拒」）"
-  verification: "**4/5 与 PySCF 一致（1e-8 量级）**：`cargo test -p qwb-scf --test sc01c_rohf` 2 例绿 —— OH −74.3615307512 vs PySCF −74.3615307261（Δ 2.51e-8，8 步）、O2 −147.6321670245 vs −147.6321669907（Δ 3.38e-8，7 步）、NO −127.5260735274 vs −127.5260734919（Δ 3.55e-8，24 步）、CH3 −39.0721483706 vs −39.0721483755（Δ 4.85e-9，10 步）；四个体系的 `⟨S²⟩` 都是精确的 `S(S+1)`（0.75 / 2.00），并断言 UHF ≤ ROHF（差 1.1e-3…4.6e-3 Ha）。**NH2 未达成**：我们的解是 −54.7418221753，比 PySCF 的 −54.8318325028 高 **9.00e-2 Ha**；它自洽（`max|dP|` → 1e-8）、`⟨S²⟩` 也对，但我们的 UHF（−54.8342479379）比它低 92 mHa，而 PySCF 的 ROHF 只在 UHF 上方 3.6 mHa —— 说明我们的解落进了错的盆地。闭壳层多重度（水，mult 1）显式返回 `InvalidInput`，不静默退化成 RHF。 **引擎级（第 383 轮）**：`cargo test -p qwb-engine --test sc01c_rohf_engine` **2 例绿** —— O2/STO-3G、`scf_type: rohf` 走引擎得到 **−147.6321670245 Ha**（PySCF −147.6321669907，Δ 3.4e-8）、`scf_converged = true`、spin 块 multiplicity 3 / n_α = 9 / n_β = 7 / `⟨S²⟩ = 2.0`（差 < 1e-12）、偶极矩非空、日志含 `scf_type = rohf`；多重度 1 的 ROHF 请求显式返回 `InvalidInput`。`kv_phase2_options` 的 `open_shell_scf_type_is_rejected_with_its_wp` 改成两半：ROHF + DFT 方法必须被拒（消息含 Hartree-Fock only 与 uks），ROHF + `hf` 必须真的算出并带 spin 块。"
-  gap: "**剩一项：NH2 落进错的盆地。** 已排除的：等效 Fock 的代数（在 numpy 里对 PySCF 的 `get_roothaan_fock` 逐元素比对，差 **0.0**）、能量表达式（同一份密度下与 `mf.e_tot` 一致到 1e-13）、三处实现 bug（对角块权重、左侧缺转置、占据规则）。七组选项（默认 / 无 DIIS + 阻尼 0.3 与 0.7 / 移位 0.5 / 大子空间 / 初猜缩放 0.5 与 1.5）全部收敛到同一个 −54.7418，说明是盆地问题而不是收敛路径：正确的解需要另一个起点（例如先做几轮 RHF 型迭代、或用 UHF 投影后的轨道当 guess）。**没有**为了让 NH2 过而放松容差或换体系。"
-  note: "**纯自旋的 `⟨S²⟩` 是「报告值」而不是「算出来的值」**：ROHF 的波函数是 CSF，`⟨S²⟩ = S(S+1)` 由构造决定（PySCF 的 `ROHF.spin_square` 同样返回这个解析值），所以这条断言检验的是多重度是否进对了；真正的自旋纯度由「UHF ≤ ROHF」这条变分关系间接守着。"
+  state: done
+  ts: "2026-11-13T16:40:00Z"
+  artifact: "`qwb-scf/src/rohf.rs`（Roothaan 等效 Fock：`Fa/Fb` 由 `P_α = D_c + D_o`、`P_β = D_c` 构造，三个对角块乘 ½、交叉块用 `P_leftᵀ F P_right` 后对称化；占据按「闭壳层 = 等效 Fock 本征值最低、开壳层 = 其余中 `⟨φ|F_a|φ⟩` 最低」；初猜走 `UhfOptions::initial_guess`（默认 SAD，与 UHF 同一套）；`⟨S²⟩` 直接报 `S(S+1)`）+ `qwb-scf/tests/sc01c_rohf.rs`（2 例）+ 引擎接线 `run_rohf_single_point`（`scf_type: rohf`，HF only）+ `qwb-engine/tests/sc01c_rohf_engine.rs`（2 例）"
+  verification: "**5/5 与 PySCF 一致（1e-8 量级）**：`cargo test -p qwb-scf --test sc01c_rohf` 2 例绿 —— OH −74.3615307512 vs −74.3615307261（Δ 2.51e-8，6 步）、O2 −147.6321670245 vs −147.6321669907（Δ 3.38e-8，5 步）、NO −127.5260735274 vs −127.5260734919（Δ 3.55e-8，13 步）、CH3 −39.0721483706 vs −39.0721483755（Δ 4.85e-9，7 步）、NH2 −54.8318325199 vs −54.8318325028（Δ 1.71e-8，7 步）；最差 3.6e-8。五个体系的 `⟨S²⟩` 都是精确的 `S(S+1)`（0.75 / 2.00），且 UHF ≤ ROHF 恒成立（1.1e-3…4.6e-3 Ha）。**引擎级**：`cargo test -p qwb-engine --test sc01c_rohf_engine` 2 例绿 —— O2/STO-3G 走 `scf_type: rohf` 得 −147.6321670245、`scf_converged = true`、spin 块 mult 3 / n_α 9 / n_β 7 / `⟨S²⟩` = 2.0（差 < 1e-12）、偶极矩非空；多重度 1 显式 `InvalidInput`。闭壳层多重度的 ROHF 请求被拒，不静默退化成 RHF。"
+  note: "**NH2 的 90 mHa 之谜的答案是「初猜」，而且两个实现都中招**：从 H_core 出发，PySCF 的 ROHF 也给 **−54.7418221589**（我们的 −54.7418221753，Δ 1.6e-8）—— 也就是说我们的等效 Fock 一直是对的，只是 `rohf_scf` 没读 `UhfOptions::initial_guess`、固定用了 H_core。改成默认的原子密度叠加（SAD）之后 NH2 在 7 步得到 −54.8318325199（PySCF 的默认初猜同样到 −54.8318325028）。值得记的是排查顺序：先在 numpy 里对 PySCF 的 `get_roothaan_fock` 逐元素比对代数（差 0.0）、再核能量表达式（1e-13）、再扫七组收敛选项（全落到同一个 −54.7418），最后才去比对**初猜** —— 正是因为前三步都干净，「两个驻点、两个初猜」这个解释才站得住。"
 SC-02:
   state: done
   ts: "2026-11-02T06:00:00Z"
@@ -494,9 +493,9 @@ M1b:
   note: "**判据里的一处实测修正**：M1b 原文写「O2/OH 的 UKS（SVWN5、PBE）与 PySCF 同值」。实际只有 3 行能做到 1e-6 以内：O2 的 svwn5 与 pbe、OH 的 pbe。OH + svwn5 在 PySCF 里三种策略（DIIS / 能级移动 / Newton）都不收敛、我们的实现 400 步也不收敛 —— 这是 VWN-RPA 参数集的低密度病态（docs/choices.md 五十），参考 CSV 里写 `nan` 并在测试里跳过，不冒充参考值。另：ROHF 从 M1b 里摘出去了（它是 M1c，state = blocked）。"
 
 M1c:
-  state: in_progress
-  ts: "2026-11-13T15:20:00Z"
-  note: "**ROHF 已达成 4/5（第 383 轮更新）**：等效 Fock 用 Roothaan 的构造落地，OH/O2/NO/CH3 与 PySCF 一致到 1e-8 并已接进引擎（`scf_type: rohf`），`⟨S²⟩` 是精确的 S(S+1)。**NH2 仍落进错的盆地**（能量比 PySCF 高 9.0e-2 Ha，但自洽），细节在 SC-01c 的 gap —— 所以 M1c 记 in_progress 而不是 done。不阻塞 M1b/M2。"
+  state: done
+  ts: "2026-11-13T16:40:00Z"
+  note: "**ROHF（纯自旋）达成**：5 个开壳层体系全部与 PySCF 一致到 3.6e-8，`⟨S²⟩` 是精确的 S(S+1)，已接进引擎（`scf_type: rohf`）。细节与实测在 SC-01c。不阻塞 M1b/M2 —— 它从来不是M1b/M2 的前置，只是 M1 的第三种 SCF 类型。"
 M2:
   state: in_progress
   ts: 「2026-11-09T15:40:00Z」

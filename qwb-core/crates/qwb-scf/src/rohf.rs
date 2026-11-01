@@ -39,7 +39,7 @@ use qwb_linalg::{Matrix, Vector, matmul, symmetric_eigen};
 
 use crate::diis::Diis;
 use crate::rks::{default_charges, inverse_sqrt_symmetric, linalg, nuclear_repulsion};
-use crate::uhf::{UhfOptions, fock_and_energy, split_spins};
+use crate::uhf::{UhfInitialGuess, UhfOptions, fock_and_energy, split_spins};
 
 /// ROHF 的结果。
 #[derive(Debug, Clone, PartialEq)]
@@ -288,8 +288,36 @@ pub fn rohf_scf(
     let x = inverse_sqrt_symmetric(overlap)?;
     let e_nuc = nuclear_repulsion(&charges, molecule)?;
 
-    // 初猜：H_core 的轨道，按本征值排序（symmetric_eigen 升序）取闭壳层/开壳层。
-    let (_, guess_coefficients) = orbitals_from_fock(&hcore, &x)?;
+    // 初猜：与 `uhf.rs` 用同一套选择（`UhfOptions::initial_guess`，默认是**原子密度叠加**）。
+    //
+    // 这一步在开壳层上不是“随便一个起点”：**同一个盆地里 ROHF 可能有两个驻点**。
+    // NH2 就是例子 —— 从 H_core 出发，PySCF 与本实现都收敛到 −54.7418（比正确的
+    // −54.8318 高 90 mHa）；从原子密度（SAD）出发两者都到 −54.8318。
+    // 顺带说明：这也把“NH2 为什么差 90 mHa”从“我们的等效 Fock 有错”改写成
+    // “我们的初猜没按 options 走”。
+    let guess_fock = match options.initial_guess {
+        UhfInitialGuess::AtomicDensities => {
+            let (alpha, beta) = crate::guess::sad_guess(basis, molecule)?;
+            if alpha.as_column_major().iter().all(|value| *value == 0.0) {
+                // SAD 不可用（`sad_guess` 已警告过），退回 H_core。
+                hcore.clone()
+            } else {
+                // `P_α = P_β = (P_α+SAD + P_β+SAD)/2` 给出闭壳层型的 Fock：
+                // `F = h + J(D_tot) − K(D_tot/2)`，用它取初猜轨道。
+                let mut half_total = Matrix::zeros(n, n);
+                for i in 0..n {
+                    for j in 0..n {
+                        half_total[(i, j)] = 0.5 * (alpha.get(i, j) + beta.get(i, j));
+                    }
+                }
+                let (fock_a, _, _, _, _) =
+                    fock_and_energy(&hcore, tensor, &half_total, &half_total, 0.0, overlap)?;
+                fock_a
+            }
+        }
+        UhfInitialGuess::Core => hcore.clone(),
+    };
+    let (_, guess_coefficients) = orbitals_from_fock(&guess_fock, &x)?;
     let mut coefficients = guess_coefficients;
 
     let mut diis = if options.use_diis {
