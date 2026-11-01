@@ -14,6 +14,7 @@ features:
   - "functional:gga"
   - "functional:hybrid"
   - grid
+  - "dispersion:d3bj"
   - "solvent:vacuum"
   - "solvent:implicit"
   - ecp

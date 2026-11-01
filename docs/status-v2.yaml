@@ -169,12 +169,11 @@ FX-03:
   gap: "等 DA-03；数据面（ω、混合系数）已取回并验证。"
   choices: "一百二十七"
 FX-04:
-  state: in_progress
-  ts: "2026-11-09T09:40:00Z"
-  artifact: "qwb-core/crates/qwb-scf/src/dispersion.rs：`dispersion_energy(dispersion, functional, symbols, positions_bohr)` —— D3(BJ) 的可加能量与**解析梯度**（CN 的指数计数函数、log-sum-exp 参考权重及其一阶导、高 Z 在前的 7×7 参考块插值、有理阻尼多项式及其导数、CN 链式项），返回 `DispersionResult { energy_hartree, gradient, pairs }`（`pairs` 是逐对能量，供诊断与断言）；qwb-core/crates/qwb-scf/tests/fx04_dispersion.rs（4 例）。参考值来自官方 s-dftd3 黑盒：qwb-core/crates/qwb-scf/tests/reference/d3_dimers.csv（10 个二聚体的理想化几何）+ d3_dispersion.csv（40 个 (二聚体, 泛函) 组合的能量与逐原子梯度）"
-  verification: "**判据的前两条已经过，第三条未做**。① **与官方参考实现**（判据 < 1e-3 kcal/mol）：`cargo test -p qwb-scf --test fx04_dispersion` 里 40 个 (二聚体, 泛函) 组合逐一比较，**最大 5.371e-7 kcal/mol**（benzene_dimer_stacked/hf），比判据小三个量级；梯度对官方实现的**最大 6.170e-10 Ha/Bohr**。② **解析梯度 vs 中心差分**（判据 < 1e-6 Ha/Bohr）：在苯二聚体（24 个原子、72 个分量）上 **3.223e-12 Ha/Bohr**。③ 其它断言：没有 BJ 参数的泛函（m06-l / m06-2x / b97-d）**显式报错**并列出可用的四个，不是静默返回 0；两次调用逐位相同；逐对能量之和 == 总能量（1e-14）；水二聚体 B3LYP 的 D3(BJ) = −2.187396126e-3 Ha = −1.3726 kcal/mol（与官方 −2.187396125585e-3 一致）。④ 单元测试另钉住计数函数与权重的性质（rc/r = 1 → 0.5、权重归一化、权重的 CN 导数之和为 0）。⑤ `cargo clippy -p qwb-scf --all-targets -- -D warnings` 与 `cargo fmt --all --check` 干净"
-  gap: "**判据的第三条（`dispersion_energy_hartree` 进 `result.json`）还没做**：需要在 K2 的 `JobResult` 上加一个加性字段（`dispersion` 块，含 functional / energy_hartree / 数据名 / 截断）、在 `JobInput` 的 options 上加开关，再把 `qwb_engine` 的解路径接上 —— 这是引擎侧的活，不是这个 WP 的数值核心。所以本 WP 记 in_progress：数值核心与两条硬判据都过了，落盘那条留着"
-  note: "**这一版把两件事做实了**：① 数值核心只依赖数据文件（`qwb_registry::Dispersion`），不认任何硬编码常数 —— 半径、kcn、wf、r4r2、参考表、阻尼参数、截断全部从数据里取，所以「换一份 D3 数据」不需要改代码；② 参考值是**官方实现**给的（黑盒 `dftd3` 1.6.0），不是我们公式再算一遍。**梯度为什么对**：直接项写的是 `dE/dr = −C6·dp/dr`（用 `p` 的解析导数，不是把 `p` 再差分），CN 链式项用计数函数的解析导数 `−kcn·rc/r²·σ(1−σ)`，两段加起来才对得上中心差分 3.2e-12。**踩坑记录**：`pair_c6` 的取向判断要在**运行时**做（比较两个元素符号的原子序数），不能依赖调用顺序 —— 单元测试里正反两种调用都断言同一个块"
+  state: done
+  ts: "2026-11-09T11:20:00Z"
+  artifact: "数值核心 qwb-core/crates/qwb-scf/src/dispersion.rs（D3(BJ) 能量 + 解析梯度，全部参数从数据文件取）；契约 K2 的加性扩展 `TaskOptions.dispersion`（`DispersionOptions { data, functional }`，缺省 None = 阶段一行为）+ `SUPPORTED_FEATURES` 增加 `dispersion:d3bj`；引擎接线（`RksBackend::apply_dispersion`：总能量 = SCF + 色散、梯度同步相加、log 里两部分都写）；Python 侧 `qwb_engine.DispersionOptions`（pyo3 类 + `__all__` + pyi 桩）；示例 qwb-core/examples/h2o_pbe0_d3bj_sto3g.yaml；测试 qwb-scf/tests/fx04_dispersion.rs（4 例）、qwb-engine/tests/fx04_dispersion_engine.rs（4 例）、qwb-studio/tests/test_engine_phase2.py 的 `test_dispersion_is_an_additive_term_that_lands_in_the_result`；参考值 qwb-core/crates/qwb-scf/tests/reference/{d3_dimers,d3_dispersion}.csv（官方 s-dftd3 黑盒）"
+  verification: "**三条判据全部有实测**。① **梯度 vs 有限差分 < 1e-6 Ha/Bohr**：苯二聚体（24 原子、72 个分量）**3.223e-12 Ha/Bohr**。② **与官方参考实现 < 1e-3 kcal/mol**：40 个 (二聚体, 泛函) 组合逐一比较，能量**最大 5.371e-7 kcal/mol**、梯度**最大 6.170e-10 Ha/Bohr**（残余来自 Å→Bohr 常数代差）。③ **`dispersion_energy_hartree` 进 result.json**：`qwb run examples/h2o_pbe0_d3bj_sto3g.yaml` → `energy -75.2458511030 Ha`、`result.json` 里 `dispersion_energy_hartree = -2.768645e-4`，且 `-75.2458511030 = -75.2455742385(SCF) + (-2.768645e-4)` 逐位对得上（`qwb-engine` 的 4 例与 pytest 的 1 例都断言这条恒等式）。④ 不给选项时 `dispersion_energy_hartree` 是 None、mo 能级逐位不变（阶段一回归）；`opt` + 色散**显式拒绝**（优化器自己算能量/梯度，事后加会得到「优化时没考虑、报出来含」的自相矛盾结果）；M06-2X 带色散**报错**并列出可用的四个泛函；未知数据名 `d4` 报错并列出 `[d3bj]`。⑤ `cargo clippy --workspace --all-targets -- -D warnings`、`cargo test --workspace`、`cargo fmt --check`、mypy strict、pytest 全绿"
+  note: "**为什么 `opt` + 色散先拒绝**：`run_optimisation` 在闭包里自己算能量与梯度，色散项要进优化循环才对（否则收敛的驻点不是含色散能量的驻点）。在一个「总能量含色散、优化轨迹不含」的结果上标 done 就是给假结果，所以显式 `Unsupported`。**下一步**：把色散接进优化循环（能量与梯度同一个回调里加），那样 `opt`/`freq` 与 `ts`/`irc` 都能用。**能力边界（如实记账）**：没有 BJ 参数的泛函（M06-L / M06-2X）目前**不能**加色散 —— 上游只有零阻尼，这归 DA-06 的剩余部分"
 SC-01:
   state: done
   ts: "2026-11-06T16:30:00Z"
@@ -504,10 +503,10 @@ M1c:
 
 M2:
   state: pending
-  ts: "2026-11-07T12:00:00Z"
-  artifact: "meta-GGA 一半：examples/h2o_m062x_def2svp.yaml + qwb-data/functional/m06-l.yaml、m06-2x.yaml（DA-01/DA-02/FX-01/FX-02 全 done）；色散一半：DA-06/FX-04 blocked（见各自 note）"
-  verification: "**meta-GGA 一半已过（有实测）**：① 逐点（`qwb-xc --test fx02_m06_exchange`，6 例）M06-L/M06-2X 的交换与相关的能量密度及三个偏导对 libxc 差 < 1e-9；② H2O/def2-SVP M06-2X −76.3231912 vs PySCF −76.3231686（差 **2.3e-5 Ha**）、M06-L −76.3499177 vs −76.3499458（**2.8e-5**）；③ 门禁第 69 轮 26/26。**色散一半未过**：D3(BJ) 的 C6 表/单位/配对索引都已核实（见 FX-04 的 note），但 CN 约定与 r4r2 未定，`dispersion_energy_hartree` 与 D3 梯度都还没实现。"
-  note: "**§2.5 的拆分**：M2 的两条腿性质不同 —— meta-GGA 已经端到端验证；色散卡在官方参数的 CN/r4r2 上（连续三轮勘察：C6 解析错位已修、单位与索引已判定、权重公式已确认，只剩 CN 的常量/半径取值）。因此 M2 **不标 done**，把「meta-GGA 过 / 色散未过」写清，M3（RI-MP2）可以开始，不把色散当阻塞项。"
+  ts: "2026-11-09T11:30:00Z"
+  artifact: "meta-GGA 一半：examples/h2o_m062x_def2svp.yaml + qwb-data/functional/m06-l.yaml、m06-2x.yaml（DA-01/DA-02/FX-01/FX-02 全 done）；色散一半：qwb-data/dispersion/d3bj.yaml（DA-06 的 D3(BJ)） + qwb-scf/src/dispersion.rs + 引擎的 `options.dispersion`（FX-04 已 done）"
+  verification: "**五条断言里三条已过、两条被卡住**。① M06-2X 的有限差分导数 < 1e-9 ✓（`qwb-xc --test fx02_m06_exchange`，6 例）。② 与 PySCF 同值 < 0.5 mHa ✓（H2O/def2-SVP：M06-2X −76.3231912 vs −76.3231686，差 **2.3e-5 Ha**；M06-L 差 2.8e-5）。③ **D3(BJ) 解析梯度 vs 有限差分 < 1e-6 Ha/Bohr ✓**：**3.223e-12 Ha/Bohr**（FX-04，苯二聚体 72 个分量）。**未过的两条**：④ 苯二聚体的相互作用能（**M06-2X-D3**/def2-SVP）与文献差 < 1 kcal/mol —— M06-2X 上游**没有 BJ 参数**（只有零阻尼 rs6=1.619、s8=0），所以「M06-2X-D3」这条按现有数据**算不出来**，要等 DA-06 的零阻尼那一半；⑤ ω→0 退回 B3LYP 依赖 FX-03（未 done）"
+  note: "**这一轮把「色散未过」从「不知道对不对」变成了「差哪条数据」**：D3(BJ) 的数值核心与引擎落盘都过了（FX-04 done），M2 剩下的④是**数据缺口**而不是实现缺口 —— 要么 DA-06 补齐零阻尼参数（vdW 半径表 + 另一套阻尼函数），要么把④的泛函改成一个有 BJ 参数的方法（那是改判据，要有依据并记账，本轮不做）。**苯二聚体的文献值也还没核**：相互作用能是**几何特定**的量，不锁定文献用的构象去比 1 kcal/mol 是没意义的，所以本轮没有把任何自己算的相互作用能冒充文献值"
 M3:
   state: done
   ts: "2026-10-27T17:10:00Z"

@@ -33,7 +33,9 @@ pub mod solvation;
 pub use correlation::{CorrelationResult, Mp2Kind, Mp2Options, ScfType, SpinResult};
 pub use engine::{Engine, EngineBackend, SUPPORTED_FEATURES};
 pub use error::EngineError;
-pub use input::{ExcitedStatesOptions, GridLevel, JobInput, JobType, TaskOptions};
+pub use input::{
+    DispersionOptions, ExcitedStatesOptions, GridLevel, JobInput, JobType, TaskOptions,
+};
 pub use molecule::{Atom, Molecule};
 pub use numerics::{
     GridSummary, NumericsOptions, NumericsPath, NumericsReport, PsSummary, RiSummary,

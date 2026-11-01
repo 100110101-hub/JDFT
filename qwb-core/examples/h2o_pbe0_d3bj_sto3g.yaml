@@ -1,0 +1,34 @@
+# FX-04 的端到端示例：H2O / STO-3G / PBE0 单点 + D3(BJ) 色散（DA-06 的数据）。
+#
+# 与 `h2o_sto3g_svwn5.yaml` 的差别只有三处：方法换成 `pbe0`、多了
+# `options.dispersion`、其余数值控制一致。色散是**可加项**：`result.json` 里
+#   energies: { total_hartree, scf_hartree, dispersion_hartree }（见 result.json 的
+#   `dispersion_energy_hartree` 字段）
+# 两部分都落盘，所以「总数里加了什么」是可核对的。
+molecule:
+  atoms:
+    - symbol: O
+      position_angstrom: [0.0, 0.0, 0.0]
+    - symbol: H
+      position_angstrom: [0.0, 0.757, 0.586]
+    - symbol: H
+      position_angstrom: [0.0, -0.757, 0.586]
+  charge: 0
+  multiplicity: 1
+basis_name: sto-3g
+method_name: pbe0
+grid_level: normal
+solvent: vacuum
+jobtype: sp
+options:
+  scf_max_iter: 128
+  scf_energy_threshold_hartree: 1.0e-8
+  scf_density_threshold: 1.0e-6
+  diis_history: 8
+  threads: 0
+  max_opt_steps: 100
+  opt_gradient_threshold_hartree_per_bohr: 4.5e-4
+  freq_step_angstrom: 0.01
+  ecp_name: null
+  dispersion:
+    data: d3bj

@@ -108,6 +108,16 @@ class NumericsOptions:
     ) -> None: ...
     def validate(self) -> None: ...
 
+class DispersionOptions:
+    """色散校正选项（`options.dispersion`，FX-04）。"""
+
+    data: str
+    functional: str | None
+    def __init__(
+        self, data: str = "d3bj", functional: str | None = None
+    ) -> None: ...
+    def validate(self) -> None: ...
+
 class TaskOptions:
     """数值控制参数（全部有默认值，未赋值的字段用默认）。"""
 
@@ -126,6 +136,7 @@ class TaskOptions:
     excited_states: ExcitedStatesOptions | None
     solvent_model: SolventModel | None
     numerics: NumericsOptions | None
+    dispersion: DispersionOptions | None
     def __init__(self) -> None: ...
     def validate(self) -> None: ...
 

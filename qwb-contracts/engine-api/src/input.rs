@@ -114,6 +114,69 @@ pub struct TaskOptions {
     /// 是否报 EPR / 超精细耦合（phase-2 `ST-05`）；缺省 `false`，旧输入行为不变。
     #[serde(default)]
     pub epr: bool,
+    /// 色散校正（FX-04 / DA-06）；`None` = 不加色散，旧输入逐位不变。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dispersion: Option<DispersionOptions>,
+}
+
+/// 色散校正选项（`TaskOptions.dispersion`，FX-04）。
+///
+/// 色散是**可加项**：`result.energy_hartree` = SCF 能量 + `dispersion_energy_hartree`，
+/// 两部分都落盘，所以「加了哪些项」是可核对的，而不是一个混合的总数。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+#[non_exhaustive]
+pub struct DispersionOptions {
+    /// 数据键名（`qwb-data/dispersion/` 下的 name）；缺省 `d3bj`。
+    #[serde(default = "default_dispersion_data")]
+    pub data: String,
+    /// 阻尼参数用的泛函键名；`None` = 用作业自己的 `method_name`。
+    ///
+    /// 单独给它的理由：D3 的阻尼参数是按泛函拟合的，而 HF/DFT 杂化比例不同的方法
+    /// 有时要用另一套参数（例如 `hf` 的 BJ 参数）；`None` 是最常见的情形。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub functional: Option<String>,
+}
+
+/// `DispersionOptions.data` 的缺省值。
+fn default_dispersion_data() -> String {
+    "d3bj".to_string()
+}
+
+impl Default for DispersionOptions {
+    fn default() -> Self {
+        Self {
+            data: default_dispersion_data(),
+            functional: None,
+        }
+    }
+}
+impl DispersionOptions {
+    /// 区间/自洽检查：数据键名与（可选的）泛函键名都不能是空白。
+    ///
+    /// 键名是否**存在**由引擎在加载数据时判（它才有 `Registry`），这里只挡掉
+    /// 「写了但等于没写」的输入。
+    ///
+    /// # Errors
+    ///
+    /// [`EngineError::InvalidInput`]：`data` 或 `functional` 是空白。
+    pub fn validate(&self) -> Result<(), EngineError> {
+        if self.data.trim().is_empty() {
+            return Err(EngineError::InvalidInput(
+                "options.dispersion.data must not be empty".into(),
+            ));
+        }
+        if self
+            .functional
+            .as_deref()
+            .is_some_and(|name| name.trim().is_empty())
+        {
+            return Err(EngineError::InvalidInput(
+                "options.dispersion.functional must not be empty when present".into(),
+            ));
+        }
+        Ok(())
+    }
 }
 
 /// 激发态选项（`TaskOptions.excited_states`）。
@@ -162,6 +225,7 @@ impl Default for TaskOptions {
             solvent_model: None,
             numerics: None,
             epr: false,
+            dispersion: None,
         }
     }
 }
@@ -264,6 +328,9 @@ impl TaskOptions {
             return Err(EngineError::InvalidInput(
                 "options.excited_states.n_states must be >= 1".into(),
             ));
+        }
+        if let Some(dispersion) = &self.dispersion {
+            dispersion.validate()?;
         }
         Ok(())
     }

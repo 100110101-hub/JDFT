@@ -31,7 +31,8 @@ use qwb_engine_api::{
     Atom as ApiAtom, DataSnapshot as ApiDataSnapshot, Engine as ApiEngine, EngineError as ApiError,
     EnvInfo as ApiEnvInfo, ExcitedStatesOptions as ApiExcitedStatesOptions, GridLevel,
     JobInput as ApiJobInput, JobResult as ApiJobResult, JobType, Molecule as ApiMolecule,
-    Mp2Options as ApiMp2Options, NumericsOptions as ApiNumericsOptions, Reporter as ApiReporter,
+    DispersionOptions as ApiDispersionOptions, Mp2Options as ApiMp2Options,
+    NumericsOptions as ApiNumericsOptions, Reporter as ApiReporter,
     TaskOptions as ApiTaskOptions,
 };
 
@@ -425,6 +426,60 @@ pub struct TaskOptions {
     /// 数值路径 / 精度等级。
     #[pyo3(get, set)]
     pub numerics: Option<Py<NumericsOptions>>,
+    /// 色散校正（FX-04）；None = 不加色散，与阶段一逐位相同。
+    #[pyo3(get, set)]
+    pub dispersion: Option<Py<DispersionOptions>>,
+}
+
+/// 色散校正选项（`options.dispersion`，FX-04）。
+#[pyclass(module = "qwb_engine")]
+#[derive(Debug, Clone)]
+pub struct DispersionOptions {
+    /// 数据键名（`qwb-data/dispersion/` 下的 name）；缺省 `d3bj`。
+    #[pyo3(get, set)]
+    pub data: String,
+    /// 阻尼参数用的泛函；None = 用作业的 `method_name`。
+    #[pyo3(get, set)]
+    pub functional: Option<String>,
+}
+
+#[pymethods]
+impl DispersionOptions {
+    #[new]
+    #[pyo3(signature = (data = "d3bj".to_string(), functional = None))]
+    fn new(data: String, functional: Option<String>) -> Self {
+        Self { data, functional }
+    }
+
+    fn __repr__(&self) -> String {
+        format!(
+            "DispersionOptions(data={:?}, functional={:?})",
+            self.data, self.functional
+        )
+    }
+
+    /// 键名不能是空白（与 K2 的 `DispersionOptions::validate` 同一条规则）。
+    fn validate(&self) -> PyResult<()> {
+        let api = self.to_api();
+        api.validate()
+            .map_err(|error| PyException::new_err(format!("options.dispersion: {error}")))
+    }
+}
+
+impl DispersionOptions {
+    fn to_api(&self) -> ApiDispersionOptions {
+        let mut out = ApiDispersionOptions::default();
+        out.data = self.data.clone();
+        out.functional = self.functional.clone();
+        out
+    }
+
+    fn from_api(options: &ApiDispersionOptions) -> Self {
+        Self {
+            data: options.data.clone(),
+            functional: options.functional.clone(),
+        }
+    }
 }
 
 impl TaskOptions {
@@ -460,6 +515,9 @@ impl TaskOptions {
         if let Some(numerics) = &self.numerics {
             out.numerics = Some(numerics.borrow(py).to_api()?);
         }
+        if let Some(dispersion) = &self.dispersion {
+            out.dispersion = Some(dispersion.borrow(py).to_api());
+        }
         Ok(out)
     }
 
@@ -490,6 +548,9 @@ impl TaskOptions {
                 .map(|value| json_name!(value)),
             numerics: match &options.numerics {
                 Some(numerics) => Some(Py::new(py, NumericsOptions::from_api(numerics))?),
+                None => None,
+            },            dispersion: match &options.dispersion {
+                Some(dispersion) => Some(Py::new(py, DispersionOptions::from_api(dispersion))?),
                 None => None,
             },
         })
@@ -1196,6 +1257,7 @@ fn qwb_engine(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<Mp2Options>()?;
     m.add_class::<ExcitedStatesOptions>()?;
     m.add_class::<NumericsOptions>()?;
+    m.add_class::<DispersionOptions>()?;
     m.add_class::<TaskOptions>()?;
     m.add_class::<JobInput>()?;
     m.add_class::<DataSnapshot>()?;
@@ -1231,6 +1293,7 @@ fn qwb_engine(m: &Bound<'_, PyModule>) -> PyResult<()> {
             "Mp2Options",
             "ExcitedStatesOptions",
             "NumericsOptions",
+            "DispersionOptions",
             "TaskOptions",
             "JobInput",
             "DataSnapshot",

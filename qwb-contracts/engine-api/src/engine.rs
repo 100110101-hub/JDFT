@@ -49,6 +49,7 @@ pub const SUPPORTED_FEATURES: &[&str] = &[
     "property:nmr",
     "property:polarizability",
     "property:multipoles",
+    "dispersion:d3bj",
 ];
 
 /// 引擎后端：真正的数值实现。

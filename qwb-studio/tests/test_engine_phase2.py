@@ -165,6 +165,29 @@ def test_explicit_default_options_are_bit_identical_to_the_default() -> None:
     assert explicit.energy_hartree == default.energy_hartree
 
 
+def test_dispersion_is_an_additive_term_that_lands_in_the_result() -> None:
+    """FX-04：`options.dispersion` 是**可加项**，两部分都落盘。
+
+    判据要的是「`dispersion_energy_hartree` 进 result.json」，所以这里断言：
+    ① 不给选项时是 `None`（阶段一回归）；② 给了之后总能量 = SCF 能量 + 色散能；
+    ③ 色散能是负的且在合理量级（水分子 + STO-3G 是 −1e-4 Ha 量级）。
+    """
+    baseline = qe.run_job(_h2o(), str(DATA_ROOT))
+    assert baseline.dispersion_energy_hartree is None
+
+    options = qe.TaskOptions()
+    options.dispersion = qe.DispersionOptions()
+    options.validate()
+    result = qe.run_job(_h2o(options), str(DATA_ROOT))
+    dispersion = result.dispersion_energy_hartree
+    assert dispersion is not None
+    # 量级：水分子（含分子内 O-H/H-H 对）+ STO-3G + **HF** 的 D3(BJ) 实测 −4.51e-3 Ha
+    # （≈ −2.83 kcal/mol）。绝对值由 `qwb-scf` 的 fx04 测试对官方实现钉住，
+    # 这里只挡「符号反了」或「差了几个数量级」。
+    assert -1.0e-2 < dispersion < 0.0
+    assert abs(result.energy_hartree - (baseline.energy_hartree + dispersion)) < 1.0e-12
+
+
 def test_numerics_options_are_declared_but_not_wired_yet() -> None:
     """`options.numerics` 已经在 K2/K6 里**声明**，但引擎还没接（IN-03/IN-04 未做）。
 

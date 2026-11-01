@@ -5878,3 +5878,71 @@ registry 的 `dispersions:` 段、Rust 加载器与「666 个元素对逐一断�
 M06-2X 实测**没有 BJ 参数**（`get_rational_damping` 无此分支，只有零阻尼 rs6=1.581/1.619），
 meta-GGA 的色散要另做零阻尼 + vdW 半径表；③ D4 的电荷/配位依赖参数未开始。判据里
 「对每个元素对都有测试」这一条在 Rust 加载器落地前不算满足 —— 不把未实装写成 done。
+
+## 一百四十二、FX-04 收口：色散做成「可加项」而不是「改总数」，以及为什么先拒绝 `opt`（2026-11-09）
+
+D3(BJ) 的数值核心在上一轮已经对官方实现到 5.4e-7 kcal/mol，这一轮只做两件事：把它接进
+引擎、把它写进 `result.json`。两条决定值得记下来。
+
+### 一、`result.json` 里存两个数，不存一个混好的总数
+
+`JobResult.energy_hartree` 变成 **SCF 能量 + 色散能**，同时 `dispersion_energy_hartree`
+单独落盘。理由：一个「混合总数」在归档里是不可审计的 —— 半年后看到 `-75.2458 Ha`，
+没人能判断它含不含色散、含的是哪一套参数。两个数都在，恒等式
+`total = scf + dispersion` 就可以被测试断言，被下游（GUI、报告、谱学）复用。
+
+K2 的 `dispersion_energy_hartree` 字段**本来就有**（阶段一定契约时留了位），这一轮补的是
+输入侧的加性扩展：
+
+```rust
+// TaskOptions
+#[serde(default, skip_serializing_if = "Option::is_none")]
+pub dispersion: Option<DispersionOptions>,
+
+// DispersionOptions（non_exhaustive）
+data: String,               // 缺省 "d3bj"
+functional: Option<String>, // None = 用作业自己的 method_name
+```
+
+缺省 `None` 时**逐位不变**：引擎侧的一条测试直接断言「不给选项 → `dispersion_energy_hartree`
+是 None，并且 `mo_energies_hartree` 与改动前相同」，所以阶段一的 26 项回归不受影响。
+
+### 二、`opt` + 色散**先显式拒绝**
+
+优化器（`run_optimisation`）在闭包里**自己**算能量与梯度。如果把色散挂在这个闭包外面：
+报出来的总能量含色散，而优化收敛到的驻点是「不含色散的能量」的驻点 —— 两句话互相矛盾，
+而结果是**看起来成功**的。这正是 §10.3 禁止的那类产物，所以选择显式 `Unsupported`：
+
+```text
+options.dispersion currently supports `sp` only: the optimisation loop evaluates its own
+energy/gradient, and adding the term after the fact would report a total that the optimiser
+never minimised
+```
+
+代价是 `opt`/`freq` 暂时用不了色散，收益是不会有人拿着一个自相矛盾的结果去发表。下一步
+（已写进 FX-04 的 note）是把色散放进优化循环的回调里 —— 能量与梯度**同一处**加，才能保证
+「优化的是什么、报的就是什么」。
+
+### 三、顺带记两个小坑
+
+1. **feature 不能提前声明**：上一轮在 `registry.yaml` 里加了 `dispersion:d3bj` feature，
+   而 `Engine::new` 会拒绝词汇表外/未实现的能力 —— 结果是**每一个**引擎作业都报
+   `Unsupported`（23 个 pytest 失败 + `core: test` 红）。能力要跟实现同一次提交上线，
+   所以这轮把 K2 的 `SUPPORTED_FEATURES` 与 `registry.yaml` 的 feature 都放在引擎接线
+   之后加。
+2. **pyo3 的 `__all__` 是第二道门**：`#[pyclass]` + `add_class` 之后
+   `from qwb_engine import qwb_engine; qwb_engine.DispersionOptions` 有，但
+   `qwb_engine.DispersionOptions` 没有 —— 包 `__init__` 走的是 `from .qwb_engine import *`，
+   受 `__all__` 控制。漏一项就是「Python 侧少一个类」而 Rust 侧全绿，只有跑 pytest 才会发现。
+
+### 结果
+
+| 判据（FX-04） | 结果 |
+| --- | --- |
+| 梯度 vs 有限差分 < 1e-6 Ha/Bohr | **3.223e-12**（苯二聚体 72 个分量） |
+| 与官方实现 < 1e-3 kcal/mol（10 个二聚体） | **5.371e-7 kcal/mol**（40 个组合的最大值） |
+| `dispersion_energy_hartree` 进 `result.json` | `qwb run examples/h2o_pbe0_d3bj_sto3g.yaml` → `-2.768645e-4`，且 `total = scf + dispersion` |
+
+M2 没有跟着 done：它的第④条断言要 **M06-2X-D3**，而 M06-2X 上游**只有零阻尼参数**
+（rs6=1.619、s8=0），这一条是**数据缺口**不是实现缺口；第⑤条依赖 FX-03。两条都写进 M2
+的 note，不把「三条过了」说成「里程碑过了」。

@@ -1361,8 +1361,23 @@ impl EngineBackend for RksBackend {
                 input.jobtype.as_str()
             )));
         }
+        // FX-04：色散是**可加项**。它只接在单点上 —— 优化器的能量/梯度来自
+        // `run_optimisation` 内部的闭包，那里没有色散；在这个函数上事后加会得到一个
+        // 「优化时没考虑色散、报出来的能量却含色散」的自相矛盾结果。所以 `opt` 显式
+        // 拒绝而不是静默给半个答案（下一步要把它推进优化循环本身）。
+        if input.options.dispersion.is_some() && input.jobtype != JobType::Sp {
+            return Err(EngineError::Unsupported(format!(
+                "options.dispersion currently supports `sp` only: the optimisation loop \
+                 evaluates its own energy/gradient, and adding the term after the fact would \
+                 report a total that the optimiser never minimised; jobtype = `{}`",
+                input.jobtype.as_str()
+            )));
+        }
         match input.jobtype {
-            JobType::Sp => self.run_single_point(input, reporter),
+            JobType::Sp => {
+                let job = self.run_single_point(input, reporter)?;
+                self.apply_dispersion(input, job, reporter)
+            }
             JobType::Opt => self.run_optimisation(input, reporter),
             other => Err(EngineError::Unsupported(format!(
                 "jobtype `{}` is not wired into the engine backend yet (frequencies are \
@@ -1374,6 +1389,80 @@ impl EngineBackend for RksBackend {
 
     fn request_cancel(&self) {
         // 单点能/优化都是同步执行：取消由 `Reporter::is_cancelled` 在步与步之间观察到。
+    }
+}
+
+impl RksBackend {
+    /// 给单点结果加上 D3(BJ) 色散（`options.dispersion`，FX-04）。
+    ///
+    /// 三个不变量：
+    ///
+    /// 1. **总能量 = SCF 能量 + 色散能**，两部分都落盘（`energies.scf_hartree` 与
+    ///    `dispersion_energy_hartree`），所以「哪些项加进去了」是可核对的；
+    /// 2. 梯度（若有）同步加上色散的解析梯度 —— 不加上去就会出现「能量含色散、
+    ///    梯度不含」的半套结果；
+    /// 3. 没给这个选项时行为**逐位不变**（阶段一回归不受影响）。
+    fn apply_dispersion(
+        &self,
+        input: &JobInput,
+        mut job: JobResult,
+        reporter: &dyn Reporter,
+    ) -> Result<JobResult, EngineError> {
+        let Some(options) = &input.options.dispersion else {
+            return Ok(job);
+        };
+        let data = self.registry.get_dispersion(&options.data)?;
+        let functional = options
+            .functional
+            .as_deref()
+            .unwrap_or(&input.method_name)
+            .to_string();
+        let symbols: Vec<&str> = input
+            .molecule
+            .atoms
+            .iter()
+            .map(|atom| atom.symbol.as_str())
+            .collect();
+        let positions: Vec<[f64; 3]> = input
+            .molecule
+            .atoms
+            .iter()
+            .map(|atom| atom.position_bohr())
+            .collect();
+        let result =
+            qwb_scf::dispersion::dispersion_energy(data, &functional, &symbols, &positions)
+                .map_err(|err| {
+                    EngineError::Data(format!("dispersion `{}`: {err}", options.data))
+                })?;
+        let scf_hartree = job.energy_hartree;
+        job.energy_hartree = scf_hartree + result.energy_hartree;
+        // 梯度是 3N×1 的矩阵（列主序，按原子优先）。
+        if let Some(gradient) = job.gradient_hartree_per_bohr.as_mut()
+            && gradient.nrows() == positions.len() * 3
+        {
+            for atom in 0..positions.len() {
+                for axis in 0..3 {
+                    gradient[(atom * 3 + axis, 0)] += result.gradient[atom][axis];
+                }
+            }
+        }
+        reporter.log(&format!(
+            "dispersion = {} (functional = {functional}), E_disp = {:.10} Ha = {:.4} kcal/mol, \
+             total = {:.10} Ha",
+            options.data,
+            result.energy_hartree,
+            result.energy_hartree * 627.509_474_063_1,
+            job.energy_hartree
+        ));
+        let log = format!(
+            "{}\nE_scf = {scf_hartree:.12} Ha, E_dispersion = {:.12} Ha, 
+",
+            job.log, result.energy_hartree
+        );
+        job = job
+            .with_dispersion_energy(result.energy_hartree)
+            .with_log(log);
+        Ok(job)
     }
 }
 
