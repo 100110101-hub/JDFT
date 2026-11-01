@@ -54,7 +54,7 @@ pub mod tddft;
 pub use cphf::{CphfOptions, CphfResult, orbital_hessian_apply, solve_cphf};
 pub use dynamic::{DynamicPolarizability, dynamic_polarizability};
 pub use hyperpolarizability::{BetaSample, BetaTensor, beta_tensor};
-pub use paramagnetic::{ParamagneticShielding, paramagnetic_shielding_ppm};
+pub use paramagnetic::{GaugeOrigin, ParamagneticShielding, paramagnetic_shielding_ppm};
 pub use polarizability::{Polarizability, static_polarizability};
 pub use tda::{Excitation, TdaResult, tda_singlet};
 pub use tddft::{TddftResult, tddft_singlet};

@@ -43,6 +43,19 @@ use crate::mo_integrals::{CphfIntegrals, pair_index};
 /// 光速（原子单位），与仓库其它地方同一个常数。
 const C: f64 = 137.035_999_084;
 
+/// 角动量算符 `L_α` 的原点选择。
+///
+/// `L` 的原点是**规范选择**，不是物理量：精确波函数下换原点不改变总屏蔽，但在有限基里会变。
+/// 默认 [`GaugeOrigin::Nucleus`] 就是 RS-04 一直用的"核中心共原规范"；给一个固定点则是
+/// "共原规范"，用来**测量规范依赖性**（GIAO 判据要求这个依赖 < 1 ppm）。
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum GaugeOrigin {
+    /// 每个核用自己的位置（nucleus-centred）。
+    Nucleus,
+    /// 所有核共用一个固定原点（bohr）。
+    Common([f64; 3]),
+}
+
 /// 一个核的顺磁屏蔽（ppm）。
 #[derive(Debug, Clone, PartialEq)]
 #[non_exhaustive]
@@ -144,6 +157,7 @@ pub fn paramagnetic_shielding_ppm(
     orbital_energies: &[f64],
     n_occupied: usize,
     integrals: &CphfIntegrals,
+    gauge: GaugeOrigin,
 ) -> Result<Vec<ParamagneticShielding>, EngineError> {
     let n = basis.n_functions();
     if coefficients.nrows() != n || coefficients.ncols() != n {
@@ -155,9 +169,14 @@ pub fn paramagnetic_shielding_ppm(
     }
     let mut out = Vec::with_capacity(molecule.atoms.len());
     for (index, atom) in molecule.atoms.iter().enumerate() {
-        let origin = atom.position_bohr();
-        let angular = angular_momentum_integrals(basis, molecule, origin)?;
-        let hyperfine = hyperfine_integrals(basis, molecule, origin)?;
+        // `L` 的原点按规范选择；超精细算符 `L_A/r_A³` 的原点**永远**是该核（它是物理量）。
+        let nucleus = atom.position_bohr();
+        let l_origin = match gauge {
+            GaugeOrigin::Nucleus => nucleus,
+            GaugeOrigin::Common(point) => point,
+        };
+        let angular = angular_momentum_integrals(basis, molecule, l_origin)?;
+        let hyperfine = hyperfine_integrals(basis, molecule, nucleus)?;
         let mut isotropic = 0.0;
         for axis in 0..3 {
             let l_block = occupied_virtual_block(&angular[axis], coefficients, n_occupied, n);

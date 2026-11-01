@@ -104,6 +104,7 @@ fn shielding(molecule: &Molecule, basis_name: &str) -> Vec<f64> {
         &energies,
         n_occ,
         &integrals,
+        qwb_response::GaugeOrigin::Nucleus,
     )
     .expect("paramagnetic")
     .iter()
@@ -235,5 +236,75 @@ fn the_total_shielding_is_diamagnetic_plus_paramagnetic() {
     assert!(
         worst < 1.0e-3,
         "the total shielding differs from the reference by {worst:.3e}"
+    );
+}
+
+/// **规范依赖性实测**（RS-04 最后一条判据 `GIAO/London 规范不变性 < 1 ppm` 的差距）。
+///
+/// 现在用的是核中心共原规范：`L` 的原点取该核。把原点换成分子重心（同一套波函数、同一套
+/// 超精细算符），总屏蔽会变多少 —— 这个变化量就是"规范误差"，GIAO 的全部工作就是把它压到
+/// 1 ppm 以下。这里把数字**测出来并钉住**：只要 GIAO 还没实现，它就应当远大于 1 ppm；
+/// 哪天有人真的实现了 GIAO，这条测试会红，作者就必须回来更新这个数字（而不是悄悄改容差）。
+#[test]
+fn the_common_origin_gauge_error_is_measured() {
+    let registry = Registry::open(data_root()).expect("qwb-data");
+    let molecule = water();
+    let basis =
+        qwb_basis::InternalBasis::build(registry.get_basis("sto-3g").expect("sto-3g"), &molecule)
+            .expect("basis");
+    let tensor = qwb_integrals::two_electron::two_electron(&basis, &molecule).expect("2e");
+    let grid = qwb_grid::molecular_grid(registry.get_grid("grid-coarse").expect("grid"), &molecule)
+        .expect("grid");
+    let mut options = RksOptions::default();
+    options.max_iter = 400;
+    options.energy_threshold = 1.0e-11;
+    options.density_threshold = 1.0e-9;
+    let scf = rks_scf(&basis, &molecule, &tensor, &grid, &[], options).expect("HF");
+    let n_occ = 5;
+    let energies: Vec<f64> = (0..scf.mo_energies_hartree.len())
+        .map(|i| scf.mo_energies_hartree.get(i))
+        .collect();
+    let dipole_ao = dipole_integrals(&basis, &molecule).expect("dipole");
+    let integrals =
+        build_cphf_integrals(&tensor, &scf.coefficients, &dipole_ao, n_occ).expect("CPHF");
+    let nuclear = qwb_response::paramagnetic_shielding_ppm(
+        &basis,
+        &molecule,
+        &scf.coefficients,
+        &energies,
+        n_occ,
+        &integrals,
+        qwb_response::GaugeOrigin::Nucleus,
+    )
+    .expect("nucleus gauge");
+    // 核电荷重心（水：O 在 z = 0.11779、两个 H 在 z = −0.47116；权重用 Z）。
+    let centroid = [
+        0.0,
+        0.0,
+        (8.0 * 0.117_790 + 1.0 * (-0.471_160) + 1.0 * (-0.471_160)) / 10.0,
+    ];
+    let common = qwb_response::paramagnetic_shielding_ppm(
+        &basis,
+        &molecule,
+        &scf.coefficients,
+        &energies,
+        n_occ,
+        &integrals,
+        qwb_response::GaugeOrigin::Common(centroid),
+    )
+    .expect("common gauge");
+    let mut worst = 0.0_f64;
+    for (index, (nucleus, other)) in nuclear.iter().zip(common.iter()).enumerate() {
+        let delta = (nucleus.sigma_p_ppm - other.sigma_p_ppm).abs();
+        worst = worst.max(delta);
+        println!(
+            "  nucleus {index} ({}): nucleus-centred {:+.4} ppm vs common origin {:+.4} ppm, |Δ| = {delta:.4} ppm",
+            nucleus.symbol, nucleus.sigma_p_ppm, other.sigma_p_ppm
+        );
+    }
+    println!("worst gauge dependence = {worst:.4} ppm (the GIAO criterion asks for < 1 ppm)");
+    assert!(
+        worst > 1.0,
+        "the common-origin gauge error came out below 1 ppm ({worst:.3e}); either the setup changed          or GIAO-equivalent behaviour appeared -- update the recorded number deliberately"
     );
 }
