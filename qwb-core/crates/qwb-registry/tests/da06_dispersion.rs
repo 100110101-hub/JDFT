@@ -43,10 +43,19 @@ fn da06_covers_every_element_pair() {
     let registry = Registry::open(data_root()).expect("qwb-data");
     let names: Vec<&str> = registry.dispersion_names().collect();
     println!("dispersion data: {names:?}");
+    // DA-06 有两份数据：BJ 与零阻尼（M06 系列只能用后者）。两份都必须能加载。
     assert_eq!(
         names,
-        vec!["d3bj"],
-        "DA-06 ships exactly one D3(BJ) data set"
+        vec!["d3bj", "d3zero"],
+        "DA-06 ships the BJ and zero-damping D3 data sets"
+    );
+    assert!(
+        registry
+            .get_dispersion("d3zero")
+            .expect("d3zero")
+            .check()
+            .is_empty(),
+        "the zero-damping data set must pass its own check"
     );
 
     let data = registry.get_dispersion("d3bj").expect("d3bj");
