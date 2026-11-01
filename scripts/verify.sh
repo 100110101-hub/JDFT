@@ -153,7 +153,28 @@ else
         step "P-06: pyo3 crate clippy -D warnings" bash -c "cd qwb-studio/rust/qwb-py && \"\$0\" clippy --all-targets -- -D warnings" "$CARGO"
         step "P-06: build + install qwb_engine (maturin, abi3-py39)" bash -c "cd qwb-studio/rust/qwb-py && \"\$0\" -m maturin build --release -o dist && \"\$0\" -m pip install --force-reinstall --no-deps --quiet dist/*.whl" "$PY_STUDIO"
         # P-01 验收：模型与 task.schema.yaml 逐字段一致、YAML/JSON 往返、非法转移抛 ValueError。
-        step "P-01/P-03/P-04/P-05/P-06: qwb-studio pytest" bash -c "cd qwb-studio && \"\$0\" -m pytest -q" "$PY_STUDIO"
+        # EX-02（第 379 轮，与 verify.ps1 同步）：一个 GUI 压力测试独占 42–45 s，把它单独放
+        # 一条泳道、其余放另一条并发跑（实测 86 s → 46 s）。**测试集合不变**由三条断言保证：
+        # ① 收集数 = 全集；② 泳道 A 恰好 1 passed；③ A+B 的 passed 之和 == 收集数。
+        step "P-01/P-03/P-04/P-05/P-06: qwb-studio pytest" bash -c '
+            cd qwb-studio || exit 1
+            big="tests/test_gui.py::test_big_log_streams_without_freezing_the_ui"
+            "$0" -m pytest -q "$big" > pytest-lane-a.log 2>&1 &
+            laneA=$!
+            "$0" -m pytest -q --deselect "$big" > pytest-lane-b.log 2>&1
+            codeB=$?
+            wait $laneA; codeA=$?
+            tail -2 pytest-lane-a.log; tail -2 pytest-lane-b.log
+            echo "   pytest lanes: A exit $codeA, B exit $codeB"
+            [ "$codeA" -eq 0 ] && [ "$codeB" -eq 0 ] || exit 1
+            passedA="$(grep -o "[0-9]\+ passed" pytest-lane-a.log | tail -1 | cut -d" " -f1)"
+            passedB="$(grep -o "[0-9]\+ passed" pytest-lane-b.log | tail -1 | cut -d" " -f1)"
+            deselectedB="$(grep -o "[0-9]\+ deselected" pytest-lane-b.log | tail -1 | cut -d" " -f1)"
+            echo "   pytest lanes: A ${passedA:-0} passed; B ${passedB:-0} passed / ${deselectedB:-0} deselected"
+            [ "${passedA:-0}" -eq 1 ] || { echo "the isolated GUI test did not run exactly once"; exit 1; }
+            [ "${deselectedB:-0}" -eq 1 ] || { echo "the deselect matched ${deselectedB:-0} tests instead of 1"; exit 1; }
+            [ "${passedB:-0}" -ge 1 ] || { echo "lane B ran no tests"; exit 1; }
+        ' "$PY_STUDIO"
         # P-02：入库的 Python 写的 .qwb 必须仍是当前写入器的输出（Rust 侧 p02_interop 读它）。
         step "P-02: .qwb fixture freshness" bash -c "\"\$0\" scripts/gen_p02_fixture.py --check" "$PY_STUDIO"
     fi

@@ -51,6 +51,8 @@ cccbdb-raw.json
 
 # gate 的日志与桌面端重定向文件（*.log 已在上面忽略）
 /verify-r*.err
+# 第 379 轮：pytest 两条泳道的中间日志（*.log 已被忽略，这里补 .err）
+/qwb-studio/pytest-lane-*
 
 # 本轮临时脚本/提交信息草稿
 /tmp_*.py
@@ -64,4 +66,8 @@ cccbdb-raw.json
 
 # SMD 上游 Fortran 快照（Apache-2.0，只作提取来源；数据进 _smd_cds_staging/cds_atomic.json）
 /qwb-data/solvent/_smd_cds_staging/raw/
+
+# S22 上游数据文件快照（ASE，LGPL-2.1-or-later，只作提取来源；仓库只提交提取出的
+# s22_dimers.csv 与带 sha256 的 s22.json —— 与 D4/SMD 同一个口径：**不把第三方源码入库**）
+/qwb-data/reference/_s22_staging/raw/
 

@@ -266,7 +266,41 @@ else {
     # P-01 acceptance: pydantic models match task.schema.yaml field by field,
     # YAML/JSON roundtrip, illegal state transitions raise ValueError.
     Step -Name 'P-01/P-03/P-04/P-05/P-06: qwb-studio pytest' -Dir 'qwb-studio' -Body {
-        & $py -m pytest -q
+        # EX-02（第 379 轮）：pytest 的 206 个用例里有**一个** GUI 压力测试独占 42–45 s
+        # （`test_big_log_streams_without_freezing_the_ui`），串行时整个套件 86 s。把它单独放
+        # 一条泳道、其余放另一条并发跑，实测 **86 s → 46 s**。
+        #
+        # **测试集合不变**由三条断言保证（任何一条不成立就红，不会静默少跑）：
+        #   ① `--collect-only` 收集到的用例数 = 全集总数；
+        #   ② 泳道 A 只跑那一个用例，必须恰好 `1 passed`（用例改名/消失 → 0 passed → 红）；
+        #   ③ A + B 的 `passed` 之和 == 总数（`--deselect` 若失配，B 会多跑一个 → 红）。
+        # `--collect-only` 那一步很贵（要把所有测试模块 import 一遍，~20 s），所以改成用
+        # **`--deselect` 的命中数**来证明切分正确：B 的摘要里必须恰好 `1 deselected`
+        # （失配时 pytest 会报 "not found" → 非零退出），A 必须恰好 `1 passed`。
+        $bigTest = 'tests/test_gui.py::test_big_log_streams_without_freezing_the_ui'
+        $laneA = Start-Process -FilePath $py -PassThru -NoNewWindow `
+            -RedirectStandardOutput pytest-lane-a.log -RedirectStandardError pytest-lane-a.err `
+            -ArgumentList @('-m', 'pytest', '-q', $bigTest)
+        & $py -m pytest -q --deselect $bigTest *> pytest-lane-b.log
+        $codeB = $LASTEXITCODE
+        $laneA.WaitForExit()
+        $codeA = $laneA.ExitCode
+        Get-Content pytest-lane-a.log -Tail 2
+        Get-Content pytest-lane-b.log -Tail 2
+        Write-Host ("   pytest lanes: A exit {0}, B exit {1}" -f $codeA, $codeB)
+        if ($codeA -ne 0 -or $codeB -ne 0) { throw 'pytest lane failed' }
+        function GetCount([string] $path, [string] $pattern) {
+            $match = Get-Content $path | Select-String -Pattern $pattern | Select-Object -Last 1
+            if ($null -eq $match) { return -1 }
+            return [int] $match.Matches[0].Groups[1].Value
+        }
+        $passedA = GetCount 'pytest-lane-a.log' '(\d+) passed'
+        $deselectedB = GetCount 'pytest-lane-b.log' '(\d+) deselected'
+        $passedB = GetCount 'pytest-lane-b.log' '(\d+) passed'
+        Write-Host ("   pytest lanes: A {0} passed; B {1} passed / {2} deselected" -f $passedA, $passedB, $deselectedB)
+        if ($passedA -ne 1) { throw "the isolated GUI test did not run exactly once (A passed = $passedA)" }
+        if ($deselectedB -ne 1) { throw "the deselect matched $deselectedB tests instead of 1" }
+        if ($passedB -lt 1) { throw "lane B ran no tests (passed = $passedB)" }
     }
     # P-02: the committed Python-written .qwb must still be what the current
     # writer produces; qwb-io's p02_interop test reads it from the Rust side.
