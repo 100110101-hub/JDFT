@@ -3,7 +3,7 @@
 # （否则 grid 的 normal 等级会有两个定义、get_grid_by_level 歧义）。
 schema_version: 1.0.0
 name: qwb-data
-version: 0.15.0
+version: 0.16.0
 created: 2026-10-22T22:53:00Z
 features:
   - "jobtype:sp"
@@ -112,6 +112,15 @@ d4_dispersions:
   - name: d4
     path: dispersion/d4.yaml
     sha256: 150676400ae138f58900fa989ffdfd6c73c897bbb0693dc4e42aaea417d739b3
+
+# 元素级 SMD 数据（SV-03）：CDS 的 vdW 半径（BONDI/Mantina）、水相逐元素表面张力 sigma、
+# 非水相 sigma 的三张表 + 四个常数项，以及面积约定 A = 4*pi*(R+0.4)^2（该偏移是反推并验证的，
+# 不是从论文抄的）。**与 SMD 的参数化半径不是同一套**，所以单独一个文件与类型，
+# 不抄进 8 个溶剂文件（见 docs/choices.md 一百六十二）。
+smd_atomics:
+  - name: smd-atomic
+    path: solvent/smd_atomic.yaml
+    sha256: f21a498d10b1897b44b4c4507d24febcd68b6d5d9c2ffcccc7a2dedd6bbc7778
 
 # 阶段二 K10：数值路径的精度等级与等价容差（project-phase2.md 4.5 / 8.5）。
 # 文件里只引用 grid 的名字，网格参数仍然只有 grid/*.yaml 一份。

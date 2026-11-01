@@ -80,6 +80,14 @@
       "description": "K1 版本（`crate::K1_VERSION`）。",
       "type": "string"
     },
+    "smd_atomics": {
+      "description": "元素级 SMD 数据（CDS 半径与 σ；SV-03）。",
+      "type": "array",
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/RegistryEntry"
+      }
+    },
     "solvents": {
       "description": "溶剂条目。",
       "type": "array",

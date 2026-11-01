@@ -46,13 +46,15 @@ pub enum DataKind {
     Molecule,
     /// `numerics/`，`numerics.schema.*`（阶段二 K10）。
     Numerics,
+    /// `solvent/smd_atomic.yaml`，`smdatomic.schema.*`（元素级 SMD 数据：CDS 半径/σ）。
+    SmdAtomic,
     /// `registry.yaml`，`registry.schema.*`。
     Registry,
 }
 
 impl DataKind {
     /// 全部类别（schema 生成顺序即此顺序）。
-    pub const ALL: [DataKind; 10] = [
+    pub const ALL: [DataKind; 11] = [
         DataKind::Basis,
         DataKind::Ecp,
         DataKind::Functional,
@@ -62,6 +64,7 @@ impl DataKind {
         DataKind::D4Dispersion,
         DataKind::Numerics,
         DataKind::Molecule,
+        DataKind::SmdAtomic,
         DataKind::Registry,
     ];
 
@@ -78,6 +81,7 @@ impl DataKind {
             DataKind::D4Dispersion => "d4dispersion",
             DataKind::Numerics => "numerics",
             DataKind::Molecule => "molecule",
+            DataKind::SmdAtomic => "smdatomic",
             DataKind::Registry => "registry",
         }
     }
@@ -265,6 +269,13 @@ pub fn verify_bytes(kind: DataKind, path: &str, bytes: &[u8]) -> Report {
         }
         DataKind::Numerics => verify_data::<NumericsDef>(&mut report, bytes, NumericsDef::check),
         DataKind::Molecule => verify_molecule(&mut report, bytes),
+        DataKind::SmdAtomic => {
+            verify_data::<crate::smd_atomic::SmdAtomic>(
+                &mut report,
+                bytes,
+                crate::smd_atomic::SmdAtomic::check,
+            );
+        }
         DataKind::Registry => verify_manifest(&mut report, bytes),
     }
 
@@ -295,6 +306,10 @@ pub fn infer_kind(path: &Path) -> Option<DataKind> {
     // 「unknown field constants」—— 实测过。
     if stem == "d4" {
         return Some(DataKind::D4Dispersion);
+    }
+    // `solvent/smd_atomic.yaml` 与溶剂文件同目录，只有文件名分得开。
+    if stem == "smd_atomic" {
+        return Some(DataKind::SmdAtomic);
     }
     if let Some(parent) = path
         .parent()

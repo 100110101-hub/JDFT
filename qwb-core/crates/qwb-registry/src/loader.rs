@@ -64,6 +64,7 @@ pub struct Registry {
     solvents: BTreeMap<String, Solvent>,
     dispersions: BTreeMap<String, Dispersion>,
     d4_dispersions: BTreeMap<String, crate::d4::D4Dispersion>,
+    smd_atomics: BTreeMap<String, crate::smd_atomic::SmdAtomic>,
     numerics: BTreeMap<String, NumericsDef>,
     missing: Vec<MissingData>,
 }
@@ -144,6 +145,14 @@ impl Registry {
             None,
             &mut missing,
         )?;
+        let smd_atomics = load_all::<crate::smd_atomic::SmdAtomic>(
+            &root,
+            "smdatomic",
+            &manifest.smd_atomics,
+            crate::smd_atomic::SmdAtomic::check_structure,
+            None,
+            &mut missing,
+        )?;
         let d4_dispersions = load_all::<crate::d4::D4Dispersion>(
             &root,
             "d4dispersion",
@@ -185,6 +194,7 @@ impl Registry {
             solvents,
             dispersions,
             d4_dispersions,
+            smd_atomics,
             numerics,
             missing,
         })
@@ -261,6 +271,15 @@ impl Registry {
     /// [`EngineError::Data`]：未索引该名字（消息里列出可用名字）。
     pub fn get_d4_dispersion(&self, name: &str) -> Result<&crate::d4::D4Dispersion, EngineError> {
         self.lookup_checked(&self.d4_dispersions, "d4dispersion", name)
+    }
+
+    /// 按名字取元素级 SMD 数据（CDS 半径与 σ）。
+    ///
+    /// # Errors
+    ///
+    /// [`EngineError::Data`]：未索引该名字（消息里列出可用名字）。
+    pub fn get_smd_atomic(&self, name: &str) -> Result<&crate::smd_atomic::SmdAtomic, EngineError> {
+        self.lookup_checked(&self.smd_atomics, "smdatomic", name)
     }
 
     /// 数值路径配置键名（阶段二 K10；字典序）。

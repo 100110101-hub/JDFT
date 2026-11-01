@@ -14,6 +14,7 @@ use crate::grid::GridLevelDef;
 use crate::molecule::MoleculeFile;
 use crate::numerics::NumericsDef;
 use crate::registry::RegistryManifest;
+use crate::smd_atomic::SmdAtomic;
 use crate::solvent::Solvent;
 use crate::verify::DataKind;
 
@@ -30,6 +31,7 @@ pub fn schema_for_kind(kind: DataKind) -> schemars::Schema {
         DataKind::D4Dispersion => schema_for!(D4Dispersion),
         DataKind::Numerics => schema_for!(NumericsDef),
         DataKind::Molecule => schema_for!(MoleculeFile),
+        DataKind::SmdAtomic => schema_for!(SmdAtomic),
         DataKind::Registry => schema_for!(RegistryManifest),
     }
 }

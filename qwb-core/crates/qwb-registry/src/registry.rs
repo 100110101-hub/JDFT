@@ -58,6 +58,9 @@ pub struct RegistryManifest {
     /// D4 的条目（DA-06；形状与 D3 不同，单独一个 section 与类型）。
     #[serde(default)]
     pub d4_dispersions: Vec<RegistryEntry>,
+    /// 元素级 SMD 数据（CDS 半径与 σ；SV-03）。
+    #[serde(default)]
+    pub smd_atomics: Vec<RegistryEntry>,
     /// 数值路径的精度等级与等价容差条目（阶段二 K10）。
     #[serde(default)]
     pub numerics: Vec<RegistryEntry>,
@@ -66,7 +69,7 @@ pub struct RegistryManifest {
 impl RegistryManifest {
     /// 全部条目，附所属域（域名字与 `qwb-data` 子目录一致）。
     pub fn all_entries(&self) -> impl Iterator<Item = (&'static str, &RegistryEntry)> {
-        let groups: [(&'static str, &Vec<RegistryEntry>); 8] = [
+        let groups: [(&'static str, &Vec<RegistryEntry>); 9] = [
             ("basis", &self.bases),
             ("ecp", &self.ecps),
             ("functional", &self.functionals),
@@ -74,6 +77,7 @@ impl RegistryManifest {
             ("solvent", &self.solvents),
             ("dispersion", &self.dispersions),
             ("d4dispersion", &self.d4_dispersions),
+            ("smdatomic", &self.smd_atomics),
             ("numerics", &self.numerics),
         ];
         groups
@@ -159,6 +163,7 @@ mod tests {
             solvents: Vec::new(),
             dispersions: Vec::new(),
             d4_dispersions: Vec::new(),
+            smd_atomics: Vec::new(),
             numerics: Vec::new(),
         }
     }

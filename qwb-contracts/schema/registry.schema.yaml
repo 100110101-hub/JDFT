@@ -80,6 +80,12 @@ properties:
   schema_version:
     description: K1 版本（`crate::K1_VERSION`）。
     type: string
+  smd_atomics:
+    default: []
+    description: 元素级 SMD 数据（CDS 半径与 σ；SV-03）。
+    items:
+      $ref: '#/$defs/RegistryEntry'
+    type: array
   solvents:
     default: []
     description: 溶剂条目。

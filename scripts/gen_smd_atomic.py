@@ -24,10 +24,7 @@ import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 STAGING = os.path.join(ROOT, "qwb-data", "solvent", "_smd_cds_staging", "cds_atomic.json")
-# 目的地**暂时**在 staging：`qwb-data/solvent/*.yaml` 会被当作 `Solvent` 校验，而 SMD 的
-# 元素级块需要自己的 K1 类型（K1 只做加性扩展：新 `DataKind` + 新 schema + registry 的
-# `smd_atomics` 段）。与 D4 的 `d4-staged.yaml` 同一处境，所以同一个做法。
-OUTPUT = os.path.join(ROOT, "qwb-data", "solvent", "_smd_cds_staging", "smd_atomic.yaml")
+OUTPUT = os.path.join(ROOT, "qwb-data", "solvent", "smd_atomic.yaml")
 
 NOTES = (
     "SMD 的 CDS（cavity dispersion solvent structure）项所需的元素级数据，从 PySCF 2.14.0 的 "
@@ -93,12 +90,15 @@ def build() -> dict:
                 "hsigma_formula": naq["hsigma_formula"],
                 "constant_formula": naq["constant_formula"],
                 "descriptor_names": list(naq["descriptor_names"]),
-                "sigma_n": list(naq["raw_tables"]["sigma_n"]),
-                "sigma_a": list(naq["raw_tables"]["sigma_a"]),
-                "sigma_b": list(naq["raw_tables"]["sigma_b"]),
-                "hsigma_n": list(naq["raw_tables"]["hsigma_n"]),
-                "hsigma_a": list(naq["raw_tables"]["hsigma_a"]),
-                "hsigma_b": list(naq["raw_tables"]["hsigma_b"]),
+                # 只保留**本文件覆盖的元素**（H–Kr，36 项）：上游表是 150 项，后 114 项对应
+                # Z > 36，本文件不覆盖它们（`elements` 就是 36 个），所以既不落盘也不校验。
+                # 完整 150 项的原始表在 `_smd_cds_staging/cds_atomic.json` 里（有 sha256 溯源）。
+                "sigma_n": list(naq["raw_tables"]["sigma_n"])[: len(element_symbols)],
+                "sigma_a": list(naq["raw_tables"]["sigma_a"])[: len(element_symbols)],
+                "sigma_b": list(naq["raw_tables"]["sigma_b"])[: len(element_symbols)],
+                "hsigma_n": list(naq["raw_tables"]["hsigma_n"])[: len(element_symbols)],
+                "hsigma_a": list(naq["raw_tables"]["hsigma_a"])[: len(element_symbols)],
+                "hsigma_b": list(naq["raw_tables"]["hsigma_b"])[: len(element_symbols)],
                 "sigma_mol": list(naq["sigma_mol"]),
             },
         },
