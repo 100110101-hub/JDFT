@@ -405,6 +405,7 @@ fn out_of_range_inputs_are_reported_instead_of_silently_degrading() {
 /// 一个来自 `scripts/smd_cds_legacy_reference.py` 的体系（PySCF `get_cds_legacy`）。
 struct OracleSystem {
     name: String,
+    solvent: String,
     atoms: Vec<(String, [f64; 3])>,
     energy_kcal: f64,
 }
@@ -423,6 +424,7 @@ fn read_oracle_systems() -> Vec<OracleSystem> {
         let fields: Vec<&str> = line.split(',').collect();
         assert_eq!(fields.len(), 13, "line {}: expected 13 columns", index + 1);
         let name = fields[0].to_string();
+        let solvent = fields[1].to_string();
         let symbol = fields[3].to_string();
         let position = [
             fields[4].parse::<f64>().expect("x"),
@@ -431,9 +433,12 @@ fn read_oracle_systems() -> Vec<OracleSystem> {
         ];
         let energy_kcal = fields[7].parse::<f64>().expect("e_cds");
         match systems.last_mut() {
-            Some(last) if last.name == name => last.atoms.push((symbol, position)),
+            Some(last) if last.name == name && last.solvent == solvent => {
+                last.atoms.push((symbol, position));
+            }
             _ => systems.push(OracleSystem {
                 name,
+                solvent,
                 atoms: vec![(symbol, position)],
                 energy_kcal,
             }),
@@ -465,7 +470,8 @@ fn the_multi_atom_cds_energy_matches_the_oracle_when_the_sigma_is_zero_order_onl
     ];
     let mut worst = 0.0_f64;
     for oracle in read_oracle_systems() {
-        if !zero_order.contains(&oracle.name.as_str()) {
+        // 参考文件里有非水相的同一批分子（`solvent` 列不同）；这一半只跑水相。
+        if oracle.solvent != "water" || !zero_order.contains(&oracle.name.as_str()) {
             continue;
         }
         let atoms = oracle

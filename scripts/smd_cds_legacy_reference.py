@@ -124,9 +124,24 @@ SYSTEMS = (
     ),
 )
 
-#: 只做水相（`icds = 1`）：非水还要叠 `CSSIGM·A_total`，那是另一个自由度；零阶表验证
-#: 不需要它，加进来只会让判据更难区分"σ 错"与"面积错"。
-SOLVENT = "water"
+#: 每个体系在哪些溶剂里取参考值：水相（`icds = 1`，σ 直接查表、`CSSIGM = 0`）与
+#: 非水相（`icds = 2`，σ 与 HSIGMA 换成 `σ_N·SOLN + σ_A·SOLA + σ_B·SOLB` 的拼装，
+#: 并叠上 `CSSIGM·A_total`）。非水四个 case 验证那条拼装与常数项 —— 它们同时用到
+#: 非水独有的 `HSIGMA_N(O) = −19.39` 与成对块 `SIGMA_N/A/B(101..150)`。
+CASES = (
+    ("water", "water"),
+    ("hydrogen-fluoride", "water"),
+    ("hydrogen-chloride", "water"),
+    ("hydrogen-sulfide", "water"),
+    ("methane", "water"),
+    ("methanol", "water"),
+    ("acetone", "water"),
+    ("acetonitrile", "water"),
+    ("water", "methanol"),
+    ("methane", "toluene"),
+    ("methanol", "methanol"),
+    ("acetonitrile", "acetonitrile"),
+)
 
 
 def rows() -> list[dict[str, str]]:
@@ -139,7 +154,9 @@ def rows() -> list[dict[str, str]]:
     print(f"pyscf {pyscf.__version__}, libsolvent available")
 
     out: list[dict[str, str]] = []
-    for name, atoms in SYSTEMS:
+    geometries = dict(SYSTEMS)
+    for name, solvent in CASES:
+        atoms = geometries[name]
         mol = gto.M(
             atom="; ".join(f"{symbol} {x} {y} {z}" for symbol, x, y, z in atoms),
             basis="sto-3g",
@@ -147,16 +164,16 @@ def rows() -> list[dict[str, str]]:
             verbose=0,
         )
         obj = smd.SMD(mol)
-        obj.solvent = SOLVENT
+        obj.solvent = solvent
         energy, gradient = smd.get_cds_legacy(obj)
         energy_kcal = float(energy) * HARTREE2KCAL
-        print(f"  {name:20s} E_CDS = {energy_kcal:.6f} kcal/mol")
+        print(f"  {name:20s} {solvent:12s} E_CDS = {energy_kcal:.6f} kcal/mol")
         for index, (symbol, x, y, z) in enumerate(atoms):
             gx, gy, gz = (float(value) for value in gradient[index])
             out.append(
                 {
                     "system": name,
-                    "solvent": SOLVENT,
+                    "solvent": solvent,
                     "atom_index": str(index),
                     "symbol": symbol,
                     "x": f"{x:.10f}",

@@ -9,7 +9,7 @@
 use std::path::PathBuf;
 
 use qwb_engine_api::{Atom, Molecule};
-use qwb_props::smd::SmdDescriptors;
+use qwb_props::smd::{SmdDescriptors, cds_constant_term};
 use qwb_props::smd_sigma::{cds_energy_kcal_from_sts, smd_sts};
 use qwb_props::smd_surface::smd_surface;
 use qwb_registry::Registry;
@@ -18,6 +18,7 @@ use qwb_registry::smd_atomic::SmdAtomic;
 /// 一个来自参考 CSV 的体系。
 struct OracleSystem {
     name: String,
+    solvent: String,
     atoms: Vec<(String, [f64; 3])>,
     energy_kcal: f64,
 }
@@ -45,6 +46,7 @@ fn read_oracle_systems() -> Vec<OracleSystem> {
         let fields: Vec<&str> = line.split(',').collect();
         assert_eq!(fields.len(), 13, "line {}: expected 13 columns", index + 1);
         let name = fields[0].to_string();
+        let solvent = fields[1].to_string();
         let symbol = fields[3].to_string();
         let position = [
             fields[4].parse::<f64>().expect("x"),
@@ -53,9 +55,12 @@ fn read_oracle_systems() -> Vec<OracleSystem> {
         ];
         let energy_kcal = fields[7].parse::<f64>().expect("e_cds");
         match systems.last_mut() {
-            Some(last) if last.name == name => last.atoms.push((symbol, position)),
+            Some(last) if last.name == name && last.solvent == solvent => {
+                last.atoms.push((symbol, position));
+            }
             _ => systems.push(OracleSystem {
                 name,
+                solvent,
                 atoms: vec![(symbol, position)],
                 energy_kcal,
             }),
@@ -77,34 +82,66 @@ fn molecule_of(system: &OracleSystem) -> Molecule {
     Molecule::new(atoms, 0, 1)
 }
 
+/// 从**本仓库**的 `qwb-data/solvent/<name>.yaml` 取六个 SMD 描述符。
+///
+/// 刻意不用 PySCF 的 `solvent_db`：参考值那边用 PySCF 自己的溶剂表，我们这边用仓库的
+/// 六个数 —— 于是这条对照同时验证"数据文件里的描述符"与"非水 σ 的拼装规则"。
+fn descriptors_for(name: &str) -> SmdDescriptors {
+    let registry = Registry::open(data_root()).expect("qwb-data");
+    let solvent = registry.get_solvent(name).expect("solvent");
+    let smd = solvent.smd.as_ref().expect("the SMD block");
+    SmdDescriptors::new(
+        smd.abraham_alpha.expect("abraham_alpha"),
+        smd.abraham_beta.expect("abraham_beta"),
+        smd.phi_sq.expect("phi_sq"),
+        smd.gamma_cal_per_mol_angstrom2
+            .expect("gamma_cal_per_mol_angstrom2"),
+        smd.psi_sq.expect("psi_sq"),
+        smd.refractive_index_20c.expect("refractive_index_20c"),
+    )
+}
+
 #[test]
 fn the_per_atom_surface_tension_reproduces_the_upstream_cds_energy() {
     let data = smd();
-    // 面积用 8192 点/原子的二值遮蔽（上一半已对上上游 1e-4 量级）。
-    // 8192 点时最差 1.63e-3，32768 点降到 8.4e-4（水/甲烷/丙酮/乙腈都在 4e-4 以内），
-    // 与上一半实测的 O(1/√N) 采样噪声同量级。判据定在 2e-3。
+    // 8192 点时水相最差 1.63e-3，32768 点降到 8.4e-4，与上一半实测的 `O(1/√N)` 采样噪声
+    // 同量级。判据定在 2e-3。
     let points = 32768;
     let mut worst = 0.0_f64;
     for system in read_oracle_systems() {
+        let water = system.solvent == "water";
+        let descriptors = if water {
+            None
+        } else {
+            Some(descriptors_for(&system.solvent))
+        };
         let molecule = molecule_of(&system);
         let surface = smd_surface(&data, &molecule, points, 0.0).expect("surface");
-        let sts = smd_sts(&data, &molecule, true, None).expect("sts");
+        let sts = smd_sts(&data, &molecule, water, descriptors.as_ref()).expect("sts");
+        let cssigm = cds_constant_term(&data, water, descriptors.as_ref());
         let energy =
-            cds_energy_kcal_from_sts(&sts, 0.0, &surface.areas_angstrom2).expect("cds energy");
+            cds_energy_kcal_from_sts(&sts, cssigm, &surface.areas_angstrom2).expect("cds energy");
         let difference = (energy - system.energy_kcal).abs() / system.energy_kcal.abs();
+        // 非水溶剂的 σ 有正有负，`E_CDS` 常常是几项相消后的小数（甲苯里的甲烷：各项
+        // 绝对值合计 ~5.7 kcal/mol，而 `E_CDS` 只有 0.53），所以纯相对差会被放大约 13 倍。
+        // 判据因此用"对各项绝对值之和"的相对差 —— 对相消不敏感，量纲仍是能量。
+        let scale: f64 = sts
+            .iter()
+            .zip(&surface.areas_angstrom2)
+            .map(|(sigma, area)| ((sigma + cssigm) * area).abs())
+            .sum::<f64>()
+            / 1000.0;
+        let deviation = (energy - system.energy_kcal).abs() / scale.max(1.0e-12);
         println!(
-            "{:20} ours {energy:.6} vs oracle {:.6} kcal/mol (rel {difference:.2e})  sts = {:?}",
-            system.name,
-            system.energy_kcal,
-            sts.iter()
-                .map(|value| (value * 100.0).round() / 100.0)
-                .collect::<Vec<_>>()
+            "{:20} {:12} ours {energy:.6} vs oracle {:.6} kcal/mol \
+             (rel {difference:.2e}, vs sum of |terms| {deviation:.2e})",
+            system.name, system.solvent, system.energy_kcal
         );
-        worst = worst.max(difference);
+        worst = worst.max(deviation);
     }
-    println!("worst relative deviation: {worst:.3e}");
+    println!("worst deviation (normalised by the sum of |terms|): {worst:.3e}");
     assert!(
-        worst < 2.0e-3,
+        worst < 1.0e-3,
         "the per-atom sigma assembly must reproduce the oracle, got {worst:.3e}"
     );
 }
