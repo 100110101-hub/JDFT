@@ -101,6 +101,11 @@ step "core: fmt" bash -c "cd qwb-core && \"\$0\" fmt --all --check" "$CARGO"
 step "core: clippy -D warnings" bash -c "cd qwb-core && \"\$0\" clippy --workspace --all-targets -- -D warnings" "$CARGO"
 # EX-02：与 verify.ps1 同步 —— 有 cargo-nextest 就走进程级并行（doctest 单独跑一步，
 # 集合不变），没有就退回 `cargo test --workspace`。
+# EX-02：与 verify.ps1 同步 —— 编译单独一步（不计入测试段计时），下一行才是测试段。
+step "core: test binaries (prebuild, not part of the test wall clock)" bash -c '
+    cd qwb-core || exit 1
+    cargo test --workspace --all-targets --no-run
+'
 step "core: test" bash -c '
     cd qwb-core || exit 1
     NEXTEST="$(command -v cargo-nextest || command -v cargo-nextest.exe || true)"

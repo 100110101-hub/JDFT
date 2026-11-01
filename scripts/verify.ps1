@@ -130,6 +130,13 @@ Step -Name 'core: fmt' -Dir 'qwb-core' -Body { cargo fmt --all --check }
 Step -Name 'core: clippy -D warnings' -Dir 'qwb-core' -Body {
     cargo clippy --workspace --all-targets -- -D warnings
 }
+# EX-02：**先编译、再计时**。`qwb-registry` 的类型一改，依赖它的每个测试二进制都要重编；
+# 把编译放进计时的那一步里，会让「省了一大笔运行时间」被编译时间掩盖（第 375 轮实测：
+# 冷路径 `core: test` 760.9 s，其中运行只有几十秒）。所以编译单独一步、单独报时，
+# 下一步的计时才是真正的**测试段**。编译产物 nextest 直接复用（同一个 test profile）。
+Step -Name 'core: test binaries (prebuild, not part of the test wall clock)' -Dir 'qwb-core' -Body {
+    cargo test --workspace --all-targets --no-run
+}
 # EX-02：进程级并行（cargo-nextest）。**测试集合不变** —— nextest 不跑 doctest，
 # 所以 doctest 单独跑一步补上；没装 nextest 的机器退回 `cargo test --workspace`（同一个集合）。
 Step -Name 'core: test' -Dir 'qwb-core' -Body {

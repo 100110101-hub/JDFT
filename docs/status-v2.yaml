@@ -549,8 +549,8 @@ EX-01:
 EX-02:
   state: done
   ts: "2026-11-06T12:00:00Z"
-  artifact: "`qwb-core/Cargo.toml` 的 `[profile.test] opt-level = 2`（`debug-assertions` 仍开）+ `scripts/verify.ps1` 的 `core: test` 装配 steps + `sc01b_uks.rs` 按参考行拆分（4 个测试 + 1 条覆盖断言，`check_reference_row` 是原循环体逐字搬移）"
-  verification: "**门禁 45–70 min → 396.8 s（6.6 min）**，26 项全绿；`core: test` **981 s → 161 s**。归因实测：同一批 UKS 测试 debug **591.6 s** vs release **15.5 s**（**38×**），改 profile 后 **23.96 s**。附带的 SCF 修正：`density_threshold` 1e-8 → 1e-7（grid-fine 求积噪声底，原阈值不可达，跑满 400 步），O2/PBE 590 s → 260 s（改 profile 后 15 s），能量 E = −148.1377193243 vs PySCF −148.1377187459（差 −5.78e-7，容差 1e-6 未动）。"
+  artifact: "`qwb-core/Cargo.toml` 的 `[profile.test]`（`opt-level = 2` + **第 375 轮补 `debug = 0`**，`debug-assertions` 仍开）+ `scripts/verify.ps1` / `verify.sh` 的 `core: test binaries (prebuild, ...)` 与 `core: test` 两步（第 375 轮把**编译**从测试段计时里分出来） + `sc01b_uks.rs` 按参考行拆分（4 个测试 + 1 条覆盖断言，`check_reference_row` 是原循环体逐字搬移）"
+  verification: "**门禁 45–70 min → 396.8 s（6.6 min）**，26 项全绿；`core: test` **981 s → 161 s**。**第 375 轮三档墙钟实测（33 项全绿）**：暖路径 **321.8 s（5.4 min）**、测试段 **154.5 s**；冷路径（改 `qwb-registry` 的类型）prebuild **518.3 s** + 测试段 **160.6 s**、总 **976.3 s（16.3 min）**。`[profile.test] debug = 0` 把冷路径的编译+运行从 **760.9 s 降到 678.9 s（−11 %）**，只关调试符号、`debug-assertions` 仍开，测试集合/断言/容差/数值一字未改。归因实测：同一批 UKS 测试 debug **591.6 s** vs release **15.5 s**（**38×**），改 profile 后 **23.96 s**。附带的 SCF 修正：`density_threshold` 1e-8 → 1e-7（grid-fine 求积噪声底，原阈值不可达，跑满 400 步），O2/PBE 590 s → 260 s（改 profile 后 15 s），能量 E = −148.1377193243 vs PySCF −148.1377187459（差 −5.78e-7，容差 1e-6 未动）。"
   note: "测试集合、断言、容差一字未改；改的是**构建配置**与一个**物理上不可达的收敛阈值**。"
 EX-03:
   state: blocked

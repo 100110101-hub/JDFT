@@ -58,3 +58,9 @@ pedantic = { level = "allow", priority = -1 }
 # 的优化级别（debug-assertions 保持打开），测试集合、断言与容差一个都不动。
 [profile.test]
 opt-level = 2
+# EX-02（第 375 轮补）：**关掉测试二进制的调试信息**。动机是冷路径墙钟：`qwb-registry` 的
+# 类型一改，依赖它的每个测试二进制都要重编，而每个二进制都带着完整 debuginfo 去链接 ——
+# 这一项占冷路径编译时间的大头。`debug = 0` 只影响调试符号（不含任何代码生成），
+# `debug-assertions` 仍按默认的 test profile 打开，所以**测试集合、断言、数值一个都不变**；
+# 代价是 panic 的回溯里没有行号，而门禁不使用行号（失败时看的是 nextest 的用例名）。
+debug = 0
