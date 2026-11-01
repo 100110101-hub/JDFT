@@ -130,6 +130,16 @@ fn recipes() -> Vec<(&'static str, UhfOptions)> {
         ("J 退火 2.0/0.95", annealed(2.0, 0.95, 1.0)),
         ("K 退火 5.0/0.97", annealed(5.0, 0.97, 1.0)),
         ("L 退火 2.0/0.90+破对称", annealed(2.0, 0.90, 1.5)),
+        // M（第 380 轮）：NO 的病不是振荡而是**很长的下坡** —— 前 200 步 E 还在
+        // −127.52999 附近缓慢下降，908 步才到真正的 UHF 驻点 −127.5303995618。
+        // 十二档配方全部卡在 200/400 步的预算上，所以缺的是**预算**不是配方。
+        // 独立的 PySCF UHF（damp 0.7 收敛到 192 步，Newton 复核）给 −127.5303995296、
+        // ⟨S²⟩ = 0.9650 —— 两者差 3.2e-8 Ha（本仓库 STO-3G 指数比 PySCF 内建表多几位）。
+        ("M 大预算（1200 步）", {
+            let mut o = base(0.0, 0.0, 1.0);
+            o.max_iter = 1200;
+            o
+        }),
     ]
 }
 
@@ -152,6 +162,14 @@ fn open_shell_stability_is_measured_not_assumed() {
                         "{name}: 收敛（{label}）E = {:.10} Ha，{} 步，{seconds:.3} s",
                         result.energy_hartree, result.iterations
                     );
+                    if name == "NO" {
+                        // PySCF 的 UHF（damp 0.7，192 步；`newton()` 复核）＝ −127.5303995296。
+                        assert!(
+                            (result.energy_hartree - (-127.530_399_529_6)).abs() < 1.0e-6,
+                            "NO 的 UHF 能量 {:.10} 与 PySCF 的 −127.5303995296 差得太多",
+                            result.energy_hartree
+                        );
+                    }
                     chosen = Some((label, result.iterations, seconds));
                     break;
                 }
@@ -190,16 +208,25 @@ fn open_shell_stability_is_measured_not_assumed() {
         println!("{name:5} {label:24} {iterations:3} 步 {seconds:6.3} s  收敛");
     }
     for (name, diagnosis) in &failed {
-        println!("{name:5} 未收敛（8 档配方）  诊断：{diagnosis}");
+        println!(
+            "{name:5} 未收敛（{} 档配方）  诊断：{diagnosis}",
+            recipes().len()
+        );
     }
-    // 钉住实测状态：现在 4/5 收敛，NO 不收敛。修好 NO 之后这条会红，提醒更新台账。
+    // 钉住实测状态：**5/5 收敛**（第 380 轮：NO 的卡点是预算不是配方 —— 十二档配方全部卡在
+    // 200/400 步，而它从 −127.52999 一路缓慢下坡，908 步才到 UHF 驻点）。
     assert_eq!(
         converged.len(),
-        4,
-        "实测应为 4 个体系收敛（见台账 SC-03 的 gap）"
+        5,
+        "实测应为 5 个体系收敛（SC-03 的判据：5/5 到 1e-8）"
     );
-    assert_eq!(failed.len(), 1, "实测应有 1 个体系失败（NO）");
-    assert_eq!(failed[0].0, "NO", "失败的是 NO");
+    assert!(failed.is_empty(), "不应再有失败的体系：{failed:?}");
+
+    // NO 的**独立核对**：PySCF 2.14.0 的 UHF（damp 0.7 收敛到 192 步，`newton()` 复核）
+    // 给 −127.5303995296 Ha、⟨S²⟩ = 0.9650。本仓库的 STO-3G 指数比 PySCF 内建表多几位，
+    // 实测差 **3.2e-8 Ha**。这条断言钉住"908 步收敛到的是**同一个** UHF 驻点"，
+    // 而不是一个更低的伪态 —— 顺带说明：早先"放宽到 1e-6、103 步"的那个解是
+    // **−127.5288656**，比真驻点高 1.5 mHa，是个伪态。
 }
 
 #[test]
