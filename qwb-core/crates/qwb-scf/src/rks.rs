@@ -304,6 +304,11 @@ pub(crate) fn nuclear_repulsion(charges: &[f64], molecule: &Molecule) -> Result<
 pub(crate) fn default_charges(molecule: &Molecule) -> Result<Vec<f64>, EngineError> {
     let mut charges = Vec::with_capacity(molecule.n_atoms());
     for atom in &molecule.atoms {
+        if atom.ghost {
+            // 幽灵原子：只带基函数，核电荷与电子数为 0（counterpoise/BSSE 用）。
+            charges.push(0.0);
+            continue;
+        }
         let z = atomic_number(&atom.symbol)
             .ok_or_else(|| EngineError::Internal(format!("unknown element {}", atom.symbol)))?;
         charges.push(f64::from(z));

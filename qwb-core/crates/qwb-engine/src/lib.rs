@@ -1485,6 +1485,30 @@ impl EngineBackend for RksBackend {
         // 但引擎还没实现。这里必须显式拒绝 —— 静默忽略会让用户拿一个"看起来成功"
         // 的闭壳层结果去当他想要的 UKS/MP2/溶剂化结果（那正是 §10.3 禁止的事）。
         reject_unimplemented_options(input)?;
+        // **幽灵原子（counterpoise/BSSE）**：只支持 `sp`，且不支持色散校正 / ECP / 溶剂。
+        //
+        // 为什么这么窄：ghost 的语义是"只提供基函数、没有核与电子"。原子核相关的量
+        // （核排斥、偶极的核项、布居的 Z、EPR 的核 g 因子）、以及按元素配对的色散校正
+        // 都必须逐个审过才能放行 —— 没审过就放过，用户会拿到一个数值上"看起来正常"但
+        // 把 ghost 当成真实原子算的结果。所以这里按"能量路径"白名单，其余显式拒绝。
+        if input.molecule.has_ghosts() {
+            if input.jobtype != JobType::Sp {
+                return Err(EngineError::Unsupported(format!(
+                    "ghost atoms (counterpoise/BSSE) are implemented for `sp` only; jobtype = `{}`",
+                    input.jobtype.as_str()
+                )));
+            }
+            if input.options.dispersion.is_some()
+                || input.options.ecp_name.is_some()
+                || input.solvent != "vacuum"
+            {
+                return Err(EngineError::Unsupported(
+                    "ghost atoms are not audited against dispersion / ECP / solvent yet; \
+                     run the counterpoise energies without them"
+                        .to_string(),
+                ));
+            }
+        }
         if input.solvent != "vacuum" {
             // SV-01：单点的隐式溶剂（COSMO / C-PCM）已实装，但**还没接到**梯度的
             // 自洽求解里（SV-02）。`opt`/`freq` 走的是另一条路径，如果在这里放行，

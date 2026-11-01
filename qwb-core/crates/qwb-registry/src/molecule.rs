@@ -19,6 +19,15 @@ pub struct MoleculeAtom {
     pub symbol: String,
     /// 直角坐标，单位 Å。
     pub position_angstrom: [f64; 3],
+    /// **幽灵原子**（只提供基函数、没有核电荷）：与 `engine-api::Atom::ghost` 对齐。
+    /// counterpoise/BSSE 的输入文件用它，默认 `false` 且不序列化。
+    #[serde(default, skip_serializing_if = "is_false_ghost")]
+    pub ghost: bool,
+}
+
+/// `skip_serializing_if` 的辅助：`false` 不写出来。
+fn is_false_ghost(value: &bool) -> bool {
+    !*value
 }
 
 /// 分子文件（`qwb-data/molecule/*.yaml`，也用于 GUI 保存的分子）。
@@ -146,14 +155,17 @@ mod tests {
                 MoleculeAtom {
                     symbol: "O".into(),
                     position_angstrom: [0.0, 0.0, 0.0],
+                    ghost: false,
                 },
                 MoleculeAtom {
                     symbol: "H".into(),
                     position_angstrom: [0.0, 0.757, 0.586],
+                    ghost: false,
                 },
                 MoleculeAtom {
                     symbol: "H".into(),
                     position_angstrom: [0.0, -0.757, 0.586],
+                    ghost: false,
                 },
             ],
             charge: 0,

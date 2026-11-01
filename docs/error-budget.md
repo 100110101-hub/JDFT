@@ -52,6 +52,7 @@
 | CDS **多原子**能量 vs 上游 `libsolvent`（水 / HF / HCl / H₂S，`w = 0`、8192 点/原子、零阶 σ） | 相对 1.25e-4 / 6.84e-5 / 3.36e-5 / **1.86e-4**（最差 H₂S）；官方值 1.441315 / 2.031181 / 1.176125 / 1.008290 kcal/mol | SV-03：多原子 CDS 能量对官方实现 < 1e-3 | ✅ | `qwb-core/crates/qwb-props/tests/sv03_smd_surface.rs`（参考值 `tests/reference/smd_cds_legacy.csv`） |
 | CDS 表面分解的**带宽开起来**时对上游的偏差（水 / HF / HCl / H₂S，`w = 0.2`、1024 点） | 1.21e-1 / 8.47e-2 / 8.19e-2 / 1.20e-1 | 同上 | ⚠️ 记录：上游的等效表面更接近二值遮蔽，所以能量默认 `w = 0` | `qwb-core/crates/qwb-props/tests/sv03_smd_surface.rs` |
 | CDS 多原子表面的**分原子面积** vs 上游 `DAREAL` | 未测（`get_cds_legacy` 只返回能量 + 梯度，不含面积；总能量层面的对照已由上一行覆盖） | 无 §9.3 行 | 未测 | `docs/status-v2.yaml` 的 SV-03 条目 |
+| 幽灵原子（counterpoise）路径 vs PySCF `ghost:` | 水二聚体 STO-3G：二聚体 5.0e-8、单体（二聚体基组）3.1e-8、单体（自由）3.1e-8 Ha；BSSE(A) = 2.318e-5 Ha | M2：与 oracle 一致 < 1e-6 | ✅ | `qwb-core/crates/qwb-engine/tests/m2_ghost_counterpoise.rs` |
 | 完整 TDDFT（RPA/TDHF，ST-01）vs PySCF `tdscf.rhf.TDHF` | 4.6e-7…5.9e-7 eV（H2O/STO-3G）、1.2e-7…2.9e-7 eV（def2-SVP） | `§9.3` 无专门行；ST-01 判据 0.15 eV | ✅（小 5 个量级；相对 TDA 系统性下降 0.014–0.110 eV） | `qwb-core/crates/qwb-response/tests/st01_tddft.rs` |
 | 短程 2e 积分（IN-02，ω ∈ {0, 0.1, 0.3, 0.6, 1.0}） | 相对 1.41e-14（与 u 空间独立闭式） | K10 判据 1e-9 | ✅ | `qwb-core/crates/qwb-integrals/tests/in02_short_range.rs` |
 | 解析梯度 vs 数值（UHF：OH/O2） | 3.63e-7 / 7.29e-7 Ha/Bohr | `§9.3:梯度` < 1e-5 Ha/Bohr | ✅ | `qwb-core/crates/qwb-scf/tests/sc02_uhf_gradient.rs` |

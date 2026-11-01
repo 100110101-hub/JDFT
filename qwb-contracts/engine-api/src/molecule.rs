@@ -19,6 +19,18 @@ pub struct Atom {
     pub symbol: String,
     /// 直角坐标，单位 Å，顺序为 `[x, y, z]`。
     pub position_angstrom: [f64; 3],
+    /// **幽灵原子**（ghost）：只提供基函数、不提供核电荷与电子。
+    ///
+    /// 这是 counterpoise（BSSE）校正要用的：把伙伴分子放在原位置但换成 ghost，
+    /// 单体的能量里就只剩"伙伴的基函数"这一项基组不完备效应。默认 `false`，
+    /// 且序列化时**不输出**（旧输出逐字节不变）。
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub ghost: bool,
+}
+
+/// `skip_serializing_if` 的辅助：`false` 不写出来。
+fn is_false(value: &bool) -> bool {
+    !*value
 }
 
 impl Atom {
@@ -28,6 +40,17 @@ impl Atom {
         Self {
             symbol: symbol.into(),
             position_angstrom,
+            ghost: false,
+        }
+    }
+
+    /// 构造一个**幽灵原子**：保留该元素的基函数，但核电荷与电子数为 0。
+    #[must_use]
+    pub fn new_ghost(symbol: impl Into<String>, position_angstrom: [f64; 3]) -> Self {
+        Self {
+            symbol: symbol.into(),
+            position_angstrom,
+            ghost: true,
         }
     }
 
@@ -95,13 +118,58 @@ impl Molecule {
                 )));
             }
         }
+        if self.atoms.iter().all(|atom| atom.ghost) {
+            return Err(EngineError::InvalidInput(
+                "a molecule made only of ghost atoms has no electrons".into(),
+            ));
+        }
         Ok(())
+    }
+
+    /// 是否含幽灵原子（counterpoise 校正）。
+    #[must_use]
+    pub fn has_ghosts(&self) -> bool {
+        self.atoms.iter().any(|atom| atom.ghost)
+    }
+
+    /// 真实原子（非 ghost）的个数。
+    #[must_use]
+    pub fn n_real_atoms(&self) -> usize {
+        self.atoms.iter().filter(|atom| !atom.ghost).count()
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::{Atom, BOHR_PER_ANGSTROM, Molecule};
+
+    #[test]
+    fn ghost_atoms_are_opt_in_and_never_serialized_when_false() {
+        // 幽灵原子：默认 false、`false` 不写进 JSON（旧输出逐字节不变）、`new_ghost` 置 true。
+        let plain = Atom::new("O", [0.0, 0.0, 0.0]);
+        let text = serde_json::to_string(&plain).expect("json");
+        assert!(
+            !text.contains("ghost"),
+            "false 的 ghost 不该出现在 JSON 里：{text}"
+        );
+        let restored: Atom = serde_json::from_str(&text).expect("back");
+        assert!(!restored.ghost);
+
+        let ghost = Atom::new_ghost("O", [0.0, 0.0, 1.5]);
+        let text = serde_json::to_string(&ghost).expect("json");
+        assert!(text.contains("ghost"), "{text}");
+        let restored: Atom = serde_json::from_str(&text).expect("back");
+        assert!(restored.ghost);
+
+        // 分子层面：`has_ghosts` / `n_real_atoms`，以及"全是 ghost"被拒（没有电子）。
+        let molecule = Molecule::new(vec![restored, Atom::new("H", [0.0, 0.0, -1.0])], 0, 1);
+        assert!(molecule.has_ghosts());
+        assert_eq!(molecule.n_real_atoms(), 1);
+        molecule.validate().expect("一个真实原子就够");
+
+        let all_ghosts = Molecule::new(vec![Atom::new_ghost("O", [0.0, 0.0, 0.0])], 0, 1);
+        assert!(all_ghosts.validate().is_err(), "全是 ghost 的分子没有电子");
+    }
 
     fn h2() -> Molecule {
         Molecule::new(

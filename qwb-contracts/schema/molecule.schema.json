@@ -93,6 +93,10 @@
       "description": "单个原子（Å，与 `engine-api::Atom` 对齐）。",
       "type": "object",
       "properties": {
+        "ghost": {
+          "description": "**幽灵原子**（只提供基函数、没有核电荷）：与 `engine-api::Atom::ghost` 对齐。\ncounterpoise/BSSE 的输入文件用它，默认 `false` 且不序列化。",
+          "type": "boolean"
+        },
         "position_angstrom": {
           "description": "直角坐标，单位 Å。",
           "type": "array",

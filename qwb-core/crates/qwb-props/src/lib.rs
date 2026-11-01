@@ -145,7 +145,12 @@ pub fn populations(
     let mut mulliken_charges = Vec::with_capacity(molecule.atoms.len());
     let mut lowdin_charges = Vec::with_capacity(molecule.atoms.len());
     for (index, atom) in molecule.atoms.iter().enumerate() {
-        let z = f64::from(atomic_number(&atom.symbol).unwrap_or(0));
+        // 幽灵原子没有核电荷：Z = 0（否则布居电荷会把伙伴的核算进来）。
+        let z = if atom.ghost {
+            0.0
+        } else {
+            f64::from(atomic_number(&atom.symbol).unwrap_or(0))
+        };
         mulliken_charges.push(z - mulliken_atoms[index]);
         lowdin_charges.push(z - lowdin_atoms[index]);
     }
@@ -329,6 +334,9 @@ pub fn dipole_debye(
         }
         let mut nuclear = 0.0;
         for atom in &molecule.atoms {
+            if atom.ghost {
+                continue; // 幽灵原子没有核电荷
+            }
             let z = f64::from(atomic_number(&atom.symbol).unwrap_or(0));
             nuclear += z * atom.position_bohr()[axis];
         }
