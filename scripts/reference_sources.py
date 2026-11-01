@@ -31,6 +31,8 @@ __all__ = [
     "GENERATORS",
     "DFTD3_DOI",
     "DFTD3_URL",
+    "DFTD4_DOI",
+    "DFTD4_URL",
     "PYSCF_DOI",
     "PYSCF_URL",
     "SOURCE_COLUMNS",
@@ -51,6 +53,15 @@ PYSCF_URL = "https://github.com/pyscf/pyscf"
 DFTD3_DOI = "10.1063/1.3382344"
 #: 官方 s-dftd3 实现（色散参考值的黑盒尺子）。
 DFTD3_URL = "https://github.com/dftd3/simple-dftd3"
+
+#: D4 的原始论文（Caldeweyher, Ehlert, Hansen, Neugebauer, Spicher, Bannwarth, Grimme,
+#: J. Chem. Phys. 150, 154122 (2019)）。
+#: 2026-11-10 用 Crossref `api.crossref.org/works/10.1063/1.5090222` 核对过题名（
+#: "A generally applicable atomic-charge dependent London dispersion correction"）、
+#: 卷 150 / 期 15 / 文章号 154122 与年份 2019。
+DFTD4_DOI = "10.1063/1.5090222"
+#: 官方 dftd4 实现（D4 参考值的黑盒尺子；本机装的是 pip 包 dftd4 4.3.1）。
+DFTD4_URL = "https://github.com/dftd4/dftd4"
 
 #: 每一行都必须带的两个来源列（加在最后一列之后，位置固定）。
 SOURCE_COLUMNS = ("source_doi", "source_url")
@@ -97,6 +108,12 @@ GENERATORS = {
     # `dft.UKS` 黑盒。逐点参考（`spin_mgga_pointwise.csv`）钉公式，这一份钉接线。
     "qwb-core/crates/qwb-scf/tests/reference/uks_mgga.csv":
         "scripts/pyscf_uks_mgga_reference.py",
+    # DA-06（D4）：官方 dftd4 4.3.1 黑盒给出的色散能/梯度与中间量（CN、EEQ 电荷、
+    # 极化率、C6）。D4 的验收判据同样是「与官方实现一致」，所以参考值只能来自它本身。
+    "qwb-core/crates/qwb-scf/tests/reference/d4_dispersion.csv":
+        "scripts/dftd4_dispersion_reference.py",
+    "qwb-core/crates/qwb-scf/tests/reference/d4_properties.csv":
+        "scripts/dftd4_dispersion_reference.py",
 }
 
 FAMILIES = tuple(GENERATORS)

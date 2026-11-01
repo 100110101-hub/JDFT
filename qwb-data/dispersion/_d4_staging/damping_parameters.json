@@ -1,0 +1,251 @@
+{
+  "schema_version": 1,
+  "description": "DFT-D4 damping parameters per functional, extracted programmatically from the pinned dftd4 v4.3.1 source. Numbers are parsed from src/dftd4/param.f90::get_d4eeq_bjatm_parameter and cross-checked against assets/parameters.toml.",
+  "generated_by": "extract_d4_data.py (no value typed by hand)",
+  "upstream": {
+    "repo": "https://github.com/dftd4/dftd4",
+    "tag": "v4.3.1",
+    "commit": "1107ea7c7c2131719e306fd57a5f4a1579e2577e",
+    "license_spdx": "LGPL-3.0-or-later"
+  },
+  "citation": {
+    "title": "A generally applicable atomic-charge dependent London dispersion correction",
+    "authors": "E. Caldeweyher, S. Ehlert, A. Hansen, H. Neugebauer, S. Spicher, C. Bannwarth, S. Grimme",
+    "journal": "J. Chem. Phys. 150, 154122 (2019)",
+    "doi": "10.1063/1.5090222",
+    "verified_from": "dftd4/CITATION.bib entry dftd4-2"
+  },
+  "model": {
+    "two_body_energy_implemented": "E_2 = -1/2 * sum_{i,j} C6_ij * sw_ij * ( s6 / (R_ij^6 + r0_ij^6) + s8 * rrij_ij / (R_ij^8 + r0_ij^8) )",
+    "variables": {
+      "rrij_ij": "3 * r4r2_i * r4r2_j  (= C8/C6)",
+      "r0_ij": "a1 * sqrt(rrij_ij) + a2",
+      "C6_ij": "sum_{ref,ref'} w_ref(i)*w_ref'(j)*C6_ref,ref'(Z_i,Z_j); the reference weights w are CN- and charge-dependent (see reference_systems.json)",
+      "sw_ij": "quintic smooth cutoff switch, 1 for r <= cutoff-width (cutoff 60 bohr default)",
+      "alp": "NOT used by the two-body term; upstream uses it only in the ATM term"
+    },
+    "atm_three_body_energy_implemented": "E_3 = sum_{i<j<k} ang_ijk * fdmp_ijk * C9_ijk with C9_ijk = -s9*sqrt(|C6_ij*C6_ik*C6_jk|), r0_ijk = prod r0_ab, fdmp = 1/(1 + 6*(r0_ijk/(r_ij r_ik r_jk))^(alp/3)), ang = 3/8*(...)/(r_ij r_ik r_jk)^5 + 1/(r_ij r_ik r_jk)^3",
+    "atm_enabled_by_default": true,
+    "atm_note": "get_rational_damping() prefers the 'bj-eeq-atm' table, whose dftd_param defaults s9 = 1.0, so the three-body term is on by default; s9 = 0 disables it (get_atm_dispersion returns immediately for |s9| < eps).",
+    "defaults": {
+      "s6": 1.0,
+      "s9": 1.0,
+      "alp": 16.0
+    },
+    "charge_response": {
+      "coefficients_exist_upstream": false,
+      "note": "There are no s6q/s8q/a1q/a2q coefficients anywhere in dftd4 v4.3.1. The charge dependence of D4 enters (a) through the EEQ partial charges q used in the reference weighting, and (b) through the element-specific charge scaling zeta(ga, eta_i*gc, q_ref+zeff, q+zeff). The damping parameters s6, s8, a1, a2 are charge-independent constants.",
+      "ga": 3.0,
+      "gc": 2.0,
+      "wf": 6.0,
+      "ga_gc_source": "dftd4/src/dftd4/model/d4.f90:65-71 (ga_default, gc_default, wf_default)",
+      "zeta_source": "dftd4/src/dftd4/model/utils.f90:44-60"
+    }
+  },
+  "functionals": {
+    "b3lyp": {
+      "s6": 1.0,
+      "s8": 2.02929367,
+      "a1": 0.40868035,
+      "a2": 4.53807137,
+      "alp": 16.0,
+      "s9": 1.0,
+      "charge_response_coefficients": {
+        "s6q": null,
+        "s8q": null,
+        "a1q": null,
+        "a2q": null,
+        "note": "upstream defines no charge-response damping coefficients; charge dependence is carried by the EEQ charges and the reference weighting zeta(ga, eta*gc, q_ref+zeff, q+zeff). See model.charge_response."
+      },
+      "aliases": [
+        "b3-lyp",
+        "b3lyp",
+        "hyb_gga_xc_b3lyp",
+        "hyb_gga_xc_b3lyp3",
+        "hyb_gga_xc_b3lyp5"
+      ],
+      "matched_alias": "b3lyp",
+      "case_label": "p_b3lyp",
+      "source": {
+        "file": "dftd4/src/dftd4/param.f90",
+        "subroutine": "get_d4eeq_bjatm_parameter",
+        "case_line": 384,
+        "url": "https://raw.githubusercontent.com/dftd4/dftd4/1107ea7c7c2131719e306fd57a5f4a1579e2577e/src/dftd4/param.f90#L384"
+      },
+      "doi": "10.1063/1.5090222",
+      "cross_check_parameters_toml": {
+        "match": true,
+        "file": "dftd4/assets/parameters.toml",
+        "line": 42,
+        "values": {
+          "s8": 2.02929367,
+          "a1": 0.40868035,
+          "a2": 4.53807137
+        }
+      }
+    },
+    "pbe": {
+      "s6": 1.0,
+      "s8": 0.95948085,
+      "a1": 0.38574991,
+      "a2": 4.80688534,
+      "alp": 16.0,
+      "s9": 1.0,
+      "charge_response_coefficients": {
+        "s6q": null,
+        "s8q": null,
+        "a1q": null,
+        "a2q": null,
+        "note": "upstream defines no charge-response damping coefficients; charge dependence is carried by the EEQ charges and the reference weighting zeta(ga, eta*gc, q_ref+zeff, q+zeff). See model.charge_response."
+      },
+      "aliases": [
+        "pbe",
+        "gga_x_pbe:gga_c_pbe"
+      ],
+      "matched_alias": "pbe",
+      "case_label": "p_pbe",
+      "source": {
+        "file": "dftd4/src/dftd4/param.f90",
+        "subroutine": "get_d4eeq_bjatm_parameter",
+        "case_line": 576,
+        "url": "https://raw.githubusercontent.com/dftd4/dftd4/1107ea7c7c2131719e306fd57a5f4a1579e2577e/src/dftd4/param.f90#L576"
+      },
+      "doi": "10.1063/1.5090222",
+      "cross_check_parameters_toml": {
+        "match": true,
+        "file": "dftd4/assets/parameters.toml",
+        "line": 277,
+        "values": {
+          "s8": 0.95948085,
+          "a1": 0.38574991,
+          "a2": 4.80688534
+        }
+      }
+    },
+    "pbe0": {
+      "s6": 1.0,
+      "s8": 1.20065498,
+      "a1": 0.40085597,
+      "a2": 5.02928789,
+      "alp": 16.0,
+      "s9": 1.0,
+      "charge_response_coefficients": {
+        "s6q": null,
+        "s8q": null,
+        "a1q": null,
+        "a2q": null,
+        "note": "upstream defines no charge-response damping coefficients; charge dependence is carried by the EEQ charges and the reference weighting zeta(ga, eta*gc, q_ref+zeff, q+zeff). See model.charge_response."
+      },
+      "aliases": [
+        "pbe0",
+        "hyb_gga_xc_pbeh"
+      ],
+      "matched_alias": "pbe0",
+      "case_label": "p_pbe0",
+      "source": {
+        "file": "dftd4/src/dftd4/param.f90",
+        "subroutine": "get_d4eeq_bjatm_parameter",
+        "case_line": 568,
+        "url": "https://raw.githubusercontent.com/dftd4/dftd4/1107ea7c7c2131719e306fd57a5f4a1579e2577e/src/dftd4/param.f90#L568"
+      },
+      "doi": "10.1063/1.5090222",
+      "cross_check_parameters_toml": {
+        "match": true,
+        "file": "dftd4/assets/parameters.toml",
+        "line": 268,
+        "values": {
+          "s8": 1.20065498,
+          "a1": 0.40085597,
+          "a2": 5.02928789
+        }
+      }
+    },
+    "hf": {
+      "s6": 1.0,
+      "s8": 1.61679827,
+      "a1": 0.44959224,
+      "a2": 3.35743605,
+      "alp": 16.0,
+      "s9": 1.0,
+      "charge_response_coefficients": {
+        "s6q": null,
+        "s8q": null,
+        "a1q": null,
+        "a2q": null,
+        "note": "upstream defines no charge-response damping coefficients; charge dependence is carried by the EEQ charges and the reference weighting zeta(ga, eta*gc, q_ref+zeff, q+zeff). See model.charge_response."
+      },
+      "aliases": [
+        "hf"
+      ],
+      "matched_alias": "hf",
+      "case_label": "p_hf",
+      "source": {
+        "file": "dftd4/src/dftd4/param.f90",
+        "subroutine": "get_d4eeq_bjatm_parameter",
+        "case_line": 471,
+        "url": "https://raw.githubusercontent.com/dftd4/dftd4/1107ea7c7c2131719e306fd57a5f4a1579e2577e/src/dftd4/param.f90#L471"
+      },
+      "doi": "10.1063/1.5090222",
+      "cross_check_parameters_toml": {
+        "match": true,
+        "file": "dftd4/assets/parameters.toml",
+        "line": 137,
+        "values": {
+          "s8": 1.61679827,
+          "a1": 0.44959224,
+          "a2": 3.35743605
+        }
+      }
+    },
+    "m06-l": {
+      "s6": 1.0,
+      "s8": 0.5949376,
+      "a1": 0.71422359,
+      "a2": 6.35314182,
+      "alp": 16.0,
+      "s9": 1.0,
+      "charge_response_coefficients": {
+        "s6q": null,
+        "s8q": null,
+        "a1q": null,
+        "a2q": null,
+        "note": "upstream defines no charge-response damping coefficients; charge dependence is carried by the EEQ charges and the reference weighting zeta(ga, eta*gc, q_ref+zeff, q+zeff). See model.charge_response."
+      },
+      "aliases": [
+        "m06l",
+        "mgga_x_m06_l:mgga_c_m06_l"
+      ],
+      "matched_alias": "m06l",
+      "case_label": "p_m06l",
+      "source": {
+        "file": "dftd4/src/dftd4/param.f90",
+        "subroutine": "get_d4eeq_bjatm_parameter",
+        "case_line": 516,
+        "url": "https://raw.githubusercontent.com/dftd4/dftd4/1107ea7c7c2131719e306fd57a5f4a1579e2577e/src/dftd4/param.f90#L516"
+      },
+      "doi": "10.1063/1.5090222",
+      "cross_check_parameters_toml": {
+        "match": true,
+        "file": "dftd4/assets/parameters.toml",
+        "line": 213,
+        "values": {
+          "s8": 0.5949376,
+          "a1": 0.71422359,
+          "a2": 6.35314182
+        }
+      }
+    },
+    "m06-2x": {
+      "absent_upstream": true,
+      "requested_aliases": [
+        "m062x",
+        "m06-2x"
+      ],
+      "reason": "dftd4 v4.3.1 has no damping parameter entry for this functional: the functional enumerator/param tables in src/dftd4/param.f90 do not contain it and assets/parameters.toml has no [parameter.*] block for it. No numbers are provided rather than inventing values.",
+      "checked_files": [
+        "dftd4/src/dftd4/param.f90",
+        "dftd4/assets/parameters.toml"
+      ]
+    }
+  }
+}

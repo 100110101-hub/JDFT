@@ -1,0 +1,434 @@
+{
+  "files": [
+    {
+      "local_path": "raw/dftd4/assets/parameters.toml",
+      "repo": "dftd4/dftd4",
+      "tag": "v4.3.1",
+      "commit": "1107ea7c7c2131719e306fd57a5f4a1579e2577e",
+      "repo_path": "assets/parameters.toml",
+      "url": "https://raw.githubusercontent.com/dftd4/dftd4/1107ea7c7c2131719e306fd57a5f4a1579e2577e/assets/parameters.toml",
+      "bytes": 23778,
+      "sha256": "c09bfad618de0aa0e3df881037b60449b9d7f1c1720f4fb9ba9b3745513d0a26"
+    },
+    {
+      "local_path": "raw/dftd4/CITATION.bib",
+      "repo": "dftd4/dftd4",
+      "tag": "v4.3.1",
+      "commit": "1107ea7c7c2131719e306fd57a5f4a1579e2577e",
+      "repo_path": "CITATION.bib",
+      "url": "https://raw.githubusercontent.com/dftd4/dftd4/1107ea7c7c2131719e306fd57a5f4a1579e2577e/CITATION.bib",
+      "bytes": 2360,
+      "sha256": "70404d8fc7f6a76f5dd4a6611efdfabde793a3816bb282b79678879461aac730"
+    },
+    {
+      "local_path": "raw/dftd4/COPYING.LESSER",
+      "repo": "dftd4/dftd4",
+      "tag": "v4.3.1",
+      "commit": "1107ea7c7c2131719e306fd57a5f4a1579e2577e",
+      "repo_path": "COPYING.LESSER",
+      "url": "https://raw.githubusercontent.com/dftd4/dftd4/1107ea7c7c2131719e306fd57a5f4a1579e2577e/COPYING.LESSER",
+      "bytes": 7652,
+      "sha256": "e3a994d82e644b03a792a930f574002658412f62407f5fee083f2555c5f23118"
+    },
+    {
+      "local_path": "raw/dftd4/fpm.toml",
+      "repo": "dftd4/dftd4",
+      "tag": "v4.3.1",
+      "commit": "1107ea7c7c2131719e306fd57a5f4a1579e2577e",
+      "repo_path": "fpm.toml",
+      "url": "https://raw.githubusercontent.com/dftd4/dftd4/1107ea7c7c2131719e306fd57a5f4a1579e2577e/fpm.toml",
+      "bytes": 1282,
+      "sha256": "9494867d4b23f1926ca3c8a3355ef18d6c65d2e424e3d5f41fa51623fa757b18"
+    },
+    {
+      "local_path": "raw/dftd4/README.md",
+      "repo": "dftd4/dftd4",
+      "tag": "v4.3.1",
+      "commit": "1107ea7c7c2131719e306fd57a5f4a1579e2577e",
+      "repo_path": "README.md",
+      "url": "https://raw.githubusercontent.com/dftd4/dftd4/1107ea7c7c2131719e306fd57a5f4a1579e2577e/README.md",
+      "bytes": 17764,
+      "sha256": "017434d086f4a273b46bcb80cf127f63cbbcc779bd303274eb5668083e2dcdad"
+    },
+    {
+      "local_path": "raw/dftd4/src/dftd4/cutoff.f90",
+      "repo": "dftd4/dftd4",
+      "tag": "v4.3.1",
+      "commit": "1107ea7c7c2131719e306fd57a5f4a1579e2577e",
+      "repo_path": "src/dftd4/cutoff.f90",
+      "url": "https://raw.githubusercontent.com/dftd4/dftd4/1107ea7c7c2131719e306fd57a5f4a1579e2577e/src/dftd4/cutoff.f90",
+      "bytes": 8724,
+      "sha256": "a0e82171b97829138bca9de597027584e4675efbcb598f234b52492cb1403fad"
+    },
+    {
+      "local_path": "raw/dftd4/src/dftd4/damping/atm.f90",
+      "repo": "dftd4/dftd4",
+      "tag": "v4.3.1",
+      "commit": "1107ea7c7c2131719e306fd57a5f4a1579e2577e",
+      "repo_path": "src/dftd4/damping/atm.f90",
+      "url": "https://raw.githubusercontent.com/dftd4/dftd4/1107ea7c7c2131719e306fd57a5f4a1579e2577e/src/dftd4/damping/atm.f90",
+      "bytes": 36055,
+      "sha256": "113830b772ae23b79379bc6aa4072c9fe852d72056612306328ca3c41d425d0a"
+    },
+    {
+      "local_path": "raw/dftd4/src/dftd4/damping/rational.f90",
+      "repo": "dftd4/dftd4",
+      "tag": "v4.3.1",
+      "commit": "1107ea7c7c2131719e306fd57a5f4a1579e2577e",
+      "repo_path": "src/dftd4/damping/rational.f90",
+      "url": "https://raw.githubusercontent.com/dftd4/dftd4/1107ea7c7c2131719e306fd57a5f4a1579e2577e/src/dftd4/damping/rational.f90",
+      "bytes": 24124,
+      "sha256": "c12a258589d7840f94eb7f0ebb5b1d73b88446ec5adc79a498296c24886a6cd2"
+    },
+    {
+      "local_path": "raw/dftd4/src/dftd4/damping.f90",
+      "repo": "dftd4/dftd4",
+      "tag": "v4.3.1",
+      "commit": "1107ea7c7c2131719e306fd57a5f4a1579e2577e",
+      "repo_path": "src/dftd4/damping.f90",
+      "url": "https://raw.githubusercontent.com/dftd4/dftd4/1107ea7c7c2131719e306fd57a5f4a1579e2577e/src/dftd4/damping.f90",
+      "bytes": 9296,
+      "sha256": "9ed31c15b0cfe0e78db4320be18ec9fbf9eff1ac9d6002514bbd082505f144dc"
+    },
+    {
+      "local_path": "raw/dftd4/src/dftd4/data/covrad.f90",
+      "repo": "dftd4/dftd4",
+      "tag": "v4.3.1",
+      "commit": "1107ea7c7c2131719e306fd57a5f4a1579e2577e",
+      "repo_path": "src/dftd4/data/covrad.f90",
+      "url": "https://raw.githubusercontent.com/dftd4/dftd4/1107ea7c7c2131719e306fd57a5f4a1579e2577e/src/dftd4/data/covrad.f90",
+      "bytes": 3895,
+      "sha256": "66e6888236f46de4c72b075e736d30aa71e8dabafe95f8e5a65eb9c18b98cd7b"
+    },
+    {
+      "local_path": "raw/dftd4/src/dftd4/data/en.f90",
+      "repo": "dftd4/dftd4",
+      "tag": "v4.3.1",
+      "commit": "1107ea7c7c2131719e306fd57a5f4a1579e2577e",
+      "repo_path": "src/dftd4/data/en.f90",
+      "url": "https://raw.githubusercontent.com/dftd4/dftd4/1107ea7c7c2131719e306fd57a5f4a1579e2577e/src/dftd4/data/en.f90",
+      "bytes": 3677,
+      "sha256": "87ccc06465ab37c3ed45d37178977d0f473c2b00035b978c899d126921fad5fe"
+    },
+    {
+      "local_path": "raw/dftd4/src/dftd4/data/hardness.f90",
+      "repo": "dftd4/dftd4",
+      "tag": "v4.3.1",
+      "commit": "1107ea7c7c2131719e306fd57a5f4a1579e2577e",
+      "repo_path": "src/dftd4/data/hardness.f90",
+      "url": "https://raw.githubusercontent.com/dftd4/dftd4/1107ea7c7c2131719e306fd57a5f4a1579e2577e/src/dftd4/data/hardness.f90",
+      "bytes": 3946,
+      "sha256": "22ce50b8bf8d3859abdc979643dc1aa2bf3583284b9a2630ca2b2fe4586bcc3d"
+    },
+    {
+      "local_path": "raw/dftd4/src/dftd4/data/r4r2.f90",
+      "repo": "dftd4/dftd4",
+      "tag": "v4.3.1",
+      "commit": "1107ea7c7c2131719e306fd57a5f4a1579e2577e",
+      "repo_path": "src/dftd4/data/r4r2.f90",
+      "url": "https://raw.githubusercontent.com/dftd4/dftd4/1107ea7c7c2131719e306fd57a5f4a1579e2577e/src/dftd4/data/r4r2.f90",
+      "bytes": 4465,
+      "sha256": "57b3c084ac806e37bf95b50207f61e40ff0a7da9483cb98bdcde1e734e2d9fb9"
+    },
+    {
+      "local_path": "raw/dftd4/src/dftd4/data/wfpair.f90",
+      "repo": "dftd4/dftd4",
+      "tag": "v4.3.1",
+      "commit": "1107ea7c7c2131719e306fd57a5f4a1579e2577e",
+      "repo_path": "src/dftd4/data/wfpair.f90",
+      "url": "https://raw.githubusercontent.com/dftd4/dftd4/1107ea7c7c2131719e306fd57a5f4a1579e2577e/src/dftd4/data/wfpair.f90",
+      "bytes": 253666,
+      "sha256": "a49dca1939baf020b13428e599145b4f2578017d14470b24d0475387514193b9"
+    },
+    {
+      "local_path": "raw/dftd4/src/dftd4/data/zeff.f90",
+      "repo": "dftd4/dftd4",
+      "tag": "v4.3.1",
+      "commit": "1107ea7c7c2131719e306fd57a5f4a1579e2577e",
+      "repo_path": "src/dftd4/data/zeff.f90",
+      "url": "https://raw.githubusercontent.com/dftd4/dftd4/1107ea7c7c2131719e306fd57a5f4a1579e2577e/src/dftd4/data/zeff.f90",
+      "bytes": 2700,
+      "sha256": "86769bc150a74e49dad3a27af77745090b910b1539004846c25f1fd133ca9498"
+    },
+    {
+      "local_path": "raw/dftd4/src/dftd4/data.f90",
+      "repo": "dftd4/dftd4",
+      "tag": "v4.3.1",
+      "commit": "1107ea7c7c2131719e306fd57a5f4a1579e2577e",
+      "repo_path": "src/dftd4/data.f90",
+      "url": "https://raw.githubusercontent.com/dftd4/dftd4/1107ea7c7c2131719e306fd57a5f4a1579e2577e/src/dftd4/data.f90",
+      "bytes": 1119,
+      "sha256": "840c931ee9d293f2a3bb0b08dacb3ce4fcf039b6a11c68ac55672e07f6f5a61f"
+    },
+    {
+      "local_path": "raw/dftd4/src/dftd4/disp.f90",
+      "repo": "dftd4/dftd4",
+      "tag": "v4.3.1",
+      "commit": "1107ea7c7c2131719e306fd57a5f4a1579e2577e",
+      "repo_path": "src/dftd4/disp.f90",
+      "url": "https://raw.githubusercontent.com/dftd4/dftd4/1107ea7c7c2131719e306fd57a5f4a1579e2577e/src/dftd4/disp.f90",
+      "bytes": 19193,
+      "sha256": "6b5e775c20d4fb417feb7002e8189ac435e361e98e0515d31995e66ffad0a771"
+    },
+    {
+      "local_path": "raw/dftd4/src/dftd4/model/d4.f90",
+      "repo": "dftd4/dftd4",
+      "tag": "v4.3.1",
+      "commit": "1107ea7c7c2131719e306fd57a5f4a1579e2577e",
+      "repo_path": "src/dftd4/model/d4.f90",
+      "url": "https://raw.githubusercontent.com/dftd4/dftd4/1107ea7c7c2131719e306fd57a5f4a1579e2577e/src/dftd4/model/d4.f90",
+      "bytes": 23278,
+      "sha256": "8f88b5080e4d88a281aaca5cadf7dfd94f3777af3d9337f66579e9af1348b8d0"
+    },
+    {
+      "local_path": "raw/dftd4/src/dftd4/model/type.f90",
+      "repo": "dftd4/dftd4",
+      "tag": "v4.3.1",
+      "commit": "1107ea7c7c2131719e306fd57a5f4a1579e2577e",
+      "repo_path": "src/dftd4/model/type.f90",
+      "url": "https://raw.githubusercontent.com/dftd4/dftd4/1107ea7c7c2131719e306fd57a5f4a1579e2577e/src/dftd4/model/type.f90",
+      "bytes": 6690,
+      "sha256": "444f97b284dc61345b0fb8bf0bb886d6b312f4bc00e97816a6e58d34fd8da07e"
+    },
+    {
+      "local_path": "raw/dftd4/src/dftd4/model/utils.f90",
+      "repo": "dftd4/dftd4",
+      "tag": "v4.3.1",
+      "commit": "1107ea7c7c2131719e306fd57a5f4a1579e2577e",
+      "repo_path": "src/dftd4/model/utils.f90",
+      "url": "https://raw.githubusercontent.com/dftd4/dftd4/1107ea7c7c2131719e306fd57a5f4a1579e2577e/src/dftd4/model/utils.f90",
+      "bytes": 4353,
+      "sha256": "c79e2efaff93d196ff7f12bb4d7ce6c7b0fe567b9fddaa0fca08b4ac31e095f3"
+    },
+    {
+      "local_path": "raw/dftd4/src/dftd4/ncoord.f90",
+      "repo": "dftd4/dftd4",
+      "tag": "v4.3.1",
+      "commit": "1107ea7c7c2131719e306fd57a5f4a1579e2577e",
+      "repo_path": "src/dftd4/ncoord.f90",
+      "url": "https://raw.githubusercontent.com/dftd4/dftd4/1107ea7c7c2131719e306fd57a5f4a1579e2577e/src/dftd4/ncoord.f90",
+      "bytes": 5699,
+      "sha256": "5b2782a831e5ed69e140b46788baaa90c299abab59b0dfcb378b729ce9053f34"
+    },
+    {
+      "local_path": "raw/dftd4/src/dftd4/param.f90",
+      "repo": "dftd4/dftd4",
+      "tag": "v4.3.1",
+      "commit": "1107ea7c7c2131719e306fd57a5f4a1579e2577e",
+      "repo_path": "src/dftd4/param.f90",
+      "url": "https://raw.githubusercontent.com/dftd4/dftd4/1107ea7c7c2131719e306fd57a5f4a1579e2577e/src/dftd4/param.f90",
+      "bytes": 48827,
+      "sha256": "0fcf58c9a9f52a2cd186d109d54ddbdc21a38974ce8f40bc3244d9109f90d3d0"
+    },
+    {
+      "local_path": "raw/dftd4/src/dftd4/reference.f90",
+      "repo": "dftd4/dftd4",
+      "tag": "v4.3.1",
+      "commit": "1107ea7c7c2131719e306fd57a5f4a1579e2577e",
+      "repo_path": "src/dftd4/reference.f90",
+      "url": "https://raw.githubusercontent.com/dftd4/dftd4/1107ea7c7c2131719e306fd57a5f4a1579e2577e/src/dftd4/reference.f90",
+      "bytes": 12509,
+      "sha256": "39acb4c62753d6e30070367413286b9427d69ec556a5564464986091ac024fe0"
+    },
+    {
+      "local_path": "raw/dftd4/src/dftd4/reference.inc",
+      "repo": "dftd4/dftd4",
+      "tag": "v4.3.1",
+      "commit": "1107ea7c7c2131719e306fd57a5f4a1579e2577e",
+      "repo_path": "src/dftd4/reference.inc",
+      "url": "https://raw.githubusercontent.com/dftd4/dftd4/1107ea7c7c2131719e306fd57a5f4a1579e2577e/src/dftd4/reference.inc",
+      "bytes": 598180,
+      "sha256": "2838071315c5bd666d266a5e297f9b45d472105413bd69e6601b3a7ee78b4955"
+    },
+    {
+      "local_path": "raw/dftd4/subprojects/mctc-lib.wrap",
+      "repo": "dftd4/dftd4",
+      "tag": "v4.3.1",
+      "commit": "1107ea7c7c2131719e306fd57a5f4a1579e2577e",
+      "repo_path": "subprojects/mctc-lib.wrap",
+      "url": "https://raw.githubusercontent.com/dftd4/dftd4/1107ea7c7c2131719e306fd57a5f4a1579e2577e/subprojects/mctc-lib.wrap",
+      "bytes": 95,
+      "sha256": "dcf36b60fde8ed1eb8b407cd8e3573fd4e13a42be16e27c885bae36e8c6f63d3"
+    },
+    {
+      "local_path": "raw/dftd4/subprojects/mstore.wrap",
+      "repo": "dftd4/dftd4",
+      "tag": "v4.3.1",
+      "commit": "1107ea7c7c2131719e306fd57a5f4a1579e2577e",
+      "repo_path": "subprojects/mstore.wrap",
+      "url": "https://raw.githubusercontent.com/dftd4/dftd4/1107ea7c7c2131719e306fd57a5f4a1579e2577e/subprojects/mstore.wrap",
+      "bytes": 91,
+      "sha256": "33dd2ef764169697f6f92ec872e002c9758763e0c773a8ed641c291190c2cd65"
+    },
+    {
+      "local_path": "raw/dftd4/subprojects/multicharge.wrap",
+      "repo": "dftd4/dftd4",
+      "tag": "v4.3.1",
+      "commit": "1107ea7c7c2131719e306fd57a5f4a1579e2577e",
+      "repo_path": "subprojects/multicharge.wrap",
+      "url": "https://raw.githubusercontent.com/dftd4/dftd4/1107ea7c7c2131719e306fd57a5f4a1579e2577e/subprojects/multicharge.wrap",
+      "bytes": 101,
+      "sha256": "738ebe79630907c246103afa38c1a1844bfe764a091c88b9b01265997fc134b3"
+    },
+    {
+      "local_path": "raw/mctc-lib/LICENSE",
+      "repo": "grimme-lab/mctc-lib",
+      "tag": "v0.7.0",
+      "commit": "aec7f40ccf1b0dceb9156ae6dc6667fd61206916",
+      "repo_path": "LICENSE",
+      "url": "https://raw.githubusercontent.com/grimme-lab/mctc-lib/aec7f40ccf1b0dceb9156ae6dc6667fd61206916/LICENSE",
+      "bytes": 11358,
+      "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+    },
+    {
+      "local_path": "raw/mctc-lib/src/mctc/data/covrad.f90",
+      "repo": "grimme-lab/mctc-lib",
+      "tag": "v0.7.0",
+      "commit": "aec7f40ccf1b0dceb9156ae6dc6667fd61206916",
+      "repo_path": "src/mctc/data/covrad.f90",
+      "url": "https://raw.githubusercontent.com/grimme-lab/mctc-lib/aec7f40ccf1b0dceb9156ae6dc6667fd61206916/src/mctc/data/covrad.f90",
+      "bytes": 3850,
+      "sha256": "fdbd599664a7f113633d96110531d810fdc8e54b6db26d4f584120d9c7cec314"
+    },
+    {
+      "local_path": "raw/mctc-lib/src/mctc/data/paulingen.f90",
+      "repo": "grimme-lab/mctc-lib",
+      "tag": "v0.7.0",
+      "commit": "aec7f40ccf1b0dceb9156ae6dc6667fd61206916",
+      "repo_path": "src/mctc/data/paulingen.f90",
+      "url": "https://raw.githubusercontent.com/grimme-lab/mctc-lib/aec7f40ccf1b0dceb9156ae6dc6667fd61206916/src/mctc/data/paulingen.f90",
+      "bytes": 3597,
+      "sha256": "8ccd4c9688fbb733888e8a2622de0d8b67d6a348ed400b1a41686d6268f06d1b"
+    },
+    {
+      "local_path": "raw/mctc-lib/src/mctc/io/constants.f90",
+      "repo": "grimme-lab/mctc-lib",
+      "tag": "v0.7.0",
+      "commit": "aec7f40ccf1b0dceb9156ae6dc6667fd61206916",
+      "repo_path": "src/mctc/io/constants.f90",
+      "url": "https://raw.githubusercontent.com/grimme-lab/mctc-lib/aec7f40ccf1b0dceb9156ae6dc6667fd61206916/src/mctc/io/constants.f90",
+      "bytes": 1799,
+      "sha256": "6ee2b599fc2d338f1a7e07b5b46e984e2612b4cfc58110d1203ecf19ebde2385"
+    },
+    {
+      "local_path": "raw/mctc-lib/src/mctc/io/convert.f90",
+      "repo": "grimme-lab/mctc-lib",
+      "tag": "v0.7.0",
+      "commit": "aec7f40ccf1b0dceb9156ae6dc6667fd61206916",
+      "repo_path": "src/mctc/io/convert.f90",
+      "url": "https://raw.githubusercontent.com/grimme-lab/mctc-lib/aec7f40ccf1b0dceb9156ae6dc6667fd61206916/src/mctc/io/convert.f90",
+      "bytes": 3999,
+      "sha256": "b05d7b4821deb4abe448cf11d53df9b118747294b44f0d774f056bc3b28430b9"
+    },
+    {
+      "local_path": "raw/mctc-lib/src/mctc/ncoord/erf/dftd4.f90",
+      "repo": "grimme-lab/mctc-lib",
+      "tag": "v0.7.0",
+      "commit": "aec7f40ccf1b0dceb9156ae6dc6667fd61206916",
+      "repo_path": "src/mctc/ncoord/erf/dftd4.f90",
+      "url": "https://raw.githubusercontent.com/grimme-lab/mctc-lib/aec7f40ccf1b0dceb9156ae6dc6667fd61206916/src/mctc/ncoord/erf/dftd4.f90",
+      "bytes": 4036,
+      "sha256": "b5d8f266b32d80cc76158139a1db692e916b963f6edf00080052dc7d1838c925"
+    },
+    {
+      "local_path": "raw/mctc-lib/src/mctc/ncoord/erf/en.f90",
+      "repo": "grimme-lab/mctc-lib",
+      "tag": "v0.7.0",
+      "commit": "aec7f40ccf1b0dceb9156ae6dc6667fd61206916",
+      "repo_path": "src/mctc/ncoord/erf/en.f90",
+      "url": "https://raw.githubusercontent.com/grimme-lab/mctc-lib/aec7f40ccf1b0dceb9156ae6dc6667fd61206916/src/mctc/ncoord/erf/en.f90",
+      "bytes": 3814,
+      "sha256": "84ce8caddaa41175cdff5c24b376a74b17c846e33f8160b594e2c77c8b78da30"
+    },
+    {
+      "local_path": "raw/mctc-lib/src/mctc/ncoord/erf.f90",
+      "repo": "grimme-lab/mctc-lib",
+      "tag": "v0.7.0",
+      "commit": "aec7f40ccf1b0dceb9156ae6dc6667fd61206916",
+      "repo_path": "src/mctc/ncoord/erf.f90",
+      "url": "https://raw.githubusercontent.com/grimme-lab/mctc-lib/aec7f40ccf1b0dceb9156ae6dc6667fd61206916/src/mctc/ncoord/erf.f90",
+      "bytes": 5271,
+      "sha256": "3168eb83d5f03c32da704cd3a005a847a09cbd2c60c56f073f874f29797552fd"
+    },
+    {
+      "local_path": "raw/mctc-lib/src/mctc/ncoord/type.f90",
+      "repo": "grimme-lab/mctc-lib",
+      "tag": "v0.7.0",
+      "commit": "aec7f40ccf1b0dceb9156ae6dc6667fd61206916",
+      "repo_path": "src/mctc/ncoord/type.f90",
+      "url": "https://raw.githubusercontent.com/grimme-lab/mctc-lib/aec7f40ccf1b0dceb9156ae6dc6667fd61206916/src/mctc/ncoord/type.f90",
+      "bytes": 41825,
+      "sha256": "836d2c6c49460ef1162512b7ef117f09d26cff1bacd9134dc1aa6eb203d09dbe"
+    },
+    {
+      "local_path": "raw/multicharge/LICENSE",
+      "repo": "grimme-lab/multicharge",
+      "tag": "v0.6.0",
+      "commit": "576f499b49eb57f8c2dc1ba6f7017800f1e332d9",
+      "repo_path": "LICENSE",
+      "url": "https://raw.githubusercontent.com/grimme-lab/multicharge/576f499b49eb57f8c2dc1ba6f7017800f1e332d9/LICENSE",
+      "bytes": 11358,
+      "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+    },
+    {
+      "local_path": "raw/multicharge/README.md",
+      "repo": "grimme-lab/multicharge",
+      "tag": "v0.6.0",
+      "commit": "576f499b49eb57f8c2dc1ba6f7017800f1e332d9",
+      "repo_path": "README.md",
+      "url": "https://raw.githubusercontent.com/grimme-lab/multicharge/576f499b49eb57f8c2dc1ba6f7017800f1e332d9/README.md",
+      "bytes": 5481,
+      "sha256": "45838c7a0b114b18b58ff5fd966bcb5310895baad2f75f8f1c517cfd5abcf737"
+    },
+    {
+      "local_path": "raw/multicharge/src/multicharge/charge.f90",
+      "repo": "grimme-lab/multicharge",
+      "tag": "v0.6.0",
+      "commit": "576f499b49eb57f8c2dc1ba6f7017800f1e332d9",
+      "repo_path": "src/multicharge/charge.f90",
+      "url": "https://raw.githubusercontent.com/grimme-lab/multicharge/576f499b49eb57f8c2dc1ba6f7017800f1e332d9/src/multicharge/charge.f90",
+      "bytes": 5329,
+      "sha256": "4c2ab655c45cae4134fd36466e865cda49aa3853b154a56ec511e6432593938e"
+    },
+    {
+      "local_path": "raw/multicharge/src/multicharge/model/eeq.f90",
+      "repo": "grimme-lab/multicharge",
+      "tag": "v0.6.0",
+      "commit": "576f499b49eb57f8c2dc1ba6f7017800f1e332d9",
+      "repo_path": "src/multicharge/model/eeq.f90",
+      "url": "https://raw.githubusercontent.com/grimme-lab/multicharge/576f499b49eb57f8c2dc1ba6f7017800f1e332d9/src/multicharge/model/eeq.f90",
+      "bytes": 24541,
+      "sha256": "3b8c2bc725df2fa3622033459f6c4fac1262b9d2024c00bc301cbf8a52c424ab"
+    },
+    {
+      "local_path": "raw/multicharge/src/multicharge/model/type.F90",
+      "repo": "grimme-lab/multicharge",
+      "tag": "v0.6.0",
+      "commit": "576f499b49eb57f8c2dc1ba6f7017800f1e332d9",
+      "repo_path": "src/multicharge/model/type.F90",
+      "url": "https://raw.githubusercontent.com/grimme-lab/multicharge/576f499b49eb57f8c2dc1ba6f7017800f1e332d9/src/multicharge/model/type.F90",
+      "bytes": 16587,
+      "sha256": "c45cd242efc4557f20ad52c0b61b85c5d7c8a0dbce30678266f3944853d2e791"
+    },
+    {
+      "local_path": "raw/multicharge/src/multicharge/param/eeq2019.f90",
+      "repo": "grimme-lab/multicharge",
+      "tag": "v0.6.0",
+      "commit": "576f499b49eb57f8c2dc1ba6f7017800f1e332d9",
+      "repo_path": "src/multicharge/param/eeq2019.f90",
+      "url": "https://raw.githubusercontent.com/grimme-lab/multicharge/576f499b49eb57f8c2dc1ba6f7017800f1e332d9/src/multicharge/param/eeq2019.f90",
+      "bytes": 12363,
+      "sha256": "0c2c3cf1c57ec2175fed4a15980ced496d56bbb34ce7667110fea798fbfdcfeb"
+    },
+    {
+      "local_path": "raw/multicharge/src/multicharge/param.f90",
+      "repo": "grimme-lab/multicharge",
+      "tag": "v0.6.0",
+      "commit": "576f499b49eb57f8c2dc1ba6f7017800f1e332d9",
+      "repo_path": "src/multicharge/param.f90",
+      "url": "https://raw.githubusercontent.com/grimme-lab/multicharge/576f499b49eb57f8c2dc1ba6f7017800f1e332d9/src/multicharge/param.f90",
+      "bytes": 4757,
+      "sha256": "b789b7463be90cd84f3e5d55e795533a5e17e5ddbaefda6781bc1cbd59bebe09"
+    }
+  ]
+}

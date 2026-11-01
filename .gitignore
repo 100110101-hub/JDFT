@@ -56,3 +56,8 @@ cccbdb-raw.json
 /tmp_*.py
 /tmp_*.txt
 /qwb-core/slow-lane.err
+
+# D4 上游源码快照（LGPL 代码，只作提取来源；最终数据进 qwb-data/dispersion/d4.yaml）
+/qwb-data/dispersion/_d4_staging/raw/
+/qwb-data/dispersion/_d4_staging/_work/
+
