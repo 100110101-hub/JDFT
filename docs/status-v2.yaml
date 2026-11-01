@@ -231,11 +231,12 @@ SC-05:
   verification: "① **精度（判据 1）**：cargo test -p qwb-scf --test sc05_rimp2 绿 —— H2O/def2-SVP + def2-SVP-RI 的 RI-MP2 相关能 = **−0.2035582016 Ha**，与 canonical（SC-04）−0.2036434624 差 **8.526e-5 Ha = 0.085 mHa < 0.1 mHa**；与 PySCF 2.14.0 的 RI-MP2 −0.2035582026 差 **1e-9**；V 的秩 = 76 = 满秩（def2-SVP-RI 对水无线性相关方向）。② **报告（判据 3）**：cargo test -p qwb-engine --test sc05_rimp2_engine 3 例绿 —— correlation 块里有 method: ri-mp2、aux_basis_name: def2-svp-ri、ri_error_hartree: 8.526e-5；端到端 qwb run examples/h2o_ri_mp2_def2svp.yaml 的 result.json 同样是这四个键；RI 缺辅助基 → InvalidInput（退出码 1），辅助基不存在 → Data（退出码 3）。③ **墙钟（判据 2，实测后降级）**：苯/def2-SVP（n_orb = 114、n_aux = 372）上 **canonical 7.14 s vs RI 48.32 s = 0.15×**，即 RI 路径慢 **6.8×**，不满足「≥ 3×」。按 §2.5 记下降级：RI-MP2 保持可用（精度与报告都达标），但**不宣称性能优势**，也不作为默认路径。原因与改进方向见 note 与 docs/choices.md 五十八。"
   note: "**墙钟没有优势，这一条按 §2.5 记降级而不是改判据**。实测苯/def2-SVP：canonical 7.14 s、RI 48.32 s。分解代价可以看到为什么：canonical 版用的是 n_occ·n⁴ 的四步半变换（水/def2-SVP 只要 1.7e6 次乘加），而我们的 3 中心张量是**逐壳层三元组**用 primitive_component 现算的（苯上约 130 个辅助壳 × 2211 个轨道壳对），建 3 中心这一步就吃掉了大部分时间；RI 的经典优势（内存从 n⁴ 降到 n_aux·n²、渐近 O(N⁴) vs O(N⁵)）要靠**壳层块驱动的 3 中心构建 + 屏蔽 + 直接积分**才能兑现，那是 IN-05（并行）与 IN-04（RI-J 的 Fock 路径）的活。所以结论写成：**正确性达标、报告达标、性能未达标并记录**。另一处如实交代：引擎的 kind: ri-mp2 会**同时**算一遍 canonical 来填 ri_error_hartree（K10 第 ③ 条要求近似留痕，而 K9 的字段只能通过「与精确值比」来填），所以这个作业的墙钟比纯 RI 更慢 —— 判据 2 量的是**内核**（3 中心组装 + 白化 + 收缩 vs 4 指标半变换），两个数都在测试里打印。"
 SC-06:
-  state: pending
-  note: "开壳层 × meta-GGA/D3 的最小可用组合"
-
-# ───────────────────── 响应与性质轨（RS，8）─────────────────────
-
+  state: in_progress
+  ts: "2026-11-09T17:20:00Z"
+  artifact: "qwb-core/crates/qwb-engine/tests/sc06_open_shell_dispersion.rs（2 例）：① 开壳层 + D3 的可执行组合（O2 三重态 / STO-3G：`uks`+PBE 与 `uhf`+HF，`options.dispersion = d3bj`），断言色散块进 `result.json`、`total = SCF + 色散`、以及 **threads 1 vs 4 逐位相同**；② 开壳层 + meta-GGA 的**显式拒绝**（`uks` + M06-2X），并把拒绝理由钉在测试里"
+  verification: "**两条判据对账**。② 「`--threads` 归约仍确定性」✓：同一输入在 1 与 4 线程下 **总能量与色散能逐位相同**（UKS/PBE：E = **-148.1376390310 Ha**、E_disp = **-2.671422e-4 Ha**；UHF/HF：E = **-147.6373143144 Ha**、E_disp = **-3.391565e-3 Ha**）—— 色散是逐对归约的纯函数，SCF 走确定性归约，所以线程数不进结果。① 「至少 1 个开壳层体系在 M06-2X/D3 下跑通并给出梯度」**未过**：`uks` + M06-2X 被显式拒绝，理由是实现缺口 —— `MggaXM062x` 没有自旋分辨实现（`uks.rs` 的 `require_spin_support`），而 M06 型交换项的 τ 依赖无法用闭壳层标度拆成 α/β 通道。所以「开壳层 × D3」这一半可用，「开壳层 × meta-GGA」这一半仍缺"
+  gap: "**要的是自旋分辨的 meta-GGA**：`qwb-xc` 需要把 τ 通道加进 `SpinXcOutput`（现在六通道只到 ρ/σ），`MggaXM062x`/`MggaLyp` 一类项要给出 `∂e/∂τ_σ`，`uks.rs` 的 τ 守卫（「spin-resolved meta-GGA (τ_α/τ_β) is not implemented yet」）才能放行。这不是配置问题：M06 的交换项是 t = τ 依赖的多项式，闭壳层的自旋标度不适用"
+  note: "**这一轮把 SC-06 从「pending」变成「一半可执行、另一半有精确缺口」**：开壳层 × D3 现在有测试证明（含线程确定性），而 meta-GGA 那半的缺口写到了具体函数与守卫上。顺带踩到两个语义边界并记进测试：① `uhf` **只接受 HF**（配 PBE 会报「is Hartree-Fock only」），所以「开壳层 + 泛函交叉」的两条路要用不同的 method；② 开壳层 meta-GGA 的实际报错来自 `require_spin_support`（「no spin-resolved implementation」），比 τ 那条守卫更早触发 —— 两条都指向同一个缺口，测试断言的是实际那条，不写想象中的那条"
 RS-01:
   state: done
   ts: "2026-10-28T14:10:00Z"
