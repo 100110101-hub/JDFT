@@ -199,6 +199,7 @@ class JobResult:
     polarizability: dict[str, Any] | None
     multipoles: dict[str, Any] | None
     numerics_report: dict[str, Any] | None
+    epr: dict[str, Any] | None
     def to_json(self) -> str: ...
     @staticmethod
     def from_json(text: str) -> JobResult: ...

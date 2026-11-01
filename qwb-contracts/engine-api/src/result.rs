@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 use crate::correlation::{CorrelationResult, SpinResult};
 use crate::error::EngineError;
 use crate::numerics::NumericsReport;
-use crate::properties::{ExcitedStates, Multipoles, NmrShieldings, Polarizability};
+use crate::properties::{EprResult, ExcitedStates, Multipoles, NmrShieldings, Polarizability};
 use crate::solvation::SolvationResult;
 
 /// 矩阵/向量与 JSON 数组之间的显式转换（K4）。
@@ -345,6 +345,9 @@ pub struct JobResult {
     /// 多极展开（四极/八极，phase-2 `RS-08`）。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub multipoles: Option<Multipoles>,
+    /// EPR / 超精细耦合（phase-2 `ST-05`）。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub epr: Option<EprResult>,
     /// 数值路径留痕（K10：用了近似必须能看见）。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub numerics_report: Option<NumericsReport>,
@@ -419,6 +422,7 @@ impl JobResult {
             nmr_shieldings: None,
             polarizability: None,
             multipoles: None,
+            epr: None,
             numerics_report: None,
         }
     }
@@ -519,6 +523,13 @@ impl JobResult {
     #[must_use]
     pub fn with_multipoles(mut self, multipoles: Multipoles) -> Self {
         self.multipoles = Some(multipoles);
+        self
+    }
+
+    /// 挂上 EPR 块（phase-2 `ST-05`）。
+    #[must_use]
+    pub fn with_epr(mut self, epr: EprResult) -> Self {
+        self.epr = Some(epr);
         self
     }
 

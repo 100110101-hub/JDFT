@@ -303,6 +303,27 @@ class Polarizability(BaseModel):
     anisotropy_au: float
 
 
+class HyperfineCoupling(BaseModel):
+    """一个核的各向同性超精细耦合（K7，phase-2 ST-05）。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    nucleus_index: int
+    symbol: str
+    spin_density_au: float
+    a_iso_mhz: float
+    a_iso_gauss: float
+
+
+class EprResult(BaseModel):
+    """EPR 结果块（K7，phase-2 ST-05）。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    method: str
+    nuclei: list[HyperfineCoupling]
+
+
 class Multipoles(BaseModel):
     """多极展开（K7）。多极矩对原点敏感，所以原点必须记下来。"""
 
@@ -382,6 +403,7 @@ class Result(BaseModel):
     polarizability: Polarizability | None = None
     multipoles: Multipoles | None = None
     numerics_report: NumericsReport | None = None
+    epr: EprResult | None = None
 
 
 class Project(BaseModel):

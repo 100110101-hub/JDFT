@@ -111,6 +111,9 @@ pub struct TaskOptions {
     /// 数值路径与精度等级（K10）；`None` = 解析路径 + 等级 3，与阶段一逐位相同。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub numerics: Option<NumericsOptions>,
+    /// 是否报 EPR / 超精细耦合（phase-2 `ST-05`）；缺省 `false`，旧输入行为不变。
+    #[serde(default)]
+    pub epr: bool,
 }
 
 /// 激发态选项（`TaskOptions.excited_states`）。
@@ -158,6 +161,7 @@ impl Default for TaskOptions {
             excited_states: None,
             solvent_model: None,
             numerics: None,
+            epr: false,
         }
     }
 }
@@ -197,6 +201,13 @@ impl TaskOptions {
     #[must_use]
     pub fn with_numerics(mut self, numerics: NumericsOptions) -> Self {
         self.numerics = Some(numerics);
+        self
+    }
+
+    /// 打开 EPR 块（阶段二 `ST-05`）。
+    #[must_use]
+    pub fn with_epr(mut self, epr: bool) -> Self {
+        self.epr = epr;
         self
     }
 
@@ -359,6 +370,23 @@ impl JobInput {
                 return Err(EngineError::InvalidInput(
                     "options.mp2 currently supports closed-shell references only (rhf/rks)".into(),
                 ));
+            }
+        }
+        if self.options.epr {
+            // EPR / 超精细耦合是**自旋密度**的性质：闭壳层体系的自旋密度恒为零，
+            // 报出来的全是 0 —— 那等于静默失败，所以显式拒绝。
+            if self.molecule.multiplicity <= 1 {
+                return Err(EngineError::InvalidInput(format!(
+                    "options.epr needs an open-shell system (multiplicity > 1), \
+                     got multiplicity = {}",
+                    self.molecule.multiplicity
+                )));
+            }
+            if self.jobtype != JobType::Sp {
+                return Err(EngineError::InvalidInput(format!(
+                    "options.epr is only available for `sp` jobs, got jobtype = `{}`",
+                    self.jobtype.as_str()
+                )));
             }
         }
         if let Some(model) = self.options.solvent_model {

@@ -98,6 +98,11 @@ $defs:
           - $ref: "#/$defs/NumericsReport"
           - type: "null"
         description: 数值路径留痕（K10：用了近似必须能看见，phase-2 §4.5）。
+      epr:
+        anyOf:
+          - $ref: "#/$defs/EprResult"
+          - type: "null"
+        description: EPR / 超精细耦合（phase-2 ST-05）。
   SpinResult:
     type: object
     additionalProperties: false
@@ -321,6 +326,36 @@ $defs:
       wall_time_s:
         type: number
         minimum: 0
+  EprResult:
+    type: object
+    additionalProperties: false
+    required: [method, nuclei]
+    description: EPR 结果块（K7，phase-2 ST-05）。
+    properties:
+      method:
+        type: string
+        description: 自旋密度的来源方法（`uhf` / `uks`）。
+      nuclei:
+        type: array
+        items:
+          $ref: "#/$defs/HyperfineCoupling"
+  HyperfineCoupling:
+    type: object
+    additionalProperties: false
+    required: [nucleus_index, symbol, spin_density_au, a_iso_mhz, a_iso_gauss]
+    description: 一个核的各向同性超精细耦合（Fermi 接触项）。
+    properties:
+      nucleus_index:
+        type: integer
+        minimum: 0
+      symbol:
+        type: string
+      spin_density_au:
+        type: number
+      a_iso_mhz:
+        type: number
+      a_iso_gauss:
+        type: number
   Multipoles:
     type: object
     additionalProperties: false

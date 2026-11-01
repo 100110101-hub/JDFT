@@ -5418,3 +5418,54 @@ K7 的 `EprResult`/`HyperfineCoupling`、K2 的 `TaskOptions.epr`、K1 schema �
    极其敏感的量。这条对照抓到的错，比它验证的对更多。
 3. **stretch 项允许 blocked，但 blocked 必须带实测数字** —— 本轮交出去的是：机器、两条独立
    验证、三档实测 CH₃ 值、以及两条写得出来的 gap（实验值、`epr` 块）。
+
+## 一百三十四、ST-05 第二半：`epr` 块要过五道门（K7/K2/K1/studio/pyo3），而守卫要挡两次（2026-11-08）
+
+### 加一个新结果块到底要改几处
+
+上一轮把 Fermi 接触项的机器做完了，但 §6 的第二句是「`epr` 块进结果」。把这句话真的做出来，
+要走完五处，少一处门禁就会红（这次就是逐处红过来的）：
+
+1. **K7**（`engine-api/src/result.rs` + `properties.rs`）：`HyperfineCoupling` / `EprResult` 两个
+   结构体 + `JobResult.epr: Option<EprResult>` + `with_epr` builder。加性扩展：`serde(default,
+   skip_serializing_if = "Option::is_none")`，所以 `phase2_blocks_are_absent_by_default` 与
+   「旧 result.json 仍能解析」两条既有测试原样通过。
+2. **K2**（`input.rs`）：`TaskOptions.epr: bool`（`#[serde(default)]`）+ 两条前置校验
+   （必须开壳层、必须 `sp`）。默认 `false` ⇒ 旧输入逐位不变。
+3. **K1**：`qwb-gen-schemas` 重新生成 —— 这一步是自动的，但 `--check` 会红，所以它会强迫你
+   想起来自己加过字段。
+4. **studio**：`result.schema.yaml` 的 `$defs` + `properties`、`models.py` 的 pydantic 模型。
+   `k3_schema_docs.rs` 有一条断言「`$defs/JobResult/properties` 的键集 == 挂满所有块的
+   `JobResult` 序列化键集」，所以两处必须同时改，而且**测试里的 builder 链也要挂上**
+   （那条测试构造的是"全部块都挂上"的结果；不挂 `with_epr` 就变成"文档里有、Rust 没有"）。
+5. **pyo3**（PR-02 的通道）：`JobResult` 的块走的是**显式 getter**（每个块一个），所以新块还要
+   在 `qwb-py/src/lib.rs` 里加一个 `#[getter] fn epr`，否则 Python 侧看不到；桩里补
+   `epr: dict[str, Any] | None`。
+
+### 守卫为什么必须写两遍
+
+K2 的 `JobInput::validate` 里有 epr 的两条前置，但**直接调 `Engine` API 的调用方不经过它**
+（CLI 路径才调 `validate`）。第一版只在 K2 里加，结果引擎级测试里"水 + epr"竟然跑过去了，
+还老老实实报了一个全 0 的 `epr` 块 —— 那正是"静默失败"的样子。所以引擎自己的守卫
+`reject_unimplemented_options` 里又写了一遍（闭壳层 ⇒ `InvalidInput`；非 `sp` ⇒ `InvalidInput`）。
+两处都写是**故意的重复**：这套代码有两个入口（CLI 先 validate、Engine API 不），只挡一个入口
+就是漏。
+
+### 端到端实测
+
+OH 自由基 + `options.epr: true`（UHF/STO-3G，max_iter = 400）：
+
+```text
+O0: rho_s = +0.081886 a0^-3, a_iso = -49.5550 MHz = -17.6825 G
+H1: rho_s = -0.026298 a0^-3, a_iso = -117.3488 MHz = -41.8731 G
+```
+
+O 的耦合是负的，因为 ¹⁷O 的核 g 因子本身是负的（`g_O = −0.757516`）—— 这正好说明符号没有被
+"取绝对值"抹掉。同一作业不打开 `options.epr` 时 `result.json` 里没有 `epr` 键；闭壳层（水）
+打开它是退出码 1。
+
+### 仍然缺的那一条
+
+「CH3 的 ¹H 与实验差 < 20%」照旧留空（上一轮的说明不变：没有取到可引用的实验原文）。
+所以 ST-05 继续记 **blocked**，但 gap 从"两条"缩到"一条"。这条处理方式本身值得记下来：
+**把一个 WP 的一部分做完，就把 gap 列表改短，而不是把状态改成 done**。

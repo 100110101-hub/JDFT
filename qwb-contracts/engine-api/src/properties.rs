@@ -414,6 +414,68 @@ impl Multipoles {
     }
 }
 
+/// 一个核的各向同性超精细耦合（Fermi 接触项，phase-2 `ST-05`）。
+///
+/// 单位：`spin_density_au` 是 `a0^-3`；`a_iso_mhz` / `a_iso_gauss` 是同一个量的两个单位
+/// （`1 G = 2.802_49 MHz`，自由电子），两个都落盘是为了省掉读的人自己换算。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+#[non_exhaustive]
+pub struct HyperfineCoupling {
+    /// 核（原子）下标，与 `molecule.atoms` 同序。
+    pub nucleus_index: usize,
+    /// 元素符号。
+    pub symbol: String,
+    /// 核位置上的自旋密度 `Σ (P_α − P_β)_{μν} φ_μ(R_K) φ_ν(R_K)`，单位 `a0^-3`。
+    pub spin_density_au: f64,
+    /// 各向同性耦合，MHz。
+    pub a_iso_mhz: f64,
+    /// 各向同性耦合，Gauss。
+    pub a_iso_gauss: f64,
+}
+
+impl HyperfineCoupling {
+    /// 构造一个核的耦合。
+    #[must_use]
+    pub fn new(
+        nucleus_index: usize,
+        symbol: impl Into<String>,
+        spin_density_au: f64,
+        a_iso_mhz: f64,
+        a_iso_gauss: f64,
+    ) -> Self {
+        Self {
+            nucleus_index,
+            symbol: symbol.into(),
+            spin_density_au,
+            a_iso_mhz,
+            a_iso_gauss,
+        }
+    }
+}
+
+/// EPR 结果块（phase-2 `ST-05`）：开壳层体系在核位置上的自旋密度与各向同性超精细耦合。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+#[non_exhaustive]
+pub struct EprResult {
+    /// 方法说明（`uhf` / `uks`），落盘是为了让读的人知道自旋密度来自哪种参考。
+    pub method: String,
+    /// 每个核的耦合（顺序 = `molecule.atoms`）。
+    pub nuclei: Vec<HyperfineCoupling>,
+}
+
+impl EprResult {
+    /// 构造 EPR 块。
+    #[must_use]
+    pub fn new(method: impl Into<String>, nuclei: Vec<HyperfineCoupling>) -> Self {
+        Self {
+            method: method.into(),
+            nuclei,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{

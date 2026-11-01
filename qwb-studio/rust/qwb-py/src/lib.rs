@@ -1040,6 +1040,20 @@ impl JobResult {
         }
     }
 
+    /// EPR / 超精细耦合（phase-2 `ST-05`）。
+    #[getter]
+    fn epr(&self, py: Python<'_>) -> PyResult<PyObject> {
+        match &self.inner.epr {
+            None => Ok(py.None()),
+            Some(block) => {
+                let json = serde_json::to_value(block).map_err(|error| {
+                    PyErr::new::<DataError, _>(format!("cannot serialise result block: {error}"))
+                })?;
+                json_to_py(py, &json)
+            }
+        }
+    }
+
     /// 序列化成 `result.json` 的文本（K4：矩阵 list-of-list）。
     fn to_json(&self) -> PyResult<String> {
         serde_json::to_string(&self.inner).map_err(|error| {

@@ -389,7 +389,27 @@ impl RksBackend {
             input.molecule.multiplicity,
             result.s_squared,
         );
-        Ok(JobResult::new(
+        // ST-05：开了 `options.epr` 才报（K2 的 validate 已经保证它是开壳层 + sp 作业）。
+        let epr = if input.options.epr {
+            reporter.progress("epr", 96.0);
+            let block = epr_block(
+                &basis,
+                &input.molecule,
+                &result.density_alpha,
+                &result.density_beta,
+                "uks",
+            )?;
+            reporter.log(&format!(
+                "epr: {} nuclei, method = uks, first a_iso = {:.4} MHz ({:.4} G)",
+                block.nuclei.len(),
+                block.nuclei.first().map_or(0.0, |n| n.a_iso_mhz),
+                block.nuclei.first().map_or(0.0, |n| n.a_iso_gauss),
+            ));
+            Some(block)
+        } else {
+            None
+        };
+        let mut job = JobResult::new(
             result.energy_hartree,
             result.scf_converged,
             self.registry.snapshot(),
@@ -400,8 +420,11 @@ impl RksBackend {
             nalgebra::DVector::from_column_slice(result.mo_energies_alpha.as_slice()),
             density_to_api(&result.coefficients_alpha),
         )
-        .with_spin(spin)
-        .with_log(format!(
+        .with_spin(spin);
+        if let Some(block) = epr {
+            job = job.with_epr(block);
+        }
+        Ok(job.with_log(format!(
             "scf_type = uks, method = {}, basis = {}, grid = {}, iterations = {}, \
              E_elec = {:.10}, E_xc = {:.10}, <S^2> = {:.6} (contamination {:+.3e}), \
              n_alpha = {}, n_beta = {}, dipole = [{:.4}, {:.4}, {:.4}] D. \
@@ -512,7 +535,27 @@ impl RksBackend {
             input.molecule.multiplicity,
             result.s_squared,
         );
-        Ok(JobResult::new(
+        // ST-05：UHF 路径同样支持 `options.epr`（自旋密度 = P_α − P_β）。
+        let epr = if input.options.epr {
+            reporter.progress("epr", 96.0);
+            let block = epr_block(
+                &basis,
+                &input.molecule,
+                &result.density_alpha,
+                &result.density_beta,
+                "uhf",
+            )?;
+            reporter.log(&format!(
+                "epr: {} nuclei, method = uhf, first a_iso = {:.4} MHz ({:.4} G)",
+                block.nuclei.len(),
+                block.nuclei.first().map_or(0.0, |n| n.a_iso_mhz),
+                block.nuclei.first().map_or(0.0, |n| n.a_iso_gauss),
+            ));
+            Some(block)
+        } else {
+            None
+        };
+        let mut job = JobResult::new(
             result.energy_hartree,
             result.scf_converged,
             self.registry.snapshot(),
@@ -523,8 +566,11 @@ impl RksBackend {
             nalgebra::DVector::from_column_slice(result.mo_energies_alpha.as_slice()),
             density_to_api(&result.coefficients_alpha),
         )
-        .with_spin(spin)
-        .with_log(format!(
+        .with_spin(spin);
+        if let Some(block) = epr {
+            job = job.with_epr(block);
+        }
+        Ok(job.with_log(format!(
             "scf_type = uhf, basis = {}, iterations = {}, E_elec = {:.10}, \
              <S^2> = {:.6} (contamination {:+.3e}), n_alpha = {}, n_beta = {}, \
              dipole = [{:.4}, {:.4}, {:.4}] D. mo_energies_hartree / mo_coeffs are the ALPHA set.",
@@ -1335,6 +1381,43 @@ impl EngineBackend for RksBackend {
 ///
 /// MP2 的占据轨道数就是它的一半；奇数电子在闭壳层参考里没有定义，所以显式报错
 /// 而不是悄悄取整。
+/// ST-05：由 `P_α − P_β` 算 EPR 块（每个核的 Fermi 接触耦合）。
+///
+/// AO 在核位置的取值由 `qwb-scf` 提供（`qwb-props` 不能反向依赖它），自旋密度在这里减出来。
+fn epr_block(
+    basis: &qwb_basis::InternalBasis,
+    molecule: &qwb_engine_api::Molecule,
+    alpha: &qwb_linalg::Matrix,
+    beta: &qwb_linalg::Matrix,
+    method: &str,
+) -> Result<qwb_engine_api::EprResult, EngineError> {
+    let n = basis.n_functions();
+    let mut spin = qwb_linalg::Matrix::zeros(n, n);
+    for mu in 0..n {
+        for nu in 0..n {
+            spin.set(mu, nu, alpha[(mu, nu)] - beta[(mu, nu)]);
+        }
+    }
+    let mut values = Vec::with_capacity(molecule.atoms.len());
+    for atom in &molecule.atoms {
+        values.push(qwb_scf::rks::ao_value(basis, atom.position_bohr())?);
+    }
+    let couplings = qwb_props::epr::isotropic_hyperfine(molecule, &values, &spin)?;
+    let nuclei = couplings
+        .into_iter()
+        .map(|coupling| {
+            qwb_engine_api::HyperfineCoupling::new(
+                coupling.nucleus_index,
+                coupling.symbol,
+                coupling.spin_density_au,
+                coupling.a_iso_mhz,
+                coupling.a_iso_gauss,
+            )
+        })
+        .collect();
+    Ok(qwb_engine_api::EprResult::new(method, nuclei))
+}
+
 fn closed_shell_electrons(molecule: &Molecule) -> Result<usize, EngineError> {
     let mut electrons = -i64::from(molecule.charge);
     for atom in &molecule.atoms {
@@ -1360,6 +1443,23 @@ fn closed_shell_electrons(molecule: &Molecule) -> Result<usize, EngineError> {
 /// 否则旧输入会被无故拒绝。每条错误都指向负责它的 WP，便于把"还没做"和"不支持"分开。
 fn reject_unimplemented_options(input: &JobInput) -> Result<(), EngineError> {
     let options = &input.options;
+    if options.epr {
+        // ST-05：EPR 是**自旋密度**的性质。闭壳层的自旋密度恒为零，报出来全是 0 —— 那等于
+        // 静默失败，所以显式拒绝（K2 的 `validate` 也查一遍，但直接走 Engine API 的调用方
+        // 不经过 `validate`，所以这里必须再挡一次）。
+        if input.molecule.multiplicity <= 1 {
+            return Err(EngineError::InvalidInput(format!(
+                "options.epr needs an open-shell system (multiplicity > 1), got multiplicity = {}",
+                input.molecule.multiplicity
+            )));
+        }
+        if input.jobtype != JobType::Sp {
+            return Err(EngineError::InvalidInput(format!(
+                "options.epr is only available for `sp` jobs, got jobtype = `{}`",
+                input.jobtype.as_str()
+            )));
+        }
+    }
     if let Some(scf_type) = options.scf_type {
         // 阶段二已接：闭壳层 KS/RHF（阶段一行为）、**UHF**（SC-01）、**UKS**（SC-01b）。
         // 只剩 ROHF 没接线（SC-01c 记为 blocked，见 docs/status-v2.yaml）。

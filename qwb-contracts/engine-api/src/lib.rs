@@ -39,8 +39,8 @@ pub use numerics::{
     GridSummary, NumericsOptions, NumericsPath, NumericsReport, PsSummary, RiSummary,
 };
 pub use properties::{
-    ExcitedStateMethod, ExcitedStates, Multipoles, NmrReference, NmrShieldings, NucleusShielding,
-    Polarizability, SumRules, Transition, TransitionContribution,
+    EprResult, ExcitedStateMethod, ExcitedStates, HyperfineCoupling, Multipoles, NmrReference,
+    NmrShieldings, NucleusShielding, Polarizability, SumRules, Transition, TransitionContribution,
 };
 pub use registry::Registry;
 pub use reporter::Reporter;

@@ -216,7 +216,14 @@ fn result_schema_matches_job_result() {
                 0.5,
             )
             .with_grid(qwb_engine_api::GridSummary::new(75, 302, 20.0)),
-        );
+        )
+        // ST-05 的 `epr` 块（phase-2）：同样必须"文档里有、Rust 里也有"。
+        .with_epr(qwb_engine_api::EprResult::new(
+            "uhf",
+            vec![qwb_engine_api::HyperfineCoupling::new(
+                0, "H", -0.0123, -54.6, -19.5,
+            )],
+        ));
     let actual = json_keys(&serde_json::to_value(&result).expect("serialize"));
 
     assert_eq!(
