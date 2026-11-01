@@ -89,6 +89,8 @@ GENERATORS = {
         "scripts/dftd3_dispersion_reference.py",
     "qwb-core/crates/qwb-scf/tests/reference/d3_dispersion.csv":
         "scripts/dftd3_dispersion_reference.py",
+    "qwb-core/crates/qwb-xc/tests/reference/spin_mgga_pointwise.csv":
+        "scripts/pyscf_spin_mgga_reference.py",
     "qwb-core/crates/qwb-scf/tests/reference/d3zero_dispersion.csv":
         "scripts/dftd3_dispersion_reference.py",
 }

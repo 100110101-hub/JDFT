@@ -1,0 +1,20 @@
+Spin meta-GGA: pin the reference values first, and record what libxc cannot provide
+
+scripts/pyscf_spin_mgga_reference.py emits spin_mgga_pointwise.csv: 5 samples
+(closed shell, weakly polarised, fully polarised, sparse, large gradient) x 4
+components, each row carrying e, v_rho_alpha/beta, the three d e/d sigma
+channels and d e/d tau_alpha/beta, with source_doi/source_url so it joins the
+DA-08 family list (gate now reports 15 family files, 1150 rows).
+
+The probing also settled what the external ruler can and cannot cover in this
+build: MGGA_X_M06 and MGGA_X_M06_2X do not exist in this libxc (KeyError);
+only MGGA_X_M06_L and the four M06 correlations are available. So the pinned
+reference covers the correlation side - the actually hard half, since M06
+correlation needs the zeta-dependent Stoll decomposition - while the exchange
+half has exact spin scaling e_sigma = e_closed(2 rho_sigma, 4 sigma,
+2 tau_sigma) and can be verified point by point against our own closed-shell
+implementation.
+
+Also recorded in the ledger: PySCF returns meta-GGA derivatives as
+(exc, [v_rho, v_sigma, v_lapl, v_tau], None, None) - a list inside out[1], not
+out[2]/out[3]; reading it by intuition gives a TypeError.
