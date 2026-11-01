@@ -1326,6 +1326,11 @@
    "subroutine": "SMD_CDS_AQ"
   }
  },
+ "cds_area_convention": {
+  "evidence": "single-atom inverse against PySCF 2.14.0 libsolvent: without the offset the derived sigma is 1.48-1.78x too large, element by element; with 0.4 A the water table matches to 1.6e-5 cal/(mol A^2) and four nonaqueous solvents to 1e-7 kcal/mol",
+  "formula": "A_i = 4*pi*(R_i + offset)^2",
+  "offset_angstrom": 0.4
+ },
  "cds_vdw_radii_angstrom": {
   "note": "CDS cavity radii, not the SMD parameterised radii: H from Bondi 1964, the rest from Mantina et al. (CRC Handbook 2010-2011)",
   "table": "BONDI",

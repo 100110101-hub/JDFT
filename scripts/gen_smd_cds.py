@@ -178,6 +178,19 @@ def build_rows() -> dict:
     # 这里的 C 是 1.70 / N 1.55 / O 1.52，而 SMD 参数化半径是 C 1.85 / N 1.89 /（O 依赖 α）。
     # 两套半径混用会静默错数，所以分开落盘、各自标名字。
     vdwrad = subroutine_body(source, "VDWRAD")
+    # CDS 的**面积约定**：不是几何球面 4πR²，而是 4π(R + 0.4 Å)²。这一条不是从论文抄的，
+    # 是 `scripts/validate_smd_cds.py` 用单原子对着 PySCF 的 `libsolvent` 反推出来的：
+    # 不加 0.4 时 σ 逐元素偏大 1.48~1.78 倍（H 1.78、C 1.53、F 1.62、S 1.49、Cl 1.51、Br 1.48），
+    # 加上之后水相与四个非水溶剂都回到 1e-7 相对以内。所以它是**验证出来的约定**，不是猜的。
+    rows["cds_area_convention"] = {
+        "formula": "A_i = 4*pi*(R_i + offset)^2",
+        "offset_angstrom": 0.4,
+        "evidence": (
+            "single-atom inverse against PySCF 2.14.0 libsolvent: without the offset the "
+            "derived sigma is 1.48-1.78x too large, element by element; with 0.4 A the water "
+            "table matches to 1.6e-5 cal/(mol A^2) and four nonaqueous solvents to 1e-7 kcal/mol"
+        ),
+    }
     rows["cds_vdw_radii_angstrom"] = {
         "table": "BONDI",
         "note": (
