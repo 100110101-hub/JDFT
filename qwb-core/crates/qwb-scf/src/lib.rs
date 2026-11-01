@@ -24,6 +24,7 @@
 pub mod analytic_gradient;
 pub mod checkpoint;
 pub mod cphf_hessian;
+pub mod d4;
 pub mod diis;
 pub mod dispersion;
 pub mod ecp;
