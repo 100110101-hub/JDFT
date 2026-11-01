@@ -1411,7 +1411,6 @@ impl RksBackend {
         let Some(options) = &input.options.dispersion else {
             return Ok(job);
         };
-        let data = self.registry.get_dispersion(&options.data)?;
         let functional = options
             .functional
             .as_deref()
@@ -1429,20 +1428,38 @@ impl RksBackend {
             .iter()
             .map(|atom| atom.position_bohr())
             .collect();
-        let result =
-            qwb_scf::dispersion::dispersion_energy(data, &functional, &symbols, &positions)
-                .map_err(|err| {
-                    EngineError::Data(format!("dispersion `{}`: {err}", options.data))
-                })?;
+        // D3 与 D4 是**两套数据类型**（形状不同，见 `qwb-registry` 的 `d4` 模块），所以按数据键名
+        // 分派；D4 还需要体系总电荷（EEQ 电荷是电荷相关的），D3 不需要。
+        let (dispersion_energy, dispersion_gradient) = if options.data == "d4" {
+            let data = self.registry.get_d4_dispersion("d4")?;
+            let total_charge = f64::from(input.molecule.charge);
+            let result = qwb_scf::d4::dispersion_gradient(
+                data,
+                &functional,
+                &symbols,
+                &positions,
+                total_charge,
+            )
+            .map_err(|err| EngineError::Data(format!("dispersion `{}`: {err}", options.data)))?;
+            (result.energy_hartree, result.gradient)
+        } else {
+            let data = self.registry.get_dispersion(&options.data)?;
+            let result =
+                qwb_scf::dispersion::dispersion_energy(data, &functional, &symbols, &positions)
+                    .map_err(|err| {
+                        EngineError::Data(format!("dispersion `{}`: {err}", options.data))
+                    })?;
+            (result.energy_hartree, result.gradient)
+        };
         let scf_hartree = job.energy_hartree;
-        job.energy_hartree = scf_hartree + result.energy_hartree;
+        job.energy_hartree = scf_hartree + dispersion_energy;
         // 梯度是 3N×1 的矩阵（列主序，按原子优先）。
         if let Some(gradient) = job.gradient_hartree_per_bohr.as_mut()
             && gradient.nrows() == positions.len() * 3
         {
             for atom in 0..positions.len() {
                 for axis in 0..3 {
-                    gradient[(atom * 3 + axis, 0)] += result.gradient[atom][axis];
+                    gradient[(atom * 3 + axis, 0)] += dispersion_gradient[atom][axis];
                 }
             }
         }
@@ -1450,18 +1467,16 @@ impl RksBackend {
             "dispersion = {} (functional = {functional}), E_disp = {:.10} Ha = {:.4} kcal/mol, \
              total = {:.10} Ha",
             options.data,
-            result.energy_hartree,
-            result.energy_hartree * 627.509_474_063_1,
+            dispersion_energy,
+            dispersion_energy * 627.509_474_063_1,
             job.energy_hartree
         ));
         let log = format!(
             "{}\nE_scf = {scf_hartree:.12} Ha, E_dispersion = {:.12} Ha, 
 ",
-            job.log, result.energy_hartree
+            job.log, dispersion_energy
         );
-        job = job
-            .with_dispersion_energy(result.energy_hartree)
-            .with_log(log);
+        job = job.with_dispersion_energy(dispersion_energy).with_log(log);
         Ok(job)
     }
 }

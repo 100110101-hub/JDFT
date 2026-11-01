@@ -144,14 +144,16 @@ fn fx04_unknown_data_and_functionals_are_reported() {
     let mut request = input(JobType::Sp, "pbe0");
     // `DispersionOptions` 是 non_exhaustive：先 Default 再覆盖字段。
     let mut options = DispersionOptions::default();
-    options.data = "d4".into();
+    // 这个键名必须**真的不存在**：DA-06 之后 `d4` 已是合法键（见 `da06_d4_engine.rs`），
+    // 所以从 `d4` 改成拼错的 `d3bj-typo` —— 断言本身（未知键必须被拒且消息点名）不变。
+    options.data = "d3bj-typo".into();
     request.options.dispersion = Some(options);
     let error = backend
         .run(&request, &NullReporter)
         .expect_err("unknown data must be rejected");
     let message = format!("{error}");
     println!("unknown data: {message}");
-    assert!(message.contains("d4"), "{message}");
+    assert!(message.contains("d3bj-typo"), "{message}");
 
     // M06-2X 没有 BJ 参数：用 `d3bj` 必须报错并指出可用的四个泛函。
     let mut request = input(JobType::Sp, "m06-2x");
