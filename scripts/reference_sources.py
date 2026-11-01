@@ -67,6 +67,8 @@ GENERATORS = {
         "scripts/pyscf_epr_reference.py",
     "qwb-core/crates/qwb-response/tests/reference/dynamic_polarizability.csv":
         "scripts/pyscf_dynamic_polarizability_reference.py",
+    "qwb-core/crates/qwb-response/tests/reference/beta.csv":
+        "scripts/pyscf_beta_ref.py",
     "qwb-core/crates/qwb-props/tests/reference/nmr_molecules.csv":
         "scripts/pyscf_nmr_shieldings_reference.py",
     "qwb-core/crates/qwb-props/tests/reference/nmr_diamagnetic.csv":

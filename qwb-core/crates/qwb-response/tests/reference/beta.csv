@@ -1,0 +1,30 @@
+species,basis,component,beta_au,note,source_doi,source_url
+H2O,sto-3g,tensor_000,0.0000000004,PySCF 2.14.0 RHF + get_hcore 有限场 + CPHF(gen_response) + Richardson,10.1063/5.0006074,https://github.com/pyscf/pyscf
+H2O,sto-3g,tensor_001,-0.0000000451,PySCF 2.14.0 RHF + get_hcore 有限场 + CPHF(gen_response) + Richardson,10.1063/5.0006074,https://github.com/pyscf/pyscf
+H2O,sto-3g,tensor_002,0.0595192473,PySCF 2.14.0 RHF + get_hcore 有限场 + CPHF(gen_response) + Richardson,10.1063/5.0006074,https://github.com/pyscf/pyscf
+H2O,sto-3g,tensor_010,-0.0000000065,PySCF 2.14.0 RHF + get_hcore 有限场 + CPHF(gen_response) + Richardson,10.1063/5.0006074,https://github.com/pyscf/pyscf
+H2O,sto-3g,tensor_011,-0.0000044950,PySCF 2.14.0 RHF + get_hcore 有限场 + CPHF(gen_response) + Richardson,10.1063/5.0006074,https://github.com/pyscf/pyscf
+H2O,sto-3g,tensor_012,0.0000000001,PySCF 2.14.0 RHF + get_hcore 有限场 + CPHF(gen_response) + Richardson,10.1063/5.0006074,https://github.com/pyscf/pyscf
+H2O,sto-3g,tensor_020,0.0596414750,PySCF 2.14.0 RHF + get_hcore 有限场 + CPHF(gen_response) + Richardson,10.1063/5.0006074,https://github.com/pyscf/pyscf
+H2O,sto-3g,tensor_021,0.0000030215,PySCF 2.14.0 RHF + get_hcore 有限场 + CPHF(gen_response) + Richardson,10.1063/5.0006074,https://github.com/pyscf/pyscf
+H2O,sto-3g,tensor_022,0.0000000029,PySCF 2.14.0 RHF + get_hcore 有限场 + CPHF(gen_response) + Richardson,10.1063/5.0006074,https://github.com/pyscf/pyscf
+H2O,sto-3g,tensor_100,-0.0000000065,PySCF 2.14.0 RHF + get_hcore 有限场 + CPHF(gen_response) + Richardson,10.1063/5.0006074,https://github.com/pyscf/pyscf
+H2O,sto-3g,tensor_101,-0.0000044950,PySCF 2.14.0 RHF + get_hcore 有限场 + CPHF(gen_response) + Richardson,10.1063/5.0006074,https://github.com/pyscf/pyscf
+H2O,sto-3g,tensor_102,0.0000000001,PySCF 2.14.0 RHF + get_hcore 有限场 + CPHF(gen_response) + Richardson,10.1063/5.0006074,https://github.com/pyscf/pyscf
+H2O,sto-3g,tensor_110,-0.0000000243,PySCF 2.14.0 RHF + get_hcore 有限场 + CPHF(gen_response) + Richardson,10.1063/5.0006074,https://github.com/pyscf/pyscf
+H2O,sto-3g,tensor_111,0.0000007616,PySCF 2.14.0 RHF + get_hcore 有限场 + CPHF(gen_response) + Richardson,10.1063/5.0006074,https://github.com/pyscf/pyscf
+H2O,sto-3g,tensor_112,-6.4036348617,PySCF 2.14.0 RHF + get_hcore 有限场 + CPHF(gen_response) + Richardson,10.1063/5.0006074,https://github.com/pyscf/pyscf
+H2O,sto-3g,tensor_120,0.0000001715,PySCF 2.14.0 RHF + get_hcore 有限场 + CPHF(gen_response) + Richardson,10.1063/5.0006074,https://github.com/pyscf/pyscf
+H2O,sto-3g,tensor_121,-6.4077119257,PySCF 2.14.0 RHF + get_hcore 有限场 + CPHF(gen_response) + Richardson,10.1063/5.0006074,https://github.com/pyscf/pyscf
+H2O,sto-3g,tensor_122,-0.0000000098,PySCF 2.14.0 RHF + get_hcore 有限场 + CPHF(gen_response) + Richardson,10.1063/5.0006074,https://github.com/pyscf/pyscf
+H2O,sto-3g,tensor_200,0.0596414750,PySCF 2.14.0 RHF + get_hcore 有限场 + CPHF(gen_response) + Richardson,10.1063/5.0006074,https://github.com/pyscf/pyscf
+H2O,sto-3g,tensor_201,0.0000030215,PySCF 2.14.0 RHF + get_hcore 有限场 + CPHF(gen_response) + Richardson,10.1063/5.0006074,https://github.com/pyscf/pyscf
+H2O,sto-3g,tensor_202,0.0000000029,PySCF 2.14.0 RHF + get_hcore 有限场 + CPHF(gen_response) + Richardson,10.1063/5.0006074,https://github.com/pyscf/pyscf
+H2O,sto-3g,tensor_210,0.0000001715,PySCF 2.14.0 RHF + get_hcore 有限场 + CPHF(gen_response) + Richardson,10.1063/5.0006074,https://github.com/pyscf/pyscf
+H2O,sto-3g,tensor_211,-6.4077119257,PySCF 2.14.0 RHF + get_hcore 有限场 + CPHF(gen_response) + Richardson,10.1063/5.0006074,https://github.com/pyscf/pyscf
+H2O,sto-3g,tensor_212,-0.0000000098,PySCF 2.14.0 RHF + get_hcore 有限场 + CPHF(gen_response) + Richardson,10.1063/5.0006074,https://github.com/pyscf/pyscf
+H2O,sto-3g,tensor_220,-0.0000000724,PySCF 2.14.0 RHF + get_hcore 有限场 + CPHF(gen_response) + Richardson,10.1063/5.0006074,https://github.com/pyscf/pyscf
+H2O,sto-3g,tensor_221,-0.0000038361,PySCF 2.14.0 RHF + get_hcore 有限场 + CPHF(gen_response) + Richardson,10.1063/5.0006074,https://github.com/pyscf/pyscf
+H2O,sto-3g,tensor_222,-3.4259773518,PySCF 2.14.0 RHF + get_hcore 有限场 + CPHF(gen_response) + Richardson,10.1063/5.0006074,https://github.com/pyscf/pyscf
+H2O,sto-3g,beta_vec,29.3181885715,beta_vec = sqrt(sum_i (sum_j (beta_ijj+beta_jij+beta_jji))^2),10.1063/5.0006074,https://github.com/pyscf/pyscf
+H2O,sto-3g,beta_parallel,-17.5909131429,"beta_parallel = (3/5) sum_i (beta_zii + beta_izi + beta_iiz), z = dipole axis",10.1063/5.0006074,https://github.com/pyscf/pyscf
