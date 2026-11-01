@@ -54,7 +54,7 @@ pub use molecule::{MoleculeAtom, MoleculeFile};
 pub use numerics::{AccuracyLevel, EquivalenceTolerance, NumericsDef, PsSettings};
 pub use registry::{RegistryEntry, RegistryManifest};
 pub use smd_atomic::{SmdAtomic, SmdCds};
-pub use solvent::{CavityModel, Solvent};
+pub use solvent::{CavityModel, RadiiSet, Solvent};
 pub use thirdparty::MissingData;
 pub use verify::{DataKind, Issue, Report, Severity};
 

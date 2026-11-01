@@ -30,6 +30,7 @@ pub mod gradient;
 pub mod hessian;
 pub mod opt;
 
+use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
 
 use qwb_engine_api::{
@@ -675,12 +676,23 @@ impl RksBackend {
         if solvent_name != "vacuum" {
             let (epsilon, scale, radii, cavity_model) = {
                 let solvent = self.registry.get_solvent(&solvent_name)?;
-                (
-                    solvent.epsilon,
+                // SV-03：`radii_set: smd` 时用 SMD 的**参数化半径**（eq. 16）—— 与文件里的
+                // `atomic_radii`（Bondi/UFF）是两套，混用会静默错数，所以由数据里的
+                // `radii_set` 声明、在这里集中选择。默认（bondi/uff/缺省）行为**逐位不变**。
+                let smd_data = if solvent.radii_set == Some(qwb_registry::RadiiSet::Smd) {
+                    Some(self.registry.get_smd_atomic(SMD_ATOMIC_NAME)?)
+                } else {
+                    None
+                };
+                let (radii, scale) = cosmo_radii(
+                    &input.molecule,
+                    solvent.radii_set,
+                    &solvent.atomic_radii,
                     solvent.scale,
-                    solvent.atomic_radii.clone(),
-                    solvent.cavity_model,
-                )
+                    solvent.smd.as_ref().and_then(|block| block.abraham_alpha),
+                    smd_data,
+                )?;
+                (solvent.epsilon, scale, radii, solvent.cavity_model)
             };
             match cavity_model {
                 qwb_registry::CavityModel::Pcm => {}
@@ -1697,4 +1709,49 @@ fn reject_unimplemented_options(input: &JobInput) -> Result<(), EngineError> {
         }
     }
     Ok(())
+}
+
+/// `kind: smd-atomic` 数据在仓库里的名字。
+const SMD_ATOMIC_NAME: &str = "smd-atomic";
+
+/// 依据溶剂的 `radii_set` 选 COSMO/C-PCM 的空腔半径，返回 `(每元素半径, 缩放因子)`。
+///
+/// * `Some(RadiiSet::Smd)`：用 SMD 的参数化半径（eq. 16，见 [`qwb_props::smd_radii`]），
+///   缩放**固定 1.0** —— eq. 16 给出的就是最终半径，再乘 Bondi 那套的 `scale` 会重复放大；
+///   O 半径由溶剂的 Abraham α 决定，所以缺 `abraham_alpha` 或 `smd-atomic` 数据时**显式报错**。
+/// * 其它（`bondi` / `uff` / 未声明）：返回文件里的 `atomic_radii` 与文件里的 `scale`，
+///   行为与第 375 轮之前**逐位相同**。
+///
+/// # Errors
+///
+/// `radii_set = smd` 但缺 `smd-atomic` 数据或溶剂的 `abraham_alpha` → [`EngineError::Data`]。
+pub fn cosmo_radii(
+    molecule: &Molecule,
+    radii_set: Option<qwb_registry::RadiiSet>,
+    atomic_radii: &BTreeMap<String, f64>,
+    scale: f64,
+    alpha: Option<f64>,
+    smd: Option<&qwb_registry::smd_atomic::SmdAtomic>,
+) -> Result<(BTreeMap<String, f64>, f64), EngineError> {
+    if radii_set != Some(qwb_registry::RadiiSet::Smd) {
+        return Ok((atomic_radii.clone(), scale));
+    }
+    let data = smd.ok_or_else(|| {
+        EngineError::Data(
+            "solvent declares radii_set = smd but the `smd-atomic` data is not loaded".to_string(),
+        )
+    })?;
+    let alpha = alpha.ok_or_else(|| {
+        EngineError::Data(
+            "solvent declares radii_set = smd but has no `smd.abraham_alpha` (the oxygen radius \
+             depends on it)"
+                .to_string(),
+        )
+    })?;
+    let per_atom = qwb_props::smd_radii::smd_parameterised_radii(data, molecule, alpha)?;
+    let mut radii = BTreeMap::new();
+    for (atom, radius) in molecule.atoms.iter().zip(per_atom) {
+        radii.insert(atom.symbol.clone(), radius);
+    }
+    Ok((radii, 1.0))
 }
