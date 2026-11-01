@@ -316,6 +316,33 @@ impl FunctionalTerm for M06Exchange {
         Requirements::meta_gga()
     }
 
+    /// 交换项的自旋标度是**精确**的，M06 的交换也不例外：它只依赖同一自旋通道的
+    /// `(ρ_σ, σ_σσ, τ_σ)`，所以
+    ///
+    /// ```text
+    /// e = ρ_α·ε(2ρ_α, 4σ_αα, 2τ_α) + ρ_β·ε(2ρ_β, 4σ_ββ, 2τ_β)
+    /// ```
+    ///
+    /// 这一条由 `exchange_spin_scaling` 实现（它已经处理 τ），与「相关项要 ζ 插值」
+    /// 的情况不同 —— M06 的相关项**不**适用这个标度。
+    fn evaluate_spin(
+        &self,
+        batch: &crate::SpinDensityBatch<'_>,
+        out: &mut crate::SpinXcOutput<'_>,
+    ) -> Result<(), crate::XcError> {
+        crate::exchange_spin_scaling(self, batch, out)
+    }
+
+    /// 自旋**且** τ：能自旋化，但要求调用方同时给出 `τ_α/τ_β`。
+    ///
+    /// 与 [`FunctionalTerm::spin_supported`] 分开是刻意的：`spin_supported` 表示
+    /// 「当前 `uks` 路径已经能喂它」，而 `uks` 还没有积累 τ（那一步是 UKS 的
+    /// meta-GGA 接线）。所以这一位只表示**组件本身**已经具备自旋+τ 的求值能力，
+    /// 逐点测试直接调 [`FunctionalTerm::evaluate_spin`] 验证它。
+    fn spin_meta_supported(&self) -> bool {
+        true
+    }
+
     fn spin_scaling(&self) -> f64 {
         1.0
     }

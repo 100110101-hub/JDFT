@@ -311,6 +311,13 @@ pub trait FunctionalTerm: Send + Sync {
     fn spin_supported(&self) -> bool {
         false
     }
+
+    /// 组件是否具备**自旋 + τ** 的求值能力（`SpinDensityBatch` 里的 `tau_alpha/tau_beta`
+    /// 非空时可调）。默认 `false`；与 `spin_supported` 分开是因为「能算」与「uks 路径
+    /// 已经喂得进 τ」是两件事。
+    fn spin_meta_supported(&self) -> bool {
+        false
+    }
     /// 一次求出自旋分辨 XC 的全部六个量（能量密度、两个势、三个 σ 导数）。
     ///
     /// **写入语义**：被调方把 `out` 的六个切片全部覆盖（不累加），长度必须等于
@@ -624,6 +631,13 @@ pub struct SpinDensityBatch<'a> {
     pub sigma_beta: &'a [f64],
     /// `σ_αβ = ∇ρ_α·∇ρ_β`；LDA 项给空切片。
     pub sigma_alpha_beta: &'a [f64],
+    /// `τ_α = ½ Σ_μν P^α_μν ∇φ_μ·∇φ_ν`（自旋分辨的动能密度）；非 meta-GGA 给空切片。
+    ///
+    /// 为什么单独占两个通道而不是从 ρ/σ 推：`τ` 不是 ρ 与 σ 的函数（同一个 ρ、σ 可以有
+    /// 不同的 τ，「鬼」态就能构造出来），所以它必须由调用方从密度矩阵直接算出来。
+    pub tau_alpha: &'a [f64],
+    /// `τ_β`。
+    pub tau_beta: &'a [f64],
 }
 
 impl<'a> SpinDensityBatch<'a> {
@@ -645,7 +659,39 @@ impl<'a> SpinDensityBatch<'a> {
             sigma_alpha: &[],
             sigma_beta: &[],
             sigma_alpha_beta: &[],
+            tau_alpha: &[],
+            tau_beta: &[],
         }
+    }
+
+    /// 密度 + 三个 σ + 两个 τ（meta-GGA 用）。
+    ///
+    /// # Panics
+    ///
+    /// 七个切片长度不一致。
+    #[must_use]
+    pub fn with_tau(
+        rho_alpha: &'a [f64],
+        rho_beta: &'a [f64],
+        sigma_alpha: &'a [f64],
+        sigma_beta: &'a [f64],
+        sigma_alpha_beta: &'a [f64],
+        tau_alpha: &'a [f64],
+        tau_beta: &'a [f64],
+    ) -> Self {
+        let mut batch = Self::with_sigma(
+            rho_alpha,
+            rho_beta,
+            sigma_alpha,
+            sigma_beta,
+            sigma_alpha_beta,
+        );
+        let points = rho_alpha.len();
+        assert_eq!(tau_alpha.len(), points, "tau_alpha must match");
+        assert_eq!(tau_beta.len(), points, "tau_beta must match");
+        batch.tau_alpha = tau_alpha;
+        batch.tau_beta = tau_beta;
+        batch
     }
 
     /// 密度 + 三个 σ（GGA 用）。
@@ -676,6 +722,8 @@ impl<'a> SpinDensityBatch<'a> {
             sigma_alpha,
             sigma_beta,
             sigma_alpha_beta,
+            tau_alpha: &[],
+            tau_beta: &[],
         }
     }
 
@@ -753,10 +801,14 @@ pub struct SpinXcOutput<'a> {
     pub d_sigma_beta: &'a mut [f64],
     /// `∂e/∂σ_αβ`。
     pub d_sigma_alpha_beta: &'a mut [f64],
+    /// `∂e/∂τ_α`（meta-GGA；非 meta-GGA 项填 0，切片可以给空）。
+    pub d_tau_alpha: &'a mut [f64],
+    /// `∂e/∂τ_β`。
+    pub d_tau_beta: &'a mut [f64],
 }
 
 impl<'a> SpinXcOutput<'a> {
-    /// 由六个可变切片构造。
+    /// 由六个可变切片构造（非 meta-GGA 用；两个 τ 导数通道为空）。
     #[must_use]
     pub fn new(
         energy: &'a mut [f64],
@@ -773,6 +825,30 @@ impl<'a> SpinXcOutput<'a> {
             d_sigma_alpha,
             d_sigma_beta,
             d_sigma_alpha_beta,
+            d_tau_alpha: &mut [],
+            d_tau_beta: &mut [],
+        }
+    }
+
+    /// 挂上两个 τ 导数通道（meta-GGA 用）。
+    ///
+    /// # Panics
+    ///
+    /// 长度与已有点数不一致。
+    #[must_use]
+    pub fn with_tau(self, d_tau_alpha: &'a mut [f64], d_tau_beta: &'a mut [f64]) -> Self {
+        let points = self.energy.len();
+        assert_eq!(d_tau_alpha.len(), points, "d_tau_alpha must match");
+        assert_eq!(d_tau_beta.len(), points, "d_tau_beta must match");
+        SpinXcOutput {
+            energy: self.energy,
+            v_alpha: self.v_alpha,
+            v_beta: self.v_beta,
+            d_sigma_alpha: self.d_sigma_alpha,
+            d_sigma_beta: self.d_sigma_beta,
+            d_sigma_alpha_beta: self.d_sigma_alpha_beta,
+            d_tau_alpha,
+            d_tau_beta,
         }
     }
 
@@ -840,28 +916,50 @@ pub(crate) fn exchange_spin_scaling(
     out.clear();
 
     let needs_sigma = term.requires().sigma;
+    let needs_tau = term.requires().kinetic_density;
     let mut doubled = vec![0.0_f64; points];
     let mut quadrupled = vec![0.0_f64; points];
+    let mut doubled_tau = vec![0.0_f64; points];
     let mut eps = vec![0.0_f64; points];
     let mut d_eps = vec![0.0_f64; points];
     let mut d_sigma = vec![0.0_f64; points];
+    let mut d_laplacian = vec![0.0_f64; points];
+    let mut d_tau = vec![0.0_f64; points];
     for channel in 0..2 {
-        let (source, sigma_source) = if channel == 0 {
-            (batch.rho_alpha, batch.sigma_alpha)
+        let (source, sigma_source, tau_source) = if channel == 0 {
+            (batch.rho_alpha, batch.sigma_alpha, batch.tau_alpha)
         } else {
-            (batch.rho_beta, batch.sigma_beta)
+            (batch.rho_beta, batch.sigma_beta, batch.tau_beta)
         };
         for index in 0..points {
             doubled[index] = 2.0 * source[index].max(0.0);
             quadrupled[index] = 4.0 * sigma_source.get(index).copied().unwrap_or(0.0).max(0.0);
+            doubled_tau[index] = 2.0 * tau_source.get(index).copied().unwrap_or(0.0).max(0.0);
         }
-        let closed = if needs_sigma {
+        // meta-GGA 的三元组（ρ, σ, τ）里，自旋标度把每个通道看成「密度翻倍的全极化子系统」：
+        // `(2ρ_σ, 4σ_σσ, 2τ_σ)`。τ 也翻倍是关键 —— 漏掉它就等于用错动能密度。
+        // 交换项不依赖 ∇²ρ，但 `with_all` 的签名要一个 laplacian 切片：
+        // 用一个**独立**的空缓冲区，别把它和下面写回导数的缓冲区混用（借用冲突）。
+        let empty_laplacian = vec![0.0_f64; points];
+        let closed = if needs_tau {
+            DensityBatch::with_all(&doubled, &quadrupled, &empty_laplacian, &doubled_tau)
+        } else if needs_sigma {
             DensityBatch::new(&doubled, &quadrupled)
         } else {
             DensityBatch::from_rho(&doubled)
         };
         term.energy_density(&closed, &mut eps);
-        term.potential_derivatives(&closed, &mut d_eps, &mut d_sigma);
+        if needs_tau {
+            term.potential_derivatives_full(
+                &closed,
+                &mut d_eps,
+                &mut d_sigma,
+                &mut d_laplacian,
+                &mut d_tau,
+            );
+        } else {
+            term.potential_derivatives(&closed, &mut d_eps, &mut d_sigma);
+        }
         for index in 0..points {
             let rho = source[index].max(0.0);
             // 该通道没有电子：能量、势、σ 导数都必须**严格为 0**。
@@ -879,6 +977,16 @@ pub(crate) fn exchange_spin_scaling(
                 out.v_alpha[index] += potential;
             } else {
                 out.v_beta[index] += potential;
+            }
+            if needs_tau {
+                // e_σ = ρ_σ·ε(2ρ_σ, 4σ_σσ, 2τ_σ)
+                //   ∂e/∂τ_σ = ρ_σ·ε_t·2 = 2ρ_σ·ε_t
+                let derivative = 2.0 * rho * d_tau[index];
+                if channel == 0 {
+                    out.d_tau_alpha[index] += derivative;
+                } else {
+                    out.d_tau_beta[index] += derivative;
+                }
             }
             if needs_sigma {
                 // ∂e/∂σ_σσ = ρ_σ · ε_σ(2ρ_σ, 4σ_σσ) · 4；σ_αβ 不进交换项。
