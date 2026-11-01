@@ -6771,3 +6771,43 @@ HCl **1.176125**、H₂S **1.008290** kcal/mol。我们的"Fibonacci 表面 × �
 相对误差 ≤ 5.5e-14；`w = 0` 与 `cavity()` 的总面积差 2.95e-14、逐原子完全一致；分离的 H₂
 面积与 CDS 能量都严格可加（3.132705716291 = 2 × 1.566352858146 kcal/mol）；距离 8 → 1 Å 时
 面积 64.340 → 43.801 单调不增。
+
+## 一百六十六、把 `SMXCDS` 的成键规则提进 K1：`D` 指数与定长注释是两个坑（2026-11-12）
+
+上一节记下"每原子 σ 要 `HSIGMA` + 成对修正 + 成键权重 `COT`"。`HSIGMA` 与成对块本来就在
+staging JSON 里（`SIGMA_DATA` 的 101–150 项），**缺的是 `COT` 的半径表**：15×15 的 `RKKVAL`
+与 `NATCNV`（核电荷 → 11 个类型）。这一轮把这两张表提出来，落成 K1 的 `cds.bonds`。
+
+两个坑都在解析层，而且都是**静默**的那类：
+
+1. **`0.00D0`**。`RKKVAL` 的初值用 Fortran 的 `D` 指数（double），`float("0.00D0")` 直接抛
+   `ValueError` —— 报错里不会说是哪张表。修法是在 `fortran_number_list` 里统一做一次
+   `(?<=\d)[dD](?=[+-]?\d) → e`；放在最底层的好处是以后任何带 `D` 的表都自动过。
+2. **定长 Fortran 的注释行夹在 `DATA` 块里**。这块表长这样：
+   ```fortran
+         DATA ((RKKVAL(J,I), I=1,15), J=1,15)
+   C  Set for type 1
+        .           /0.00D0, 1.55D0, ...
+   ```
+   于是 ① 开 `/` 不在声明符后面紧跟（所以 `extract_table` 的 `DATA\s+name\s*/` 锚不上），
+   ② 整行注释（第 1 列是 `C`）落在数值之间，直接拼会得到 `C`/`Set`/`for` 这些"数字"。
+   新写的 `extract_matrix` 做三件事：锚 `DATA ((<name>`、取第一个与第二个 `/` 之间的正文、
+   剔掉 `^\s*[Cc]\s` 的行，最后按 15×15 重排并检查长度正好 225。
+
+**对称性是这次读表对错的判据。** Fortran 的写法是 `((RKKVAL(J,I), I=1,15), J=1,15)`（列主序，
+J 在外层）；如果按行主序理解，得到的矩阵会是转置的 —— 而这张表恰好对称，转置看不出来。
+所以生成器里对 105 个上三角元素逐个断言 `RKKVAL(J,I) == RKKVAL(I,J)`：**它过了，说明
+"表确实是对称的配对表"**，也就说明 225 个数的顺序没有被读错（转置或错位都会破坏对称）。
+数值抽样：H–C 1.55、C–C 1.84、N–C 1.84、O–C 1.84、O–N 1.50、O–O 2.75、O–S 1.71；
+类型 H 1、C 2、N 3、O 4、F 5、S 6、Cl 7、Br 8、P 9、Si 11，其余 26 个元素是 0
+（`COT ≡ 0`，与上游 `NATCNV` 一致 —— 我第一版注释写成"25 个是 0"，被测试里那条
+`inactive == 26` 抓了出来）。
+
+K1 侧是加性扩展：`SmdCds.bonds: SmdBonds`（`table`/`note`/`element_types`/`rkkval_angstrom`），
+`check_structure` 校验表名、15×15、非负有限、对称（1e-12）、每个覆盖元素都有类型且 ≤ 15；
+`registry.yaml` 0.16.0 → **0.17.0**、`smdatomic.schema.{json,yaml}` 重生成、
+`DATA_LICENSES.md` 更新哈希（文件数仍是 34）、`qwb data verify` **34/34**；
+`qwb-registry/tests/sv03_smd_atomic.rs` 新增 `the_bond_contact_rules_match_upstream`
+（3 例全绿）。**组装本身（`STS_i = σ_i + Σ COT·HSIGMA + 成对项`）还没做** —— 数据先到位，
+是因为它是"能一次抄对、然后可以反复用"的那类东西，而组装要等 `COT` 的 Δ 与两处特例
+（O–S 0.10/1.330、O–O 0.30/1.80）先在测试里钉住。

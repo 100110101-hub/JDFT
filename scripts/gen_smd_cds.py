@@ -49,11 +49,13 @@ ELEMENTS = [
 
 
 def fortran_number_list(body: str) -> list[float]:
-    """展开 Fortran `DATA` 的初值表：支持 `n*value` 与 `&`/`.` 续行。"""
+    """展开 Fortran `DATA` 的初值表：支持 `n*value`、`&`/`.` 续行与 `D` 指数。"""
     # Fortran 的续行标记是第 6 列的 `.`（如 `  . 48.69, ...`）：**先按行去掉**再拼，
     # 否则拼成一行后行首锚点就失效了（实测会留下一个孤立的 `.` 让 float() 抛错）。
     # 每行要同时处理三件事：列 6 的续行标记（`.` 或 `$`）、Fortran 的行内注释（`! ...`）、
     # 以及可能的行首 `&`。都在**按行**阶段做，避免拼成一行后锚点失效。
+    # `RKKVAL` 里的初值写成 `0.00D0`（Fortran 的 double 指数），`float()` 不认，先统一成 `E`。
+    body = re.sub(r"(?<=\d)[dD](?=[+-]?\d)", "e", body)
     lines = []
     for line in body.split("\n"):
         line = re.sub(r"!.*$", " ", line)
@@ -82,6 +84,35 @@ def extract_table(
     body_end = source.index("/", body_start)
     values = fortran_number_list(source[body_start:body_end])
     return values if limit is None else values[:limit]
+
+
+def extract_matrix(source: str, name: str, size: int) -> list[list[float]]:
+    """把 `DATA ((<name>(J,I), I=1,n), J=1,n)` 的 n×n 表读出来。
+
+    与 [`extract_table`] 的区别有三处，都是 `RKKVAL` 这块数据特有的写法：
+    ① 声明符不是裸名字（多一层括号），所以开 `/` 得另外找；
+    ② 表里夹着整行的定长 Fortran 注释（第 1 列是 `C`），要先剔掉，
+       否则 `C`/`Set`/`for` 这些词会被当成数字；
+    ③ 初值是 `0.00D0` 这种 `D` 指数（已在 [`fortran_number_list`] 里统一）。
+    """
+    match = re.search(rf"DATA\s+\(\({name}", source, re.IGNORECASE)
+    if match is None:
+        raise SystemExit(f"gen_smd_cds: `DATA (({name}` not found in mnsol.F")
+    body_start = source.index("/", match.end())
+    body_end = source.index("/", body_start + 1)
+    body = source[body_start + 1 : body_end]
+    kept = [
+        line
+        for line in body.split("\n")
+        if not re.match(r"^\s*[Cc]\s", line) and not line.strip().startswith("C")
+    ]
+    values = fortran_number_list("\n".join(kept))
+    expected = size * size
+    if len(values) != expected:
+        raise SystemExit(
+            f"gen_smd_cds: `{name}` has {len(values)} entries, expected {expected}"
+        )
+    return [values[row * size : (row + 1) * size] for row in range(size)]
 
 
 def subroutine_body(source: str, name: str) -> str:
@@ -198,6 +229,35 @@ def build_rows() -> dict:
             "from Mantina et al. (CRC Handbook 2010-2011)"
         ),
         "values": extract_table(vdwrad, "BONDI", limit=None),
+    }
+
+    # CDS 的**成键接触权重**（`SMXCDS` 用）：`COT_ij = exp(Δ/(d_ij − (R_ij + Δ)))`，
+    # 其中 `R_ij` 来自 15×15 的 `RKKVAL`、`Δ = 0.30 Å`（O–S 特例 0.10 / 1.330，O–O 特例
+    # 0.30 / 1.80，见 `SMXCDS` 正文）。`NATCNV` 把核电荷映射到 11 个「类型」，类型 0
+    # 表示「不参与成键权重」，此时 `COT ≡ 0`；本文件覆盖的 36 个元素里有 26 个是 0。
+    natcnv = extract_table(source, "NATCNV", limit=None)
+    if len(natcnv) < 100:
+        raise SystemExit("gen_smd_cds: NATCNV is shorter than 100 entries")
+    rkkval = extract_matrix(source, "RKKVAL", 15)
+    for row in range(15):
+        for column in range(row + 1, 15):
+            if rkkval[row][column] != rkkval[column][row]:
+                raise SystemExit(
+                    f"gen_smd_cds: RKKVAL is not symmetric at ({row + 1},{column + 1})"
+                )
+    rows["cds_bond_rules"] = {
+        "table": "RKKVAL",
+        "note": (
+            "bond-contact reference lengths used by SMXCDS: "
+            "COT = exp(delta/(d - (R + delta))) with delta = 0.30 A; the O-S pair overrides "
+            "delta = 0.10 / R = 1.330 and the O-O pair (ISTS = 6) delta = 0.30 / R = 1.80. "
+            "Element types come from NATCNV; type 0 means 'no bond weight'."
+        ),
+        "element_types": {
+            symbol: int(natcnv[index]) for index, symbol in enumerate(ELEMENTS)
+        },
+        "natcnv_raw_100": natcnv[:100],
+        "rkkval_angstrom": rkkval,
     }
     return rows
 

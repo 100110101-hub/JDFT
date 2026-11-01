@@ -55,6 +55,44 @@ $defs:
     - generator
     - upstream
     type: object
+  SmdBonds:
+    additionalProperties: false
+    description: |-
+      CDS 的**成键接触规则**（上游 `SMXCDS`）：15×15 的参考键长表 + 元素类型映射。
+
+      成键权重是 `COT_ij = exp(Δ/(d_ij − (R_ij + Δ)))`（`d ≥ R + Δ` 时为 0），
+      `R_ij = rkkval_angstrom[type_i − 1][type_j − 1]`、`Δ = 0.30 Å`；两处特例（O–S 用
+      `Δ = 0.10 / R = 1.330`、`ISTS = 6` 时 O–O 用 `Δ = 0.30 / R = 1.80`）写在 `note` 里，
+      由实现侧按上游正文落实。类型编号为 0 的元素**不参与**成键权重（`COT ≡ 0`）——
+      本文件覆盖的 36 个元素里有 26 个是 0，这与上游 `NATCNV` 一致。
+    properties:
+      element_types:
+        additionalProperties:
+          format: uint
+          minimum: 0
+          type: integer
+        description: 元素符号 → 类型编号，1..=15；0 表示不参与成键权重。
+        type: object
+      note:
+        description: 提取说明与两处特例（人读用）。
+        type: string
+      rkkval_angstrom:
+        description: 15×15 的参考键长（Å），按上游类型编号索引（0 基：`[类型 − 1][类型 − 1]`）。
+        items:
+          items:
+            format: double
+            type: number
+          type: array
+        type: array
+      table:
+        description: 上游表名（`RKKVAL`）。
+        type: string
+    required:
+    - table
+    - note
+    - element_types
+    - rkkval_angstrom
+    type: object
   SmdCds:
     additionalProperties: false
     description: CDS 项的元素级数据。
@@ -66,6 +104,9 @@ $defs:
         description: 面积约定里的半径偏移（Å）。
         format: double
         type: number
+      bonds:
+        $ref: '#/$defs/SmdBonds'
+        description: 成键接触规则（`SMXCDS` 的 `COT` 权重）。
       nonaqueous:
         $ref: '#/$defs/SmdNonaqueousSigma'
         description: 非水相参数。
@@ -84,6 +125,7 @@ $defs:
     - vdw_radii_angstrom
     - water
     - nonaqueous
+    - bonds
     type: object
   SmdNonaqueousSigma:
     additionalProperties: false

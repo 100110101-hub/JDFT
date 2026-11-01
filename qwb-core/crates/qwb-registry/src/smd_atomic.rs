@@ -68,6 +68,27 @@ pub struct SmdNonaqueousSigma {
     pub sigma_mol: Vec<f64>,
 }
 
+/// CDS 的**成键接触规则**（上游 `SMXCDS`）：15×15 的参考键长表 + 元素类型映射。
+///
+/// 成键权重是 `COT_ij = exp(Δ/(d_ij − (R_ij + Δ)))`（`d ≥ R + Δ` 时为 0），
+/// `R_ij = rkkval_angstrom[type_i − 1][type_j − 1]`、`Δ = 0.30 Å`；两处特例（O–S 用
+/// `Δ = 0.10 / R = 1.330`、`ISTS = 6` 时 O–O 用 `Δ = 0.30 / R = 1.80`）写在 `note` 里，
+/// 由实现侧按上游正文落实。类型编号为 0 的元素**不参与**成键权重（`COT ≡ 0`）——
+/// 本文件覆盖的 36 个元素里有 26 个是 0，这与上游 `NATCNV` 一致。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+#[non_exhaustive]
+pub struct SmdBonds {
+    /// 上游表名（`RKKVAL`）。
+    pub table: String,
+    /// 提取说明与两处特例（人读用）。
+    pub note: String,
+    /// 元素符号 → 类型编号，1..=15；0 表示不参与成键权重。
+    pub element_types: BTreeMap<String, usize>,
+    /// 15×15 的参考键长（Å），按上游类型编号索引（0 基：`[类型 − 1][类型 − 1]`）。
+    pub rkkval_angstrom: Vec<Vec<f64>>,
+}
+
 /// CDS 项的元素级数据。
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
@@ -83,6 +104,8 @@ pub struct SmdCds {
     pub water: SmdWaterSigma,
     /// 非水相参数。
     pub nonaqueous: SmdNonaqueousSigma,
+    /// 成键接触规则（`SMXCDS` 的 `COT` 权重）。
+    pub bonds: SmdBonds,
 }
 
 /// 溯源。
@@ -230,6 +253,58 @@ impl SmdAtomic {
         }
         if !self.cds.area_offset_angstrom.is_finite() || self.cds.area_offset_angstrom <= 0.0 {
             issues.push("cds.area_offset_angstrom must be positive and finite".into());
+        }
+        // 成键规则：15×15、有限非负、对称；每个覆盖元素都要有类型（0 = 不参与）。
+        let bonds = &self.cds.bonds;
+        if bonds.table.trim() != "RKKVAL" {
+            issues.push(format!(
+                "cds.bonds.table must be `RKKVAL`, got `{}`",
+                bonds.table
+            ));
+        }
+        if bonds.rkkval_angstrom.len() != 15 {
+            issues.push(format!(
+                "cds.bonds.rkkval_angstrom has {} rows, expected 15",
+                bonds.rkkval_angstrom.len()
+            ));
+        } else {
+            for (row, values) in bonds.rkkval_angstrom.iter().enumerate() {
+                if values.len() != 15 {
+                    issues.push(format!(
+                        "cds.bonds.rkkval_angstrom row {row} has {} entries, expected 15",
+                        values.len()
+                    ));
+                    continue;
+                }
+                for (column, value) in values.iter().enumerate() {
+                    if !value.is_finite() || *value < 0.0 {
+                        issues.push(format!(
+                            "cds.bonds.rkkval_angstrom[{row}][{column}] must be non-negative \
+                             and finite"
+                        ));
+                    }
+                    let mirrored = bonds.rkkval_angstrom[column][row];
+                    if (value - mirrored).abs() > 1.0e-12 {
+                        issues.push(format!(
+                            "cds.bonds.rkkval_angstrom must be symmetric at [{row}][{column}]"
+                        ));
+                    }
+                }
+            }
+        }
+        for symbol in &self.elements {
+            match bonds.element_types.get(symbol) {
+                None => issues.push(format!(
+                    "cds.bonds.element_types has no entry for `{symbol}`"
+                )),
+                Some(kind) => {
+                    if *kind > 15 {
+                        issues.push(format!(
+                            "cds.bonds.element_types[{symbol}] must be <= 15, got {kind}"
+                        ));
+                    }
+                }
+            }
         }
         if self.provenance.upstream.is_empty() {
             issues.push("provenance.upstream must not be empty".into());

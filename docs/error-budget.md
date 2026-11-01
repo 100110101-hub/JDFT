@@ -41,7 +41,7 @@
 | CDS 单原子极限（逐元素 `4π(R+0.4)²`，7 个元素） | 相对 ≤ 5.5e-14 | 与已验证的 σ 层一致（水相 1.6e-5 cal/(mol·Å²)） | ✅ | `qwb-core/crates/qwb-props/tests/sv03_smd_surface.rs` |
 | CDS 表面分解的转动漂移（采样路径，水，1024/4096/16384 点） | 1.036e-5 / 2.481e-5 / 7.186e-7 | 无 §9.3 行；记录（`O(1/√N)` 采样误差，不单调） | ⚠️ 记录 | `qwb-core/crates/qwb-props/tests/sv03_smd_surface.rs` |
 | CDS 切换带宽（**模型选择**，不是数值误差；水面积 w = 0 → 0.8 Å） | 55.667 → 81.598 Å²（孤立和 110.664） | 无 §9.3 行；记录：单调、夹在二值与孤立和之间 | ⚠️ 记录 | `qwb-core/crates/qwb-props/tests/sv03_smd_surface.rs` |
-| CDS 每原子 σ 的 H/成对修正（`HSIGMA(6) = −60.77`、`SIGMA(101..116)` 六个非零项） | 水：0（一条都不触发）；含 C–H/C–O/C–N 的分子**未实现**但会偏（甲烷的 H：`48.69 − 60.77·COT`，`COT → 1` 的极限是 −12.08） | SV-03 gap ⓪ | ❌ 未实装 | `docs/status-v2.yaml` 的 SV-03 条目 |
+| CDS 每原子 σ 的 H/成对修正（`HSIGMA(6) = −60.77`、`SIGMA(101..116)` 六个非零项） | 水：0（一条都不触发）；含 C–H/C–O/C–N 的分子**未实现**但会偏（甲烷的 H：`48.69 − 60.77·COT`，`COT → 1` 的极限是 −12.08） | SV-03 gap ⓪ | ❌ 组装未实装（数据 `RKKVAL`/`NATCNV`/`HSIGMA` 已进 K1） | `docs/status-v2.yaml` 的 SV-03 条目 |
 | CDS **多原子**能量 vs 上游 `libsolvent`（水 / HF / HCl / H₂S，`w = 0`、8192 点/原子、零阶 σ） | 相对 1.25e-4 / 6.84e-5 / 3.36e-5 / **1.86e-4**（最差 H₂S）；官方值 1.441315 / 2.031181 / 1.176125 / 1.008290 kcal/mol | SV-03：多原子 CDS 能量对官方实现 < 1e-3 | ✅ | `qwb-core/crates/qwb-props/tests/sv03_smd_surface.rs`（参考值 `tests/reference/smd_cds_legacy.csv`） |
 | CDS 表面分解的**带宽开起来**时对上游的偏差（水 / HF / HCl / H₂S，`w = 0.2`、1024 点） | 1.21e-1 / 8.47e-2 / 8.19e-2 / 1.20e-1 | 同上 | ⚠️ 记录：上游的等效表面更接近二值遮蔽，所以能量默认 `w = 0` | `qwb-core/crates/qwb-props/tests/sv03_smd_surface.rs` |
 | CDS 多原子表面的**分原子面积** vs 上游 `DAREAL` | 未测（`get_cds_legacy` 只返回能量 + 梯度，不含面积；总能量层面的对照已由上一行覆盖） | 无 §9.3 行 | 未测 | `docs/status-v2.yaml` 的 SV-03 条目 |

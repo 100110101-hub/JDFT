@@ -91,6 +91,54 @@ fn smd_atomic_data_loads_with_the_documented_shape() {
 }
 
 #[test]
+fn the_bond_contact_rules_match_upstream() {
+    // `SMXCDS` 的成键权重 `COT = exp(Δ/(d − (R + Δ)))` 需要 15×15 的 `RKKVAL` 与
+    // `NATCNV` 的元素类型。这里钉住几处手抄过的值：H–C 1.55、C–C 1.84、O–C 1.84、
+    // O–O 2.75（`ISTS = 6` 时被特例覆盖成 1.80，特例在实现侧）、O–S 1.71（特例 1.330）。
+    let registry = Registry::open(data_root()).expect("qwb-data");
+    let data = registry.get_smd_atomic("smd-atomic").expect("smd-atomic");
+    let bonds = &data.cds.bonds;
+    assert_eq!(bonds.table, "RKKVAL");
+    assert_eq!(bonds.rkkval_angstrom.len(), 15);
+    assert!(bonds.rkkval_angstrom.iter().all(|row| row.len() == 15));
+    // 类型编号（上游 `NATCNV`）：H 1、C 2、N 3、O 4、F 5、S 6、Cl 7、Br 8、P 9、Si 11。
+    let expected_types = [
+        ("H", 1usize),
+        ("C", 2),
+        ("N", 3),
+        ("O", 4),
+        ("F", 5),
+        ("S", 6),
+        ("Cl", 7),
+        ("Br", 8),
+        ("P", 9),
+        ("Si", 11),
+    ];
+    for (symbol, kind) in expected_types {
+        assert_eq!(bonds.element_types[symbol], kind, "{symbol}");
+    }
+    let r = |a: &str, b: &str| {
+        bonds.rkkval_angstrom[bonds.element_types[a] - 1][bonds.element_types[b] - 1]
+    };
+    assert_eq!(r("H", "C"), 1.55);
+    assert_eq!(r("C", "C"), 1.84);
+    assert_eq!(r("N", "C"), 1.84);
+    assert_eq!(r("O", "C"), 1.84);
+    assert_eq!(r("O", "N"), 1.50);
+    assert_eq!(r("O", "O"), 2.75);
+    assert_eq!(r("O", "S"), 1.71);
+    // 本文件覆盖的 36 个元素里有 25 个类型是 0（不参与成键权重），例如 He/Ne/Ar。
+    assert_eq!(bonds.element_types.len(), 36);
+    let inactive = bonds
+        .element_types
+        .values()
+        .filter(|kind| **kind == 0)
+        .count();
+    assert_eq!(inactive, 26, "26 of the 36 elements carry type 0");
+    assert_eq!(bonds.element_types["Ne"], 0);
+}
+
+#[test]
 fn the_smd_atomic_kind_is_separate_from_the_solvent_kind() {
     let registry = Registry::open(data_root()).expect("qwb-data");
     // 溶剂文件仍然走 `Solvent`（`radii_set: bondi` / `cavity_model: pcm`）。

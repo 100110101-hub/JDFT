@@ -44,6 +44,7 @@ def build() -> dict:
         staging = json.load(handle)
     water = staging["cases"]["water"]
     naq = staging["cases"]["nonaqueous"]
+    bonds = staging["cds_bond_rules"]
     radii = staging["cds_vdw_radii_angstrom"]["values"]
     element_symbols = [
         "H", "He", "Li", "Be", "B", "C", "N", "O", "F", "Ne",
@@ -100,6 +101,12 @@ def build() -> dict:
                 "hsigma_a": list(naq["raw_tables"]["hsigma_a"])[: len(element_symbols)],
                 "hsigma_b": list(naq["raw_tables"]["hsigma_b"])[: len(element_symbols)],
                 "sigma_mol": list(naq["sigma_mol"]),
+            },
+            "bonds": {
+                "table": bonds["table"],
+                "note": bonds["note"],
+                "element_types": dict(bonds["element_types"]),
+                "rkkval_angstrom": [list(row) for row in bonds["rkkval_angstrom"]],
             },
         },
         "provenance": {
@@ -165,6 +172,13 @@ def emit(value, indent: int = 0, out: list[str] | None = None) -> list[str]:
                         emit(sub, indent + 2, out)
                     else:
                         out.append(f"{prefix}{key}: {scalar(sub)}")
+            elif isinstance(item, list):
+                # 嵌套表（`RKKVAL` 的 15×15）：空表写成 `[]`，否则块序列里再嵌一层。
+                if not item:
+                    out.append(f"{pad}- []")
+                else:
+                    out.append(f"{pad}-")
+                    emit(item, indent + 1, out)
             else:
                 out.append(f"{pad}- {scalar(item)}")
     else:
