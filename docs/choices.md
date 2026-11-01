@@ -6329,3 +6329,33 @@ multicharge v0.6.0 commit `576f499`）。CPU 基准没有动（本轮只加脚�
 顺序上这一轮没有抢跑：尺子（官方绑定）→ 参考数据（两份 CSV）→ 参数提取 → **独立复核参数**
 （Δ = 0）→ **原型对官方中间量**（1e-7）。到这一步才值得写 Rust，而写的时候每一层都有现成的
 对照物。CPU 基准没有动（本轮只加数据/脚本）。
+
+## 一百五十三、D4 的数据文件已经生成，但它在 staging 停了一站 —— 因为 K1 的结构里没有那四块（2026-11-10）
+
+`scripts/gen_d4_params.py` 把四份提取 JSON 合成 `d4.yaml`：36 个元素、119 个参考体系（每个带 23 点的
+`alpha(iω)` 与电荷缩放版）、频率网格 + `trapzd` 权重 + `thopi`、`ga/gc/wf`、EEQ 的 χ/η/kcnchi/rad、
+CN 参数、5 个泛函的 s6/s8/a1/a2、ATM 的 s9/alp，以及 `unsupported_functionals: m06-2x`。
+文件 **177,866 字节**，`--check` 是语义比较（容差 0）。
+
+两个小坑值得记：
+
+* **`1e-06` 不是 YAML 的浮点数**。PyYAML 按 YAML 1.1 解析，`1e-06` 会被读成**字符串**，
+  于是出现「生成器写 1e-06、盘上读回 '1e-6'」。发射器现在保证指数形式带小数点（`1.0e-06`）。
+* **`created` 会被读成 `datetime`**。写的是字符串，读回来是 `datetime(2026,11,10,tzinfo=utc)`，
+  语义比较要按 ISO 文本归一化 —— 这类「同一份数据两种 Python 类型」的差异只有 `--check` 能抓住，
+  肉眼看 YAML 永远看不出。
+
+但**文件没有进 `qwb-data/dispersion/`**：`qwb-stamp-data --check` 立刻报
+`unknown field constants, expected one of ...`。K1 的 `Dispersion` 结构是为 D3 设计的
+（`reference_c6` 是 666×49 的表、阻尼是 `s6/s8/a1/a2`），而 D4 需要 `constants`（aatoau/thopi/
+ga/gc/wf）、`eeq`（χ/η/kcnchi/rad）、`frequency_grid`（频率 + 权重）、`unsupported_functionals`。
+按附录 A 的顺序（**契约先落**），这一步不能倒过来做：先生成数据、再让 schema 去追，等于让
+「能加载」变成「碰巧能塞进去」。
+
+所以它停在 `_d4_staging/d4-staged.yaml`。下一步是给 `qwb-registry` 加 D4 的类型（加性扩展，
+D3 的字段一个不动）、`qwb-gen-schemas` 重新生成、`qwb-stamp-data` 打 sha256、`registry.yaml`
+加条目（0.15.0）、`DATA_LICENSES` 从 32 变 33。**顺序上这一步必须与 Rust 的类型同一次提交**，
+否则会重演「先声明 `dispersion: d3bj` 再实现、结果所有作业 `Unsupported`」那个坑。
+
+`aatoau` 这件事也没有手写：生成器 import 了 `validate_d4_data.py` 里那份 CODATA-2018 推导
+（`mctc_aatoau()`），并断言等于 1.8897261257783122 —— 一个来源，不抄两遍。CPU 基准没有动。
