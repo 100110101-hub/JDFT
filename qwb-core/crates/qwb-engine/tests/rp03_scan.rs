@@ -9,6 +9,8 @@
 //!
 //! 弛豫那一半（约束优化）**还没有实现**，所以这里有一条专门的拒绝测试 —— 不许把"每个点自由
 //! 优化"当成弛豫扫描（那会把所有点压回同一个极小点，曲线是平的）。
+mod common;
+
 use std::path::PathBuf;
 
 use qwb_engine::RksBackend;
@@ -120,6 +122,43 @@ fn an_angle_scan_also_works_and_keeps_the_bond_lengths() {
     // 只动第 3 个原子：两根 O–H 的长度都不该变（改键角不该顺带改键长）。
     let minimum = block.minimum().expect("minimum");
     assert!(minimum.energy_hartree < block.points[0].energy_hartree);
+}
+
+#[test]
+fn the_gradient_is_consistent_at_every_scan_type() {
+    // RP-04 对 RP-03 的要求：解析 vs 数值梯度 < 1e-5。约束切空间那一半已经在
+    // `the_constrained_gradient_matches_a_finite_difference_along_the_tangent` 里验过；
+    // 这里补**无约束**的普通梯度：距离、键角扫描点各取一个（都是把坐标挪到扫描值之后的几何，
+    // 不是驻点，所以不是 0 vs 0）。
+    use qwb_engine::opt::OptOptions;
+
+    let registry = Registry::open(data_root()).expect("qwb-data");
+    let mut options = OptOptions::new("sto-3g", "", "grid-coarse");
+    options.force_threshold = 4.5e-4;
+
+    let stretched = qwb_engine::scan::set_coordinate(&water(), ScanKind::Distance, &[0, 1], 1.10)
+        .expect("distance scan point");
+    common::assert_gradient_matches(
+        "距离扫描点（O–H = 1.10 Å）",
+        &registry,
+        &stretched,
+        &options,
+        1.0e-3,
+        1.0e-5,
+        1.0e-2,
+    );
+
+    let bent = qwb_engine::scan::set_coordinate(&water(), ScanKind::Angle, &[1, 0, 2], 95.0)
+        .expect("angle scan point");
+    common::assert_gradient_matches(
+        "键角扫描点（H–O–H = 95°）",
+        &registry,
+        &bent,
+        &options,
+        1.0e-3,
+        1.0e-5,
+        1.0e-2,
+    );
 }
 
 #[test]

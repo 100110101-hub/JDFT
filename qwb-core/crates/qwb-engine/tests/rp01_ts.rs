@@ -6,6 +6,8 @@
 //!
 //! `n_imaginary` **只计真虚频**（波数 < −100 cm⁻¹）：平面 NH3 的零模噪声实测有 −16.4 与
 //! −0.016 cm⁻¹ 两个点，把它们算进去会让"恰好一个虚频"永远不成立 —— 这条正是第一版踩的坑。
+mod common;
+
 use std::path::PathBuf;
 
 use qwb_engine::RksBackend;
@@ -90,6 +92,60 @@ fn the_ammonia_umbrella_saddle_is_a_first_order_saddle() {
         block.iterations,
         started.elapsed().as_secs_f64()
     );
+}
+
+#[test]
+fn the_gradient_is_consistent_all_along_the_search() {
+    // RP-04 对 RP-01 的要求：解析 vs 数值梯度 < 1e-5，**不允许只有能量对**。
+    // 在鞍点上两个梯度都接近零（0 vs 0 没有信息量），所以沿伞形本征向量把几何挪开一点再比。
+    use qwb_engine::opt::OptOptions;
+    use qwb_engine::ts::{analyse_hessian, search};
+
+    let registry = Registry::open(data_root()).expect("qwb-data");
+    let mut options = OptOptions::new("sto-3g", "", "grid-coarse");
+    options.force_threshold = 4.5e-4;
+    let saddle = search(
+        &registry,
+        &pyramidal_ammonia(),
+        &options,
+        20,
+        4.5e-4,
+        &NullReporter,
+    )
+    .expect("saddle");
+    let hessian = qwb_engine::hessian::numerical_hessian(&registry, &saddle.molecule, &options)
+        .expect("hessian");
+    let (_, eigenvectors) = analyse_hessian(&saddle.molecule, &hessian.hessian).expect("eigen");
+    let mode = eigenvectors[0].clone();
+    for (label, factor) in [
+        ("鞍点", 0.0_f64),
+        ("沿虚频 +0.15", 0.15),
+        ("沿虚频 -0.15", -0.15),
+    ] {
+        // 质量加权的本征向量摊回笛卡尔位移（与 IRC 的 `walk` 同一约定）。
+        let mut shifted = saddle.molecule.clone();
+        for atom in 0..shifted.atoms.len() {
+            let mass = qwb_engine::hessian::atomic_mass(&shifted.atoms[atom].symbol).expect("mass");
+            for axis in 0..3 {
+                let coordinate = 3 * atom + axis;
+                shifted.atoms[atom].position_angstrom[axis] +=
+                    factor * mode[coordinate] / mass.sqrt() * 0.529_177_210_903;
+            }
+        }
+        if factor == 0.0 {
+            // 鞍点本身：只断言两个梯度都小（一致性在这个点上没有信息量）。
+            let (difference, analytic_max, numeric_max) =
+                common::compare_gradients(&registry, &shifted, &options, 1.0e-3).expect("check");
+            println!(
+                "{label}: 差 {difference:.3e}（解析 {analytic_max:.3e} / 数值 {numeric_max:.3e}）"
+            );
+            assert!(analytic_max < 1.0e-3 && numeric_max < 1.0e-3);
+            continue;
+        }
+        common::assert_gradient_matches(
+            label, &registry, &shifted, &options, 1.0e-3, 1.0e-5, 1.0e-3,
+        );
+    }
 }
 
 #[test]

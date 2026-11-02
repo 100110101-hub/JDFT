@@ -9,6 +9,8 @@
 //! 3. **`irc.json` 落盘**（CLI 侧，`t21_irc.rs`）。
 //!
 //! 起点是 `qwb ts` 在 NH3 上收敛出来的真鞍点（平面 D3h，伞形虚频 −1081 cm⁻¹）。
+mod common;
+
 use std::path::PathBuf;
 
 use qwb_engine::RksBackend;
@@ -157,6 +159,56 @@ fn an_irc_from_the_ammonia_saddle_reaches_both_minima() {
         reverse.minimum_energy_hartree,
         started.elapsed().as_secs_f64()
     );
+}
+
+#[test]
+fn the_gradient_is_consistent_along_the_irc() {
+    // RP-04 对 RP-02 的要求：解析 vs 数值梯度 < 1e-5，**不允许只有能量对**。取两处：
+    // ① 离开鞍点之后的路径起点（沿虚频本征向量挪 0.15）；② 端点盆地里的一个非驻点几何
+    // （把某个 N–H 拉长 0.05 Å）—— 两个驻点（鞍点、极小点）上两个梯度都是零，0 vs 0 没信息量。
+    use qwb_engine::hessian::{atomic_mass, numerical_hessian};
+    use qwb_engine::ts::analyse_hessian;
+
+    let registry = registry();
+    let options = opt_options();
+    let (mode, _) = irc::saddle_mode(&registry, &saddle(), &options).expect("mode");
+    let mut displaced = saddle();
+    for atom in 0..displaced.atoms.len() {
+        let mass = atomic_mass(&displaced.atoms[atom].symbol).expect("mass");
+        for axis in 0..3 {
+            let coordinate = 3 * atom + axis;
+            displaced.atoms[atom].position_angstrom[axis] +=
+                0.15 * mode[coordinate] / mass.sqrt() * 0.529_177_210_903;
+        }
+    }
+    common::assert_gradient_matches(
+        "IRC 起点（离开鞍点 0.15）",
+        &registry,
+        &displaced,
+        &options,
+        1.0e-3,
+        1.0e-5,
+        1.0e-3,
+    );
+
+    // 端点盆地里：自由优化后的极小点本身梯度为零，所以往外拉 0.05 Å 再比。
+    let minimum = optimize(&registry, &pyramidal_start(), &options).expect("optimise");
+    let mut nudged = minimum.molecule.clone();
+    nudged.atoms[1].position_angstrom[0] += 0.05;
+    common::assert_gradient_matches(
+        "IRC 端点盆地（拉长 0.05 Å 的 N–H）",
+        &registry,
+        &nudged,
+        &options,
+        1.0e-3,
+        1.0e-5,
+        1.0e-2,
+    );
+
+    // 顺带核对：`saddle_mode` 与直接对角化给的是同一个模式（两条路同一份数据）。
+    let hessian = numerical_hessian(&registry, &saddle(), &options).expect("hessian");
+    let (eigenvalues, _) = analyse_hessian(&saddle(), &hessian.hessian).expect("eigen");
+    assert!(eigenvalues[0] < 0.0, "最低本征值必须是负的（鞍点）");
 }
 
 #[test]
