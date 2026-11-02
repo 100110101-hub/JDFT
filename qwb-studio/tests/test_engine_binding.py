@@ -136,11 +136,16 @@ def test_exception_hierarchy_and_exit_codes() -> None:
     assert bad_options.value.exit_code == 1
 
     job = _h2()
-    # `freq` 还没接到 EngineBackend 上（T8 只要求 opt）→ UnsupportedError / 退出码 4
+    # 第 388 轮起 `freq` 已接到 EngineBackend 上（数值 Hessian + 热化学），所以这里断言
+    # 它真的跑通并带两块结果；退出码 4 的那条防线改由 `ts`（没接线）来钉。
     job.jobtype = "freq"
-    with pytest.raises(qe.UnsupportedError) as unsupported:
-        engine.run(job)
-    assert unsupported.value.exit_code == 4
+    result = engine.run(job)
+    # 新块走「结构体 → JSON → Python dict」那条通道（PR-02：块还在加性演进，
+    # 一份通道不会因为加字段就漏 getter）。
+    recorded = json.loads(result.to_json())
+    assert recorded["vibrational_frequencies"]["vibrational_modes"] == 1
+    assert recorded["thermochemistry"]["entropy_j_per_mol_k"] > 0.0
+
 
 
 def test_scf_not_converged_carries_iters() -> None:

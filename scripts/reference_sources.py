@@ -93,6 +93,10 @@ GENERATORS = {
         "scripts/pyscf_tda_acetone_reference.py",
     "qwb-core/crates/qwb-response/tests/reference/tddft_excitations.csv":
         "scripts/pyscf_tdh_reference.py",
+    # F-01/F-02 + `jobtype: freq`：PySCF 的**解析** Hessian 给出的简正模频率与约化质量
+    # （本项目的数值 Hessian 对同一条链的独立实现）。
+    "qwb-core/crates/qwb-engine/tests/reference/hessian_water.csv":
+        "scripts/pyscf_hessian_reference.py",
     "qwb-core/crates/qwb-props/tests/reference/epr_spin_density.csv":
         "scripts/pyscf_epr_reference.py",
     "qwb-core/crates/qwb-response/tests/reference/dynamic_polarizability.csv":

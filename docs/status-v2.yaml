@@ -524,7 +524,7 @@ M6:
   note: "过渡态 + IRC + 扫描"
 M7:
   state: pending
-  note: "谱学套件（解析 Hessian / NMR / 极化率 / 多极）"
+  note: "谱学套件（解析 Hessian / NMR / 极化率 / 多极） **第 388 轮（接线，不改变 M7 的状态）**：`jobtype: freq` 已接进引擎 —— 数值 Hessian → 简正模 → 谐振频率 + IR 强度 + 理想气体热化学（298.15 K / 1 atm），K2 加性新增 `VibrationalFrequencies` / `VibrationalMode` / `Thermochemistry` 三块与 `TaskOptions.symmetry_number`。实测：H2O/STO-3G/HF 的 2169.41 / 4140.76 / 4391.90 cm⁻¹ 对 PySCF 解析 Hessian（2169.61 / 4140.70 / 4391.86）最差 **0.19 cm⁻¹**；`tests/f03_freq_engine.rs` 5 例绿。**顺带修掉一个真缺陷**：热化学的转动对称数 σ 原来只对同核双原子判，水/氨/甲烷全按 σ=1 算 —— 水的 S 因而偏大 R ln 2 = 5.76 J/(mol·K)；现在由 `options.symmetry_number` 显式给（σ=2 时 S = 189.4 J/(mol·K)，实验 188.83，差 +0.6），并且 σ=2 与 σ=1 的差正好是 R ln 2（测试钉住 1e-9）。**M7 仍未完成**：解析 Hessian（RS-05）、NMR（RS-04）、多极（RS-08 已有）之外的谱学套件与 `freq` 的几何/溶剂组合都还没做。"
 M8:
   state: pending
   note: "产品面收口（CLI/Python/GUI + 向后兼容）"

@@ -7392,3 +7392,38 @@ eq. 4.77–4.80，与上游 `pyscf/solvent/smd_experiment.py` 的实现一致）
 热化学那一项不补上，判据就是没满足。另外原文的静电是 IEF-PCM(SWIG)、我们是同一套 C-PCM
 表面方程 + 自家 Fibonacci tessellation，这一项**未测**（没有第二套实现可比），
 两处都写进了 `docs/error-budget.md`，SV-03 保持 in_progress。
+
+## 一百八十三、`jobtype: freq` 接线，以及热化学里漏掉的转动对称数（2026-11-13）
+
+`jobtype: freq` 在阶段一就"存在但没接线"：`hessian::numerical_hessian` 有测试（F-01/F-02），
+但没进作业分发，所以频率/热化学/IR 只能靠库调用。这一轮把它接上，并顺手抓到一个真缺陷。
+
+**接线本身是三块契约 + 一条分发分支。** K2 加性新增 `VibrationalMode`
+（`wavenumber_cm` / `ir_intensity_km_per_mol` / `imaginary`）、`VibrationalFrequencies`
+（`method` / `modes` / `zero_point_cm` / `vibrational_modes` / `degrees_of_freedom`）与
+`Thermochemistry`（ZPE / U_corr / H_corr / S / G / 转动常数 / 对称数），`JobResult` 加两个
+可选块，`JobType::Freq` 走 `run_frequencies`。**虚频用负波数表示**，`imaginary` 只是派生的
+布尔，`validate` 会核对两者一致 —— 两套真值源是这类块最容易出错的地方。
+
+**没有为新能力重写物理**：频率链还是 `hessian` 那一条（数值 Hessian：3N 个位移 × 解析梯度，
+热启动密度），所以阶段一实测的 2169.4 / 4140.8 / 4392.0 cm⁻¹ 原样复现。新加的是外部尺子：
+`scripts/pyscf_hessian_reference.py` 用 PySCF 的**解析** Hessian 在同一个几何上给
+2169.61 / 4140.70 / 4391.86，我们最差差 **0.19 cm⁻¹** —— 两条独立算法（数值 ∂²E 与解析导数）
+在这个量级上一致，说明"质量加权 → 对角化 → 波数换算 → 哪些模算振动"这一整条链没有因子错。
+
+**那个缺陷：转动对称数 σ 只对同核双原子判。** `rotational_symmetry()` 原来只有两条规则
+（单原子 1、同核双原子 2），**水/氨/甲烷统统按 σ=1** 算。S 对 σ 是对数依赖：水的 S 因此偏大
+R ln 2 = **5.76 J/(mol·K)**，G 也跟着偏。修法是**不猜点群**：`options.symmetry_number`
+（K2 加性，缺省 1）显式给，引擎传下去，结果块里写 `symmetry_number` 让读数的人能核对。
+水的 σ=2 → S = **189.4 J/(mol·K)**（实验 188.83，差 +0.6，STO-3G + 谐振近似的水平），
+而 σ=2 与 σ=1 的 S 差必须正好 R ln 2（测试钉 1e-9）。为什么不做自动点群：正确做法要投影
+振动子空间、枚举对称操作，那是 RP-01/RS-05 的活；**猜错一个 σ 比不猜更危险**，因为它只让
+S 偏几个 J/(mol·K)，看起来完全正常。
+
+**两条如实写下的边界**：① 只做闭壳层**极小点** —— 开壳层、ECP、溶剂、色散、ghost 一律显式
+拒绝；真虚频（< −100 cm⁻¹；零模数值噪声实测到 −48.7、鞍点虚频是 −893 量级）也拒绝，
+因为 3N−6 是按波数选的，鞍点会先把虚频当成平移/转动模丢掉，那需要子空间投影（RP-01）。
+② 几何不是驻点时本实现不会报错 —— 它只保证"没有真虚频"，不保证梯度为零；要保证得先 `opt`。
+
+**没动的**：`hessian` 的数值链与它的慢档测试一字未改；K2 只有加性字段；旧的
+`f02_thermochemistry` 只是跟着多传一个 `None`（等价于原来的自动判定）。

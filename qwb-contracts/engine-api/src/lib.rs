@@ -29,6 +29,7 @@ pub mod registry;
 pub mod reporter;
 pub mod result;
 pub mod solvation;
+pub mod vibrations;
 
 pub use correlation::{CorrelationResult, Mp2Kind, Mp2Options, ScfType, SpinResult};
 pub use engine::{Engine, EngineBackend, SUPPORTED_FEATURES};
@@ -48,3 +49,4 @@ pub use registry::Registry;
 pub use reporter::Reporter;
 pub use result::{DataSnapshot, EnvInfo, JobResult, UvVisSpectrum};
 pub use solvation::{SolvationResult, SolventModel};
+pub use vibrations::{Thermochemistry, VibrationalFrequencies, VibrationalMode};

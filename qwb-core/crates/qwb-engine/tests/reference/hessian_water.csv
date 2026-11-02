@@ -1,0 +1,7 @@
+system,method,basis,quantity,index,value,unit,source_doi,source_url
+water,hf,sto-3g,wavenumber,1,2169.605693,cm^-1,10.1063/5.0006074,https://github.com/pyscf/pyscf
+water,hf,sto-3g,reduced_mass,1,1.078681,amu,10.1063/5.0006074,https://github.com/pyscf/pyscf
+water,hf,sto-3g,wavenumber,2,4140.700626,cm^-1,10.1063/5.0006074,https://github.com/pyscf/pyscf
+water,hf,sto-3g,reduced_mass,2,1.049268,amu,10.1063/5.0006074,https://github.com/pyscf/pyscf
+water,hf,sto-3g,wavenumber,3,4391.857938,cm^-1,10.1063/5.0006074,https://github.com/pyscf/pyscf
+water,hf,sto-3g,reduced_mass,3,1.077553,amu,10.1063/5.0006074,https://github.com/pyscf/pyscf

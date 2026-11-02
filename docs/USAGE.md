@@ -869,6 +869,8 @@ $env:QWB_ENGINE_BIN = '<仓库根>\qwb-core\target\release\qwb.exe'   # 可选�
 | `correlation` | `options.mp2` | `method` / `e2_hartree` / `e_total_hartree` / `aux_basis_name` / `ri_error_hartree` |
 | `excited_states` | `options.excited_states` | `method` / `n_states` / `transitions` / `sum_rules` |
 | `uv_vis_spectrum` | 同上（且 `numerics.yaml` 有 `spectrum_defaults`） | `gaussian_hwhm_ev` / `grid_step_ev` / `points` |
+| `vibrational_frequencies` | `jobtype: freq` | `method` / `modes[]`（`wavenumber_cm`、`ir_intensity_km_per_mol`、`imaginary`）/ `zero_point_cm` / `vibrational_modes` |
+| `thermochemistry` | `jobtype: freq` | `temperature_k` / `pressure_pa` / `zero_point_hartree` / `internal_energy_hartree` / `enthalpy_hartree` / `entropy_j_per_mol_k` / `gibbs_hartree` / `rotational_constants_cm` / `symmetry_number` |
 | `solvation` | `solvent: <非 vacuum>` | `model` / `solvent_name` / `electrostatic_hartree` / `cds_hartree`（SMD 才有，eq. 4.77）/ `cds_atomic_hartree` + `cds_molecular_hartree`（它的两半）/ 空腔几何 |
 | `dispersion_energy_hartree` | `options.dispersion` | 可加项；`energy_hartree = SCF + 它 |
 | `epr` | `options.epr: true`（开壳层 sp） | `method` / `nuclei[]`（`spin_density_au`、`a_iso_mhz`、`a_iso_gauss`） |
@@ -1100,8 +1102,13 @@ gitignored 的 `qwb-data/reference/_*_staging/raw/` 里，派生物（CSV/JSON�
 
 ### 9.4 明确没做
 
-* **`jobtype: freq` 没接到引擎**（退出码 4）：`hessian::numerical_hessian` 存在且有测试
-  （F-01/F-02 直接调它），但没接进作业分发，所以频率/热化学/IR 只能用测试或库调用。
+* **`jobtype: freq` 已接**（第 388 轮）：数值 Hessian（`numerical-hessian`）→ 简正模 →
+  谐振频率 + IR 强度 + 理想气体热化学（298.15 K / 1 atm），结果在 `result.json` 的
+  `vibrational_frequencies` 与 `thermochemistry` 两块。**只做闭壳层极小点**：开壳层、ECP、
+  溶剂、色散、带 ghost 的组合一律显式拒绝；几何若有**真虚频**（< −100 cm⁻¹，零模噪声实测
+  到 −48.7）也拒绝 —— 3N−6 的振动集合是按波数选的，鞍点要先做子空间投影（RP-01）。
+  **转动对称数 σ** 要显式给 `options.symmetry_number`（水 2、氨 3、甲烷 12）；缺省 1 会让
+  S 偏大 R ln σ（水 +5.76 J/(mol·K)）。
 * **ECP 的导数**：带 ECP 的 `opt`/`freq` 不支持。
 * **开壳层的 opt 只到 HF**（`uhf`/`rohf`）；`uks` 只能 `sp`（开壳层 UKS 的 SCF 收敛是 SC-02 的剩余一半）。
 * **开壳层的布居/cube**：只有 α 套轨道，宁可不写（§3.4）。
@@ -1155,7 +1162,7 @@ ECP、频率库函数）在 `docs/status.yaml`；这里只列阶段二台账里�
 | SMD 单点（静电 + `G_CDS`） | ⚠ | SV-03 | 8 溶剂 × 3 分子的 ΔG_solv MAE 判据未走完（缺热化学修正）；静电是 C-PCM 而非 IEF-PCM(SWIG) |
 | 溶剂化解析梯度 / 优化 | ❌ | SV-02 | 依赖 SV-01 |
 | 溶液相频率 / 热化学 | ❌ | SV-05 | 依赖 SV-01/SV-02 |
-| `jobtype: freq`（解析 Hessian） | ❌ | RS-05 | 20× 的两条前提都不成立（blocked） |
+| `jobtype: freq`（**数值** Hessian：频率/IR/热化学） | ⚠ | RS-05 | 已接线（第 388 轮）：频率对 PySCF 解析 Hessian 差 ≤ 0.19 cm⁻¹；**解析** Hessian 仍 blocked（20× 的前提不成立），freq 因此是 3N+1 次 SCF 级的成本 |
 | GIAO NMR 屏蔽 | ❌ | RS-04 | 缺 London 复基组层（common-origin 下 O 差 1.50 ppm） |
 | Raman 活性 | ❌ | RS-06 | 要简正模式 → 要 RS-05 |
 | VCD | ❌ | RS-07 | pending |

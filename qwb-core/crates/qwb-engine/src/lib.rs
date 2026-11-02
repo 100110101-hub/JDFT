@@ -1455,6 +1455,175 @@ impl RksBackend {
         Ok(job)
     }
 
+    /// 频率作业（`Freq`）：数值 Hessian → 简正模 → 谐振频率 + 红外强度 + 理想气体热化学。
+    ///
+    /// 这一步只做**数值** Hessian（`hessian::numerical_hessian`）：解析 Hessian 是 RS-05
+    /// （blocked），所以 `vibrational_frequencies.method` 写死 `numerical-hessian`，
+    /// 读数的人一眼就知道频率的来源。
+    ///
+    /// # 两个显式拒绝（都是"会给出看起来正常但错的数"的情形）
+    ///
+    /// * **虚频**：`hessian` 里"取最大的 `3N−6` 个模当振动"这条规则只在**极小点**成立 ——
+    ///   鞍点上虚频（负波数）排在平移/转动模之下，会被当成非振动模丢掉。所以出现虚频
+    ///   一律拒绝并点名 RP-01（要正确的分类得先把振动子空间投影出来），不猜。
+    /// * **开壳层 / ECP**：频率的数值路径复用了 `opt` 的解析梯度，而开壳层与 ECP 的
+    ///   二阶导没有任何验收；放过就是拿闭壳层的 Hessian 当真。
+    fn run_frequencies(
+        &self,
+        input: &JobInput,
+        reporter: &dyn Reporter,
+    ) -> Result<JobResult, EngineError> {
+        if let Some(ecp_name) = &input.options.ecp_name {
+            return Err(EngineError::Unsupported(format!(
+                "frequencies with an ECP (`{ecp_name}`) are not implemented: the ECP derivative \
+                 w.r.t. nuclear coordinates is missing (I-05 covers energies only)"
+            )));
+        }
+        if input
+            .options
+            .scf_type
+            .is_some_and(|scf_type| scf_type.is_open_shell())
+        {
+            return Err(EngineError::Unsupported(
+                "frequencies are implemented for closed-shell HF/KS only: the numerical Hessian \
+                 reuses the analytic gradient, and open-shell (uhf/rohf/uks) second derivatives \
+                 have no acceptance tests yet"
+                    .to_string(),
+            ));
+        }
+        let spec = self.spec(input)?;
+        let mut options = opt::OptOptions::new(
+            &input.basis_name,
+            spec.functional_name.clone(),
+            spec.grid_name.clone(),
+        );
+        options.max_iterations = input.options.max_opt_steps;
+        options.force_threshold = input.options.opt_gradient_threshold_hartree_per_bohr;
+        options.scf_max_iter = input.options.scf_max_iter;
+        options.scf_energy_threshold = input.options.scf_energy_threshold_hartree;
+        options.scf_density_threshold = input.options.scf_density_threshold;
+        options.scf_type = input.options.scf_type;
+
+        reporter.progress("single point", 5.0);
+        let result = self.run_single_point(input, reporter)?;
+
+        reporter.progress("hessian", 20.0);
+        reporter.log(&format!(
+            "jobtype = freq, method = {}, basis = {}, grid = {} (numerical Hessian, {})",
+            if spec.functional_name.is_empty() {
+                "hf".to_string()
+            } else {
+                spec.functional_name.clone()
+            },
+            input.basis_name,
+            spec.grid_name,
+            hessian::HESSIAN_METHOD
+        ));
+        let hessian = hessian::numerical_hessian(&self.registry, &input.molecule, &options)?;
+        // 只数**振动模**里的虚频：3N 个本征值里有 3 个平动 + 3 个（线性 5 个）转动是零模，
+        // 数值上它们的本征值会在 0 两侧随机落 —— 把它们的负号也算成"虚频"，极小点也会被拒
+        // （实测：H2O/STO-3G 的光滑极小点上有 4 个 −48.7 cm⁻¹ 的零模噪声）。
+        // 真虚频的判据带阈值：3N 个本征值里有 3 个平动 + 3 个转动是零模，数值噪声让它们在
+        // 0 两侧随机落 —— 实测 H2O/STO-3G 的优化几何上最负的零模噪声是 −48.7 cm⁻¹，而拉长
+        // O–H 的鞍点给出的是 −893 cm⁻¹ 量级。所以「所有模里 < −100 cm⁻¹」才算真虚频；
+        // 这个数不是拍的，是那两条实测之间的中点，并且写进日志说明。
+        let imaginary: Vec<f64> = hessian
+            .modes
+            .iter()
+            .filter(|mode| mode.wavenumber < IMAGINARY_MODE_THRESHOLD_CM)
+            .map(|mode| mode.wavenumber)
+            .collect();
+        if !imaginary.is_empty() {
+            return Err(EngineError::Unsupported(format!(
+                "frequency analysis found {} imaginary mode(s) (most negative = {:.1} cm^-1, \
+                 threshold {:.0} cm^-1): the 3N-6 vibrational set is selected by wavenumber, \
+                 which is only correct at a minimum - a saddle point needs the vibrational \
+                 subspace projected out (RP-01)",
+                imaginary.len(),
+                imaginary.first().copied().unwrap_or_default(),
+                IMAGINARY_MODE_THRESHOLD_CM
+            )));
+        }
+
+        reporter.progress("ir", 70.0);
+        let dipoles = hessian::dipole_derivatives(
+            &self.registry,
+            &input.molecule,
+            &input.basis_name,
+            &spec.functional_name,
+            &spec.grid_name,
+        )?;
+        let intensities = hessian::ir_intensities(&hessian, &dipoles);
+        let start = hessian
+            .modes
+            .len()
+            .saturating_sub(hessian.vibrational_modes);
+        let modes: Vec<qwb_engine_api::VibrationalMode> = hessian
+            .modes
+            .iter()
+            .zip(&intensities)
+            .skip(start)
+            .map(|(mode, intensity)| {
+                qwb_engine_api::VibrationalMode::new(mode.wavenumber).with_ir(*intensity)
+            })
+            .collect();
+        let frequencies = qwb_engine_api::VibrationalFrequencies::new(
+            hessian::HESSIAN_METHOD,
+            modes,
+            hessian.zero_point_cm,
+            hessian.vibrational_modes,
+            hessian.degrees_of_freedom,
+        );
+        frequencies.validate()?;
+
+        reporter.progress("thermochemistry", 90.0);
+        let given_symmetry = input.options.symmetry_number;
+        let symmetry = if given_symmetry > 1 {
+            Some(f64::from(given_symmetry))
+        } else {
+            None
+        };
+        let thermo = hessian::thermochemistry(
+            &input.molecule,
+            &hessian,
+            result.energy_hartree,
+            THERMO_TEMPERATURE_K,
+            THERMO_PRESSURE_PA,
+            symmetry,
+        )?;
+        let thermochemistry = qwb_engine_api::Thermochemistry::new(
+            thermo.temperature_k,
+            thermo.pressure_pa,
+            thermo.zero_point_hartree,
+            thermo.internal_energy_hartree,
+            thermo.enthalpy_hartree,
+            thermo.entropy_j_per_mol_k,
+            thermo.gibbs_hartree,
+            thermo.rotational_constants_cm.clone(),
+            symmetry.map_or(1, |value| value as u32),
+        );
+        thermochemistry.validate(result.energy_hartree)?;
+
+        reporter.log(&format!(
+            "freq = numerical-hessian: {} modes, ZPE = {:.2} cm^-1 ({:.6} Ha), \
+             H_corr = {:.6} Ha, S = {:.2} J/(mol K), G = {:.6} Ha at {:.2} K / {:.0} Pa \
+             (rotational symmetry number = {})",
+            frequencies.vibrational_modes,
+            frequencies.zero_point_cm,
+            thermo.zero_point_hartree,
+            thermo.enthalpy_hartree,
+            thermo.entropy_j_per_mol_k,
+            thermo.gibbs_hartree,
+            thermo.temperature_k,
+            thermo.pressure_pa,
+            thermochemistry.symmetry_number
+        ));
+        reporter.progress("done", 100.0);
+        Ok(result
+            .with_vibrational_frequencies(frequencies)
+            .with_thermochemistry(thermochemistry))
+    }
+
     /// 几何优化（`Opt`）：BFGS + 解析梯度，收尾再跑一次单点拿轨道/偶极。
     fn run_optimisation(
         &self,
@@ -1657,6 +1826,7 @@ impl EngineBackend for RksBackend {
                 self.apply_dispersion(input, job, reporter)
             }
             JobType::Opt => self.run_optimisation(input, reporter),
+            JobType::Freq => self.run_frequencies(input, reporter),
             other => Err(EngineError::Unsupported(format!(
                 "jobtype `{}` is not wired into the engine backend yet (frequencies are \
                  available through qwb_engine::hessian, see F-01/F-02)",
@@ -1993,6 +2163,19 @@ const SMD_ATOMIC_NAME: &str = "smd-atomic";
 
 /// kcal/mol → Hartree（CODATA 2018；与色散/溶剂化日志里用的是同一个数）。
 const HARTREE_PER_KCAL_MOL: f64 = 627.509_474_063_6;
+
+/// 频率作业的热化学标准态：298.15 K、101 325 Pa（1 atm）。
+///
+/// 写成常量而不是 K2 字段：这是**本项目报告的约定**（与 `spectrum_defaults` 不同 ——
+/// 那一个是展示约定，需要版本化）。将来要支持变温，就在这里加 K2 字段、并把它从常量
+/// 改成读输入；`thermochemistry.temperature_k` / `pressure_pa` 已经落在结果块里，
+/// 读的人能核对。
+const THERMO_TEMPERATURE_K: f64 = 298.15;
+const THERMO_PRESSURE_PA: f64 = 101_325.0;
+
+/// "真虚频"的波数阈值（cm⁻¹）：零模（平动/转动）的数值噪声实测到 −48.7，而鞍点的虚频是
+/// −893 量级，所以 −100 把两者分开。低于它的模说明几何不是极小点。
+const IMAGINARY_MODE_THRESHOLD_CM: f64 = -100.0;
 
 /// 从 K1 的 `smd:` 块取 SMD 需要的六个溶剂描述符（`SmdDescriptors` 的顺序是
 /// SOLA/SOLB/SOLC/SOLG/SOLH/SOLN —— 与上游 `mnsol.F` 一致）。

@@ -15,9 +15,7 @@
 use std::path::PathBuf;
 
 use qwb_engine::OptSink;
-use qwb_engine_api::{
-    Atom, EngineBackend, EngineError, GridLevel, JobInput, JobType, Molecule, TaskOptions,
-};
+use qwb_engine_api::{Atom, EngineBackend, GridLevel, JobInput, JobType, Molecule, TaskOptions};
 use qwb_registry::Registry;
 
 fn data_root() -> PathBuf {
@@ -200,11 +198,14 @@ fn freq_is_refused_explicitly() {
         JobType::Freq,
         TaskOptions::default(),
     );
-    let error = backend.run(&input, &Silent).expect_err("freq 还没接线");
-    match error {
-        EngineError::Unsupported(message) => {
-            assert!(message.contains("freq"), "错误信息要指名是 freq：{message}");
-        }
-        other => panic!("freq 应该报 Unsupported，实际是 {other:?}"),
-    }
+    // 第 388 轮：`freq` 已接线（数值 Hessian + 热化学），所以这里改成**正向**断言，
+    // 而不是删掉 —— H2 是最小的频率案例（1 个振动模），它跑通说明分发那一条分支还在。
+    let result = backend.run(&input, &Silent).expect("freq 应已接线");
+    let frequencies = result
+        .vibrational_frequencies
+        .expect("freq 必须带 vibrational_frequencies");
+    assert_eq!(frequencies.vibrational_modes, 1, "H2 只有一个振动模");
+    assert!(frequencies.modes[0].wavenumber_cm > 1000.0);
+    let thermochemistry = result.thermochemistry.expect("freq 必须带 thermochemistry");
+    assert!(thermochemistry.entropy_j_per_mol_k > 0.0);
 }

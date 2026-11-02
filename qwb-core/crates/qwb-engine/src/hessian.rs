@@ -31,6 +31,12 @@ use crate::opt::OptOptions;
 /// 中心差分步长（Bohr）。0.01 时截断误差与辛普森式差分噪声都比较小。
 pub const HESSIAN_DELTA_BOHR: f64 = 1.0e-2;
 
+/// 频率来源的冻结字符串（进 `result.json` 的 `vibrational_frequencies.method`）。
+///
+/// 现在只有数值 Hessian；RS-05 的解析 Hessian 落地后这里加一个值（`analytic-hessian`），
+/// 而不是加字段 —— 加值不会让旧读者解析失败。
+pub const HESSIAN_METHOD: &str = "numerical-hessian";
+
 /// `sqrt(Ha / (Bohr² · amu))` → cm⁻¹。
 pub const WAVE_NUMBER_FACTOR: f64 = 5140.4871;
 
@@ -320,7 +326,12 @@ const SPEED_OF_LIGHT_CM: f64 = 2.997_924_58e10;
 const R_J_PER_MOL_K: f64 = 8.314_462_618;
 const AMU_KG: f64 = 1.660_539_066_60e-27;
 
-/// 由几何 + 简正模算理想气体热化学（298.15 K、1 atm 等由调用方给）。
+/// 由几何 + 简正模算理想气体热化学（温度/压强由调用方给）。
+///
+/// `symmetry_number` 是**转动对称数** σ：水 2、氨 3、甲烷 12、苯 12、同核双原子 2。
+/// 传 `None` 只用几何上无歧义的自动判定（单原子、同核双原子），其余情形按 σ=1 算 ——
+/// 那会让 S 偏大 `R ln σ`，所以生产路径（`jobtype: freq`）把 `options.symmetry_number`
+/// 显式传下来。
 ///
 /// # Errors
 /// 原子质量未知（元素不在表里），或转动惯量为零/负（几何退化）。
@@ -331,6 +342,7 @@ pub fn thermochemistry(
     electronic_energy_hartree: f64,
     temperature_k: f64,
     pressure_pa: f64,
+    symmetry_number: Option<f64>,
 ) -> Result<ThermoResult, EngineError> {
     let atoms = &molecule.atoms;
     let masses_amu: Vec<f64> = atoms
@@ -421,7 +433,13 @@ pub fn thermochemistry(
     let s_trans = R_J_PER_MOL_K * ((q_trans_over_v * kt / pressure_pa).ln() + 2.5);
 
     // 转动熵
-    let symmetry = rotational_symmetry(molecule);
+    // 转动熵对对称数 σ 是**对数**依赖：漏掉 σ 会让 S 偏大 R·ln σ（H2O σ=2 → +5.76
+    // J/(mol·K)），而 G 也跟着偏。自动判定只覆盖原子/同核双原子（那两条是几何上无歧义的），
+    // 其余分子**必须**由 `options.symmetry_number` 显式给 —— 猜一个点群比不猜更危险。
+    let symmetry = match symmetry_number {
+        Some(value) if value > 0.0 && value.is_finite() => value,
+        _ => rotational_symmetry(molecule),
+    };
     let s_rot = if linear {
         // 转动温度用 **kB**（不是 kT）：θ_rot = h²/(8π²Ik)。
         let theta = H_PLANCK * H_PLANCK

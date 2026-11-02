@@ -98,6 +98,12 @@ pub struct TaskOptions {
     /// `method_name == "hf"`，KS 变体要求不是 `"hf"`（phase-2 §4.4）。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub scf_type: Option<ScfType>,
+    /// 转动对称数 σ（热化学用；`jobtype: freq`）。缺省 1 = 不做对称校正。
+    ///
+    /// 水 2、氨 3、甲烷 12、苯 12、同核双原子 2。它只影响**转动熵**（`S` 偏大 `R ln σ`
+    /// 与 `G` 同向偏离），但那是 298 K 下的几个 J/(mol·K)，不能靠"看起来差不多"糊过去。
+    #[serde(default = "default_symmetry_number", skip_serializing_if = "is_one")]
+    pub symmetry_number: u32,
     /// 相关方法（MP2 / RI-MP2）；`None` = 只做 SCF。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub mp2: Option<Mp2Options>,
@@ -219,6 +225,7 @@ impl Default for TaskOptions {
             opt_gradient_threshold_hartree_per_bohr: 4.5e-4,
             freq_step_angstrom: 0.01,
             ecp_name: None,
+            symmetry_number: 1,
             scf_type: None,
             mp2: None,
             excited_states: None,
@@ -231,9 +238,20 @@ impl Default for TaskOptions {
 }
 
 impl TaskOptions {
-    /// 用 SCF 类型覆盖自旋处理（阶段二 K9；`None` = 引擎按方法/多重度决定）。
+    /// 设置转动对称数 σ（热化学；`jobtype: freq` 用）。
     ///
-    /// `non_exhaustive` 结构体不允许下游写 struct literal，所以新选项一律用 builder 挂上。
+    /// 水 2、氨 3、甲烷 12、苯 12、同核双原子 2。缺省 1 = 不做对称校正（`S` 会偏大
+    /// `R ln σ`）。`non_exhaustive` 结构体不允许下游写 struct literal，所以新选项一律用
+    /// builder 挂上。
+    ///
+    /// 0 不是合法值：`validate` 会拒绝，builder 本身不 panic（构造与校验分离）。
+    #[must_use]
+    pub fn with_symmetry_number(mut self, symmetry_number: u32) -> Self {
+        self.symmetry_number = symmetry_number;
+        self
+    }
+
+    /// 用 SCF 类型覆盖自旋处理（阶段二 K9；`None` = 引擎按方法/多重度决定）。
     #[must_use]
     pub fn with_scf_type(mut self, scf_type: ScfType) -> Self {
         self.scf_type = Some(scf_type);
@@ -336,6 +354,16 @@ impl TaskOptions {
     }
 }
 
+/// 转动对称数的缺省值（1 = 不做对称校正）。
+fn default_symmetry_number() -> u32 {
+    1
+}
+
+/// `serde` 的 `skip_serializing_if`：值为 1（缺省）时不写出。
+fn is_one(value: &u32) -> bool {
+    *value == 1
+}
+
 /// 一次作业的完整输入（K2 冻结；同时是 `input.yaml` 的形态，见 K4）。
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -407,6 +435,11 @@ impl JobInput {
             }
         }
         self.options.validate()?;
+        if self.options.symmetry_number == 0 {
+            return Err(EngineError::InvalidInput(
+                "options.symmetry_number must be >= 1 (rotation symmetry number)".into(),
+            ));
+        }
         self.validate_phase2_options()
     }
 

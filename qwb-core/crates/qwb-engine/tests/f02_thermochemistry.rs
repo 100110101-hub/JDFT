@@ -45,6 +45,7 @@ fn h2_thermochemistry_is_the_right_size() {
         optimized.energy_hartree,
         ROOM_TEMPERATURE_K,
         STANDARD_PRESSURE_PA,
+        None,
     )
     .expect("thermochemistry");
 

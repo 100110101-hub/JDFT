@@ -14,6 +14,7 @@ use crate::error::EngineError;
 use crate::numerics::NumericsReport;
 use crate::properties::{EprResult, ExcitedStates, Multipoles, NmrShieldings, Polarizability};
 use crate::solvation::SolvationResult;
+use crate::vibrations::{Thermochemistry, VibrationalFrequencies};
 
 /// 矩阵/向量与 JSON 数组之间的显式转换（K4）。
 mod json_array {
@@ -345,6 +346,12 @@ pub struct JobResult {
     /// 多极展开（四极/八极，phase-2 `RS-08`）。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub multipoles: Option<Multipoles>,
+    /// 振动频率与简正模（`jobtype: freq`，phase-2 `M7` 的接线部分）。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub vibrational_frequencies: Option<VibrationalFrequencies>,
+    /// 理想气体热化学（`jobtype: freq`，与频率同一份 Hessian）。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub thermochemistry: Option<Thermochemistry>,
     /// EPR / 超精细耦合（phase-2 `ST-05`）。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub epr: Option<EprResult>,
@@ -421,6 +428,8 @@ impl JobResult {
             uv_vis_spectrum: None,
             nmr_shieldings: None,
             polarizability: None,
+            vibrational_frequencies: None,
+            thermochemistry: None,
             multipoles: None,
             epr: None,
             numerics_report: None,
@@ -488,6 +497,20 @@ impl JobResult {
     #[must_use]
     pub fn with_solvation(mut self, solvation: SolvationResult) -> Self {
         self.solvation = Some(solvation);
+        self
+    }
+
+    /// 挂上振动频率（`jobtype: freq`）。
+    #[must_use]
+    pub fn with_vibrational_frequencies(mut self, frequencies: VibrationalFrequencies) -> Self {
+        self.vibrational_frequencies = Some(frequencies);
+        self
+    }
+
+    /// 挂上热化学（`jobtype: freq`）。
+    #[must_use]
+    pub fn with_thermochemistry(mut self, thermochemistry: Thermochemistry) -> Self {
+        self.thermochemistry = Some(thermochemistry);
         self
     }
 
