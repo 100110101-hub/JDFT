@@ -7329,3 +7329,66 @@ PR-08 的判据是「文档里每个 ✅ 都能在 `status-v2.yaml` 找到对应
 检查失败，是打印失败 —— 两种都会让门禁红，但原因完全不同）。脚本在启动时把 stdout 转成
 utf-8（`sys.stdout.reconfigure(encoding="utf-8", errors="replace")`），并且输出里同时给
 `ok/partial/missing` 三个 ASCII 名字，所以 `.venv` 的 3.12 与系统 3.9 都能跑。
+
+## 一百八十二、「SMD 还有三项非极性项」是个误读；顺带把 `solvent_model: smd` 接上（2026-11-13）
+
+账本里 SV-03 的 gap 一直写着「还差 `E_CD`/`E_S`/`E_C` 三项非极性项，参数在付费墙后、没有本地
+oracle」。这一轮去查这句话，结论是**它错了两处**，而且错的方向正好会让人做错事（去追三个不
+存在的能量项）。
+
+**一、SMD 的非极性部分只有一项。** Marenich–Cramer–Truhlar 2009 的非极性项叫 `G_CDS`
+（cavity-dispersion-solvent structure），一个表达式：
+
+    G_CDS = Σ_j σ_j A_j + σ^[M] Σ_j A_j        （eq. 4.77）
+    σ_j   = σ̃_{Z_j} + Σ_{j'} σ̃_{Z_j Z_j'} T_j    （eq. 4.78，每原子表面张力）
+    σ^[M] = σ̃^[γ] γ + σ̃^[φ²] φ² + σ̃^[ψ²] ψ² + σ̃^[β²] β²   （eq. 4.80，分子表面张力）
+
+也就是说「空化/色散/溶剂结构」是**同一个式子的物理含义**，不是三个可分开算的项；而
+「四项」指的是 eq. 4.80 里**分子表面张力**的四个**溶剂描述符系数**（γ、φ²、ψ²、β²）——
+旧账本把它们读成了四个能量项，于是凭空长出 `E_CD`/`E_S`/`E_C`。K8 的 `SolvationResult`
+当初也是照这个误读写成了"空化/色散/排斥"三个字段，这一轮**加性地**补了 `cds_hartree` 与它的
+两半，旧字段保留（K2 是加性契约，删字段会让旧读者炸）但 SMD 不再用它们，`validate` 也从
+"必须有 cavitation"改成"必须有 cds"。
+
+**二、参数不在付费墙后。** 六个溶剂描述符来自公开的 Minnesota Solvent Descriptor Database
+（`mnsddb.pdf`，2010 版，2021/2026 追补），八列的列名与单位都写在文档第 1 页；我们八个溶剂
+的这一块在 DA-04 就已经按它填好并钉了 sha256（`qwb-data/solvent/*.yaml` 的 `smd:`）。
+`γ` 的单位是 cal/(mol·Å²)（文档给了 1 dyne/cm = 1.43932 cal mol⁻¹ Å⁻² 的换算），水那一行的
+`γ/φ/ψ = −1` 是**占位**：水相走单独的 σ 表，分子表面张力项恒为 0 —— 所以 `nonpolar_terms_available:
+false` 只对水成立，不是"缺数据"。公式本身用公开学位论文核对（Imperial College 学位论文，
+eq. 4.77–4.80，与上游 `pyscf/solvent/smd_experiment.py` 的实现一致）。两份快照留在
+`qwb-data/solvent/_smd_nonpolar_staging/raw/`（**gitignore，只作核对来源**）：
+`mnsddb.pdf` sha256 `abfa8b0988f1b073a5d86d7089fb449713b994ccac70e379238274ef734beb40`（494,608 B）、
+`imperial_thesis.pdf` sha256 `cd8be125dbced670ace487b39a8323de9b3449f8a3ef6dd8b8c10cf50fe2f2f8`（1,854,508 B）。
+**没有从这两份快照里抄任何数字进仓库**：数据早已在 YAML 里，这一轮只是核对公式与单位。
+
+**三、于是 `solvent_model: smd` 可以接了。** 引擎的改动很小，因为物理层都在：
+`run_single_point` 里模型缺省从数据的 `cavity_model` 取（给了 `options.solvent_model` 就听输入，
+§8.2），`smd` 时**强制**用 eq. 16 的参数化半径（与数据里的 `radii_set` 无关 —— 那是 COSMO 的键），
+然后算 `G_CDS` 并按 eq. 4.77 的两半落块。三个刻意的选择：
+
+* **采样点数写进日志**：`SMD_POINTS_PER_ATOM = 4096`。收敛表是实测的（32768 点 8.4e-4、
+  8192 点 1.63e-3，`O(1/√N)`），4096 点在 ~2e-3 量级；这个数不是"调到一个好看的"，是
+  "成本可忽略 + 精度与上游同量级"，并且每次运行都打出来。
+* **水与非水两条路都测**：水走 σ_water 表、分子项恰为 0；甲苯里的甲烷分子项非零
+  （`σ^[M] = 0.35×40.2 − 4.19×0.857² = 10.99` cal/(mol·Å²)），两条都对着 props 层逐位比。
+* **半径切换要有证据**：同一体系 COSMO（Bondi C 1.70）与 SMD（1.85）的面积必须不同 ——
+  47.753 vs **49.545 Å²**、G_EP −2.41e-4 vs **−2.68e-4 Ha**。没有这条测试，"SMD 悄悄用 COSMO
+  的键"这种错误会以完全正常的数字通过所有能量断言。
+
+**实测**（`examples/h2o_smd.yaml`，H2O/STO-3G/HF/水）：`energy = −74.9747389362 Ha`、
+`solvation.total = −0.0092962712 Ha` = 静电 `−0.0115925270` + `G_CDS +0.0022962558`、
+`ΔE_solv = −5.8336 kcal/mol`（实验 −6.32，差 **+0.486**）、对账差 **0**。
+水的 SMD 半径恰好与 Bondi 重合（O 1.52 / H 1.20），所以这个体系的 SCF 能量与 COSMO 逐位相同 ——
+"换了模型但能量没变"在这里是**对的**，换个体系（甲苯）就会变，这也是为什么半径切换单独有一条
+测试而不是靠这个例子。
+
+**没有动的**：COSMO 的路径一行未改（`radii_set` 的逻辑对非 SMD 请求原样走），阶段一的位级
+回归与全部既有锚点不受影响；数据文件一个字节没改（描述符早就在）；K2 只做加性扩展。
+
+**还剩什么（如实记）**：SV-03 的判据是「8 溶剂 × 3 分子的 ΔG_solv 与实验 MAE < 1.0 kcal/mol」，
+而现在报的是 **ΔE_solv**（电子能差 + `G_CDS`），没有 298 K 的热化学修正 —— `jobtype: freq`
+还没接进引擎。所以不能靠"多跑几个分子"把它糊成 done：单点水就已经差了 +0.486，
+热化学那一项不补上，判据就是没满足。另外原文的静电是 IEF-PCM(SWIG)、我们是同一套 C-PCM
+表面方程 + 自家 Fibonacci tessellation，这一项**未测**（没有第二套实现可比），
+两处都写进了 `docs/error-budget.md`，SV-03 保持 in_progress。

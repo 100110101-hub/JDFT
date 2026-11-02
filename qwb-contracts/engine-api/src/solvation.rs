@@ -4,9 +4,20 @@
 //!
 //! - **模型是显式选择**（§8.2）：[`SolventModel`] 没有"默认猜一个"的分支 —— 输入不给就用
 //!   数据里 `cavity_model` 的默认，数据也不给就是 `vacuum`。
-//! - **能量分解必须能逐项对账**：SMD 的四项（静电/空化/色散/排斥）每一项都可选，
-//!   但 `total = Σ 各项` 必须能被 [`SolvationResult::decomposition_gap_hartree`] 查出来。
+//! - **能量分解必须能逐项对账**：SMD 的非极性部分可以逐项报，但
+//!   `total = Σ 各项` 必须能被 [`SolvationResult::decomposition_gap_hartree`] 查出来。
 //! - **`converged` 是独立判定**（`S-06` 风险）：表面电荷迭代不收敛时不得悄悄返回能量。
+//!
+//! # 一处契约订正（第 387 轮，`choices` 一百八十二）
+//!
+//! 这个块最初照着"静电 / 空化 / 色散 / 排斥 四项"设计，把 SMD 的非极性部分当成三个独立的
+//! 能量项。**SMD 不是那样**：Marenich–Cramer–Truhlar 2009 的非极性部分是**一项**
+//! `G_CDS`（cavity-dispersion-solvent structure），由 eq. 4.77 给出，可分成两半 ——
+//! 每原子表面张力那一半 `Σ_j σ_j A_j` 与分子表面张力那一半 `σ^[M] Σ_j A_j`。
+//! 那"四项"其实是 eq. 4.80 里**分子表面张力**的四个溶剂描述符系数（γ、φ²、ψ²、β²），
+//! 不是四个能量项。所以这里**加性地**补上 [`SolvationResult::cds_hartree`]（以及它的两个
+//! 分量），并把 `cavitation/dispersion/repulsion` 保留为**未使用**的字段（不删：K2 是加性
+//! 演进的契约，删字段会让旧读者炸；但 SMD 不再用它们，`validate` 也不再要求它们）。
 
 use serde::{Deserialize, Serialize};
 
@@ -21,7 +32,7 @@ pub enum SolventModel {
     Vacuum,
     /// COSMO / C-PCM 一族（导体屏蔽近似）。
     Cosmo,
-    /// SMD（COSMO + 4 项非极性校正 + 参数化半径）。
+    /// SMD：C-PCM/COSMO 静电 + **一项**非极性 `G_CDS`（eq. 4.77）+ 参数化半径（eq. 16）。
     Smd,
     /// Poisson–Boltzmann（含离子强度；phase-2 `stretch`）。
     Pbf,
@@ -89,15 +100,26 @@ pub struct SolvationResult {
     pub total_hartree: f64,
     /// 静电（极化 + 表面电荷）贡献，单位 Hartree（负值 = 稳定化）。
     pub electrostatic_hartree: f64,
-    /// 空化项（SMD 才有），单位 Hartree。
+    /// 空化项（SMD **不用**这个字段，见模块头的契约订正），单位 Hartree。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cavitation_hartree: Option<f64>,
-    /// 色散项（SMD 才有），单位 Hartree。
+    /// 色散项（SMD **不用**这个字段），单位 Hartree。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub dispersion_hartree: Option<f64>,
-    /// 排斥项（SMD 才有），单位 Hartree。
+    /// 排斥项（SMD **不用**这个字段），单位 Hartree。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub repulsion_hartree: Option<f64>,
+    /// SMD 的非极性项 `G_CDS`（cavity-dispersion-solvent structure，eq. 4.77），单位 Hartree。
+    ///
+    /// 它**不是**上面三项之和：CDS 是一个整体表达式，下面的两半是它的可核对分解。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cds_hartree: Option<f64>,
+    /// `G_CDS` 的每原子表面张力那一半 `Σ_j σ_j A_j`（eq. 4.78），单位 Hartree。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cds_atomic_hartree: Option<f64>,
+    /// `G_CDS` 的分子表面张力那一半 `σ^[M] Σ_j A_j`（eq. 4.80；水相为 0），单位 Hartree。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cds_molecular_hartree: Option<f64>,
     /// 可及表面积，单位 Å²。
     pub surface_area_angstrom2: f64,
     /// 可及体积，单位 Å³。
@@ -129,6 +151,9 @@ impl SolvationResult {
             cavitation_hartree: None,
             dispersion_hartree: None,
             repulsion_hartree: None,
+            cds_hartree: None,
+            cds_atomic_hartree: None,
+            cds_molecular_hartree: None,
             surface_area_angstrom2: cavity.surface_area_angstrom2,
             surface_volume_angstrom3: cavity.surface_volume_angstrom3,
             n_tesserae: cavity.n_tesserae,
@@ -138,6 +163,9 @@ impl SolvationResult {
     }
 
     /// 补上 SMD 的三项非极性贡献。
+    ///
+    /// **SMD 不用这条路**（契约订正后它只有一项 `G_CDS`）；保留给将来真正把非极性拆成
+    /// 空化/色散/排斥的模型（例如 PBF 的扩展）。SMD 请用 [`Self::with_cds`]。
     #[must_use]
     pub fn with_nonpolar(
         mut self,
@@ -148,6 +176,23 @@ impl SolvationResult {
         self.cavitation_hartree = Some(cavitation_hartree);
         self.dispersion_hartree = Some(dispersion_hartree);
         self.repulsion_hartree = Some(repulsion_hartree);
+        self
+    }
+
+    /// 补上 SMD 的非极性项 `G_CDS` 与它的两半（eq. 4.77）。
+    ///
+    /// `cds_hartree` 由调用方给出，而不是这里把两半加起来：这样
+    /// [`Self::cds_gap_hartree`] 才真的在核对"报出来的总数 = 报出来的两半之和"。
+    #[must_use]
+    pub fn with_cds(
+        mut self,
+        cds_hartree: f64,
+        cds_atomic_hartree: f64,
+        cds_molecular_hartree: f64,
+    ) -> Self {
+        self.cds_hartree = Some(cds_hartree);
+        self.cds_atomic_hartree = Some(cds_atomic_hartree);
+        self.cds_molecular_hartree = Some(cds_molecular_hartree);
         self
     }
 
@@ -164,6 +209,22 @@ impl SolvationResult {
         self.cavitation_hartree.unwrap_or(0.0)
             + self.dispersion_hartree.unwrap_or(0.0)
             + self.repulsion_hartree.unwrap_or(0.0)
+            + self.cds_hartree.unwrap_or(0.0)
+    }
+
+    /// `G_CDS` 的自洽差额：`cds − (cds_atomic + cds_molecular)`。
+    ///
+    /// eq. 4.77 的两半必须加起来就是报出来的 CDS；差得开说明分解与总数不是同一套数。
+    #[must_use]
+    pub fn cds_gap_hartree(&self) -> f64 {
+        match (
+            self.cds_hartree,
+            self.cds_atomic_hartree,
+            self.cds_molecular_hartree,
+        ) {
+            (Some(cds), Some(atomic), Some(molecular)) => cds - (atomic + molecular),
+            _ => 0.0,
+        }
     }
 
     /// 对账差额：`total − (electrostatic + nonpolar_sum)`。
@@ -203,9 +264,13 @@ impl SolvationResult {
                 "solvation surface area/volume must be positive".into(),
             ));
         }
-        if self.model == SolventModel::Smd && self.cavitation_hartree.is_none() {
+        if self.model == SolventModel::Smd
+            && self.cds_hartree.is_none()
+            && self.cavitation_hartree.is_none()
+        {
             return Err(EngineError::Internal(
-                "smd solvation requires the nonpolar (cavitation/dispersion/repulsion) terms"
+                "smd solvation requires its nonpolar term `cds_hartree` (eq. 4.77); the \
+                 cavitation/dispersion/repulsion fields are not used by SMD"
                     .into(),
             ));
         }
@@ -213,6 +278,9 @@ impl SolvationResult {
             ("cavitation_hartree", self.cavitation_hartree),
             ("dispersion_hartree", self.dispersion_hartree),
             ("repulsion_hartree", self.repulsion_hartree),
+            ("cds_hartree", self.cds_hartree),
+            ("cds_atomic_hartree", self.cds_atomic_hartree),
+            ("cds_molecular_hartree", self.cds_molecular_hartree),
         ] {
             if let Some(value) = value
                 && !value.is_finite()
@@ -273,6 +341,45 @@ mod tests {
         let expected = -0.02 + 0.001 - 0.002 + 0.0005;
         assert!((smd.nonpolar_sum_hartree() - (0.001 - 0.002 + 0.0005)).abs() < 1e-15);
         assert!((smd.decomposition_gap_hartree() - (-76.41 - expected)).abs() < 1e-12);
+    }
+
+    #[test]
+    fn cds_parts_must_add_up_to_the_reported_cds() {
+        let block = SolvationResult::new(
+            SolventModel::Smd,
+            "water",
+            0.0,
+            0.0,
+            CavityGeometry::new(42.0, 18.0, 1024),
+            9,
+        )
+        .with_cds(0.0012, 0.0010, 0.0002);
+        assert!(block.validate().is_ok());
+        assert!(block.cds_gap_hartree().abs() < 1e-15);
+        assert!((block.nonpolar_sum_hartree() - 0.0012).abs() < 1e-15);
+
+        let mismatched = SolvationResult::new(
+            SolventModel::Smd,
+            "water",
+            0.0,
+            0.0,
+            CavityGeometry::new(42.0, 18.0, 1024),
+            9,
+        )
+        .with_cds(0.0012, 0.0010, 0.0001);
+        // 契约不因此报错（总数才是判据），但差额必须能查出来 —— 这正是它的用途。
+        assert!((mismatched.cds_gap_hartree() - 0.0001).abs() < 1e-15);
+
+        // 没有 CDS 也没有旧的三项 → 拒绝。
+        let bare = SolvationResult::new(
+            SolventModel::Smd,
+            "water",
+            0.0,
+            0.0,
+            CavityGeometry::new(42.0, 18.0, 1024),
+            9,
+        );
+        assert!(bare.validate().is_err());
     }
 
     #[test]

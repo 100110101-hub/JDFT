@@ -132,15 +132,29 @@ fn a_dft_reference_for_excited_states_is_rejected_with_fx03() {
 #[test]
 fn unimplemented_solvent_models_are_rejected_with_their_wp() {
     // SV-01 落地后 `cosmo` 是**已实装**的（见 tests/sv01_cosmo_scf.rs 的端到端用例）；
-    // SMD 要等 SV-03、PBF 要等 SV-04，仍然必须显式拒绝。
-    for (model, wp) in [(SolventModel::Smd, "SV-03"), (SolventModel::Pbf, "SV-04")] {
-        let mut job = input("svwn5", 1, TaskOptions::default());
-        job.solvent = "water".into();
-        job.options.solvent_model = Some(model);
-        let message = unsupported(&job);
-        assert!(message.contains(wp), "{message}");
-        assert!(message.contains(model.as_str()), "{message}");
-    }
+    // SV-03（第 387 轮）起 `smd` 也接了（见 tests/sv03_smd_engine.rs），PBF 仍等 SV-04。
+    let mut job = input("svwn5", 1, TaskOptions::default());
+    job.solvent = "water".into();
+    job.options.solvent_model = Some(SolventModel::Pbf);
+    let message = unsupported(&job);
+    assert!(message.contains("SV-04"), "{message}");
+    assert!(message.contains("pbf"), "{message}");
+}
+
+#[test]
+fn smd_is_wired_now_but_pbf_is_not() {
+    // 反方向的守卫：`solvent_model: smd` 不再被拒 —— 它会真的跑出 `solvation` 块
+    // （`model = smd` 且带 `G_CDS`）。数值细节在 tests/sv03_smd_engine.rs。
+    let mut job = input(
+        "svwn5",
+        1,
+        TaskOptions::default().with_solvent_model(SolventModel::Smd),
+    );
+    job.solvent = "water".into();
+    let result = backend().run(&job, &NullReporter).expect("smd 应当跑通");
+    let block = result.solvation.expect("smd 必须带 solvation 块");
+    assert_eq!(block.model, SolventModel::Smd);
+    assert!(block.cds_hartree.is_some(), "SMD 必须报 G_CDS（eq. 4.77）");
 }
 
 #[test]

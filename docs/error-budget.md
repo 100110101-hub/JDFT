@@ -52,6 +52,11 @@
 | CDS **多原子**能量 vs 上游 `libsolvent`（水 / HF / HCl / H₂S，`w = 0`、8192 点/原子、零阶 σ） | 相对 1.25e-4 / 6.84e-5 / 3.36e-5 / **1.86e-4**（最差 H₂S）；官方值 1.441315 / 2.031181 / 1.176125 / 1.008290 kcal/mol | SV-03：多原子 CDS 能量对官方实现 < 1e-3 | ✅ | `qwb-core/crates/qwb-props/tests/sv03_smd_surface.rs`（参考值 `tests/reference/smd_cds_legacy.csv`） |
 | CDS 表面分解的**带宽开起来**时对上游的偏差（水 / HF / HCl / H₂S，`w = 0.2`、1024 点） | 1.21e-1 / 8.47e-2 / 8.19e-2 / 1.20e-1 | 同上 | ⚠️ 记录：上游的等效表面更接近二值遮蔽，所以能量默认 `w = 0` | `qwb-core/crates/qwb-props/tests/sv03_smd_surface.rs` |
 | CDS 多原子表面的**分原子面积** vs 上游 `DAREAL` | 未测（`get_cds_legacy` 只返回能量 + 梯度，不含面积；总能量层面的对照已由上一行覆盖） | 无 §9.3 行 | 未测 | `docs/status-v2.yaml` 的 SV-03 条目 |
+| SMD 单点的能量对账（H2O/STO-3G、水、`solvent_model: smd`） | G_EP = −0.0115925270 Ha、G_CDS = +0.0022962558 Ha、`total = el + cds` 的差 **0**（< 1e-12） | K8 对账恒等式（`decomposition_gap_hartree`）/ `§9.3:ΔG_solv` | ✅ 对账 | `qwb-core/crates/qwb-engine/tests/sv03_smd_engine.rs` |
+| SMD 的 ΔE_solv 对实验（H2O、水、STO-3G/HF，**不含热化学修正**） | **−5.8336 vs −6.32 kcal/mol（差 +0.486）** | SV-03 判据：8 溶剂 × 3 分子 MAE < 1.0 kcal/mol | ⚠️ 单个体系、且报的是 ΔE 不是 ΔG | `qwb-core/examples/h2o_smd.yaml` |
+| SMD 的静电形式（本项目的 C-PCM 表面 vs 原文的 IEF-PCM/SWIG） | **未测**：仓库里没有第二套静电实现可比 | 无 §9.3 行 | 未测 | `docs/status-v2.yaml` 的 SV-03 条目 |
+| `G_CDS` 的表面采样点数（4096 点/原子，引擎默认） | 32768 点时对上游 8.4e-4、8192 点 1.63e-3（`O(1/√N)` 采样噪声），4096 点在 ~2e-3 量级 | SV-03：CDS 能量对上游 < 1e-3（引擎默认点数按 2e-3 记录） | ⚠️ 记录（点数写进日志） | `qwb-core/crates/qwb-props/tests/sv03_smd_sts.rs` |
+| SMD 的空腔半径切换（甲苯里的甲烷：COSMO Bondi C 1.70 vs SMD 1.85） | 面积 47.753 → **49.545 Å²**、G_EP −2.41e-4 → **−2.68e-4 Ha** | 无 §9.3 行；断言"两套半径不许静默混用" | ✅ | `qwb-core/crates/qwb-engine/tests/sv03_smd_engine.rs` |
 | 幽灵原子（counterpoise）路径 vs PySCF `ghost:` | 水二聚体 STO-3G：二聚体 5.0e-8、单体（二聚体基组）3.1e-8、单体（自由）3.1e-8 Ha；BSSE(A) = 2.318e-5 Ha | M2：与 oracle 一致 < 1e-6 | ✅ | `qwb-core/crates/qwb-engine/tests/m2_ghost_counterpoise.rs` |
 | 完整 TDDFT（RPA/TDHF，ST-01）vs PySCF `tdscf.rhf.TDHF` | 4.6e-7…5.9e-7 eV（H2O/STO-3G）、1.2e-7…2.9e-7 eV（def2-SVP） | `§9.3` 无专门行；ST-01 判据 0.15 eV | ✅（小 5 个量级；相对 TDA 系统性下降 0.014–0.110 eV） | `qwb-core/crates/qwb-response/tests/st01_tddft.rs` |
 | 短程 2e 积分（IN-02，ω ∈ {0, 0.1, 0.3, 0.6, 1.0}） | 相对 1.41e-14（与 u 空间独立闭式） | K10 判据 1e-9 | ✅ | `qwb-core/crates/qwb-integrals/tests/in02_short_range.rs` |
@@ -133,8 +138,11 @@ RI 路径更慢，按 §2.5 不宣称性能优势（见 `docs/status-v2.yaml` �
   **帽高本轮被订正过**：原先用切片位置 `z` 顶替 `h = R_i − z`，单原子与不交叠体系都看不出，
   H₂ 上偏大 15.4 %；订正后双原子与闭式一致到 1e-12、与 20 万点采样差 **8.5e-6**，
   三球以上的低估反而从 1.69e-2 变成 1.847e-1 —— 那是这个近似**本来**的口径，不是新误差。
-  所以 SV-01 目前是 blocked：几何路径达标（解析，且只在双原子时当锚点），但判据要求的
-  "与 SMD 非极性项配套的半径集"还缺（DA-05 的付费墙）。
+  所以 SV-01 目前是 blocked：几何路径达标（解析，且只在双原子时当锚点），但"多球交叠的
+  面积/体积对转动不变 < 1e-6"这条判据只能靠解析球帽 + 三重交叠处理，那一半还没做。
+  **旧版这里写的是"缺与 SMD 非极性项配套的半径集（DA-05 的付费墙）"——第 387 轮查清这句是错的**：
+  SMD 的半径集（eq. 16）与非极性项的参数都来自公开的 MNSOL 表、且早已随数据钉住
+  （`qwb-data/solvent/smd_atomic.yaml` + 八个溶剂 YAML 的 `smd:` 块），不存在付费墙。
 * **CDS 多原子表面分解**（SV-03）：单原子极限逐元素 ≤ 5.5e-14（闭式 `4π(R+0.4)²`）；
   `w = 0` 与二值遮蔽的 `cavity()` 逐原子一致（2.95e-14）；双原子对解析球帽的收敛
   0.284 % → 0.071 % → 0.036 % → 0.036 %（N = 256→16384）；水面积随切换带宽单调

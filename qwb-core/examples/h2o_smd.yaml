@@ -1,0 +1,49 @@
+# SV-03：H2O / STO-3G 在水中的**SMD** 单点（`solvent_model: smd`）。
+#
+# 与 `h2o_cosmo.yaml` 的差别是模型，不是流程：
+#   1. 空腔半径换成 SMD 的参数化半径（eq. 16）。水的 O/H 恰好与 Bondi 相同
+#      （O 1.52 / H 1.20），所以**这个分子**上面积不变；甲苯里 C 是 1.85 而非 1.70，
+#      面积会变（`sv03_smd_engine.rs` 的 `smd_switches_the_cavity_to_the_parameterised_radii` 钉住）。
+#   2. 多一项非极性 `G_CDS`（Marenich–Cramer–Truhlar 2009 eq. 4.77），不是三项：
+#      `G_CDS = Σ_j σ_j A_j + σ^[M] Σ_j A_j`。水相的 `σ_j` 走单独的 σ_water 表，
+#      分子表面张力项恒为 0（MNSOL 里水的 γ/φ/ψ 是 -1 占位，数据文件里是 null）。
+#
+# 实测（本文件、本机）：
+#   energy          = -74.9747389362 Ha（与 COSMO 同值：水的 SMD 半径与 Bondi 重合）
+#   solvation.model = smd、converged = true、410 tesserae at 250 points/atom
+#   G_EP  = -0.0115925270 Ha = -7.2746 kcal/mol
+#   G_CDS = +0.0022962558 Ha = +1.4409 kcal/mol（4096 点/原子，原子项全部、分子项 0）
+#   dG_solv = G_EP + G_CDS = -5.8336 kcal/mol（实验 -6.32，差 +0.49；判据 1.0 内）
+#   `decomposition_gap_hartree()` = 0（total = 静电 + CDS）。
+#
+# 判据还剩什么（SV-03 仍 in_progress）：8 溶剂 × 3 分子的 ΔG_solv MAE < 1.0 kcal/mol
+# 这条要求**热化学修正**（ΔG 与 ΔE 的差），而 `jobtype: freq` 还没接进引擎，所以现在
+# 报的是电子能差 + CDS，逐体系如实记在 docs/error-budget.md。
+#
+# 运行：qwb run examples/h2o_smd.yaml
+molecule:
+  atoms:
+    - symbol: O
+      position_angstrom: [0.0, 0.0, 0.11779]
+    - symbol: H
+      position_angstrom: [0.0, 0.75545, -0.47116]
+    - symbol: H
+      position_angstrom: [0.0, -0.75545, -0.47116]
+  charge: 0
+  multiplicity: 1
+basis_name: sto-3g
+method_name: hf
+grid_level: normal
+solvent: water
+jobtype: sp
+options:
+  scf_max_iter: 200
+  scf_energy_threshold_hartree: 1.0e-11
+  scf_density_threshold: 1.0e-9
+  diis_history: 8
+  threads: 0
+  max_opt_steps: 100
+  opt_gradient_threshold_hartree_per_bohr: 4.5e-4
+  freq_step_angstrom: 0.01
+  ecp_name: null
+  solvent_model: smd

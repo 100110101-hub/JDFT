@@ -811,54 +811,129 @@ impl RksBackend {
             options.ecp_potential = Some(potential);
         }
 
-        // SV-01 / KV-02：隐式溶剂（COSMO / C-PCM）。
+        // SV-01 / KV-02：隐式溶剂（COSMO / C-PCM）。SV-03 起同一套表面方程也服务 SMD ——
+        // 差别只有两处：半径换成 SMD 的参数化半径（eq. 16），能量里加一项 `G_CDS`（eq. 4.77）。
         //
         // 空腔的碎片数是**稠密**表面方程的规模（`O(M³)` 一次分解、每步 SCF 重解一次），
         // 所以这里既给默认值也设上限：大分子自动降采样并**记日志**，不静默改变精度。
         // 250 点/原子是 `docs/choices.md` 六十二里的实测选择（160→250 差 0.6 kcal/mol）。
         const COSMO_POINTS_PER_ATOM: usize = 250;
         const COSMO_MAX_TESSERAE: usize = 1500;
+        // SMD 的 SASA 用同一个 Fibonacci 球面采样。实测：32768 点时水相 `G_CDS` 对上游
+        // `libsolvent` 最差 8.4e-4、8192 点 1.63e-3（`smd_sigma` 的收敛表，O(1/√N) 采样噪声）。
+        // 4096 点是"精度还在 2e-3 量级、成本可忽略"的折中，且**写进日志**，不静默取值。
+        const SMD_POINTS_PER_ATOM: usize = 4096;
         let mut cosmo: Option<(std::sync::Arc<cosmo_scf::CosmoScfField>, f64, f64, usize)> = None;
+        // SV-03：`G_CDS` 的三个数（总数 / 每原子那一半 / 分子那一半），单位 Hartree。
+        let mut smd_cds: Option<(f64, f64, f64)> = None;
+        let mut solvent_model_used: Option<qwb_engine_api::SolventModel> = None;
         let solvent_name = input.solvent.clone();
         if solvent_name != "vacuum" {
-            let (epsilon, scale, radii, cavity_model) = {
+            let water = solvent_name.eq_ignore_ascii_case("water");
+            let (epsilon, scale, radii, model) = {
                 let solvent = self.registry.get_solvent(&solvent_name)?;
-                // SV-03：`radii_set: smd` 时用 SMD 的**参数化半径**（eq. 16）—— 与文件里的
-                // `atomic_radii`（Bondi/UFF）是两套，混用会静默错数，所以由数据里的
-                // `radii_set` 声明、在这里集中选择。默认（bondi/uff/缺省）行为**逐位不变**。
-                let smd_data = if solvent.radii_set == Some(qwb_registry::RadiiSet::Smd) {
+                // 数据里的 `cavity_model` 是**默认值**；输入给了 `options.solvent_model` 就听输入
+                // （§8.2：模型是显式选择，不猜）。
+                let data_model = match solvent.cavity_model {
+                    qwb_registry::CavityModel::Pcm => qwb_engine_api::SolventModel::Cosmo,
+                    qwb_registry::CavityModel::Smd => qwb_engine_api::SolventModel::Smd,
+                    qwb_registry::CavityModel::None => {
+                        return Err(EngineError::Data(format!(
+                            "solvent `{solvent_name}` declares cavity_model = none"
+                        )));
+                    }
+                    _ => {
+                        return Err(EngineError::Unsupported(format!(
+                            "solvent `{solvent_name}` declares an unimplemented cavity_model"
+                        )));
+                    }
+                };
+                let model = input.options.solvent_model.unwrap_or(data_model);
+                if model == qwb_engine_api::SolventModel::Cosmo
+                    && data_model == qwb_engine_api::SolventModel::Smd
+                {
+                    // 两套半径家族不能混：数据说 SMD 空腔，就不许用 COSMO 的键去跑它。
+                    return Err(EngineError::InvalidInput(format!(
+                        "solvent `{solvent_name}` declares cavity_model = smd; ask for \
+                         `solvent_model: smd` instead of letting COSMO use another radius set"
+                    )));
+                }
+                let use_smd = model == qwb_engine_api::SolventModel::Smd;
+                // SV-03：`solvent_model: smd` 时半径一律用 SMD 的参数化半径（eq. 16），
+                // 与数据里声明的 `radii_set`（Bondi/UFF）无关 —— 那套是 COSMO 的键。
+                let radii_set = if use_smd {
+                    Some(qwb_registry::RadiiSet::Smd)
+                } else {
+                    solvent.radii_set
+                };
+                let smd_data = if radii_set == Some(qwb_registry::RadiiSet::Smd) {
                     Some(self.registry.get_smd_atomic(SMD_ATOMIC_NAME)?)
                 } else {
                     None
                 };
                 let (radii, scale) = cosmo_radii(
                     &input.molecule,
-                    solvent.radii_set,
+                    radii_set,
                     &solvent.atomic_radii,
                     solvent.scale,
                     solvent.smd.as_ref().and_then(|block| block.abraham_alpha),
                     smd_data,
                 )?;
-                (solvent.epsilon, scale, radii, solvent.cavity_model)
+                if use_smd {
+                    let data = smd_data.ok_or_else(|| {
+                        EngineError::Data(
+                            "solvent_model = smd needs the `smd-atomic` data table".to_string(),
+                        )
+                    })?;
+                    // 描述符缺一个就不是 SMD（非水相）；水相走单独的 σ 表、不需要它们。
+                    let descriptors = smd_descriptors_or_none(solvent.smd.as_ref());
+                    let surface = qwb_props::smd_surface::smd_surface(
+                        data,
+                        &input.molecule,
+                        SMD_POINTS_PER_ATOM,
+                        0.0,
+                    )?;
+                    let sts = qwb_props::smd_sigma::smd_sts(
+                        data,
+                        &input.molecule,
+                        water,
+                        descriptors.as_ref(),
+                    )?;
+                    let cssigm =
+                        qwb_props::smd::cds_constant_term(data, water, descriptors.as_ref());
+                    // eq. 4.77 的两半分开算：`Σ σ_j A_j` 与 `σ^[M] Σ A_j`。
+                    let zeros = vec![0.0_f64; surface.areas_angstrom2.len()];
+                    let atomic_kcal = qwb_props::smd_sigma::cds_energy_kcal_from_sts(
+                        &sts,
+                        0.0,
+                        &surface.areas_angstrom2,
+                    )
+                    .map_err(EngineError::Data)?;
+                    let molecular_kcal = qwb_props::smd_sigma::cds_energy_kcal_from_sts(
+                        &zeros,
+                        cssigm,
+                        &surface.areas_angstrom2,
+                    )
+                    .map_err(EngineError::Data)?;
+                    let to_hartree = 1.0 / HARTREE_PER_KCAL_MOL;
+                    let atomic = atomic_kcal * to_hartree;
+                    let molecular = molecular_kcal * to_hartree;
+                    reporter.log(&format!(
+                        "solvation: smd cds (eq. 4.77), solvent = {solvent_name}{},                      {SMD_POINTS_PER_ATOM} points/atom, A_total = {:.3} A^2,                      G_CDS = {:.6} kcal/mol (atomic {:.6} + molecular {:.6})",
+                        if water {
+                            " (aqueous sigma table; molecular term is 0)"
+                        } else {
+                            ""
+                        },
+                        surface.total_area_angstrom2,
+                        atomic_kcal + molecular_kcal,
+                        atomic_kcal,
+                        molecular_kcal
+                    ));
+                    smd_cds = Some((atomic + molecular, atomic, molecular));
+                }
+                (solvent.epsilon, scale, radii, model)
             };
-            match cavity_model {
-                qwb_registry::CavityModel::Pcm => {}
-                qwb_registry::CavityModel::Smd => {
-                    return Err(EngineError::Unsupported(format!(
-                        "solvent `{solvent_name}` declares cavity_model = smd, which is SV-03"
-                    )));
-                }
-                qwb_registry::CavityModel::None => {
-                    return Err(EngineError::Data(format!(
-                        "solvent `{solvent_name}` declares cavity_model = none"
-                    )));
-                }
-                _ => {
-                    return Err(EngineError::Unsupported(format!(
-                        "solvent `{solvent_name}` declares an unimplemented cavity_model"
-                    )));
-                }
-            }
             if !epsilon.is_finite() || epsilon < 1.0 {
                 return Err(EngineError::Data(format!(
                     "solvent `{solvent_name}` has epsilon = {epsilon}"
@@ -884,12 +959,15 @@ impl RksBackend {
                 epsilon,
             )?);
             reporter.log(&format!(
-                "solvation: cosmo/c-pcm, solvent = {solvent_name} (eps = {epsilon}),                  {} tesserae at {points} points/atom, surface A = {:.3} A^2, V = {:.3} A^3",
+                "solvation: {model}, solvent = {solvent_name} (eps = {epsilon}), \
+                 {} tesserae at {points} points/atom, surface A = {:.3} A^2, V = {:.3} A^3",
                 cavity.tesserae.len(),
                 cavity.surface_area_angstrom2,
-                cavity.volume_angstrom3
+                cavity.volume_angstrom3,
+                model = model.as_str()
             ));
             options.external_field = Some(field.handle());
+            solvent_model_used = Some(model);
             cosmo = Some((
                 field,
                 cavity.surface_area_angstrom2,
@@ -1334,8 +1412,9 @@ impl RksBackend {
                 distortion
             ));
             let electrostatic = result.energy_hartree - gas.energy_hartree;
+            let model = solvent_model_used.unwrap_or(qwb_engine_api::SolventModel::Cosmo);
             let block = qwb_engine_api::SolvationResult::new(
-                qwb_engine_api::SolventModel::Cosmo,
+                model,
                 &solvent_name,
                 electrostatic,
                 electrostatic,
@@ -1344,13 +1423,29 @@ impl RksBackend {
                 result.iterations as usize,
             )
             .with_converged(result.scf_converged);
+            // SV-03：SMD 的非极性项是**一项** `G_CDS`（eq. 4.77），不是三项。`total_hartree`
+            // 按对账恒等式取 `G_EP + G_CDS`（该块的 `total` 是**溶剂化自由能**，不是体系
+            // 绝对能量；绝对能量仍在 `JobResult.energy_hartree`）。
+            let (block, total) = match smd_cds {
+                Some((cds, atomic, molecular)) => {
+                    let total = electrostatic + cds;
+                    (block.with_cds(cds, atomic, molecular), total)
+                }
+                None => (block, electrostatic),
+            };
+            let mut block = block;
+            block.total_hartree = total;
             block.validate()?;
             job = job
                 .with_log(format!(
-                    "solvation = cosmo/{}: dG_el = {:.10} Ha ({:.3} kcal/mol),                      A = {:.3} A^2, V = {:.3} A^3, {} tesserae",
+                    "solvation = {}/{}: dG_el = {:.10} Ha ({:.3} kcal/mol), G_CDS = {:.6} kcal/mol, \
+                     dG_solv = {:.3} kcal/mol, A = {:.3} A^2, V = {:.3} A^3, {} tesserae",
+                    model.as_str(),
                     solvent_name,
                     electrostatic,
-                    electrostatic * 627.509_474_063_6,
+                    electrostatic * HARTREE_PER_KCAL_MOL,
+                    total * HARTREE_PER_KCAL_MOL - electrostatic * HARTREE_PER_KCAL_MOL,
+                    total * HARTREE_PER_KCAL_MOL,
                     area,
                     volume,
                     n_tesserae
@@ -1871,15 +1966,11 @@ fn reject_unimplemented_options(input: &JobInput) -> Result<(), EngineError> {
     }
     if let Some(model) = options.solvent_model {
         // SV-01 落地后 cosmo 是**已实装**的（需要 `input.solvent` 给出溶剂名）；
-        // SMD 要等 SV-03、PBF 要等 SV-04，仍然显式拒绝。
+        // SV-03（第 387 轮）起 smd 也接了（CDS 非极性项 + 参数化半径），PBF 仍等 SV-04。
         match model {
-            qwb_engine_api::SolventModel::Vacuum | qwb_engine_api::SolventModel::Cosmo => {}
-            qwb_engine_api::SolventModel::Smd => {
-                return Err(EngineError::Unsupported(
-                    "options.solvent_model = `smd` is not implemented yet (the four nonpolar                      terms and the parameterised radii are SV-03)"
-                        .into(),
-                ));
-            }
+            qwb_engine_api::SolventModel::Vacuum
+            | qwb_engine_api::SolventModel::Cosmo
+            | qwb_engine_api::SolventModel::Smd => {}
             qwb_engine_api::SolventModel::Pbf => {
                 return Err(EngineError::Unsupported(
                     "options.solvent_model = `pbf` is not implemented yet (boundary/finite                      element Poisson-Boltzmann is SV-04)"
@@ -1899,6 +1990,31 @@ fn reject_unimplemented_options(input: &JobInput) -> Result<(), EngineError> {
 
 /// `kind: smd-atomic` 数据在仓库里的名字。
 const SMD_ATOMIC_NAME: &str = "smd-atomic";
+
+/// kcal/mol → Hartree（CODATA 2018；与色散/溶剂化日志里用的是同一个数）。
+const HARTREE_PER_KCAL_MOL: f64 = 627.509_474_063_6;
+
+/// 从 K1 的 `smd:` 块取 SMD 需要的六个溶剂描述符（`SmdDescriptors` 的顺序是
+/// SOLA/SOLB/SOLC/SOLG/SOLH/SOLN —— 与上游 `mnsol.F` 一致）。
+///
+/// 六个里缺任何一个都返回 `None`：**水相**不需要它们（走单独的 σ 表），非水相缺了就由
+/// `qwb_props::smd_sigma` 显式拒绝 —— 这里不替数据补齐，也不许拿 0 顶替。
+///
+/// 注意 `phi_sq`/`psi_sq` 这两个 **K1 字段名**是历史遗留：MNSOL 表给的是 φ 与 ψ 本身
+/// （芳香性/卤素性分数），平方在 eq. 4.80 里做（`smd_constant_term` 里就是这个乘法）。
+fn smd_descriptors_or_none(
+    parameters: Option<&qwb_registry::solvent::SmdParameters>,
+) -> Option<qwb_props::smd::SmdDescriptors> {
+    let parameters = parameters?;
+    Some(qwb_props::smd::SmdDescriptors::new(
+        parameters.abraham_alpha?,
+        parameters.abraham_beta?,
+        parameters.phi_sq?,
+        parameters.gamma_cal_per_mol_angstrom2?,
+        parameters.psi_sq?,
+        parameters.refractive_index_20c?,
+    ))
+}
 
 /// 依据溶剂的 `radii_set` 选 COSMO/C-PCM 的空腔半径，返回 `(每元素半径, 缩放因子)`。
 ///

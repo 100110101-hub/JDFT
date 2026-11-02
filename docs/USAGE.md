@@ -202,7 +202,7 @@ options:
   scf_type: null                           # null / rhf / rks / uhf / uks / rohf，见 §3.4
   mp2: null                                # {kind: mp2 | ri-mp2, aux_basis_name: ...}，见 §3.5
   excited_states: null                     # {n_states: 5, method: cis | tda | tddft}，见 §3.6
-  solvent_model: null                      # vacuum | cosmo（smd/pbf → 退出码 4），见 §3.7
+  solvent_model: null                      # vacuum | cosmo | smd（pbf → 退出码 4），见 §3.7
   dispersion: null                         # {data: d3bj | d3zero | d4}，见 §3.8
   epr: false                               # 开壳层的超精细耦合，见 §3.9
   numerics: null                           # 精度等级/近似路径：**一律退出码 4**，见 §3.10
@@ -497,13 +497,19 @@ options:
 四条现状规则（都由测试钉住）：
 
 * **只支持 `jobtype: sp`**：溶剂化的梯度/优化属 SV-02，`opt` 以退出码 4 拒绝；
-* `solvent_model: smd` → 退出码 4（SV-03：四项非极性项与参数化半径还没接线）；
+* `solvent_model: smd` **能算**（`sp`，第 387 轮接线）：静电用同一套 C-PCM 表面方程、
+  半径换成 SMD 的参数化半径（eq. 16），能量里加**一项**非极性 `G_CDS`（eq. 4.77）——
+  它可分成 `Σ σ_j A_j` 与 `σ^[M] Σ A_j` 两半，不是"空化/色散/排斥三项"
+  （K8 的那个说法已订正，见 §7 的 `solvation` 块与 `docs/choices.md` 一百八十二）；
   `solvent_model: pbf` → 退出码 4（SV-04）；
 * `solvent: vacuum` 配 `solvent_model: cosmo` 是自相矛盾，解析阶段就报错（退出码 1）；
   反过来 `solvent: water` 配 `solvent_model: vacuum` 也一样；
-* 半径由数据驱动：溶剂文件声明 `radii_set: smd` 时用 SMD 的参数化半径（eq. 16，缩放固定 1.0），
-  否则用文件里的 `atomic_radii` × `scale`。**当前没有溶剂声明 `radii_set: smd`**，所以这条分支
-  端到端跑不到，它由 `sv03_smd_radii_cosmo.rs` 对真实数据直接测。
+* 半径有两个来源，**不许混**：`solvent_model: smd` 一律用 SMD 的参数化半径（eq. 16，缩放 1.0），
+  与数据里的 `radii_set` 无关（那是 COSMO 的键）；其余情况按数据的 `radii_set`
+  （`radii_set: smd` 时也用参数化半径，由 `sv03_smd_radii_cosmo.rs` 直接测）。
+  **当前没有溶剂文件声明 `radii_set: smd`**，所以那条数据分支只有测试在走；
+  `solvent_model: smd` 这条由 `sv03_smd_engine.rs` 的 `smd_switches_the_cavity_to_the_parameterised_radii`
+  钉住（甲苯里的 C：Bondi 1.70 vs SMD 1.85，面积 47.753 → 49.545 Å²）。
 
 ### 3.8 色散校正：`d3bj` / `d3zero` / `d4`
 
@@ -559,7 +565,6 @@ a_iso_mhz, a_iso_gauss}`，两核 `a_iso(O) = −81.4773 MHz = −29.0732 G`。U
 | 字段 | 现状 | 退出码 | 归属 |
 |---|---|---|---|
 | `options.numerics` | 精度等级 1..5 + 路径（`analytic`/`ri`/`pseudospectral`）能解析，但**没有任何代码在读** | 4 | IN-03 / IN-04（K10 门禁） |
-| `options.solvent_model: smd` | 契约在、数据在（CDS 能量层已验收），引擎未接线 | 4 | SV-03 |
 | `options.solvent_model: pbf` | 同上 | 4 | SV-04 |
 | `jobtype: freq` | `hessian::numerical_hessian` 存在且有测试，但没接进作业分发 | 4 | M7 / F-01 |
 | `qwb ts` / `irc` / `scan` | K5 只落签名 | 4 | M6 / RP-01..03 |
@@ -864,7 +869,7 @@ $env:QWB_ENGINE_BIN = '<仓库根>\qwb-core\target\release\qwb.exe'   # 可选�
 | `correlation` | `options.mp2` | `method` / `e2_hartree` / `e_total_hartree` / `aux_basis_name` / `ri_error_hartree` |
 | `excited_states` | `options.excited_states` | `method` / `n_states` / `transitions` / `sum_rules` |
 | `uv_vis_spectrum` | 同上（且 `numerics.yaml` 有 `spectrum_defaults`） | `gaussian_hwhm_ev` / `grid_step_ev` / `points` |
-| `solvation` | `solvent: <非 vacuum>` | `model` / `solvent_name` / `electrostatic_hartree` / 三项非极性项（SMD 才有）/ 空腔几何 |
+| `solvation` | `solvent: <非 vacuum>` | `model` / `solvent_name` / `electrostatic_hartree` / `cds_hartree`（SMD 才有，eq. 4.77）/ `cds_atomic_hartree` + `cds_molecular_hartree`（它的两半）/ 空腔几何 |
 | `dispersion_energy_hartree` | `options.dispersion` | 可加项；`energy_hartree = SCF + 它 |
 | `epr` | `options.epr: true`（开壳层 sp） | `method` / `nuclei[]`（`spin_density_au`、`a_iso_mhz`、`a_iso_gauss`） |
 | `multipoles` | 每次闭壳层 `sp` | `quadrupole_traceless_debye_angstrom` / `origin_angstrom` |
@@ -1100,8 +1105,12 @@ gitignored 的 `qwb-data/reference/_*_staging/raw/` 里，派生物（CSV/JSON�
 * **ECP 的导数**：带 ECP 的 `opt`/`freq` 不支持。
 * **开壳层的 opt 只到 HF**（`uhf`/`rohf`）；`uks` 只能 `sp`（开壳层 UKS 的 SCF 收敛是 SC-02 的剩余一半）。
 * **开壳层的布居/cube**：只有 α 套轨道，宁可不写（§3.4）。
-* **溶剂**只到 COSMO/C-PCM 单点：SMD（SV-03）与 PBF（SV-04）退出码 4；`E_CD`/`E_S`/`E_C`
-  三项非极性项的参数在付费墙后、没有本地 oracle，所以 SV-03 仍 in_progress。
+* **溶剂**只到单点，且静电都是 C-PCM 一族：`opt`/`freq` 退出码 4（SV-02），PBF 退出码 4
+  （SV-04）。**SMD 的 `sp` 已接**（静电 + `G_CDS`），但 SV-03 的判据（8 溶剂 × 3 分子的
+  ΔG_solv 对实验 MAE < 1.0 kcal/mol）还没走完：缺热化学修正（`freq` 未接线），而且
+  SMD 原文的静电是 IEF-PCM(SWIG) 而不是我们这套 C-PCM 表面 —— 两处都记在
+  `docs/error-budget.md`。**旧账本的"三项非极性项在付费墙后"是错的**：SMD 的非极性项
+  只有一项 `G_CDS`，参数来自公开的 MNSOL 描述符表，已随数据钉住（见 choices 一百八十二）。
 * **近似路径**：`options.numerics` 一律退出码 4（IN-03 pseudospectral、IN-04 RI-J 都没过 K10）。
 * **解析 Hessian**（RS-05，blocked：20× 的两条前提都不成立）、**GIAO NMR**（RS-04，in_progress）、
   **Raman**（RS-06，blocked：要简正模式 → 要 RS-05）、**VCD**（RS-07 pending）。
@@ -1143,7 +1152,7 @@ ECP、频率库函数）在 `docs/status.yaml`；这里只列阶段二台账里�
 | 色散 D3(BJ)/D3(0)（含开壳层与线程确定性） | ✅ | FX-04, DA-06 | 对官方 s-dftd3 逐项 |
 | 幽灵原子 / counterpoise（BSSE）单点 | ⚠ | M2 | 只支持 `sp`；色散/ECP/溶剂未审，显式拒绝 |
 | COSMO / C-PCM 单点 | ⚠ | SV-01 | 面积判据仍 blocked（解析球帽已部分落地）；缺非极性项 |
-| SMD | ❌ | SV-03 | `E_CD`/`E_S`/`E_C` 的参数在付费墙后，没有本地 oracle |
+| SMD 单点（静电 + `G_CDS`） | ⚠ | SV-03 | 8 溶剂 × 3 分子的 ΔG_solv MAE 判据未走完（缺热化学修正）；静电是 C-PCM 而非 IEF-PCM(SWIG) |
 | 溶剂化解析梯度 / 优化 | ❌ | SV-02 | 依赖 SV-01 |
 | 溶液相频率 / 热化学 | ❌ | SV-05 | 依赖 SV-01/SV-02 |
 | `jobtype: freq`（解析 Hessian） | ❌ | RS-05 | 20× 的两条前提都不成立（blocked） |
@@ -1364,7 +1373,7 @@ pwsh -NoProfile -File scripts\verify.ps1
 | `unsupported feature: jobtype 'freq' is not wired …` | 4 | 用了 `freq` | 用 `sp`/`opt`；频率见 F-01/F-02 的测试 |
 | `unsupported feature: geometry optimisation with an ECP …` | 4 | 带 ECP 的 opt | ECP 只支持 `sp` |
 | `unsupported feature: options.scf_type = 'uks' currently supports 'sp' only` | 4 | 开壳层 UKS 优化 | 用 `sp`；或用 `uhf`/`rohf` 做 HF 优化 |
-| `unsupported feature: options.solvent_model = 'smd' is not implemented yet` | 4 | 想要 SMD | 用 `cosmo`；SMD 见 SV-03 |
+| `unsupported feature: options.solvent_model = 'pbf' is not implemented yet` | 4 | 想要 PBF | PBF 见 SV-04；SMD 用 `smd`（已接） |
 | `unsupported feature: solvent 'water' currently supports 'sp' only` | 4 | 溶剂体系做 opt | 溶剂只支持单点 |
 | `unsupported feature: ghost atoms … implemented for 'sp' only` | 4 | ghost + opt/freq/色散/ECP/溶剂 | 只做 `sp` |
 | `unsupported feature: options.numerics is not wired yet` | 4 | 想用近似路径 | 去掉 `options.numerics`（IN-03/IN-04 未过 K10） |

@@ -70,4 +70,5 @@ cccbdb-raw.json
 # S22 上游数据文件快照（ASE，LGPL-2.1-or-later，只作提取来源；仓库只提交提取出的
 # s22_dimers.csv 与带 sha256 的 s22.json —— 与 D4/SMD 同一个口径：**不把第三方源码入库**）
 /qwb-data/reference/_s22_staging/raw/
-
+# SMD 非极性项（CDS）的文献快照：MNSOL 描述符表 + 论文/学位论文（只作数据来源与公式核对，_smd_nonpolar_staging/raw/ 不进仓库）
+/qwb-data/solvent/_smd_nonpolar_staging/raw/
