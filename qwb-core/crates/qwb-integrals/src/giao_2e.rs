@@ -25,18 +25,17 @@
 //! Fock 导数里拿掉，屏蔽从 O **365.673** ppm 变成 **2396.038**、H **33.682** 变成 **−2.036**。
 //! 它与单电子项同量级 —— **只靠单电子 `∂H/∂B` 与 `∂S/∂B` 拼出来的"GIAO"不是 GIAO**。
 //!
-//! # 交付边界（如实写在这里）
+//! # 把 `X_l` 收缩成 `∂F₂ₑ/∂B_k`（这一层已与 PySCF 逐元素对上）
 //!
-//! 这里交付的是**积分层** `X_l` 本身（三条结构尺子全绿，见下方测试：单中心恒等式、`μ↔ν`
-//! 对称性、抬高 bra 与抬高 ket 一致）。把 `X_l` 收缩成 `∂F₂ₑ/∂B_k` 的那一步**还没有**与
-//! PySCF 逐元素对上（残留约 1.8e-1，量级 1.2e0），所以它**没有**进 `qwb-response` 的屏蔽装配
-//! —— 宁可少一个功能，也不把没对上的数当结果。参考值已经落在
-//! `qwb-response/tests/reference/giao_fock_derivative.csv`（`two_electron_field_derivative`
-//! 那一列），谁接这一步都能立刻验。
+//! 见 [`giao_two_electron_field_derivative`] 的文档。一句话：`X_l` 本身**不够** —— 收缩不是一次
+//! 密度缩并，而是「Coulomb 的第二个电子对」+「交换项的两个挂法之差 `E_k − E_kᵀ`」两种模式；
+//! 反过来，Coulomb 里那个把密度挂在**第一个**电子对上的转置项（`X_l[λσ|μν]`）对**对称**的
+//! 密度矩阵**精确为零**（实测 3.8e-17），所以它不需要单独实现。
 #![deny(unsafe_code)]
 
 use qwb_basis::InternalBasis;
 use qwb_engine_api::{EngineError, Molecule};
+use qwb_linalg::Matrix;
 
 use crate::two_electron::{ShellBlock, cartesian_block_raised, contract, shell_block, strides};
 
@@ -117,6 +116,178 @@ fn moment_tensors(
                         }
                     }
                 }
+            }
+        }
+    }
+    Ok(out)
+}
+
+/// `ε_{klm}`（Levi-Civita；与 [`crate::giao`] 的叉积同一个符号）。
+fn levi_civita(k: usize, l: usize, m: usize) -> f64 {
+    match (k, l, m) {
+        (0, 1, 2) | (1, 2, 0) | (2, 0, 1) => 1.0,
+        (0, 2, 1) | (1, 0, 2) | (2, 1, 0) => -1.0,
+        _ => 0.0,
+    }
+}
+
+/// `w_{k,l}(a,b) = Σ_m ε_{klm} (R_a − R_b)_m`，即 `[e_k × (R_a − R_b)]_l`。
+fn pair_weight(k: usize, l: usize, delta: [f64; 3]) -> f64 {
+    // ε 只有两个非零的 m，直接枚举比查表清楚。
+    (0..3).map(|m| levi_civita(k, l, m) * delta[m]).sum::<f64>()
+}
+
+/// GIAO 电子排斥对**磁场**的一阶导数：三个**实**矩阵 `Y_k`，`∂F₂ₑ/∂B_k = i·Y_k`。
+///
+/// # 为什么它不是"密度 × `X_l`"一次收缩
+///
+/// 两电子积分的四个基函数**都**带相位，所以
+///
+/// ```text
+/// ∂(μν|λσ)/∂B_k = (i/2) Σ_l { [e_k×(R_μ−R_ν)]_l X_l[μν|λσ] + [e_k×(R_λ−R_σ)]_l X_l[λσ|μν] }
+/// ```
+///
+/// 而 Fock 矩阵 `F_μν = H_μν + Σ_λσ D_λσ[(μν|λσ) − ½(μλ|νσ)]` 求导后出现**四种**不同的
+/// 指标挂法（`w_k(a,b) ≡ Σ_m ε_{klm}(R_a−R_b)_m`）：
+///
+/// ```text
+/// J_l[μν]    = Σ_λσ D_λσ X_l[μν|λσ]                     ← Coulomb：密度挂第二个电子对
+/// T_l[μλν]   = Σ_σ D_λσ X_l[μλ|σν]                      ← 交换：权重里含一个占据指标
+/// Y_k[μν]    = −½ Σ_l w_k(μ,ν)_l J_l[μν] + ¼ (E_k[μν] − E_k[νμ])
+/// E_k[μν]    = Σ_l Σ_λ w_k(μ,λ)_l T_l[μλν]
+/// ```
+///
+/// 两点值得写下来（都是**实测**得到的，不是推导出来就完事）：
+///
+/// 1. **Coulomb 的"另一个电子"那一项恒为零**：`Σ_λσ D_λσ w_k(λ,σ)_l X_l[λσ|μν]` 里
+///    `w_k(λ,σ)` 对 `λ↔σ` 反对称、`X_l` 与 `D` 都对称，缩并精确为零（实测 3.8e-17）。
+///    所以密度只挂在 `X_l` 的第二个电子对上。
+/// 2. **交换项必须反对称化**（`E_k − E_kᵀ`），不是对称组合 —— 这一条被参考值钉死：
+///    换成对称组合 `±½(E_k + E_kᵀ)` 时，水/STO-3G 的 O 屏蔽从 365.673 ppm 变成
+///    4384.289 ppm（PySCF 侧的实测，等价地本函数的逐元素残留从 7e-8 跳到 O(1)）。
+///
+/// # 尺子
+///
+/// `qwb-response/tests/reference/giao_fock_derivative.csv` 的
+/// `two_electron_field_derivative` 列（PySCF 的 `int2e_ig1` 组装，441 行）。逐元素残留见
+/// `crates/qwb-response/tests/rs04_giao_derivative_2e.rs`：用本仓库自己的 SCF 密度是
+/// **7.4e-8**（量级 1.2e0），与 `∂H/∂B` 的 3.9e-8 同一量级，来源是 Å→Bohr 常数差 1.84e-8
+/// （见 `qwb-integrals/src/giao.rs` 与 `rs04_giao_derivatives.rs` 的说明）。
+///
+/// 单位：`density` 与返回值都是原子单位（密度是 AO 基下的 `P_μν`，含自旋求和）。
+///
+/// # Errors
+///
+/// 密度维度与基函数数不符 → [`EngineError::Internal`]；`X_l` 算不出来（`l` 过大）→
+/// [`EngineError::Unsupported`]。
+pub fn giao_two_electron_field_derivative(
+    basis: &InternalBasis,
+    molecule: &Molecule,
+    density: &Matrix,
+) -> Result<[Matrix; 3], EngineError> {
+    let n = basis.n_functions();
+    if density.nrows() != n || density.ncols() != n {
+        return Err(EngineError::Internal(format!(
+            "giao_two_electron_field_derivative: density is {}x{}, basis has {n} functions",
+            density.nrows(),
+            density.ncols()
+        )));
+    }
+    let moments = giao_two_electron_moments(basis, molecule)?;
+    let mut centers: Vec<[f64; 3]> = Vec::with_capacity(n);
+    for shell in basis.shells() {
+        for _ in 0..shell.n_functions() {
+            centers.push(shell.center_bohr);
+        }
+    }
+    if centers.len() != n {
+        return Err(EngineError::Internal(format!(
+            "giao_two_electron_field_derivative: {n} functions but {} centers",
+            centers.len()
+        )));
+    }
+    let basis_index = |mu: usize, nu: usize, lambda: usize, sigma: usize| {
+        ((mu * n + nu) * n + lambda) * n + sigma
+    };
+
+    // ── J_l[μν] = Σ_λσ D_λσ X_l[μν|λσ]（Coulomb）────────────────────
+    let mut coulomb: [Matrix; 3] = std::array::from_fn(|_| Matrix::zeros(n, n));
+    // ── T_l[μλν] = Σ_σ D_λσ X_l[μλ|σν]（交换；第二个电子对的顺序按 Fock 的 (μλ|νσ)）──
+    let mut exchange = vec![0.0_f64; 3 * n * n * n];
+    for (l, moment) in moments.iter().enumerate() {
+        for mu in 0..n {
+            for lambda in 0..n {
+                for nu in 0..n {
+                    let mut sum = 0.0;
+                    for sigma in 0..n {
+                        let d = density[(lambda, sigma)];
+                        if d == 0.0 {
+                            continue;
+                        }
+                        sum += d * moment[basis_index(mu, lambda, sigma, nu)];
+                    }
+                    exchange[(l * n + mu) * n * n + lambda * n + nu] = sum;
+                }
+            }
+            for nu in 0..n {
+                let mut sum = 0.0;
+                for lambda in 0..n {
+                    for sigma in 0..n {
+                        let d = density[(lambda, sigma)];
+                        if d == 0.0 {
+                            continue;
+                        }
+                        sum += d * moment[basis_index(mu, nu, lambda, sigma)];
+                    }
+                }
+                coulomb[l][(mu, nu)] = sum;
+            }
+        }
+    }
+
+    // ── 组装 Y_k = −½ w∘J + ¼(E_k − E_kᵀ) ──────────────────────────
+    let mut out: [Matrix; 3] = std::array::from_fn(|_| Matrix::zeros(n, n));
+    for (k, target) in out.iter_mut().enumerate() {
+        let mut coulomb_weighted = vec![0.0_f64; n * n];
+        let mut exchange_k = Matrix::zeros(n, n);
+        for l in 0..3 {
+            for mu in 0..n {
+                for nu in 0..n {
+                    let delta = [
+                        centers[mu][0] - centers[nu][0],
+                        centers[mu][1] - centers[nu][1],
+                        centers[mu][2] - centers[nu][2],
+                    ];
+                    let weight = pair_weight(k, l, delta);
+                    if weight != 0.0 {
+                        coulomb_weighted[mu * n + nu] += weight * coulomb[l][(mu, nu)];
+                    }
+                }
+            }
+            for mu in 0..n {
+                for lambda in 0..n {
+                    let delta = [
+                        centers[mu][0] - centers[lambda][0],
+                        centers[mu][1] - centers[lambda][1],
+                        centers[mu][2] - centers[lambda][2],
+                    ];
+                    let weight = pair_weight(k, l, delta);
+                    if weight == 0.0 {
+                        continue;
+                    }
+                    for nu in 0..n {
+                        let value = exchange[(l * n + mu) * n * n + lambda * n + nu];
+                        if value != 0.0 {
+                            exchange_k[(mu, nu)] += weight * value;
+                        }
+                    }
+                }
+            }
+        }
+        for mu in 0..n {
+            for nu in 0..n {
+                target[(mu, nu)] = -0.5 * coulomb_weighted[mu * n + nu]
+                    + 0.25 * (exchange_k[(mu, nu)] - exchange_k[(nu, mu)]);
             }
         }
     }

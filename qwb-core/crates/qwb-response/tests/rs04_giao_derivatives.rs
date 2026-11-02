@@ -18,8 +18,8 @@
 //! 3.9e-8（量级 1.6e0）—— 恰好是 1.84e-8 相对。判据取 1e-6（相对 ~1e-6）把这条常数差排除
 //! 在外，而比"公式写错"（那会是 1e-2 以上）小四个数量级。
 //!
-//! `two_electron_field_derivative` 那一列也在 CSV 里，但**本轮没有做到能对它** ——
-//! 见 `qwb_integrals::giao_2e` 的模块文档（交付边界）。
+//! `two_electron_field_derivative` 那一列（PySCF 的 `int2e_ig1` 组装）钉
+//! [`qwb_integrals::giao_2e::giao_two_electron_field_derivative`]，见本文件末尾。
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 
@@ -157,4 +157,34 @@ fn giao_core_field_derivative_matches_the_pyscf_reference() {
     let ours = qwb_integrals::giao::giao_core_field_derivative(&basis, &molecule)
         .expect("core field derivative");
     compare("∂H/∂B", &ours, &references()["core_field_derivative"]);
+}
+
+/// 参考列用的密度是 PySCF 的收敛 RHF 密度；这里用本仓库自己的 SCF（同样的几何、同样的
+/// STO-3G），所以残留里含有两边的 SCF/常数差 —— 与 `∂H/∂B` 那一列同源。
+fn converged_density(basis: &qwb_basis::InternalBasis, molecule: &Molecule) -> qwb_linalg::Matrix {
+    let registry = Registry::open(data_root()).expect("qwb-data");
+    let tensor = qwb_integrals::two_electron::two_electron(basis, molecule).expect("2e");
+    let grid = qwb_grid::molecular_grid(registry.get_grid("grid-coarse").expect("grid"), molecule)
+        .expect("grid");
+    let mut options = qwb_scf::rks::RksOptions::default();
+    options.max_iter = 400;
+    options.energy_threshold = 1.0e-11;
+    options.density_threshold = 1.0e-9;
+    let scf = qwb_scf::rks::rks_scf(basis, molecule, &tensor, &grid, &[], options).expect("HF");
+    scf.density
+}
+
+/// GIAO 两电子部分的场导数 `∂F₂ₑ/∂B_k = i·Y_k`。
+#[test]
+fn giao_two_electron_field_derivative_matches_the_pyscf_reference() {
+    let (basis, molecule) = converged_state();
+    let density = converged_density(&basis, &molecule);
+    let ours =
+        qwb_integrals::giao_2e::giao_two_electron_field_derivative(&basis, &molecule, &density)
+            .expect("two-electron field derivative");
+    compare(
+        "∂F₂ₑ/∂B",
+        &ours,
+        &references()["two_electron_field_derivative"],
+    );
 }
