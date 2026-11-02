@@ -32,6 +32,7 @@ pub mod attenuated;
 pub mod boys;
 #[cfg(feature = "integral-cache")]
 pub mod cache;
+pub mod core_hamiltonian;
 pub mod deterministic;
 pub mod dipole;
 pub mod giao;
@@ -45,6 +46,9 @@ pub use attenuated::erfc_boys;
 pub use boys::boys_functions;
 #[cfg(feature = "integral-cache")]
 pub use cache::{IntegralCache, fingerprint};
+pub use core_hamiltonian::{
+    core_hamiltonian_field_derivative, core_hamiltonian_field_derivative_with_charges,
+};
 pub use giao::{kinetic_moment_integrals, nuclear_moment_integrals};
 pub use one_electron::{OneElectronIntegrals, one_electron};
 pub use ri::{ThreeCenterIntegrals, inverse_sqrt, three_center, two_center_coulomb};
