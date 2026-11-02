@@ -407,10 +407,12 @@ PR-07:
   note: "**pandas 只在测试里用，不进产品依赖**：`qwb-studio/pyproject.toml` 的 dependencies 仍是 `pydantic>=2`，gate 声明工具链仍是 `mypy numpy pydantic pytest`；pandas 那条用 `pytest.importorskip`，缺了就 skip，不会让 gate 变红。本轮为了真跑那条断言在本地 .venv 装了 pandas 3.1.0（3.12.10 解释器），这是「197 passed」的前提，也记在 docs/choices.md 一百二十八。Rust 与 Python 各有一份 CSV 写出实现（GUI 要能在没有 qwb 二进制时用），一致性靠**冻结的列序常量 + 两侧同一串字面量**保证，不是靠互相调用。`qwb compare` 是只读命令：不重算、不写回结果目录、不改 state。没做「按能量排序 / 归一化到最低能量」这类参考系花样：ΔE 的参考就是命令行给的第一个目录，写在表头与状态行里。另：本轮发现 `t15_paths_props.rs` 的 props 测试没给 `--out`，默认 out root（相对 CWD 的 `results/`）让它每次门禁都把仓库里提交的 `examples/results/h2o_tddft/` 整份重写 —— 已改成临时目录并加before/after 字节断言，那六个文件的脏 diff 也已丢弃，没有混进本提交（见 choices 一百二十八）。"
   choices: "一百二十八"
 PR-08:
-  state: pending
-  note: "文档更新：USAGE 新章节 + 诚实清单与账本一致"
-
-# ───────────────────────── 验证轨（VF，6）─────────────────────────
+  state: done
+  ts: "2026-11-13T21:10:00Z"
+  artifact: "docs/USAGE.md 新增 §9.5「逐项对应的 WP（机器核对）」（36 行，包在 `<!-- honest-list:begin -->` / `<!-- honest-list:end -->` 之间，每行 条目 / 声称 / WP / 缺口） + scripts/check_usage_honest_list.py（纯标准库：从 status-v2.yaml 正则读 82 个 WP 的 state，按 ✅⇒全员 done、⚠⇒无 pending、❌⇒无 done、同一 WP 不许既 ✅ 又 ❌、正文里出现状态标记却没进清单即红；`--self-test` 用三种典型漂移反向验检查器本身） + scripts/verify.ps1 与 scripts/verify.sh 各新增两条步骤（33 → 35 步，两侧同步） + docs/USAGE.md §10.1 步骤数与实测墙钟（310.4 s 总、173.1 s 测试段）、§10.2 新增一行入口、README.md 的门禁条数（35）"
+  verification: "**判据原文**：「文档里每个 ✅ 都能在 status-v2.yaml 找到对应 WP；⚠/❌ 与代码状态一致（人工核对 + 检查脚本）」。三条都实测达成。① **机器核对**：`python scripts/check_usage_honest_list.py` 输出 `ok: 36 honest-list rows checked against 82 ledger WPs (13 ok / 8 partial / 15 missing); no status glyph outside §9.5`（退出 0）；`--self-test` 三种典型漂移全部被抓到：把第一行 ✅ 的 WP 改成 pending 的 IN-03 → `claims 能算 but IN-03 is pending`、把第一行 ❌ 的 WP 改成 done 的 D0-02 → `claims 不能算 but D0-02 is done`、在正文开头加一句带 ✅ 的话 → `status glyph ✅ outside the honest-list block`（退出 0 表示三条都抓到）。两种解释器都跑通：`.venv` 的 3.12 与系统 3.9（脚本纯标准库、不 import PyYAML，与 check_error_budget.py 同一个口径；Windows 控制台是 GBK，脚本自己把 stdout 转成 utf-8，否则打印 ✅ 会 UnicodeEncodeError）。② **人工核对**：§9.1–§9.4 的每一条（方法表、作业类型矩阵、精度现状、明确没做）都在 §9.5 里有对应行，且逐行与台账 state 一致 —— 其中 5 处是这一轮核出来的真实缺口，写在第 4 列：RI-MP2 正确性达标但墙钟慢于 canonical（SC-05）、α(ω)/β 还没进 result.json（ST-02）、幽灵原子只到 `sp`（M2 in_progress）、COSMO 的面积判据仍 blocked（SV-01）、`--threads` 不驱动并行度（IN-05）。③ **门禁**：`scripts/verify.ps1` 与 `scripts/verify.sh` 各加两条同样的步骤（条数与命令逐字对应），`pwsh -NoProfile -File scripts/verify.ps1` **35/35 全绿**、总步时 303.3 s（测试段 170.5 s）。"
+  note: "**为什么是「每句断言都要指认 WP」而不是写一段更漂亮的散文**：散文没法自动验证，而这份文档最危险的句子恰恰是「能算」。所以 §9.5 这张表是**同一批事实的机读版本**：`✅` 要求列出的 WP 全部 `done`、`⚠` 不许出现 `pending`（`pending` 意味着代码没落地，那就不是「能算但有缺口」）、`❌` 不许出现 `done`（也不能拿已完成的工作包当挡箭牌）、同一个 WP 不许在一行 ✅ 在另一行 ❌。**「正文里出现状态标记却没进清单」也算红** ——这一条是关键：没有它，谁都能在正文里顺手加一句「能算」，清单就慢慢退化成摆设；为此 §9.5 标题到清单块之间的解释性文字豁免（规则本身要能写出来）。`--self-test` 是这套逻辑的证据：三种典型漂移在内存里改一遍必须都被抓到，否则「有检查脚本」这句话本身没有证据 —— 与这个项目一贯的做法一致（DA-08 的 `--check`、VF-05 的逐行数字、`gen_d3_params.py --check`）。**没有做的**：§9.1–§9.4 的 ✓/✗ 人读标记不在机检范围（矩阵按作业类型分格，一格一个 WP 会失真），所以那几张表与 §9.5 的对应关系靠「这一轮逐行核过」这句话 + §9.5 的覆盖行数保证，写在这里而不是含糊过去。"
+  choices: 一百八十一
 
 VF-01:
   state: done

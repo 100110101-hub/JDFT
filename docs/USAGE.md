@@ -1112,6 +1112,60 @@ gitignored 的 `qwb-data/reference/_*_staging/raw/` 里，派生物（CSV/JSON�
   `options.threads` 只写进 `env.json`（记 1），不驱动并行度。
 * **`.qwb` 容器**：K4 读写与双向互操作有测试，但 CLI 没有"打包"子命令（Python 侧 `QwbContainer` 可以）。
 
+### 9.5 逐项对应的 WP（机器核对）
+
+§9.1–§9.4 是给人读的；这张表是**同一批事实的机读版本**，由门禁
+`scripts/check_usage_honest_list.py` 对着 `docs/status-v2.yaml` 的 `state` 核对：
+
+* `✅` 要求列出的 WP **全部** `done`（说"能算"必须有已验收的工作包撑着）；
+* `⚠` 不许出现 `pending`（`pending` 意味着代码还没落地，那就不是"能算但有缺口"）；
+* `❌` 不许出现 `done`（也不能拿已完成的工作包当"不能算"的挡箭牌）；
+* 文档里任何位置出现 `✅/⚠/❌` 却没进这张表 → 门禁红（"顺手在正文里夸一句能算"写不进去）。
+
+`⚠` 的意思是「能算，但有记账的缺口」，缺口写在第 4 列。阶段一就有的能力（闭壳层单点、
+ECP、频率库函数）在 `docs/status.yaml`；这里只列阶段二台账里能对上号的条目。
+
+<!-- honest-list:begin -->
+| 条目 | 声称 | WP | 缺口 / 依据 |
+|---|---|---|---|
+| 闭壳层单点：`hf`/`svwn5`/`pbe`/`b88`/`pbe0`/`m06-l` | ✅ | VF-01, FX-01, FX-02 | CCCBDB 对账 + τ 管线 |
+| 开壳层 UHF 单点（`scf_type: uhf`） | ✅ | SC-01 | 与 PySCF 差 3e-8 |
+| 开壳层 UHF 解析梯度 + `opt` | ✅ | SC-02 | 解析 vs 数值 7.3e-7 Ha/Bohr |
+| 开壳层 UKS 单点（`svwn5`/`pbe`） | ✅ | SC-01b, M1b | O2/OH 与 PySCF 5.8e-7…1.1e-6 |
+| 开壳层 UKS × meta-GGA（τ 通道） | ✅ | SC-06 | M06-L/M06-2X 端到端 3.3e-5…4.5e-5 Ha |
+| ROHF（纯自旋）单点与数值梯度 `opt` | ✅ | SC-01c, M1c | 5 体系最差 3.6e-8，⟨S²⟩ 精确 |
+| canonical MP2 | ✅ | SC-04 | 与参考差 < 0.1 mHa |
+| RI-MP2 | ⚠ | SC-05 | 正确性达标，但苯/def2-SVP 墙钟 48.3 s > canonical 7.1 s（记账，不改判据） |
+| 激发态 CIS/TDA/TDDFT（**HF 参考**） | ✅ | RS-02, RS-03, ST-01 | 与 PySCF 5e-7 eV |
+| DFT 参考的 TDDFT（要 `f_xc` 进响应矩阵） | ❌ | FX-03 | 非 `hf` 参考显式拒绝并点名 FX-03 |
+| 动态极化率 α(ω) 与一阶超极化率 β | ⚠ | ST-02 | 库函数 + 测试有，尚未进 `result.json` |
+| 多极展开（traceless 四极 / 八极） | ✅ | RS-08 | — |
+| 色散 D3(BJ)/D3(0)（含开壳层与线程确定性） | ✅ | FX-04, DA-06 | 对官方 s-dftd3 逐项 |
+| 幽灵原子 / counterpoise（BSSE）单点 | ⚠ | M2 | 只支持 `sp`；色散/ECP/溶剂未审，显式拒绝 |
+| COSMO / C-PCM 单点 | ⚠ | SV-01 | 面积判据仍 blocked（解析球帽已部分落地）；缺非极性项 |
+| SMD | ❌ | SV-03 | `E_CD`/`E_S`/`E_C` 的参数在付费墙后，没有本地 oracle |
+| 溶剂化解析梯度 / 优化 | ❌ | SV-02 | 依赖 SV-01 |
+| 溶液相频率 / 热化学 | ❌ | SV-05 | 依赖 SV-01/SV-02 |
+| `jobtype: freq`（解析 Hessian） | ❌ | RS-05 | 20× 的两条前提都不成立（blocked） |
+| GIAO NMR 屏蔽 | ❌ | RS-04 | 缺 London 复基组层（common-origin 下 O 差 1.50 ppm） |
+| Raman 活性 | ❌ | RS-06 | 要简正模式 → 要 RS-05 |
+| VCD | ❌ | RS-07 | pending |
+| TS / IRC / 扫描（PES） | ❌ | RP-01, RP-02, RP-03 | CLI 只落签名，退出码 4 |
+| 近似路径：pseudospectral / RI-J 的 Fock 构建 | ❌ | IN-03, IN-04 | 都受 K10 等价性门禁约束，`options.numerics` 退出码 4 |
+| ωB97X-D / CAM-B3LYP / B3LYP | ❌ | DA-03 | LYP 要 `∇²ρ`，K1 冻结契约拒绝 `requires.laplacian` |
+| EPR 超精细耦合 | ❌ | ST-05 | 未过 K10（anchor 定标仍差 0.169% 量级之外的判据） |
+| LMP2 | ❌ | ST-03 | pending |
+| pKa 工作流 | ❌ | ST-04 | pending |
+| 溶剂化自由能 / 势垒 / NMR 基准集 | ❌ | VF-02, VF-03, VF-04 | 都没有参考集（DA-08 卡在 SV-01/SV-03） |
+| GPU：`gemm`、显存预算 + 自动回退、AO→MO（60.8×） | ⚠ | EX-01, EX-02, EX-03 | 格点 XC 的 GPU 核要 NVRTC/cubin（另一类 unsafe 面），EX-03 blocked |
+| `--threads` / `options.threads` 驱动并行度 | ⚠ | IN-05 | Fock 构建按行并行（确定性归约），但线程数只写进 `env.json`，4 指标张量仍单线程 |
+| 开壳层的布居 / cube | ⚠ | SC-01b | 只有 α 套轨道，宁可不写（§3.4） |
+| `.qwb` 容器的 CLI 打包子命令 | ⚠ | PR-03 | 容器读写与双向互操作有测试，CLI 没有"打包"子命令 |
+| Python 绑定（pyo3）与 `.pyi` 类型面 | ✅ | PR-02, KV-05 | 与 CLI 能量逐位相同；桩里声明就得实现 |
+| `qwb compare` 对比表 | ✅ | PR-07 | 只读，与各任务 `result.json` 差 < 1e-10 |
+| UV-Vis 展宽谱块（`uv_vis_spectrum`） | ✅ | PR-04 | 展宽参数版本化 + sha256 钉住 |
+<!-- honest-list:end -->
+
 ---
 
 ## 10. 验收与门禁
@@ -1126,7 +1180,7 @@ pwsh -NoProfile -File scripts\verify.ps1
 bash scripts/verify.sh
 ```
 
-**33 个步骤**：
+**35 个步骤**：
 
 1. 3 个 bash 策略门禁：依赖集中（`check_deps_centralized.sh`）、unsafe 白名单
    （`check_unsafe.sh`）、rayon 确定性（`check_rayon_determinism.sh`）；
@@ -1137,8 +1191,8 @@ bash scripts/verify.sh
    I-06 积分缓存（feature on）、I-00 faer 后端（另一套产物）、`cargo deny`、K1 schema 不漂移、
    G2 数据校验（`qwb data verify`）；
 5. 数据与参考：D-15 数据许可一致、DA-08 参考集逐行带来源、VF-05 误差预算逐行可核、
-   DA-06 三条（色散数据对上游、对 s-dftd3 的能量与梯度、零阻尼单独一条）、VF-06 等价性差异表
-   （**报告模式**）；
+   PR-08 诚实清单与账本一致（+ 检查器自测）、DA-06 三条（色散数据对上游、对 s-dftd3 的能量与
+   梯度、零阻尼单独一条）、VF-06 等价性差异表（**报告模式**）；
 6. 账本合法性：`docs/status.yaml` 与 `docs/status-v2.yaml`（两份都要能解析）；
 7. Python 侧：K6 `mypy --strict` ×2、pyo3 crate 的 fmt/clippy、maturin 构建并安装 wheel、
    `qwb-studio` pytest（**两条泳道**：一个 42–45 s 的 GUI 压力测试独占一条，其余并发；
@@ -1148,7 +1202,8 @@ bash scripts/verify.sh
 
 | 情形 | 总墙钟 | 测试段 |
 |---|---|---|
-| 暖路径（源码没动，只有增量链接） | **279–322 s（4.7–5.4 min）** | **155–161 s** |
+| 暖路径（源码没动，只有增量链接） | **279–322 s（4.7–5.4 min）** | **155–175 s** |
+| 暖路径（第 387 轮末次实测：K2 校验 + 文档门禁，其余增量） | **303.3 s（5.1 min）** | **170.5 s** |
 | 冷路径（改了共享类型） | 976 s（16.3 min） | 161 s（编译 518 s 单独一步） |
 
 目标里的两个硬指标是**测试段 ≤ 8 min、总墙钟 ≤ 15 min**：前两条达成；冷路径 16.3 min 如实记在
@@ -1168,6 +1223,7 @@ bash scripts/verify.sh
 | 数据校验 | `cargo run -q -p qwb-cli --bin qwb -- data verify` |
 | 第三方数据体检 / 取回 | `python scripts\fetch_data.py --check`（缺则 `--all`） |
 | 账本合法性 | `python scripts\check_status.py`（阶段二账本加参数 `docs/status-v2.yaml`） |
+| 诚实清单与账本对账 | `python scripts\check_usage_honest_list.py`（`--self-test` 跑检查器自测：三种漂移必须被抓到） |
 | 数据许可一致性 | `python scripts\gen_data_licenses.py --check` |
 | K10 等价性差异表 | `python scripts\check_numerics_equivalence.py --report` |
 

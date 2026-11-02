@@ -68,6 +68,9 @@ step "data: DATA_LICENSES.md 与数据一致（D-15）"
 python scripts/gen_data_licenses.py --check
 step "data: 参考集逐行带来源（DA-08）" python scripts/check_reference_sources.py
 step "data: 误差预算逐行可核（VF-05）" python scripts/check_error_budget.py
+# PR-08：USAGE §9.5 的诚实清单与台账一致；再跑 --self-test 证明这条检查抓得住漂移。
+step "docs: USAGE 诚实清单与账本一致（PR-08）" python scripts/check_usage_honest_list.py
+step "docs: 诚实清单检查器自测（PR-08）" python scripts/check_usage_honest_list.py --self-test
 
 # DA-06：色散数据能从上游源码重新生成（容差 0），且能复现官方 s-dftd3 的能量与梯度。
 # 前者读 .d3-upstream 缓存（缺失时取回），后者只读仓库里的参考 CSV，都不需要 WSL。

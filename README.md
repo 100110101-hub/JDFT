@@ -110,7 +110,7 @@ qwb data install                    # 或 python scripts\fetch_data.py --all
 完整的"能算什么/不能算什么"、判据数字与出处见 [`docs/USAGE.md`](./docs/USAGE.md) §9、
 [`docs/error-budget.md`](./docs/error-budget.md) 与两份账本。
 
-## 一条命令跑完所有门禁（33 项）
+## 一条命令跑完所有门禁（35 项）
 
 ```powershell
 # Windows（三个 bash 门禁会通过 WSL 跑）

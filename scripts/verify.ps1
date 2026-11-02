@@ -196,6 +196,18 @@ Step -Name 'VF-05: docs/error-budget.md rows are measured' -Dir '.' -Body {
     & python scripts/check_error_budget.py
 }
 
+# ---- PR-08: the USAGE honest list must not drift from the ledger ----
+# §9.5 的每一行都指明 WP：`✅` 要求列出的 WP 全部 done、`⚠` 不许 pending、`❌` 不许 done；
+# 正文里出现状态标记却没进清单也算红。第二条跑 `--self-test`：三种典型漂移（✅ 指向 pending、
+# ❌ 指向 done、正文里"夸一句能算"）必须都被抓到 —— 否则"有检查脚本"这句话本身没有证据。
+Step -Name 'PR-08: USAGE honest list matches the ledger' -Dir '.' -Body {
+    & python scripts/check_usage_honest_list.py
+}
+
+Step -Name 'PR-08: honest-list checker catches drift (self-test)' -Dir '.' -Body {
+    & python scripts/check_usage_honest_list.py --self-test
+}
+
 # DA-06：色散数据必须能从上游源码重新生成（逐项比较，容差 0），并且能与官方实现的
 # 参考值对上（能量与解析梯度）。两条都是离线可跑的：前者读 `.d3-upstream` 缓存
 # （缺失时按 `UPSTREAM` 取回），后者只读仓库里的 CSV。
