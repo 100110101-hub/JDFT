@@ -34,6 +34,7 @@ pub mod boys;
 pub mod cache;
 pub mod deterministic;
 pub mod dipole;
+pub mod giao;
 pub mod hermite2e;
 pub mod one_electron;
 pub mod ri;
