@@ -385,7 +385,9 @@ impl JobInput {
     /// 阶段二（phase-2 §4.4）再加三条**跨字段**检查（只在显式给新选项时生效）：
     /// ① `scf_type` 与 `method_name` 必须同类（HF 变体 ↔ `hf`）；
     /// ② 开壳层 `scf_type` 要求 `multiplicity > 1`，闭壳层要求 `multiplicity == 1`；
-    /// ③ MP2 只支持闭壳层参考（`rhf`/`rks`），开壳层 MP2 还没实现。
+    /// ③ MP2 只支持闭壳层参考（`rhf`/`rks`），开壳层 MP2 还没实现；
+    /// ④ `multiplicity > 1` 必须显式给 `scf_type`：缺省路径是闭壳层，它代表不了自旋态
+    ///    （第 387 轮加，修掉"O2 三重态不写 `scf_type` 就静默算成闭壳层"的缺陷）。
     ///
     /// # Errors
     ///
@@ -411,6 +413,18 @@ impl JobInput {
     /// 阶段二选项的跨字段校验（抽出成独立方法，便于单测逐条覆盖）。
     fn validate_phase2_options(&self) -> Result<(), EngineError> {
         let is_hf = self.method_name.trim().eq_ignore_ascii_case("hf");
+        // ④ 省略 `scf_type` 时缺省是闭壳层，而闭壳层代表不了自旋态：O2 三重态有 16 个电子
+        // （偶数），旧行为会静默算成**能量高 0.616 Ha 的错态**并返回退出码 0（实测：不写
+        // `scf_type` 得 −147.0158990576 Ha，写 `scf_type: rohf` 得 −147.6321670245 Ha）。
+        // 这种"算得出来但是错态"的输入必须拒绝并点名字段 —— 不替用户猜 uhf/rohf/uks。
+        if self.options.scf_type.is_none() && self.molecule.multiplicity != 1 {
+            return Err(EngineError::InvalidInput(format!(
+                "molecule.multiplicity = {} needs an explicit options.scf_type: the default \
+                 path is closed-shell (rhf/rks) and cannot represent a spin state. \
+                 Use `rohf` or `uhf` for Hartree-Fock, `uks` for a density functional",
+                self.molecule.multiplicity
+            )));
+        }
         if let Some(scf_type) = self.options.scf_type {
             if scf_type.is_hartree_fock() != is_hf {
                 return Err(EngineError::InvalidInput(format!(
@@ -659,6 +673,29 @@ mod tests {
         input.molecule.multiplicity = 3;
         input.options.scf_type = Some(ScfType::Rks);
         assert!(input.validate().is_err(), "三重态 + rks 不合法");
+    }
+
+    #[test]
+    fn a_spin_state_needs_an_explicit_scf_type() {
+        // 第 387 轮：省略 `scf_type` 的缺省路径是闭壳层，它代表不了多重态。旧行为把 O2
+        // 三重态（16 电子，偶数）静默算成能量高 0.616 Ha 的闭壳层态并返回成功。
+        let mut input = h2_input();
+        input.molecule.multiplicity = 3;
+        let message = input
+            .validate()
+            .expect_err("多重度 3 且没给 scf_type 必须拒绝")
+            .to_string();
+        assert!(message.contains("scf_type"), "{message}");
+        assert!(message.contains("multiplicity = 3"), "{message}");
+
+        // 单重态的老路径不受影响。
+        assert!(h2_input().validate().is_ok(), "单重态的缺省闭壳层仍然合法");
+
+        // 给了 `scf_type` 之后就由 ①② 那两条规则管，不再撞这条守卫。
+        let mut input = h2_input();
+        input.molecule.multiplicity = 3;
+        input.options.scf_type = Some(ScfType::Uks);
+        assert!(input.validate().is_ok());
     }
 
     #[test]

@@ -208,9 +208,11 @@ impl TaskRecord {
 #[cfg(test)]
 mod tests {
     use super::{TaskRecord, TaskState, TransitionError};
-    use qwb_engine_api::{Atom, GridLevel, JobInput, JobType, Molecule, TaskOptions};
+    use qwb_engine_api::{Atom, GridLevel, JobInput, JobType, Molecule, ScfType, TaskOptions};
 
     fn input() -> JobInput {
+        // H 原子是双重态：`multiplicity = 2` 必须配一个开壳层 `scf_type`（第 387 轮起
+        // K2 会拒绝"多重度 > 1 但没写 scf_type"的输入，这里只是任务记录用的夹具）。
         JobInput::new(
             Molecule::new(vec![Atom::new("H", [0.0, 0.0, 0.0])], 0, 2),
             "sto-3g",
@@ -218,7 +220,7 @@ mod tests {
             GridLevel::Normal,
             "vacuum",
             JobType::Sp,
-            TaskOptions::default(),
+            TaskOptions::default().with_scf_type(ScfType::Uks),
         )
     }
 

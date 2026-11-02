@@ -1730,6 +1730,18 @@ fn closed_shell_electrons(molecule: &Molecule) -> Result<usize, EngineError> {
 /// 否则旧输入会被无故拒绝。每条错误都指向负责它的 WP，便于把"还没做"和"不支持"分开。
 fn reject_unimplemented_options(input: &JobInput) -> Result<(), EngineError> {
     let options = &input.options;
+    if options.scf_type.is_none() && input.molecule.multiplicity != 1 {
+        // 缺省路径是闭壳层，它代表不了 `multiplicity > 1` 的自旋态。旧行为会算出一个
+        // **能量高 0.616 Ha 的闭壳层态**并返回成功（O2 三重态实测 −147.0158990576 vs
+        // ROHF −147.6321670245），那是最坏的一类静默降级：结果看着正常、退出码 0。
+        // K2 的 `validate` 也挡一次，但直接走 Engine API 的调用方不经过它。
+        return Err(EngineError::InvalidInput(format!(
+            "molecule.multiplicity = {} needs an explicit options.scf_type: the default \
+             path is closed-shell (rhf/rks) and cannot represent a spin state. \
+             Use `rohf` or `uhf` for Hartree-Fock, `uks` for a density functional",
+            input.molecule.multiplicity
+        )));
+    }
     if options.epr {
         // ST-05：EPR 是**自旋密度**的性质。闭壳层的自旋密度恒为零，报出来全是 0 —— 那等于
         // 静默失败，所以显式拒绝（K2 的 `validate` 也查一遍，但直接走 Engine API 的调用方
@@ -1749,8 +1761,8 @@ fn reject_unimplemented_options(input: &JobInput) -> Result<(), EngineError> {
     }
     if let Some(scf_type) = options.scf_type {
         // 阶段二已接：闭壳层 KS/RHF（阶段一行为）、**UHF**（SC-01）、**UKS**（SC-01b）、
-        // **ROHF**（SC-01c，第 383 轮接线；4/5 体系与 PySCF 一致到 1e-8，NH2 仍落进错的盆地，
-        // 见台账 SC-01c 的 gap）。ROHF 只在 Hartree-Fock 方法上可用（DFT 走 UKS/RKS）。
+        // **ROHF**（SC-01c，第 383 轮接线；5/5 体系与 PySCF 一致到 3.6e-8）。ROHF 只在
+        // Hartree-Fock 方法上可用（DFT 走 UKS/RKS）。
         let supported = matches!(
             scf_type,
             qwb_engine_api::ScfType::Rks
@@ -1760,10 +1772,11 @@ fn reject_unimplemented_options(input: &JobInput) -> Result<(), EngineError> {
                 | qwb_engine_api::ScfType::Rohf
         );
         if !supported {
+            // 目前 5 个变体都已接线，这条只剩"将来枚举加新变体"的兜底：不认识的就拒，
+            // 不能静默按闭壳层算。
             return Err(EngineError::Unsupported(format!(
-                "options.scf_type = `{}` is not wired yet \
-                 (ROHF is phase-2 SC-01c, currently blocked: the Guest–Saunders effective \
-                 Fock converges to the wrong stationary point, see docs/status-v2.yaml)",
+                "options.scf_type = `{}` is not wired yet (rks/rhf/uhf/uks/rohf are all \
+                 wired; a new variant needs its own WP)",
                 scf_type.as_str()
             )));
         }

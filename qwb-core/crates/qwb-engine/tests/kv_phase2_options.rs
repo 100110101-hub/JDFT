@@ -191,6 +191,30 @@ fn rejection_happens_before_any_numerics() {
 }
 
 #[test]
+fn a_spin_state_without_scf_type_is_rejected_by_the_engine_too() {
+    // 第 387 轮：K2 的 `validate` 会挡这条，但直接走 Engine API 的调用方不经过它 ——
+    // 旧行为是静默算成闭壳层（O2 三重态 −147.0158990576 vs ROHF −147.6321670245）。
+    let started = Instant::now();
+    let error = backend()
+        .run(&input("hf", 3, TaskOptions::default()), &NullReporter)
+        .expect_err("多重度 3 且没有 scf_type：引擎必须拒绝，不能算成闭壳层");
+    let elapsed = started.elapsed();
+    match error {
+        EngineError::InvalidInput(message) => {
+            assert!(message.contains("scf_type"), "{message}");
+            assert!(message.contains("multiplicity = 3"), "{message}");
+        }
+        other => panic!("期望 InvalidInput（退出码 1），得到 {other:?}"),
+    }
+    assert!(
+        elapsed.as_millis() < 1000,
+        "拒绝发生在数值计算之后？耗时 {elapsed:?}"
+    );
+    // 正面那一半（补上 `scf_type` 之后真能算）由 `qwb-cli` 的 `t18_open_shell_guard`
+    // 在 O2 三重态上验：那需要一次真的 ROHF SCF，放在这条 "守卫不烧 CPU" 的用例里不合适。
+}
+
+#[test]
 fn result_blocks_round_trip_through_the_k2_types() {
     // KV-01/KV-03 的产物要能被"拼进"结果并原样读回（引擎实现前的最小可用性检查）。
     let spin = SpinResult::new(5, 5, 3, 2.0);
