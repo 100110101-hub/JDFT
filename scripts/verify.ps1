@@ -225,12 +225,13 @@ Step -Name 'DA-06: zero-damping data reproduces s-dftd3' -Dir '.' -Body {
     & $script:ledgerPython scripts/validate_d3_data.py --zero --tolerance 1e-8
 }
 
-# VF-06：K10 的等价性差异表。**目前是报告模式**（`--report`）：RI-MP2 vs canonical MP2
+# VF-06：K10 的等价性差异表。**v3.2 起是强制模式**（此前为 `--report`）：RI-MP2 vs canonical MP2
 # 实测差 8.526e-05 Ha，而 `numerics.yaml` 声明的 `ri` 容差是 1e-6 —— 差的是**辅助基不完备**
 # 而不是实现（同一差值就是 SC-05 记的 ri_error）。把这条从报告改成判红，需要先把
-# K10 的容差重新界定（实现等价 vs 辅助基质量），那是改验收标准，要 bump 数据版本。
-Step -Name 'VF-06: K10 equivalence table (report mode, tolerance under review)' -Dir '.' -Body {
-    & $script:ledgerPython scripts/check_numerics_equivalence.py --report
+# K10 的容差已于 v3.2 重新界定（`ri` 1e-6 -> 2e-4，把「实现等价」与「辅助基质量」分开，
+# 见 project-phase2.md §4.5 修订 1 与 choices 二百）；数据版本随之 bump。
+Step -Name 'VF-06: K10 equivalence table (enforcing since v3.2)' -Dir '.' -Body {
+    & $script:ledgerPython scripts/check_numerics_equivalence.py
 }
 
 # ---- 10.6: the project ledger must stay machine-readable ----

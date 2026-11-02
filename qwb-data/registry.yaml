@@ -128,7 +128,7 @@ smd_atomics:
 numerics:
   - name: numerics
     path: numerics/numerics.yaml
-    sha256: 7013e40da43be893d5966217321ca2aab8d055f100a2ac35f51ed9c5712be6fa
+    sha256: f3b34d54231b2ac22190a4c072d21e14304565aa23f2cabd4ae251619343c543
 
 # DA-04：溶剂数据（K1 `solvent`）。`radii_set` 必须显式声明 —— 混用半径集会静默错数，
 # 所以 K1 里它是必填的声明字段而不是默认值。

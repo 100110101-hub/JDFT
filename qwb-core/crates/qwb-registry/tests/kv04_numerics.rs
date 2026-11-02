@@ -113,8 +113,23 @@ fn shipped_numerics_data_is_valid() {
         def.level(3).map(|l| l.grid_level.as_str()),
         Some("grid-normal")
     );
-    // K10 的容差：RI 比 PS 严
-    assert!(def.tolerance_hartree("ri") < def.tolerance_hartree("pseudospectral"));
+    // K10 的容差：两条都必须「正且有限、且 < 1e-3 Ha」。
+    //
+    // v3.2 之前这里断言的是「RI 比 PS 严」—— 那是一条**结构性假设**（RI 只是拟合误差），
+    // 不是 K10 的判据。`ri` 重定为 `2e-4`（project-phase2.md §4.5 修订 1、`docs/choices.md` 二百）之后
+    // 这个排序不再成立，也不该成立：K10 比的是总能量，而 RI-MP2 与 canonical 的差由
+    // **辅助基不完备**决定（水/STO-3G 实测 8.526e-5 Ha，随辅助基加大单调下降），
+    // 与 PS 的 5e-5 不是同一类量，没有可比的大小关系。
+    // 真正被钉住的是下面两条 + registry 的校验（>0、有限、< 1e-3）+ K10 的三条门禁。
+    for label in ["ri", "pseudospectral"] {
+        let tolerance = def.tolerance_hartree(label);
+        assert!(tolerance > 0.0, "{label} must be positive");
+        assert!(
+            tolerance < 1.0e-3,
+            "{label} must stay below the 1e-3 hard bound"
+        );
+    }
+    assert_eq!(def.tolerance_hartree("ri"), 2.0e-4);
     // 引用的网格必须真实存在（这里直接对着仓库的 registry 校验）
     let registry = Registry::open(repo_root().join("qwb-data")).expect("仓库数据根能加载");
     for reference in def.grid_level_refs() {

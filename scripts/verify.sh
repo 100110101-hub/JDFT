@@ -77,7 +77,7 @@ step "docs: 诚实清单检查器自测（PR-08）" python scripts/check_usage_h
 step "data: 色散数据与上游逐项一致（DA-06）" "$PY" scripts/gen_d3_params.py --check
 step "data: 色散数据复现官方 s-dftd3（DA-06）" "$PY" scripts/validate_d3_data.py
 step "data: 零阻尼数据复现官方 s-dftd3（DA-06）" "$PY" scripts/validate_d3_data.py --zero --tolerance 1e-8
-step "data: K10 等价性差异表（VF-06，报告模式）" "$PY" scripts/check_numerics_equivalence.py --report
+step "data: K10 等价性差异表（VF-06，v3.2 起强制）" "$PY" scripts/check_numerics_equivalence.py
 step "data: status.yaml 账本可解析（§10.6）"
 python scripts/check_status.py
 step "data: status-v2.yaml 账本可解析（阶段二 §10.6）"

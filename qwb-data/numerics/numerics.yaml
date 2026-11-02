@@ -1,4 +1,7 @@
-sha256: 7013e40da43be893d5966217321ca2aab8d055f100a2ac35f51ed9c5712be6fa
+sha256: f3b34d54231b2ac22190a4c072d21e14304565aa23f2cabd4ae251619343c543
+equivalence_tolerance:
+  ri: 0.0002
+  pseudospectral: 0.00005
 spectrum_defaults:
   gaussian_hwhm_ev: 0.4
   grid_step_ev: 0.05
@@ -47,6 +50,3 @@ levels:
   ps:
     collocation_points_per_atom: 180
     de_aliasing: true
-equivalence_tolerance:
-  ri: 1e-6
-  pseudospectral: 0.00005

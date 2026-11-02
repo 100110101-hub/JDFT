@@ -939,7 +939,7 @@ fine 99×590、veryfine 140×（见 `qwb-data/grid/*.yaml`）。`numerics.yaml` 
 
 * `levels[].grid_level` 只是**引用** `grid/*.yaml` 的 `name` —— 网格参数仍然只有一份；
 * `levels[].ps` 是 pseudospectral 路径的配点配置；等级越高配点必须越多，去别名一旦打开不许关回去；
-* `equivalence_tolerance` 是**验收判据**（`ri: 1e-6`、`pseudospectral: 5e-5`），不是文献值；
+* `equivalence_tolerance` 是**验收判据**（`ri: 2e-4`、`pseudospectral: 5e-5`；`ri` 于 v3.2 由 `1e-6` 重定，理由见 `project-phase2.md` §4.5 修订 1 与 `choices` 二百），不是文献值；
 * `spectrum_defaults` 是 UV/Vis 展宽参数（HWHM 0.4 eV、步长 0.05 eV、padding 6 HWHM）。
 
 **一处已知的不一致（VF-06，in_progress）**：`ri` 的 1e-6 想约束的是"两种算法实现同一数学对象"，

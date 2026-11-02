@@ -37,7 +37,7 @@
 | `qwb-data/grid/grid-fine.yaml` | 1.0.0 | Apache-2.0 | true | true | `25080b62b80416b1` |
 | `qwb-data/grid/grid-normal.yaml` | 1.0.0 | Apache-2.0 | true | true | `a792b362b1fdb278` |
 | `qwb-data/grid/grid-veryfine.yaml` | 1.0.0 | Apache-2.0 | true | true | `5c630f5a1ec0688d` |
-| `qwb-data/numerics/numerics.yaml` | 1.1.0 | Apache-2.0 | true | true | `7013e40da43be893` |
+| `qwb-data/numerics/numerics.yaml` | 1.1.0 | Apache-2.0 | true | true | `f3b34d54231b2ac2` |
 | `qwb-data/registry.yaml` | 0.19.0 | ? | ? | ? | `—（manifest，条目各自带` |
 | `qwb-data/solvent/acetonitrile.yaml` | 2.1.0 | Apache-2.0 | true | true | `56d58923014a0c54` |
 | `qwb-data/solvent/chloroform.yaml` | 2.1.0 | Apache-2.0 | true | true | `c38ee6eaf924c523` |
