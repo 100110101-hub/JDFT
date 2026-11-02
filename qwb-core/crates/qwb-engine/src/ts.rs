@@ -311,6 +311,37 @@ pub struct TsSearchOutcome {
     pub hessian_eigenvalues: Vec<f64>,
 }
 
+/// 把收敛的鞍点装成 [`crate::OptReport`]，让 CLI 的产物通路（`optimized.xyz` +
+/// `optimization.json`）对 `ts` 也能用 —— 鞍点几何是 IRC/GUI 的输入，必须落盘。
+#[must_use]
+pub fn to_report(outcome: &TsSearchOutcome) -> crate::OptReport {
+    let dof = outcome.gradient.len();
+    let mut gradient = Vec::with_capacity(dof / 3);
+    for atom in 0..dof / 3 {
+        gradient.push([
+            outcome.gradient[3 * atom],
+            outcome.gradient[3 * atom + 1],
+            outcome.gradient[3 * atom + 2],
+        ]);
+    }
+    crate::OptReport {
+        molecule: outcome.molecule.clone(),
+        energy_hartree: outcome.energy_hartree,
+        gradient,
+        iterations: outcome.iterations,
+        converged: true,
+        used_analytic_gradient: true,
+        analytic_fallback: None,
+        trajectory: vec![(
+            outcome.energy_hartree,
+            outcome
+                .gradient
+                .iter()
+                .fold(0.0_f64, |acc, value| acc.max(value.abs())),
+        )],
+    }
+}
+
 /// 把搜索结果装进 K2 的块。
 #[must_use]
 pub fn to_api(outcome: &TsSearchOutcome) -> TsResult {

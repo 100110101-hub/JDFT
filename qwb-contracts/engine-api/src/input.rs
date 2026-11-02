@@ -60,6 +60,9 @@ pub enum JobType {
     /// 过渡态搜索（phase-2 `RP-01`）。
     #[serde(alias = "Ts", alias = "TS")]
     Ts,
+    /// 内禀反应坐标（phase-2 `RP-02`）。
+    #[serde(alias = "Irc", alias = "IRC")]
+    Irc,
 }
 
 impl JobType {
@@ -72,6 +75,7 @@ impl JobType {
             Self::Freq => "freq",
             Self::Scan => "scan",
             Self::Ts => "ts",
+            Self::Irc => "irc",
         }
     }
 }
@@ -112,6 +116,9 @@ pub struct TaskOptions {
     /// 没有意义，静默当成单点会给出一个看起来成功的单点结果。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub scan: Option<crate::pes::ScanOptions>,
+    /// IRC 的选项（`jobtype: irc`）；`None` = 用缺省（200 步、0.1、双向）。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub irc: Option<crate::irc::IrcOptions>,
     /// 过渡态搜索的选项（`jobtype: ts`）；`None` = 不搜索。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ts: Option<crate::ts::TsOptions>,
@@ -244,6 +251,7 @@ impl Default for TaskOptions {
             ecp_name: None,
             scan: None,
             ts: None,
+            irc: None,
             symmetry_number: 1,
             scf_type: None,
             mp2: None,
@@ -261,6 +269,13 @@ impl TaskOptions {
     #[must_use]
     pub fn with_scan(mut self, scan: crate::pes::ScanOptions) -> Self {
         self.scan = Some(scan);
+        self
+    }
+
+    /// 设置 IRC（`jobtype: irc`）。
+    #[must_use]
+    pub fn with_irc(mut self, irc: crate::irc::IrcOptions) -> Self {
+        self.irc = Some(irc);
         self
     }
 

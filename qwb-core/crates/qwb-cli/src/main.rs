@@ -276,9 +276,11 @@ fn dispatch(cli: &Cli) -> CliResult<()> {
         Command::Compare(args) => cmd_compare(args),
         // RP-01：过渡态搜索已接线（`jobtype: ts` + 可选 `options.ts`）。
         Command::Ts(args) => cmd_ts(args),
+        // RP-02：**机制已写但还没验收**（端到端一轮 > 10 min 没跑完，见 status-v2.yaml 的 RP-02）。
+        // 在产品面上仍然拒绝：一个会跑十分钟还不收敛的 `irc` 比"未实装"更难处理。
         Command::Irc(args) => cmd_not_implemented(
             "irc",
-            "intrinsic reaction coordinate lands with M6 (RP-02)",
+            "intrinsic reaction coordinate is wired internally but not validated yet (RP-02)",
             Some(&args.input_yaml),
         ),
         // RP-03：PES 扫描已接线（`jobtype: scan` + `options.scan`）；`ts`/`irc` 仍按签名拒绝。

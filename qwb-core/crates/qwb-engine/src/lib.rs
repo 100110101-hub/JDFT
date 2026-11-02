@@ -28,6 +28,7 @@ pub mod cosmo_scf;
 pub mod env;
 pub mod gradient;
 pub mod hessian;
+pub mod irc;
 pub mod opt;
 pub mod scan;
 pub mod ts;
@@ -1457,6 +1458,131 @@ impl RksBackend {
         Ok(job)
     }
 
+    /// IRC（`Irc`，phase-2 `RP-02`）：从一阶鞍点沿质量加权最陡下降路径走向两端极小点。
+    ///
+    /// 起点必须是一阶鞍点（真虚频恰好一个）：判据与 `ts` 同源 —— 只计波数 < −100 cm⁻¹ 的
+    /// 真虚频，零模噪声不算。每端先按能量定方向（`±v` 哪边下降就选哪边），再逐步下降、
+    /// 只接受让能量降低的步；到极小点后**再做一次自由优化**，端点几何与内坐标指纹落盘。
+    fn run_irc(&self, input: &JobInput, reporter: &dyn Reporter) -> Result<JobResult, EngineError> {
+        if let Some(ecp_name) = &input.options.ecp_name {
+            return Err(EngineError::Unsupported(format!(
+                "IRC with an ECP (`{ecp_name}`) is not implemented: the ECP derivative w.r.t. \
+                 nuclear coordinates is missing (I-05 covers energies only)"
+            )));
+        }
+        if input
+            .options
+            .scf_type
+            .is_some_and(|scf_type| scf_type.is_open_shell())
+        {
+            return Err(EngineError::Unsupported(
+                "IRC is implemented for closed-shell HF/KS only".to_string(),
+            ));
+        }
+        let options_irc = input.options.irc.clone().unwrap_or_default();
+        if !(options_irc.step_size.is_finite() && options_irc.step_size > 0.0) {
+            return Err(EngineError::InvalidInput(format!(
+                "options.irc.step_size = {} must be a positive number",
+                options_irc.step_size
+            )));
+        }
+        let spec = self.spec(input)?;
+        let mut options = opt::OptOptions::new(
+            &input.basis_name,
+            spec.functional_name.clone(),
+            spec.grid_name.clone(),
+        );
+        options.max_iterations = options_irc.max_steps;
+        options.scf_max_iter = input.options.scf_max_iter;
+        options.scf_energy_threshold = input.options.scf_energy_threshold_hartree;
+        options.scf_density_threshold = input.options.scf_density_threshold;
+        options.scf_type = input.options.scf_type;
+        options.force_threshold = input.options.opt_gradient_threshold_hartree_per_bohr;
+
+        reporter.progress("irc", 0.0);
+        reporter.log(&format!(
+            "jobtype = irc, method = {}, basis = {}, grid = {}, step = {} sqrt(amu) Bohr, \
+             max steps = {}, direction = {}",
+            if spec.functional_name.is_empty() {
+                "hf".to_string()
+            } else {
+                spec.functional_name.clone()
+            },
+            input.basis_name,
+            spec.grid_name,
+            options_irc.step_size,
+            options_irc.max_steps,
+            options_irc.direction.as_str()
+        ));
+        let (mode, wavenumber) = irc::saddle_mode(&self.registry, &input.molecule, &options)?;
+        reporter.log(&format!(
+            "irc: starting saddle has one imaginary mode at {wavenumber:.2} cm^-1"
+        ));
+
+        let mut forward = None;
+        let mut reverse = None;
+        if options_irc.direction.forward() {
+            let (points, endpoint_molecule) = irc::walk(
+                &self.registry,
+                &input.molecule,
+                &mode,
+                &options,
+                options_irc.step_size,
+                options_irc.max_steps,
+                1.0,
+                reporter,
+            )?;
+            reporter.progress("irc", 40.0);
+            let outcome = irc::refine_end(&self.registry, &endpoint_molecule, &options)?;
+            reporter.log(&format!(
+                "irc forward: {} points, endpoint E = {:.10} Ha ({} optimisation steps)",
+                points.len(),
+                outcome.energy_hartree,
+                outcome.optimisation_steps
+            ));
+            forward = Some((points, outcome));
+        }
+        if options_irc.direction.reverse() {
+            let (points, endpoint_molecule) = irc::walk(
+                &self.registry,
+                &input.molecule,
+                &mode,
+                &options,
+                options_irc.step_size,
+                options_irc.max_steps,
+                -1.0,
+                reporter,
+            )?;
+            reporter.progress("irc", 70.0);
+            let outcome = irc::refine_end(&self.registry, &endpoint_molecule, &options)?;
+            reporter.log(&format!(
+                "irc reverse: {} points, endpoint E = {:.10} Ha ({} optimisation steps)",
+                points.len(),
+                outcome.energy_hartree,
+                outcome.optimisation_steps
+            ));
+            reverse = Some((points, outcome));
+        }
+        let block = irc::to_api(wavenumber, forward, reverse)?;
+        let forward_points = block.forward.as_ref().map_or(0, |end| end.points.len());
+        let reverse_points = block.reverse.as_ref().map_or(0, |end| end.points.len());
+        let summary = format!(
+            "irc = {}: imaginary {:.2} cm^-1, {} + {} points, forward E = {:?}, reverse E = {:?}",
+            options_irc.direction.as_str(),
+            block.imaginary_wavenumber_cm,
+            forward_points,
+            reverse_points,
+            block.forward.as_ref().map(|end| end.minimum_energy_hartree),
+            block.reverse.as_ref().map(|end| end.minimum_energy_hartree)
+        );
+        reporter.log(&summary);
+        reporter.progress("done", 100.0);
+        let mut final_input = input.clone();
+        final_input.jobtype = JobType::Sp;
+        let job = self.run_single_point(&final_input, reporter)?;
+        Ok(job.with_log(summary).with_irc_result(block))
+    }
+
     /// 过渡态搜索（`Ts`，phase-2 `RP-01`）：Hessian 引导的局部本征向量跟随。
     ///
     /// 判据是**两条一起**：`max|g| < options.ts.gradient_threshold_hartree_per_bohr`（缺省
@@ -1542,6 +1668,9 @@ impl RksBackend {
         let mut final_input = input.clone();
         final_input.molecule = outcome.molecule.clone();
         final_input.jobtype = JobType::Sp;
+        // 鞍点几何要落盘（IRC/GUI 的输入）：把它装成优化报告放进同一个 sink，CLI 的
+        // `optimized.xyz` 通路因此对 `ts` 也生效。
+        self.opt_sink.store(ts::to_report(&outcome));
         let mut job = self.run_single_point(&final_input, reporter)?;
         job = job.with_log(summary).with_ts_result(block);
         Ok(job)
@@ -2070,6 +2199,7 @@ impl EngineBackend for RksBackend {
             JobType::Freq => self.run_frequencies(input, reporter),
             JobType::Scan => self.run_scan(input, reporter),
             JobType::Ts => self.run_ts(input, reporter),
+            JobType::Irc => self.run_irc(input, reporter),
             other => Err(EngineError::Unsupported(format!(
                 "jobtype `{}` is not wired into the engine backend yet (frequencies are \
                  available through qwb_engine::hessian, see F-01/F-02)",

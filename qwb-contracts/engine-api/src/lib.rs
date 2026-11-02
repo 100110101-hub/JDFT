@@ -22,6 +22,7 @@ pub mod correlation;
 pub mod engine;
 pub mod error;
 pub mod input;
+pub mod irc;
 pub mod molecule;
 pub mod numerics;
 pub mod pes;
@@ -39,6 +40,7 @@ pub use error::EngineError;
 pub use input::{
     DispersionOptions, ExcitedStatesOptions, GridLevel, JobInput, JobType, TaskOptions,
 };
+pub use irc::{IrcDirection, IrcEnd, IrcOptions, IrcPoint, IrcResult};
 pub use molecule::{Atom, Molecule};
 pub use numerics::{
     GridSummary, NumericsOptions, NumericsPath, NumericsReport, PsSummary, RiSummary,

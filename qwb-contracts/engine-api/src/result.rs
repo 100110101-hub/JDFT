@@ -11,6 +11,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::correlation::{CorrelationResult, SpinResult};
 use crate::error::EngineError;
+use crate::irc::IrcResult;
 use crate::numerics::NumericsReport;
 use crate::pes::PesScan;
 use crate::properties::{EprResult, ExcitedStates, Multipoles, NmrShieldings, Polarizability};
@@ -348,6 +349,9 @@ pub struct JobResult {
     /// 多极展开（四极/八极，phase-2 `RS-08`）。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub multipoles: Option<Multipoles>,
+    /// IRC（`jobtype: irc`，phase-2 `RP-02`）。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub irc_result: Option<IrcResult>,
     /// 过渡态搜索（`jobtype: ts`，phase-2 `RP-01`）。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ts_result: Option<TsResult>,
@@ -440,6 +444,7 @@ impl JobResult {
             thermochemistry: None,
             pes_scan: None,
             ts_result: None,
+            irc_result: None,
             multipoles: None,
             epr: None,
             numerics_report: None,
@@ -507,6 +512,13 @@ impl JobResult {
     #[must_use]
     pub fn with_solvation(mut self, solvation: SolvationResult) -> Self {
         self.solvation = Some(solvation);
+        self
+    }
+
+    /// 挂上 IRC 结果（`jobtype: irc`）。
+    #[must_use]
+    pub fn with_irc_result(mut self, result: IrcResult) -> Self {
+        self.irc_result = Some(result);
         self
     }
 

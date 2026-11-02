@@ -1,0 +1,40 @@
+# RP-02：NH3 伞形反转的 **IRC**，从 D3h 平面鞍点出发（双向）。
+#
+# 起点就是 `examples/nh3_ts.yaml` 跑 `qwb ts` 收敛出来的几何（N 略高于三个 H 的平面，
+# 三个 H 共面）—— 手写一个"大概平面"的几何会得到 4 个虚频，因为非驻点的 Hessian 没有意义。
+#
+# 每端沿质量加权最陡下降走，只接受让能量下降的步；到端点再做一次自由优化，报内坐标指纹
+# （键长/键角，置换与旋转不变 —— 两个极小点是镜像，逐原子笛卡尔比较要先解决对齐）。
+#
+# 运行：qwb irc examples/nh3_irc.yaml
+molecule:
+  atoms:
+    - symbol: N
+      position_angstrom: [-0.000000988907, -0.000000000000, 0.013835288012]
+    - symbol: H
+      position_angstrom: [1.005477268447, 0.000000000000, 0.014273161513]
+    - symbol: H
+      position_angstrom: [-0.502740138030, 0.870769888810, 0.013642939891]
+    - symbol: H
+      position_angstrom: [-0.502740138029, -0.870769888811, 0.013642939886]
+  charge: 0
+  multiplicity: 1
+basis_name: sto-3g
+method_name: hf
+grid_level: normal
+solvent: vacuum
+jobtype: irc
+options:
+  scf_max_iter: 200
+  scf_energy_threshold_hartree: 1.0e-9
+  scf_density_threshold: 1.0e-7
+  diis_history: 8
+  threads: 0
+  max_opt_steps: 100
+  opt_gradient_threshold_hartree_per_bohr: 4.5e-4
+  freq_step_angstrom: 0.01
+  ecp_name: null
+  irc:
+    max_steps: 60
+    step_size: 0.10
+    direction: both
