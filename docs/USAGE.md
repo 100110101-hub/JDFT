@@ -1165,7 +1165,7 @@ ECP、频率库函数）在 `docs/status.yaml`；这里只列阶段二台账里�
 | 溶剂化解析梯度 / 优化 | ❌ | SV-02 | 依赖 SV-01 |
 | 溶液相频率 / 热化学 | ❌ | SV-05 | 依赖 SV-01/SV-02 |
 | `jobtype: freq`（**数值** Hessian：频率/IR/热化学） | ⚠ | RS-05 | 已接线（第 388 轮）：频率对 PySCF 解析 Hessian 差 ≤ 0.19 cm⁻¹；**解析** Hessian 仍 blocked（20× 的前提不成立），freq 因此是 3N+1 次 SCF 级的成本 |
-| GIAO NMR 屏蔽 | ❌ | RS-04 | 缺 London 复基组层（common-origin 下 O 差 1.50 ppm） |
+| NMR 屏蔽（**共原规范** + 规范变化报告） | ⚠ | RS-04 | 抗磁 + 顺磁（含 CPHF）已接进 `nmr_shieldings` 块：水 O 172.26 / H 99.63 ppm、规范变化 **7.10** ppm；**GIAO 还没做**，所以判据「spread < 1 ppm」没满足 —— 这个数就是差距的量化 |
 | Raman 活性 | ❌ | RS-06 | 要简正模式 → 要 RS-05 |
 | VCD | ❌ | RS-07 | pending |
 | 过渡态搜索（`qwb ts`，局部本征向量跟随） | ⚠ | RP-01 | 机制有了：NH3 伞形鞍点 5 步收敛（max\|g\| = 3.7e-6、一个虚频 −1081 cm⁻¹）；**判据的"3 个反应势垒对文献 < 1.5 kcal/mol"没做**（要 DFT 层级，受 EX-03 约束） |

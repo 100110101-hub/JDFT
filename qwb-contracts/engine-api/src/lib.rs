@@ -47,8 +47,9 @@ pub use numerics::{
 };
 pub use pes::{PesPoint, PesScan, ScanKind, ScanOptions};
 pub use properties::{
-    EprResult, ExcitedStateMethod, ExcitedStates, HyperfineCoupling, Multipoles, NmrReference,
-    NmrShieldings, NucleusShielding, Polarizability, SumRules, Transition, TransitionContribution,
+    EprResult, ExcitedStateMethod, ExcitedStates, HyperfineCoupling, Multipoles, NmrGauge,
+    NmrOptions, NmrReference, NmrShieldings, NucleusShielding, Polarizability, SumRules,
+    Transition, TransitionContribution,
 };
 pub use registry::Registry;
 pub use reporter::Reporter;

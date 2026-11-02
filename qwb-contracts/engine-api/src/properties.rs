@@ -244,6 +244,72 @@ impl NmrReference {
     }
 }
 
+/// NMR 的规范原点选择（`options.nmr.gauge`）。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+#[non_exhaustive]
+pub enum NmrGauge {
+    /// 每个核各自为角动量原点（Ramsey 的常规写法）。
+    Nucleus,
+    /// 核电荷重心为原点（「自由分子」共原规范）。
+    Common,
+}
+
+impl NmrGauge {
+    /// 冻结的小写名。
+    #[must_use]
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Nucleus => "nucleus",
+            Self::Common => "common",
+        }
+    }
+}
+
+/// NMR 屏蔽的选项（`options.nmr`）。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+#[non_exhaustive]
+pub struct NmrOptions {
+    /// 用哪个规范原点报屏蔽。
+    pub gauge: NmrGauge,
+    /// 是否额外报 `length_gauge_spread_ppm`（两个原点各算一次，成本 2 倍）。
+    ///
+    /// phase-2 §4.2 的门禁是「换原点重算的变化 < 1 ppm」—— 那是 GIAO 才有的性质；共原规范下
+    /// 实测 1.5 ppm（O）/ 7 ppm（H），所以这个数现在的作用是如实报出差距。
+    pub report_gauge_spread: bool,
+}
+
+impl NmrOptions {
+    /// 缺省：核中心原点、报规范变化。
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            gauge: NmrGauge::Nucleus,
+            report_gauge_spread: true,
+        }
+    }
+
+    /// 改规范原点。
+    #[must_use]
+    pub fn with_gauge(mut self, gauge: NmrGauge) -> Self {
+        self.gauge = gauge;
+        self
+    }
+
+    /// 改「是否报规范变化」。
+    #[must_use]
+    pub fn with_gauge_spread(mut self, report: bool) -> Self {
+        self.report_gauge_spread = report;
+        self
+    }
+}
+
+impl Default for NmrOptions {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 /// NMR 屏蔽结果块（K7）。
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -277,6 +343,27 @@ impl NmrShieldings {
             reference: None,
             length_gauge_spread_ppm: None,
         }
+    }
+
+    /// 改方法名。
+    ///
+    /// `new` 里的缺省是 `giao`（契约的目标），但**共原规范不是 GIAO**：本项目的实现现在报的是
+    /// `nucleus-origin` / `common-origin`，`length_gauge_spread_ppm` 因此会大于 1 ppm。把方法名
+    /// 写实，读者才不会把"共原规范的结果"当成"GIAO 的结果"。
+    #[must_use]
+    pub fn with_method(mut self, method: impl Into<String>) -> Self {
+        self.method = method.into();
+        self
+    }
+
+    /// 报出「换规范原点重算时各向同性屏蔽的最大变化」（ppm）。
+    ///
+    /// 这个数不是装饰：phase-2 §4.2 的门禁是 `< 1 ppm`，而只有 GIAO 能满足它 —— 共原规范下
+    /// 实测 1.5 ppm（O）/ 7 ppm（H）。把差距报出来，比在文档里写「GIAO 还没做」有用。
+    #[must_use]
+    pub fn with_length_gauge_spread(mut self, spread_ppm: f64) -> Self {
+        self.length_gauge_spread_ppm = Some(spread_ppm);
+        self
     }
 
     /// 补上化学位移参考物。

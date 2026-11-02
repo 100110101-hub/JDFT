@@ -1373,6 +1373,136 @@ impl RksBackend {
         if let Some(excited_states) = excited_states {
             job = job.with_excited_states(excited_states);
         }
+        // RS-04：NMR 屏蔽（抗磁 + 顺磁，共原/核中心两种规范原点）。
+        //
+        // 顺磁项要解 CPHF，所以只在闭壳层 SCF 之后算；`length_gauge_spread_ppm` 是**换原点
+        // 重算的最大变化** —— phase-2 §4.2 的门禁（< 1 ppm）只有 GIAO 能满足，共原规范下实测
+        // 1.5 ppm（O）/ 7 ppm（H），所以这个数现在是"如实报出差距"而不是"通过判据"。
+        if let Some(nmr_options) = &input.options.nmr {
+            if input
+                .options
+                .scf_type
+                .is_some_and(|scf_type| scf_type.is_open_shell())
+            {
+                return Err(EngineError::Unsupported(
+                    "options.nmr is implemented for closed-shell HF/KS only".to_string(),
+                ));
+            }
+            let electron_count = closed_shell_electrons(&input.molecule)?;
+            let n_occupied = electron_count / 2;
+            if n_occupied == 0 || n_occupied >= basis.n_functions() {
+                return Err(EngineError::Unsupported(format!(
+                    "options.nmr needs both occupied and virtual orbitals ({n_occupied} of {})",
+                    basis.n_functions()
+                )));
+            }
+            let energies: Vec<f64> = (0..result.mo_energies_hartree.len())
+                .map(|index| result.mo_energies_hartree.get(index))
+                .collect();
+            let dipole_ao = qwb_integrals::dipole::dipole_integrals(&basis, &input.molecule)?;
+            let integrals = qwb_response::mo_integrals::build_cphf_integrals(
+                &tensor,
+                &result.coefficients,
+                &dipole_ao,
+                n_occupied,
+            )?;
+            let paramagnetic = |gauge: qwb_response::GaugeOrigin| {
+                qwb_response::paramagnetic_shielding_ppm(
+                    &basis,
+                    &input.molecule,
+                    &result.coefficients,
+                    &energies,
+                    n_occupied,
+                    &integrals,
+                    gauge,
+                )
+            };
+            // 共原规范的"公共原点"取**核电荷重心**（与 `GaugeOrigin::Common` 的文档一致）。
+            let common_origin = {
+                let mut total = 0.0_f64;
+                let mut weighted = [0.0_f64; 3];
+                for atom in &input.molecule.atoms {
+                    let z =
+                        f64::from(qwb_registry::elements::atomic_number(&atom.symbol).unwrap_or(0));
+                    total += z;
+                    for (axis, slot) in weighted.iter_mut().enumerate() {
+                        *slot += z * atom.position_bohr()[axis];
+                    }
+                }
+                if total > 0.0 {
+                    [
+                        weighted[0] / total,
+                        weighted[1] / total,
+                        weighted[2] / total,
+                    ]
+                } else {
+                    [0.0, 0.0, 0.0]
+                }
+            };
+            let chosen = match nmr_options.gauge {
+                qwb_engine_api::NmrGauge::Nucleus => qwb_response::GaugeOrigin::Nucleus,
+                qwb_engine_api::NmrGauge::Common => {
+                    qwb_response::GaugeOrigin::Common(common_origin)
+                }
+                _ => {
+                    return Err(EngineError::Unsupported(
+                        "options.nmr.gauge has an unknown value".to_string(),
+                    ));
+                }
+            };
+            let dia =
+                qwb_props::diamagnetic_shielding_ppm(&basis, &input.molecule, &result.density)?;
+            let para = paramagnetic(chosen)?;
+            let mut nuclei = Vec::with_capacity(dia.len());
+            for (index, atom) in input.molecule.atoms.iter().enumerate() {
+                let sigma_dia = dia[index];
+                let sigma_para = para
+                    .iter()
+                    .find(|entry| entry.nucleus_index == index)
+                    .map_or(0.0, |entry| entry.sigma_p_ppm);
+                let isotropic = sigma_dia + sigma_para;
+                // 只有各向同性分量（张量需要顺磁项的三个分量，那一层还没落，如实留空）。
+                let zero = [[0.0_f64; 3]; 3];
+                nuclei.push(qwb_engine_api::NucleusShielding::new(
+                    &atom.symbol,
+                    index,
+                    isotropic,
+                    zero,
+                ));
+            }
+            let origin = match chosen {
+                qwb_response::GaugeOrigin::Nucleus => [0.0, 0.0, 0.0],
+                qwb_response::GaugeOrigin::Common(point) => point,
+            };
+            let method = match nmr_options.gauge {
+                qwb_engine_api::NmrGauge::Nucleus => "nucleus-origin",
+                _ => "common-origin",
+            };
+            let mut block = qwb_engine_api::NmrShieldings::new(origin, nuclei).with_method(method);
+            if nmr_options.report_gauge_spread {
+                let other = match chosen {
+                    qwb_response::GaugeOrigin::Nucleus => {
+                        qwb_response::GaugeOrigin::Common(common_origin)
+                    }
+                    _ => qwb_response::GaugeOrigin::Nucleus,
+                };
+                let alternate = paramagnetic(other)?;
+                let mut spread = 0.0_f64;
+                for entry in &alternate {
+                    let base = para
+                        .iter()
+                        .find(|item| item.nucleus_index == entry.nucleus_index)
+                        .map_or(0.0, |item| item.sigma_p_ppm);
+                    spread = spread.max((entry.sigma_p_ppm - base).abs());
+                }
+                block = block.with_length_gauge_spread(spread);
+                reporter.log(&format!(
+                    "nmr: gauge = {}, length-gauge spread = {spread:.4} ppm (GIAO would make this < 1)",
+                    nmr_options.gauge.as_str()
+                ));
+            }
+            job = job.with_nmr_shieldings(block);
+        }
         if let Some(spectrum) = uv_vis_spectrum {
             job = job.with_uv_vis_spectrum(spectrum);
         }

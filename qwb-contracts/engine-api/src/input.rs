@@ -116,6 +116,11 @@ pub struct TaskOptions {
     /// 没有意义，静默当成单点会给出一个看起来成功的单点结果。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub scan: Option<crate::pes::ScanOptions>,
+    /// NMR 屏蔽的选项（`options.nmr`）；`None` = 不算屏蔽。
+    ///
+    /// 它是**加性块**：算不算都不影响 SCF 能量，所以缺省关闭，只有显式给了才算。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub nmr: Option<crate::properties::NmrOptions>,
     /// IRC 的选项（`jobtype: irc`）；`None` = 用缺省（200 步、0.1、双向）。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub irc: Option<crate::irc::IrcOptions>,
@@ -252,6 +257,7 @@ impl Default for TaskOptions {
             scan: None,
             ts: None,
             irc: None,
+            nmr: None,
             symmetry_number: 1,
             scf_type: None,
             mp2: None,
@@ -269,6 +275,13 @@ impl TaskOptions {
     #[must_use]
     pub fn with_scan(mut self, scan: crate::pes::ScanOptions) -> Self {
         self.scan = Some(scan);
+        self
+    }
+
+    /// 设置 NMR 屏蔽（`options.nmr`）。
+    #[must_use]
+    pub fn with_nmr(mut self, nmr: crate::properties::NmrOptions) -> Self {
+        self.nmr = Some(nmr);
         self
     }
 
