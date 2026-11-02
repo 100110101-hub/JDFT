@@ -1122,7 +1122,10 @@ gitignored 的 `qwb-data/reference/_*_staging/raw/` 里，派生物（CSV/JSON�
 * **近似路径**：`options.numerics` 一律退出码 4（IN-03 pseudospectral、IN-04 RI-J 都没过 K10）。
 * **解析 Hessian**（RS-05，blocked：20× 的两条前提都不成立）、**GIAO NMR**（RS-04，in_progress）、
   **Raman**（RS-06，blocked：要简正模式 → 要 RS-05）、**VCD**（RS-07 pending）。
-* **TS / IRC / 扫描**（RP-01..04 pending）：CLI 只落签名。
+* **TS / IRC**（RP-01/RP-02 pending）：CLI 只落签名（退出码 4）。**PES 扫描已接**
+  （`qwb scan`，RP-03）：距离/键角/二面角的**刚性**扫描会写 `artifacts/pes.json`；
+  `relax: true` 的弛豫扫描要约束优化，还没做，显式拒绝（退出码 4）—— 用每个点自由优化
+  冒充它会把所有点压回同一个极小点，曲线是平的却看着像扫描。
 * **GPU**：只有 `gemm` 原语、显存预算 + 自动回退、AO→MO 变换（实测 60.8×）；格点 XC 的 GPU 核
   需要 NVRTC/cubin（另一类 unsafe 面），EX-03 仍 blocked。
 * **并行**：4 指标积分张量单线程；Fock 构建按行并行（确定性归约，I-05）；`--threads` 与
@@ -1167,7 +1170,8 @@ ECP、频率库函数）在 `docs/status.yaml`；这里只列阶段二台账里�
 | GIAO NMR 屏蔽 | ❌ | RS-04 | 缺 London 复基组层（common-origin 下 O 差 1.50 ppm） |
 | Raman 活性 | ❌ | RS-06 | 要简正模式 → 要 RS-05 |
 | VCD | ❌ | RS-07 | pending |
-| TS / IRC / 扫描（PES） | ❌ | RP-01, RP-02, RP-03 | CLI 只落签名，退出码 4 |
+| TS / IRC | ❌ | RP-01, RP-02 | CLI 只落签名，退出码 4 |
+| **刚性** PES 扫描（`qwb scan`，距离/键角/二面角） | ⚠ | RP-03 | 刚性一半已交付（9 点 O–H 扫描 max adjacent |ΔE| = 3.1e-2 Ha、极小 1.000 Å；`artifacts/pes.json` 与 `result.json` 的块逐字一致）；**弛豫扫描要约束优化**，尚未实现 → 显式拒绝（每个点自由优化会塌回同一个极小点） |
 | 近似路径：pseudospectral / RI-J 的 Fock 构建 | ❌ | IN-03, IN-04 | 都受 K10 等价性门禁约束，`options.numerics` 退出码 4 |
 | ωB97X-D / CAM-B3LYP / B3LYP | ❌ | DA-03 | LYP 要 `∇²ρ`，K1 冻结契约拒绝 `requires.laplacian` |
 | EPR 超精细耦合 | ❌ | ST-05 | 未过 K10（anchor 定标仍差 0.169% 量级之外的判据） |

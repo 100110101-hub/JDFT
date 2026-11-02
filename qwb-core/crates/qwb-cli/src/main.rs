@@ -76,7 +76,7 @@ enum Command {
     Ts(PathArgs),
     /// 内禀反应坐标；阶段二 KV-05 只落签名，未实现
     Irc(PathArgs),
-    /// 势能面扫描；阶段二 KV-05 只落签名，未实现
+    /// 势能面扫描（RP-03：`jobtype: scan` + `options.scan`）
     Scan(PathArgs),
 }
 
@@ -284,12 +284,88 @@ fn dispatch(cli: &Cli) -> CliResult<()> {
             "intrinsic reaction coordinate lands with M6 (RP-02)",
             Some(&args.input_yaml),
         ),
-        Command::Scan(args) => cmd_not_implemented(
-            "scan",
-            "PES scans land with M6 (RP-03)",
-            Some(&args.input_yaml),
-        ),
+        // RP-03：PES 扫描已接线（`jobtype: scan` + `options.scan`）；`ts`/`irc` 仍按签名拒绝。
+        Command::Scan(args) => cmd_scan(args),
     }
+}
+
+/// `qwb scan`（RP-03）：跑一次 PES 扫描，并把曲线写到 `artifacts/pes.json`。
+///
+/// 与 `run` 的区别只有两处：作业类型强制成 `scan`，以及**必须有 `options.scan`** ——
+/// 没有坐标的"扫描"没有意义，静默当成单点会给出一个看起来成功的单点结果。
+fn cmd_scan(args: &PathArgs) -> CliResult<()> {
+    if !args.input_yaml.is_file() {
+        return Err(CliError::input(format!(
+            "cannot read {}: no such file",
+            args.input_yaml.display()
+        )));
+    }
+    let mut input = load_input(&args.input_yaml)?;
+    if input.options.scan.is_none() {
+        return Err(CliError::input(
+            "`qwb scan` needs `options.scan` (kind / atoms / start / stop / points) in the input"
+                .to_string(),
+        ));
+    }
+    input.jobtype = qwb_engine_api::JobType::Scan;
+    let task_id = args
+        .input_yaml
+        .file_stem()
+        .and_then(|stem| stem.to_str())
+        .unwrap_or("scan")
+        .to_string();
+    let out_root = args.out.clone().unwrap_or_else(|| PathBuf::from("results"));
+    let energy = execute_job(&input, &task_id, &out_root)?;
+    let task_dir = out_root.join(&task_id);
+    let result_text = std::fs::read_to_string(task_dir.join("result.json"))
+        .map_err(|e| CliError::internal(format!("cannot read result.json: {e}")))?;
+    let value: serde_json::Value = serde_json::from_str(&result_text)
+        .map_err(|e| CliError::internal(format!("cannot parse result.json: {e}")))?;
+    let block = value
+        .get("pes_scan")
+        .ok_or_else(|| CliError::internal("result.json 里没有 pes_scan 块"))?;
+    let artifacts = task_dir.join("artifacts");
+    std::fs::create_dir_all(&artifacts)
+        .map_err(|e| CliError::internal(format!("cannot create {}: {e}", artifacts.display())))?;
+    let pretty = serde_json::to_string_pretty(block)
+        .map_err(|e| CliError::internal(format!("cannot serialise pes_scan: {e}")))?;
+    std::fs::write(artifacts.join("pes.json"), pretty.into_bytes())
+        .map_err(|e| CliError::internal(format!("cannot write pes.json: {e}")))?;
+
+    let kind = block["kind"].as_str().unwrap_or("scan");
+    let unit = block["unit"].as_str().unwrap_or("");
+    let points = block["points"].as_array().cloned().unwrap_or_default();
+    let relaxed = block["relaxed"].as_bool().unwrap_or(false);
+    let max_delta = block["max_adjacent_delta_hartree"]
+        .as_f64()
+        .unwrap_or(f64::NAN);
+    println!(
+        "scan     {kind}, {} points ({}), max adjacent |dE| = {max_delta:.3e} Ha",
+        points.len(),
+        if relaxed { "relaxed" } else { "rigid" }
+    );
+    if let (Some(first), Some(last)) = (points.first(), points.last()) {
+        println!(
+            "range    {:.6} -> {:.6} {unit}",
+            first["value"].as_f64().unwrap_or(f64::NAN),
+            last["value"].as_f64().unwrap_or(f64::NAN)
+        );
+    }
+    if let Some(minimum) = points.iter().min_by(|left, right| {
+        left["energy_hartree"]
+            .as_f64()
+            .unwrap_or(f64::INFINITY)
+            .total_cmp(&right["energy_hartree"].as_f64().unwrap_or(f64::INFINITY))
+    }) {
+        println!(
+            "minimum  {:.6} {unit}, E = {:.10} Ha",
+            minimum["value"].as_f64().unwrap_or(f64::NAN),
+            minimum["energy_hartree"].as_f64().unwrap_or(f64::NAN)
+        );
+    }
+    println!("pes      {}", artifacts.join("pes.json").display());
+    println!("energy  {energy:.10} Ha (lowest point)");
+    Ok(())
 }
 
 /// K5 的加性子命令：**签名先落、实现后跟**（phase-2 KV-05）。

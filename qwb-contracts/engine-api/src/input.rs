@@ -54,6 +54,9 @@ pub enum JobType {
     /// 频率。
     #[serde(alias = "Freq", alias = "FREQ")]
     Freq,
+    /// PES 扫描（phase-2 `RP-03`）。
+    #[serde(alias = "Scan", alias = "SCAN")]
+    Scan,
 }
 
 impl JobType {
@@ -64,6 +67,7 @@ impl JobType {
             Self::Sp => "sp",
             Self::Opt => "opt",
             Self::Freq => "freq",
+            Self::Scan => "scan",
         }
     }
 }
@@ -98,6 +102,12 @@ pub struct TaskOptions {
     /// `method_name == "hf"`，KS 变体要求不是 `"hf"`（phase-2 §4.4）。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub scf_type: Option<ScfType>,
+    /// PES 扫描的坐标与范围（`jobtype: scan`）；`None` = 不扫描。
+    ///
+    /// `jobtype: scan` 时**必填**（否则引擎拒绝并点名这个字段）—— 一个没有坐标的"扫描"
+    /// 没有意义，静默当成单点会给出一个看起来成功的单点结果。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scan: Option<crate::pes::ScanOptions>,
     /// 转动对称数 σ（热化学用；`jobtype: freq`）。缺省 1 = 不做对称校正。
     ///
     /// 水 2、氨 3、甲烷 12、苯 12、同核双原子 2。它只影响**转动熵**（`S` 偏大 `R ln σ`
@@ -225,6 +235,7 @@ impl Default for TaskOptions {
             opt_gradient_threshold_hartree_per_bohr: 4.5e-4,
             freq_step_angstrom: 0.01,
             ecp_name: None,
+            scan: None,
             symmetry_number: 1,
             scf_type: None,
             mp2: None,
@@ -238,6 +249,13 @@ impl Default for TaskOptions {
 }
 
 impl TaskOptions {
+    /// 设置 PES 扫描（`jobtype: scan`）。
+    #[must_use]
+    pub fn with_scan(mut self, scan: crate::pes::ScanOptions) -> Self {
+        self.scan = Some(scan);
+        self
+    }
+
     /// 设置转动对称数 σ（热化学；`jobtype: freq` 用）。
     ///
     /// 水 2、氨 3、甲烷 12、苯 12、同核双原子 2。缺省 1 = 不做对称校正（`S` 会偏大

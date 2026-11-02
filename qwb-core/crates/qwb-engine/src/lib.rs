@@ -29,6 +29,7 @@ pub mod env;
 pub mod gradient;
 pub mod hessian;
 pub mod opt;
+pub mod scan;
 
 use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
@@ -1455,6 +1456,127 @@ impl RksBackend {
         Ok(job)
     }
 
+    /// PES 扫描（`Scan`，phase-2 `RP-03`）：把某个内坐标从 `start` 扫到 `stop`。
+    ///
+    /// `relax: false`（缺省）是**刚性**扫描：每个点只把坐标挪过去、其余原子不动，然后算一次
+    /// 单点；`relax: true` 是**弛豫**扫描：每个点从上一个点的几何出发做一次自由优化，报的是
+    /// 优化后的能量与步数。两者的差别写进结果的 `relaxed` 字段 —— 混着读会得出错的结论。
+    ///
+    /// 每个点都会重新校验"挪完的内坐标确实等于目标值"（角度 1e-8、距离 1e-10），失败就报错，
+    /// 不会拿一个"差不多"的几何继续算下去。
+    fn run_scan(
+        &self,
+        input: &JobInput,
+        reporter: &dyn Reporter,
+    ) -> Result<JobResult, EngineError> {
+        if let Some(ecp_name) = &input.options.ecp_name {
+            return Err(EngineError::Unsupported(format!(
+                "PES scans with an ECP (`{ecp_name}`) are not implemented: the ECP derivative \
+                 w.r.t. nuclear coordinates is missing (relaxed scans need it)"
+            )));
+        }
+        if input
+            .options
+            .scf_type
+            .is_some_and(|scf_type| scf_type.is_open_shell())
+        {
+            return Err(EngineError::Unsupported(
+                "PES scans are implemented for closed-shell HF/KS only (open-shell second \
+                 derivatives and gradients have no acceptance tests yet)"
+                    .to_string(),
+            ));
+        }
+        let scan = input.options.scan.as_ref().ok_or_else(|| {
+            EngineError::InvalidInput(
+                "jobtype: scan needs options.scan (kind / atoms / start / stop / points)"
+                    .to_string(),
+            )
+        })?;
+        if scan.relax {
+            // 弛豫扫描要**约束优化**：固定内坐标、只放开其余自由度。不实现约束而直接对每个点
+            // 做自由优化，所有点都会跑回同一个极小点（曲线是平的）—— 那是"看起来成功的扫描"，
+            // 属于本项目最忌讳的静默错误。所以显式拒绝，并把这一半记成 RP-03 的剩余。
+            return Err(EngineError::Unsupported(
+                "relaxed PES scans (options.scan.relax = true) need constrained optimisation: \
+                 a free optimisation from each point collapses every point onto the same \
+                 minimum, which would produce a flat curve that looks like a scan. Rigid scans \
+                 are implemented; the constrained-relaxation half is the remaining part of RP-03"
+                    .to_string(),
+            ));
+        }
+        let values = scan.values(input.molecule.n_atoms())?;
+        reporter.progress("scan", 0.0);
+        reporter.log(&format!(
+            "jobtype = scan, kind = {}, atoms = {:?}, {} -> {} {}, {} points, relaxed = {}",
+            scan.kind.as_str(),
+            scan.atoms,
+            scan.start,
+            scan.stop,
+            scan.kind.unit(),
+            values.len(),
+            scan.relax
+        ));
+
+        let total = values.len();
+        let mut points = Vec::with_capacity(total);
+        // 扫描没有"一个"单点结果：`JobResult.energy_hartree` 取**能量最低的那个点**（那是对
+        // 这条 PES 最有用的一个数），轨道/偶极等其余字段也来自那一点；块里逐点都有数。
+        let mut best: Option<qwb_engine_api::JobResult> = None;
+        for (index, value) in values.iter().enumerate() {
+            let geometry = scan::set_coordinate(&input.molecule, scan.kind, &scan.atoms, *value)?;
+            let mut point_input = input.clone();
+            point_input.molecule = geometry;
+            // 刚性扫描：每个点只算一次单点（弛豫那一半已在上面的守卫里拒绝）。
+            let job = self.run_single_point(&point_input, reporter)?;
+            let (iterations, optimised) = (0_u32, false);
+            let energy = job.energy_hartree;
+            reporter.progress("scan", 100.0 * (index + 1) as f64 / total as f64);
+            reporter.log(&format!(
+                "scan point {}/{}: {} = {value:.6} {}, E = {energy:.10} Ha{}",
+                index + 1,
+                total,
+                scan.kind.as_str(),
+                scan.kind.unit(),
+                if optimised {
+                    format!(" (relaxed in {iterations} steps)")
+                } else {
+                    String::new()
+                }
+            ));
+            points.push(qwb_engine_api::PesPoint::new(
+                *value, energy, optimised, iterations,
+            ));
+            if best
+                .as_ref()
+                .is_none_or(|current| energy < current.energy_hartree)
+            {
+                best = Some(job);
+            }
+        }
+
+        let block = qwb_engine_api::PesScan::new(
+            scan.kind.as_str(),
+            scan.kind.unit(),
+            scan.atoms.clone(),
+            scan.relax,
+            points,
+        );
+        block.validate()?;
+        let minimum_at = block.minimum().map(|point| point.value);
+        let summary = format!(
+            "scan: {} points ({}), max adjacent |dE| = {:.6e} Ha, minimum at {:?}",
+            block.points.len(),
+            if block.relaxed { "relaxed" } else { "rigid" },
+            block.max_adjacent_delta_hartree,
+            minimum_at
+        );
+        reporter.log(&summary);
+        reporter.progress("done", 100.0);
+        let job =
+            best.ok_or_else(|| EngineError::Internal("scan produced no points".to_string()))?;
+        Ok(job.with_log(summary).with_pes_scan(block))
+    }
+
     /// 频率作业（`Freq`）：数值 Hessian → 简正模 → 谐振频率 + 红外强度 + 理想气体热化学。
     ///
     /// 这一步只做**数值** Hessian（`hessian::numerical_hessian`）：解析 Hessian 是 RS-05
@@ -1827,6 +1949,7 @@ impl EngineBackend for RksBackend {
             }
             JobType::Opt => self.run_optimisation(input, reporter),
             JobType::Freq => self.run_frequencies(input, reporter),
+            JobType::Scan => self.run_scan(input, reporter),
             other => Err(EngineError::Unsupported(format!(
                 "jobtype `{}` is not wired into the engine backend yet (frequencies are \
                  available through qwb_engine::hessian, see F-01/F-02)",

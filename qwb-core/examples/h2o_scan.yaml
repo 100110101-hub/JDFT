@@ -1,0 +1,42 @@
+# RP-03：H2O / STO-3G / HF 的 **O–H 键长刚性扫描**（9 点，0.80 → 1.20 Å）。
+#
+# 扫描是"一组几何上的能量"：每个点只把 O–H 挪到目标值（其余原子不动），算一次单点。
+# 判据（phase-2 §6 RP-03）：① 扫描点能量连续（相邻差有界）—— 本文件实测 max adjacent
+# |dE| 见 `artifacts/pes.json` 的 `max_adjacent_delta_hartree`；② `pes.json` 可被 GUI 读取；
+# ③ `jobtype: scan` 在 K2 的 `SUPPORTED_FEATURES` 里。
+#
+# 把 `relax` 改成 `true` 得到**弛豫扫描**（每个点做一次自由优化，从上一个点出发）。
+#
+# 运行：qwb scan examples/h2o_scan.yaml
+molecule:
+  atoms:
+    - symbol: O
+      position_angstrom: [0.0, 0.0, 0.11779]
+    - symbol: H
+      position_angstrom: [0.0, 0.75545, -0.47116]
+    - symbol: H
+      position_angstrom: [0.0, -0.75545, -0.47116]
+  charge: 0
+  multiplicity: 1
+basis_name: sto-3g
+method_name: hf
+grid_level: normal
+solvent: vacuum
+jobtype: scan
+options:
+  scf_max_iter: 200
+  scf_energy_threshold_hartree: 1.0e-9
+  scf_density_threshold: 1.0e-7
+  diis_history: 8
+  threads: 0
+  max_opt_steps: 100
+  opt_gradient_threshold_hartree_per_bohr: 4.5e-4
+  freq_step_angstrom: 0.01
+  ecp_name: null
+  scan:
+    kind: distance
+    atoms: [0, 1]
+    start: 0.80
+    stop: 1.20
+    points: 9
+    relax: false

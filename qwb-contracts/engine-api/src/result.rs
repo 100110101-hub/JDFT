@@ -12,6 +12,7 @@ use serde::{Deserialize, Serialize};
 use crate::correlation::{CorrelationResult, SpinResult};
 use crate::error::EngineError;
 use crate::numerics::NumericsReport;
+use crate::pes::PesScan;
 use crate::properties::{EprResult, ExcitedStates, Multipoles, NmrShieldings, Polarizability};
 use crate::solvation::SolvationResult;
 use crate::vibrations::{Thermochemistry, VibrationalFrequencies};
@@ -346,6 +347,9 @@ pub struct JobResult {
     /// 多极展开（四极/八极，phase-2 `RS-08`）。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub multipoles: Option<Multipoles>,
+    /// PES 扫描（`jobtype: scan`，phase-2 `RP-03`）。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pes_scan: Option<PesScan>,
     /// 振动频率与简正模（`jobtype: freq`，phase-2 `M7` 的接线部分）。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub vibrational_frequencies: Option<VibrationalFrequencies>,
@@ -430,6 +434,7 @@ impl JobResult {
             polarizability: None,
             vibrational_frequencies: None,
             thermochemistry: None,
+            pes_scan: None,
             multipoles: None,
             epr: None,
             numerics_report: None,
@@ -497,6 +502,13 @@ impl JobResult {
     #[must_use]
     pub fn with_solvation(mut self, solvation: SolvationResult) -> Self {
         self.solvation = Some(solvation);
+        self
+    }
+
+    /// 挂上 PES 扫描（`jobtype: scan`）。
+    #[must_use]
+    pub fn with_pes_scan(mut self, scan: PesScan) -> Self {
+        self.pes_scan = Some(scan);
         self
     }
 

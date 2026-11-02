@@ -24,6 +24,7 @@ pub mod error;
 pub mod input;
 pub mod molecule;
 pub mod numerics;
+pub mod pes;
 pub mod properties;
 pub mod registry;
 pub mod reporter;
@@ -41,6 +42,7 @@ pub use molecule::{Atom, Molecule};
 pub use numerics::{
     GridSummary, NumericsOptions, NumericsPath, NumericsReport, PsSummary, RiSummary,
 };
+pub use pes::{PesPoint, PesScan, ScanKind, ScanOptions};
 pub use properties::{
     EprResult, ExcitedStateMethod, ExcitedStates, HyperfineCoupling, Multipoles, NmrReference,
     NmrShieldings, NucleusShielding, Polarizability, SumRules, Transition, TransitionContribution,
