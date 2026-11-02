@@ -40,6 +40,7 @@ pub mod hermite2e;
 pub mod momentum;
 pub mod one_electron;
 pub mod ri;
+pub mod second_moment;
 pub mod two_electron;
 
 pub use attenuated::erfc_boys;
@@ -52,4 +53,5 @@ pub use core_hamiltonian::{
 pub use giao::{kinetic_moment_integrals, nuclear_moment_integrals};
 pub use one_electron::{OneElectronIntegrals, one_electron};
 pub use ri::{ThreeCenterIntegrals, inverse_sqrt, three_center, two_center_coulomb};
+pub use second_moment::{second_moment_integrals, second_moment_integrals_at_origin};
 pub use two_electron::{TwoElectronIntegrals, primitive_ssss, two_electron};
