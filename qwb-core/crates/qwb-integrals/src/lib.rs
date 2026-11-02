@@ -45,6 +45,7 @@ pub use attenuated::erfc_boys;
 pub use boys::boys_functions;
 #[cfg(feature = "integral-cache")]
 pub use cache::{IntegralCache, fingerprint};
+pub use giao::{kinetic_moment_integrals, nuclear_moment_integrals};
 pub use one_electron::{OneElectronIntegrals, one_electron};
 pub use ri::{ThreeCenterIntegrals, inverse_sqrt, three_center, two_center_coulomb};
 pub use two_electron::{TwoElectronIntegrals, primitive_ssss, two_electron};

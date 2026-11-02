@@ -121,7 +121,8 @@ fn cartesian_block(
     Ok(out)
 }
 
-fn power_along(powers: (u32, u32, u32), axis: usize) -> u32 {
+/// 取幂次的第 `axis` 个分量（`pub(crate)`：`giao` 的磁矩积分复用同一套抬高幂次的写法）。
+pub(crate) fn power_along(powers: (u32, u32, u32), axis: usize) -> u32 {
     match axis {
         0 => powers.0,
         1 => powers.1,
@@ -129,7 +130,8 @@ fn power_along(powers: (u32, u32, u32), axis: usize) -> u32 {
     }
 }
 
-fn with_power(powers: (u32, u32, u32), axis: usize, value: u32) -> (u32, u32, u32) {
+/// 把幂次第 `axis` 个分量替换成 `value`（`pub(crate)`，同上：`giao` 用它把 bra 抬高一个幂次）。
+pub(crate) fn with_power(powers: (u32, u32, u32), axis: usize, value: u32) -> (u32, u32, u32) {
     match axis {
         0 => (value, powers.1, powers.2),
         1 => (powers.0, value, powers.2),
