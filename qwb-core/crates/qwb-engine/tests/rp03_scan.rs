@@ -123,18 +123,140 @@ fn an_angle_scan_also_works_and_keeps_the_bond_lengths() {
 }
 
 #[test]
-fn relaxed_scans_are_refused_instead_of_collapsing_to_one_minimum() {
-    let scan = ScanOptions::new(ScanKind::Distance, vec![0, 1], 0.85, 1.15, 3).with_relax(true);
-    let error = backend()
+fn a_relaxed_scan_keeps_each_bond_length_and_lowers_the_energy() {
+    // 弛豫扫描 = 每个点上做**约束优化**：固定 O–H，其余自由度放开。
+    let values = [0.90, 1.00, 1.10];
+    let scan =
+        ScanOptions::new(ScanKind::Distance, vec![0, 1], values[0], values[2], 3).with_relax(true);
+    let result = backend()
         .run(&input(scan), &NullReporter)
-        .expect_err("弛豫扫描（约束优化）还没实现，必须拒绝");
-    match error {
-        EngineError::Unsupported(message) => {
-            assert!(message.contains("constrained"), "{message}");
-            assert!(message.contains("RP-03"), "{message}");
-        }
-        other => panic!("期望 Unsupported（退出码 4），得到 {other:?}"),
+        .expect("约束弛豫扫描应跑通");
+    let block = result.pes_scan.expect("pes_scan");
+    block.validate().expect("块自洽");
+    assert!(block.relaxed, "relax: true 的扫描必须标成 relaxed");
+    assert_eq!(block.points.len(), 3);
+    for (point, expected) in block.points.iter().zip(values) {
+        assert!((point.value - expected).abs() < 1e-9);
+        assert!(point.optimised, "弛豫点必须标成 optimised");
+        assert!(point.iterations > 0, "弛豫点应报优化步数");
     }
+
+    // ① 约束真的把内坐标固定在目标值上：曲线**不是平的**（自由优化会让三点塌回一个极小点）。
+    let spread = block.max_adjacent_delta_hartree;
+    assert!(
+        spread > 1.0e-4,
+        "弛豫扫描的相邻差只有 {spread:.3e} Ha —— 三点都塌回同一个极小点了？"
+    );
+    // ② 每个点的能量都不高于同坐标的刚性扫描（放松另外两个自由度只能降能）。
+    let rigid = backend()
+        .run(
+            &input(ScanOptions::new(
+                ScanKind::Distance,
+                vec![0, 1],
+                0.90,
+                1.10,
+                3,
+            )),
+            &NullReporter,
+        )
+        .expect("刚性扫描");
+    let rigid_block = rigid.pes_scan.expect("pes_scan");
+    for (relaxed, stiff) in block.points.iter().zip(&rigid_block.points) {
+        assert!(
+            relaxed.energy_hartree <= stiff.energy_hartree + 1e-9,
+            "弛豫 {:.10} 应不高于刚性 {:.10}",
+            relaxed.energy_hartree,
+            stiff.energy_hartree
+        );
+    }
+    println!(
+        "弛豫扫描：{:?} Ha，max adjacent |dE| = {:.3e} Ha",
+        block
+            .points
+            .iter()
+            .map(|p| p.energy_hartree)
+            .collect::<Vec<_>>(),
+        spread
+    );
+}
+
+#[test]
+fn the_constrained_gradient_matches_a_finite_difference_along_the_tangent() {
+    // RP-04 对 RP-03 的要求：解析梯度在**约束切空间**里与数值一致（< 1e-5）。
+    use qwb_engine::opt::{Constraint, OptOptions, analytic_energy_and_gradient};
+    use qwb_engine::scan::{constraint_gradient, measure, set_coordinate};
+
+    let registry = Registry::open(data_root()).expect("qwb-data");
+    // 先把对称性打破：水的两个 O–H 等价，对称方向上的梯度分量恒为零，"0 vs 0"的对照没有
+    // 说服力。把第三个原子在 z 上推 0.05 Å（再重设 O–H），切空间方向导数才是非零的。
+    let mut asymmetric = water();
+    asymmetric.atoms[2].position_angstrom[2] += 0.05;
+    let geometry = set_coordinate(&asymmetric, ScanKind::Distance, &[0, 1], 1.10).expect("set");
+    // 约束对象本身也走一遍（`gradient()` 与 `constraint_gradient` 必须同一条路）。
+    let constraint = Constraint::new(ScanKind::Distance, vec![0, 1], 1.10);
+    let via_constraint = constraint.gradient(&geometry).expect("constraint gradient");
+    assert_eq!(via_constraint.len(), 9);
+    let options = OptOptions::new("sto-3g", "", "grid-coarse");
+
+    let (_, gradient) =
+        analytic_energy_and_gradient(&registry, &geometry, &options).expect("gradient");
+    let mut flat: Vec<f64> = gradient
+        .iter()
+        .flat_map(|row| row.iter().copied())
+        .collect();
+    let direction = constraint_gradient(&geometry, ScanKind::Distance, &[0, 1]).expect("c");
+    let norm = direction
+        .iter()
+        .map(|value| value * value)
+        .sum::<f64>()
+        .sqrt();
+    let along: f64 = flat.iter().zip(&direction).map(|(g, c)| g * c).sum::<f64>() / (norm * norm);
+    for (value, component) in flat.iter_mut().zip(&direction) {
+        *value -= along * component;
+    }
+
+    // 切空间里的方向就取**投影后的梯度方向本身**：解析方向导数就是 |g_eff|，数值方向导数
+    // 用同一方向的中心差分（每次位移后都把 O–H 重设回 1.10，保证差分留在约束面上）。
+    let projected_norm = flat.iter().map(|value| value * value).sum::<f64>().sqrt();
+    println!("约束切空间里的 |g_eff| = {projected_norm:.3e} Ha/Bohr");
+    assert!(
+        projected_norm > 1.0e-4,
+        "投影后的梯度几乎为零（{projected_norm:.3e}）—— 这个几何已经在约束极小点上，对照没有信息量"
+    );
+    let mut tangent: Vec<f64> = flat.iter().map(|value| value / projected_norm).collect();
+    let _ = &mut tangent;
+    let analytic = flat.iter().zip(&tangent).map(|(g, t)| g * t).sum::<f64>();
+
+    let step = 1.0e-3_f64;
+    let displaced = |sign: f64| -> f64 {
+        let mut moved = geometry.clone();
+        for (index, component) in tangent.iter().enumerate() {
+            let atom = index / 3;
+            let axis = index % 3;
+            moved.atoms[atom].position_angstrom[axis] += sign * step * component;
+        }
+        let moved = set_coordinate(&moved, ScanKind::Distance, &[0, 1], 1.10).expect("re-impose");
+        let (energy, _) =
+            analytic_energy_and_gradient(&registry, &moved, &options).expect("energy");
+        energy
+    };
+    // 差分是在 **Å** 上做的（几何用 Å），而解析梯度是 Ha/**Bohr** —— 差一个 Å→Bohr 常数。
+    const ANGSTROM_PER_BOHR: f64 = 0.529_177_210_903;
+    let numeric = (displaced(1.0) - displaced(-1.0)) / (2.0 * step) * ANGSTROM_PER_BOHR;
+    let difference = (analytic - numeric).abs();
+    println!("约束切空间方向导数：解析 {analytic:.10}，数值 {numeric:.10}，差 {difference:.3e}");
+    assert!(
+        analytic.abs() > 1.0e-5,
+        "这个切方向上的导数恒为零（{analytic:.3e}）—— 对照没有信息量，换一个非对称几何/方向"
+    );
+    assert!(
+        difference < 1.0e-5,
+        "约束下的方向导数：解析 {analytic:.10} vs 数值 {numeric:.10}（差 {difference:.3e}）"
+    );
+    // 顺带：约束梯度本身与几何一致（O–H 的方向），不是零向量。
+    assert!(
+        (measure(&geometry, ScanKind::Distance, &[0, 1]).expect("measure") - 1.10).abs() < 1e-10
+    );
 }
 
 #[test]

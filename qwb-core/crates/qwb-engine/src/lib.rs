@@ -1492,18 +1492,9 @@ impl RksBackend {
                     .to_string(),
             )
         })?;
-        if scan.relax {
-            // 弛豫扫描要**约束优化**：固定内坐标、只放开其余自由度。不实现约束而直接对每个点
-            // 做自由优化，所有点都会跑回同一个极小点（曲线是平的）—— 那是"看起来成功的扫描"，
-            // 属于本项目最忌讳的静默错误。所以显式拒绝，并把这一半记成 RP-03 的剩余。
-            return Err(EngineError::Unsupported(
-                "relaxed PES scans (options.scan.relax = true) need constrained optimisation: \
-                 a free optimisation from each point collapses every point onto the same \
-                 minimum, which would produce a flat curve that looks like a scan. Rigid scans \
-                 are implemented; the constrained-relaxation half is the remaining part of RP-03"
-                    .to_string(),
-            ));
-        }
+        // 弛豫扫描：每个点都是**约束优化**（`opt::Constraint`：梯度投影 + 每步重设内坐标）。
+        // 目录里曾经拒绝过它 —— 那时"每个点自由优化"会让所有点塌回同一个极小点，曲线是平的
+        // 却看着像扫描；现在约束那一半补上了，所以打开。
         let values = scan.values(input.molecule.n_atoms())?;
         reporter.progress("scan", 0.0);
         reporter.log(&format!(
@@ -1526,9 +1517,37 @@ impl RksBackend {
             let geometry = scan::set_coordinate(&input.molecule, scan.kind, &scan.atoms, *value)?;
             let mut point_input = input.clone();
             point_input.molecule = geometry;
-            // 刚性扫描：每个点只算一次单点（弛豫那一半已在上面的守卫里拒绝）。
-            let job = self.run_single_point(&point_input, reporter)?;
-            let (iterations, optimised) = (0_u32, false);
+            let (job, iterations, optimised) = if scan.relax {
+                let job = self.run_optimisation(&point_input, reporter)?;
+                let report = self.opt_sink.take();
+                let iterations = report.as_ref().map_or(0, |report| report.iterations);
+                let converged = report.as_ref().is_some_and(|report| report.converged);
+                if !converged {
+                    return Err(EngineError::Unsupported(format!(
+                        "relaxed scan point {} ({value}) did not converge; the scan would mix \
+                         optimised and non-optimised points",
+                        index + 1
+                    )));
+                }
+                // 优化之后内坐标必须仍在目标上（每步都重设过，这里只是最后再核一次）。
+                // `OptReport` 刚被 `take()` 走了，所以量的是优化器返回的几何 —— 它在
+                // `run_optimisation` 里已经写进 `artifacts/optimized.xyz`，这里重跑一次量的是
+                // 同一份数据（`run_optimisation` 收尾的单点用的就是优化后的几何）。
+                let achieved = report
+                    .as_ref()
+                    .map(|report| scan::measure(&report.molecule, scan.kind, &scan.atoms))
+                    .transpose()?
+                    .unwrap_or(*value);
+                if (achieved - *value).abs() > 1.0e-6 {
+                    return Err(EngineError::Internal(format!(
+                        "relaxed scan point {} drifted: wanted {value}, measured {achieved}",
+                        index + 1
+                    )));
+                }
+                (job, iterations, true)
+            } else {
+                (self.run_single_point(&point_input, reporter)?, 0_u32, false)
+            };
             let energy = job.energy_hartree;
             reporter.progress("scan", 100.0 * (index + 1) as f64 / total as f64);
             reporter.log(&format!(
@@ -1775,6 +1794,15 @@ impl RksBackend {
         options.scf_density_threshold = input.options.scf_density_threshold;
         // SC-02：开壳层（UHF）的解析梯度。UKS 还没接（见 `opt::analytic_energy_and_gradient`）。
         options.scf_type = input.options.scf_type;
+        // RP-03：弛豫扫描的每个点都是**约束优化**（固定内坐标）。目标值取当前几何上的内坐标值
+        // —— 调用方（`run_scan`）已经把坐标设成扫描点，所以这里量到的就是那一点的目标。
+        if input.jobtype == JobType::Scan
+            && let Some(scan) = &input.options.scan
+            && scan.relax
+        {
+            let target = scan::measure(&input.molecule, scan.kind, &scan.atoms)?;
+            options.constraint = Some(opt::Constraint::new(scan.kind, scan.atoms.clone(), target));
+        }
 
         reporter.progress("load", 0.0);
         reporter.log(&format!(

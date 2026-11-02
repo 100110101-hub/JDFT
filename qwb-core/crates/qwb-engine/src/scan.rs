@@ -130,6 +130,44 @@ pub fn set_coordinate(
     Ok(moved)
 }
 
+/// 约束梯度 `∂q/∂x`：数值中心差分（步长 `1e-4 Å`），按 `[3*atom + axis]` 摊平。
+///
+/// 用数值而不是逐类解析：距离的梯度是一行闭式，键角/二面角的闭式要写不少易错的分支，而这里
+/// 只需要一个**方向**（梯度投影用），代价是 `6N` 次几何度量（不跑 SCF，微秒级）。
+///
+/// # Errors
+///
+/// 内坐标无法度量（原子重合/越界），或差分出现非有限值。
+pub fn constraint_gradient(
+    molecule: &Molecule,
+    kind: ScanKind,
+    atoms: &[usize],
+) -> Result<Vec<f64>, EngineError> {
+    const STEP: f64 = 1.0e-4;
+    check_atoms(molecule, kind, atoms)?;
+    let dof = molecule.n_atoms() * 3;
+    let mut gradient = vec![0.0_f64; dof];
+    #[allow(clippy::needless_range_loop)]
+    for coordinate in 0..dof {
+        let atom = coordinate / 3;
+        let axis = coordinate % 3;
+        let mut plus = molecule.clone();
+        let mut minus = molecule.clone();
+        plus.atoms[atom].position_angstrom[axis] += STEP;
+        minus.atoms[atom].position_angstrom[axis] -= STEP;
+        let high = measure(&plus, kind, atoms)?;
+        let low = measure(&minus, kind, atoms)?;
+        let value = (high - low) / (2.0 * STEP);
+        if !value.is_finite() {
+            return Err(EngineError::Internal(
+                "scan: constraint gradient is not finite".into(),
+            ));
+        }
+        gradient[coordinate] = value;
+    }
+    Ok(gradient)
+}
+
 fn check_atoms(molecule: &Molecule, kind: ScanKind, atoms: &[usize]) -> Result<(), EngineError> {
     if atoms.len() != kind.atom_count() {
         return Err(EngineError::InvalidInput(format!(

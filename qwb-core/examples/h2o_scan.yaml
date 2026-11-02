@@ -5,7 +5,8 @@
 # |dE| 见 `artifacts/pes.json` 的 `max_adjacent_delta_hartree`；② `pes.json` 可被 GUI 读取；
 # ③ `jobtype: scan` 在 K2 的 `SUPPORTED_FEATURES` 里。
 #
-# 把 `relax` 改成 `true` 得到**弛豫扫描**（每个点做一次自由优化，从上一个点出发）。
+# 把 `relax` 改成 `true` 得到**弛豫扫描**：每个点在「固定 O–H」的约束下优化其余自由度
+# （投影 BFGS：梯度投影到约束切空间 + 每步重设 O–H），所以曲线不是平的。
 #
 # 运行：qwb scan examples/h2o_scan.yaml
 molecule:

@@ -36,6 +36,50 @@ const ANGSTROM_PER_BOHR: f64 = 0.529_177_210_903;
 /// （实测见 `tests/g01_analytic_def2svp.rs` 与 `g01_gradient_localize.rs`）。
 pub(crate) const XC_DERIVATIVE_DELTA_BOHR: f64 = 1.0e-3;
 
+/// 弛豫扫描用的内坐标约束（`RP-03`）。
+#[derive(Debug, Clone, PartialEq)]
+pub struct Constraint {
+    /// 内坐标种类。
+    pub kind: qwb_engine_api::pes::ScanKind,
+    /// 参与该内坐标的原子序号（0 基）。
+    pub atoms: Vec<usize>,
+    /// 目标值（距离 Å、角度/二面角度）。
+    pub target: f64,
+}
+
+impl Constraint {
+    /// 构造。
+    #[must_use]
+    pub fn new(kind: qwb_engine_api::pes::ScanKind, atoms: Vec<usize>, target: f64) -> Self {
+        Self {
+            kind,
+            atoms,
+            target,
+        }
+    }
+
+    /// 约束梯度 `∂q/∂x`（数值中心差分，单位 Å⁻¹；角度类是度/Å）——投影方向要它。
+    ///
+    /// # Errors
+    ///
+    /// 内坐标无法度量（原子重合/越界）或位移后出现非有限值。
+    pub fn gradient(&self, molecule: &qwb_engine_api::Molecule) -> Result<Vec<f64>, EngineError> {
+        crate::scan::constraint_gradient(molecule, self.kind, &self.atoms)
+    }
+
+    /// 把内坐标重设到目标值，返回新几何。
+    ///
+    /// # Errors
+    ///
+    /// 同 [`crate::scan::set_coordinate`]。
+    pub fn impose(
+        &self,
+        molecule: &qwb_engine_api::Molecule,
+    ) -> Result<qwb_engine_api::Molecule, EngineError> {
+        crate::scan::set_coordinate(molecule, self.kind, &self.atoms, self.target)
+    }
+}
+
 /// 优化器的选项。
 #[derive(Debug, Clone)]
 #[non_exhaustive]
@@ -58,6 +102,12 @@ pub struct OptOptions {
     pub scf_energy_threshold: f64,
     /// 每一步 SCF 的密度收敛阈值。
     pub scf_density_threshold: f64,
+    /// 约束优化：固定一个内坐标（弛豫扫描用；`None` = 无约束）。
+    ///
+    /// 实现方式是"**投影 + 重设**"：把梯度投影到约束的切空间（去掉沿约束方向的分量），
+    /// 每步走完再把内坐标重设回目标值。这样 `max|grad|` 报的是**切空间里的**残差 ——
+    /// 有约束时原始梯度本来就不为零，用原始梯度判收敛会永远不收敛。
+    pub constraint: Option<Constraint>,
     /// 自旋设置（`None`/`Rks`/`Rhf` = 闭壳层；`Uhf` = 开壳层 UHF，SC-02）。
     pub scf_type: Option<qwb_engine_api::ScfType>,
     /// 每一步 SCF 的热启动密度（`None` = core guess）。
@@ -89,6 +139,7 @@ impl OptOptions {
             scf_density_threshold: 1.0e-6,
             scf_type: None,
             scf_initial_density: None,
+            constraint: None,
         }
     }
 
@@ -656,6 +707,22 @@ pub fn optimize_with_progress(
     let (mut energy, mut gradient, mut analytic_fallback) =
         energy_and_gradient(registry, molecule, options)?;
     let mut flat_gradient = flatten_gradient(&gradient);
+    // 约束优化：把梯度投影到约束的切空间（`g_eff = g − (ĉ·g)ĉ`）。收敛判据、BFGS 方向、
+    // 割线更新全部用投影后的梯度 —— 有约束时原始梯度在约束方向上本来就不为零。
+    let project = |molecule: &Molecule, gradient: &mut Vec<f64>| -> Result<(), EngineError> {
+        if let Some(constraint) = &options.constraint {
+            let direction = constraint.gradient(molecule)?;
+            let norm = dot(&direction, &direction).sqrt();
+            if norm > 1.0e-12 {
+                let along = dot(&direction, gradient) / (norm * norm);
+                for (value, component) in gradient.iter_mut().zip(&direction) {
+                    *value -= along * component;
+                }
+            }
+        }
+        Ok(())
+    };
+    project(molecule, &mut flat_gradient)?;
 
     // 逆 Hessian 初值：对角近似（0.7 Ha/Bohr² 是分子体系的常用量级）
     let mut inverse_hessian: Vec<Vec<f64>> = (0..dimension)
@@ -716,10 +783,16 @@ pub fn optimize_with_progress(
                 .map(|(x, p)| x + alpha * p)
                 .collect();
             if trial.iter().all(|value| value.is_finite()) {
-                let trial_molecule = unflatten(molecule, &trial);
+                let mut trial_molecule = unflatten(molecule, &trial);
+                // 约束优化：每步走完把内坐标**重设**回目标值。线搜索比较的是重设后的
+                // 几何的能量（否则它评的是约束面外的一个点）。
+                if let Some(constraint) = &options.constraint {
+                    trial_molecule = constraint.impose(&trial_molecule)?;
+                }
                 let trial_energy = single_point(registry, &trial_molecule, options)?;
                 if trial_energy <= energy + 1.0e-4 * alpha * slope {
-                    accepted = Some((trial, trial_molecule, trial_energy));
+                    let coordinates = flatten(&trial_molecule);
+                    accepted = Some((coordinates, trial_molecule, trial_energy));
                     break;
                 }
             }
@@ -734,7 +807,8 @@ pub fn optimize_with_progress(
         if analytic_fallback.is_none() {
             analytic_fallback = fallback;
         }
-        let new_flat = flatten_gradient(&new_gradient);
+        let mut new_flat = flatten_gradient(&new_gradient);
+        project(&new_molecule, &mut new_flat)?;
 
         // BFGS 逆 Hessian 更新：H ← (I − ρ s yᵀ) H (I − ρ y sᵀ) + ρ s sᵀ
         let s: Vec<f64> = new_coordinates
