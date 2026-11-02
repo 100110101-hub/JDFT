@@ -31,6 +31,8 @@ KNOWN_SOURCES = {
     (reference_sources.DFTD3_DOI, reference_sources.DFTD3_URL),
     # DA-06（D4）：色散参考值来自官方 dftd4 实现。
     (reference_sources.DFTD4_DOI, reference_sources.DFTD4_URL),
+    # VF-02：FreeSolv 的水相实验水合自由能（CC0，DOI 是论文，URL 是实际取回的数据文件）。
+    (reference_sources.FREESOLV_DOI, reference_sources.FREESOLV_URL),
     # M2 ④：S22 的几何/参考能（DOI 是论文，URL 是实际取回的数据文件）。
     (reference_sources.S22_DOI, reference_sources.S22_URL),
 }

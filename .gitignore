@@ -72,3 +72,6 @@ cccbdb-raw.json
 /qwb-data/reference/_s22_staging/raw/
 # SMD 非极性项（CDS）的文献快照：MNSOL 描述符表 + 论文/学位论文（只作数据来源与公式核对，_smd_nonpolar_staging/raw/ 不进仓库）
 /qwb-data/solvent/_smd_nonpolar_staging/raw/
+
+# FreeSolv 原始快照（CC0，可再分发，但按项目惯例原始数据不进仓库：数据进 QWB 侧 CSV + sha256 钉）
+/qwb-data/reference/_freesolv_staging/raw/

@@ -74,6 +74,13 @@ S22_DOI = "10.1039/b600027d"
 #: 这里记 URL 用 ASE 的 GitLab 源（数据文件的位置），DOI 用 Takatani 的（数值的位置）。
 S22_URL = "https://gitlab.com/ase/ase/-/raw/master/ase/data/s22.py"
 
+#: FreeSolv（Mobley & Guthrie, J. Comput. Aided Mol. Des. 28, 711 (2014)）—— **CC0** 的
+#: 水相水合自由能；每个值自带它引用的原始实验文献 DOI（写进 CSV 的 `expt_reference_doi`）。
+#: 2026-11-13 用 Crossref 核过题名与期刊："FreeSolv: a database of experimental and calculated
+#: hydration free energies, with input files"。
+FREESOLV_DOI = "10.1007/s10822-014-9747-x"
+FREESOLV_URL = "https://github.com/MobleyLab/FreeSolv"
+
 #: 每一行都必须带的两个来源列（加在最后一列之后，位置固定）。
 SOURCE_COLUMNS = ("source_doi", "source_url")
 
@@ -97,6 +104,10 @@ GENERATORS = {
     # （本项目的数值 Hessian 对同一条链的独立实现）。
     # SV-03：PySCF 的 SMD（同一几何/基组）给出的 G_CDS、静电与总溶剂化能 —— 本项目的
     # SMD 接线（C-PCM 表面 + eq. 4.77）对这条整条链的独立实现。
+    # VF-02：水相实验水合自由能（FreeSolv，CC0）。8 溶剂 × 3 分子的完整集卡在 MNSOL 的
+    # WAF 403（见 status-v2.yaml 的 VF-02），所以先交付水这一列。
+    "qwb-core/crates/qwb-engine/tests/reference/solvation_free_energy.csv":
+        "scripts/gen_freesolv_reference.py",
     "qwb-core/crates/qwb-engine/tests/reference/smd_water.csv":
         "scripts/pyscf_smd_reference.py",
     "qwb-core/crates/qwb-engine/tests/reference/hessian_water.csv":
