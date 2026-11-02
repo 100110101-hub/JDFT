@@ -95,6 +95,10 @@ GENERATORS = {
         "scripts/pyscf_tdh_reference.py",
     # F-01/F-02 + `jobtype: freq`：PySCF 的**解析** Hessian 给出的简正模频率与约化质量
     # （本项目的数值 Hessian 对同一条链的独立实现）。
+    # SV-03：PySCF 的 SMD（同一几何/基组）给出的 G_CDS、静电与总溶剂化能 —— 本项目的
+    # SMD 接线（C-PCM 表面 + eq. 4.77）对这条整条链的独立实现。
+    "qwb-core/crates/qwb-engine/tests/reference/smd_water.csv":
+        "scripts/pyscf_smd_reference.py",
     "qwb-core/crates/qwb-engine/tests/reference/hessian_water.csv":
         "scripts/pyscf_hessian_reference.py",
     "qwb-core/crates/qwb-props/tests/reference/epr_spin_density.csv":

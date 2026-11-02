@@ -57,6 +57,27 @@ impl SolventModel {
     }
 }
 
+/// 气体常数（J/(mol·K)，CODATA 2018）。
+const GAS_CONSTANT_J_PER_MOL_K: f64 = 8.314_462_618;
+/// 1 Hartree 的焦耳数（每摩尔），与 `vibrations.rs` 用的是同一个数。
+const HARTREE_J_PER_MOL: f64 = 2_625_499.639;
+/// 标准态换算用的温度（K）与压强（Pa）：SMD 的 298.15 K / 1 atm。
+const STANDARD_TEMPERATURE_K: f64 = 298.15;
+const STANDARD_PRESSURE_PA: f64 = 101_325.0;
+
+/// `RT·ln(RT/p°)`：1 atm 理想气体 → 1 mol/dm³ 的吉布斯能差（Hartree）。
+///
+/// 在 298.15 K / 101 325 Pa 上 `RT/p° = 24.465 L/mol`，所以
+/// `RT ln(24.465) = 7.926 kJ/mol = +1.8943 kcal/mol = +3.0188e-3 Ha`。
+/// 写成函数而不是字面量：温度/压强的依赖关系要看得见，将来支持变温时只改这一个地方。
+#[must_use]
+pub fn standard_state_1atm_hartree() -> f64 {
+    let rt = GAS_CONSTANT_J_PER_MOL_K * STANDARD_TEMPERATURE_K;
+    // RT/p° 的 SI 单位是 m³/mol，换成 L/mol（×1e3）才能得到文献里的 24.465。
+    let molar_volume_litres = rt / STANDARD_PRESSURE_PA * 1.0e3;
+    rt * molar_volume_litres.ln() / HARTREE_J_PER_MOL
+}
+
 /// 空腔几何（表面积 / 体积 / tesserae 数）——三者总是一起出现，合成一个结构避免
 /// `SolvationResult::new` 参数爆炸，也让"空腔校验"集中在一个地方。
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
@@ -177,6 +198,26 @@ impl SolvationResult {
         self.dispersion_hartree = Some(dispersion_hartree);
         self.repulsion_hartree = Some(repulsion_hartree);
         self
+    }
+
+    /// `total_hartree` 的口径说明，以及到 **1 atm 气体标准态**的换算项。
+    ///
+    /// `total_hartree` 是 **1 M ↔ 1 M** 的转移自由能（`G_EP + G_CDS`）：气体与溶液都用
+    /// 1 mol/dm³ 的标准态，分子内的热化学项在两边**互相抵消**，所以这里没有振动/热修正。
+    ///
+    /// 文献与数据库里的溶剂化自由能常常写成 `ΔG*_S`（1 atm 气体 → 1 M 溶液），两者差一项
+    /// `RT·ln(RT/p°)`（Marenich–Cramer–Truhlar 2009；Imperial 学位论文 eq. 4.64–4.65）：
+    /// 在 298.15 K / 101 325 Pa 上 `RT/p° = 24.465 L/mol`，于是该项是
+    /// **+1.8943 kcal/mol**。比较之前先确认对方的约定，不要拿两个不同标准态的数直接相减。
+    #[must_use]
+    pub fn standard_state_hartree(&self) -> f64 {
+        standard_state_1atm_hartree()
+    }
+
+    /// 1 atm 气体标准态下的溶剂化自由能（`total_hartree + standard_state_hartree`）。
+    #[must_use]
+    pub fn delta_g_solv_1atm_hartree(&self) -> f64 {
+        self.total_hartree + standard_state_1atm_hartree()
     }
 
     /// 补上 SMD 的非极性项 `G_CDS` 与它的两半（eq. 4.77）。
@@ -341,6 +382,27 @@ mod tests {
         let expected = -0.02 + 0.001 - 0.002 + 0.0005;
         assert!((smd.nonpolar_sum_hartree() - (0.001 - 0.002 + 0.0005)).abs() < 1e-15);
         assert!((smd.decomposition_gap_hartree() - (-76.41 - expected)).abs() < 1e-12);
+    }
+
+    #[test]
+    fn the_standard_state_term_is_the_documented_1_89_kcal() {
+        // RT ln(RT/p°) = 24.465 · ln / Hartree：文献记 +1.89 kcal/mol（eq. 4.64–4.65）。
+        let hartree = crate::solvation::standard_state_1atm_hartree();
+        let kcal = hartree * 627.509_474_063_6;
+        assert!(
+            (kcal - 1.8943).abs() < 1.0e-3,
+            "标准态项 {kcal:.4} kcal/mol 与文献 1.89 不符"
+        );
+        let block = SolvationResult::new(
+            SolventModel::Cosmo,
+            "water",
+            -0.02,
+            -0.02,
+            CavityGeometry::new(42.0, 18.0, 1024),
+            7,
+        );
+        assert!((block.standard_state_hartree() - hartree).abs() < 1e-15);
+        assert!((block.delta_g_solv_1atm_hartree() - (-0.02 + hartree)).abs() < 1e-15);
     }
 
     #[test]

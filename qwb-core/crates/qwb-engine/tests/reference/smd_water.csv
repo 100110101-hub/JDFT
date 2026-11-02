@@ -1,0 +1,6 @@
+system,solvent,method,basis,quantity,value,unit,source_doi,source_url
+water,water,hf,sto-3g,energy_gas_hartree,-74.9631463875,hartree,10.1063/5.0006074,https://github.com/pyscf/pyscf
+water,water,hf,sto-3g,energy_smd_hartree,-74.9703768077,hartree,10.1063/5.0006074,https://github.com/pyscf/pyscf
+water,water,hf,sto-3g,cds_kcal_per_mol,1.441315,kcal/mol,10.1063/5.0006074,https://github.com/pyscf/pyscf
+water,water,hf,sto-3g,electrostatic_kcal_per_mol,-5.978472,kcal/mol,10.1063/5.0006074,https://github.com/pyscf/pyscf
+water,water,hf,sto-3g,total_kcal_per_mol,-4.537157,kcal/mol,10.1063/5.0006074,https://github.com/pyscf/pyscf

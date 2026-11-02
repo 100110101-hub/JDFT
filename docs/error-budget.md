@@ -57,6 +57,9 @@
 | SMD 的静电形式（本项目的 C-PCM 表面 vs 原文的 IEF-PCM/SWIG） | **未测**：仓库里没有第二套静电实现可比 | 无 §9.3 行 | 未测 | `docs/status-v2.yaml` 的 SV-03 条目 |
 | `G_CDS` 的表面采样点数（4096 点/原子，引擎默认） | 32768 点时对上游 8.4e-4、8192 点 1.63e-3（`O(1/√N)` 采样噪声），4096 点在 ~2e-3 量级 | SV-03：CDS 能量对上游 < 1e-3（引擎默认点数按 2e-3 记录） | ⚠️ 记录（点数写进日志） | `qwb-core/crates/qwb-props/tests/sv03_smd_sts.rs` |
 | SMD 的空腔半径切换（甲苯里的甲烷：COSMO Bondi C 1.70 vs SMD 1.85） | 面积 47.753 → **49.545 Å²**、G_EP −2.41e-4 → **−2.68e-4 Ha** | 无 §9.3 行；断言"两套半径不许静默混用" | ✅ | `qwb-core/crates/qwb-engine/tests/sv03_smd_engine.rs` |
+| SMD 的 `G_CDS` 对 PySCF 的 SMD（H2O/STO-3G/水，同几何同基组；我们的 4096 点/原子 tesserae vs 它的 SWIG 表面） | **1.440922 vs 1.441315 kcal/mol，差 3.93e-4** | SV-03：CDS 能量对上游 < 1e-3 （kcal/mol 量级） | ✅（比判据小 2.5 倍） | `qwb-core/crates/qwb-engine/tests/sv03_smd_oracle.rs` |
+| SMD 的**静电**一半对 PySCF 的 SMD（同一体系） | **−7.2746 vs −5.9785 kcal/mol，差 1.2961**（总溶剂化能差 1.2965） | 无 §9.3 行；实测记录：表面表示不同（tesserae vs SWIG），量级与 SV-01 记录的 COSMO 离散误差同源 | ⚠️ 记录（判据暂定 2 kcal/mol，防止"两边悄悄改了实现"） | `qwb-core/crates/qwb-engine/tests/sv03_smd_oracle.rs` |
+| 溶剂化自由能的标准态（1 M ↔ 1 M vs 1 atm 气体 → 1 M） | `RT ln(RT/p°) = ` **+1.89433 kcal/mol**（298.15 K / 101 325 Pa，解析式，不是拟合） | 文献 eq. 4.64–4.65 记 +1.89 | ✅ | `qwb-contracts/engine-api/src/solvation.rs`（`standard_state_1atm_hartree`） |
 | 幽灵原子（counterpoise）路径 vs PySCF `ghost:` | 水二聚体 STO-3G：二聚体 5.0e-8、单体（二聚体基组）3.1e-8、单体（自由）3.1e-8 Ha；BSSE(A) = 2.318e-5 Ha | M2：与 oracle 一致 < 1e-6 | ✅ | `qwb-core/crates/qwb-engine/tests/m2_ghost_counterpoise.rs` |
 | 完整 TDDFT（RPA/TDHF，ST-01）vs PySCF `tdscf.rhf.TDHF` | 4.6e-7…5.9e-7 eV（H2O/STO-3G）、1.2e-7…2.9e-7 eV（def2-SVP） | `§9.3` 无专门行；ST-01 判据 0.15 eV | ✅（小 5 个量级；相对 TDA 系统性下降 0.014–0.110 eV） | `qwb-core/crates/qwb-response/tests/st01_tddft.rs` |
 | 短程 2e 积分（IN-02，ω ∈ {0, 0.1, 0.3, 0.6, 1.0}） | 相对 1.41e-14（与 u 空间独立闭式） | K10 判据 1e-9 | ✅ | `qwb-core/crates/qwb-integrals/tests/in02_short_range.rs` |

@@ -1114,7 +1114,8 @@ gitignored 的 `qwb-data/reference/_*_staging/raw/` 里，派生物（CSV/JSON�
 * **开壳层的布居/cube**：只有 α 套轨道，宁可不写（§3.4）。
 * **溶剂**只到单点，且静电都是 C-PCM 一族：`opt`/`freq` 退出码 4（SV-02），PBF 退出码 4
   （SV-04）。**SMD 的 `sp` 已接**（静电 + `G_CDS`），但 SV-03 的判据（8 溶剂 × 3 分子的
-  ΔG_solv 对实验 MAE < 1.0 kcal/mol）还没走完：缺热化学修正（`freq` 未接线），而且
+  ΔG_solv 对实验 MAE < 1.0 kcal/mol）还没走完：**缺实验参考集与参数化层级**（分子内的热化学项
+  在 1 M ↔ 1 M 的转移能里互相抵消，上一版这条写错了），而且
   SMD 原文的静电是 IEF-PCM(SWIG) 而不是我们这套 C-PCM 表面 —— 两处都记在
   `docs/error-budget.md`。**旧账本的"三项非极性项在付费墙后"是错的**：SMD 的非极性项
   只有一项 `G_CDS`，参数来自公开的 MNSOL 描述符表，已随数据钉住（见 choices 一百八十二）。
@@ -1159,7 +1160,7 @@ ECP、频率库函数）在 `docs/status.yaml`；这里只列阶段二台账里�
 | 色散 D3(BJ)/D3(0)（含开壳层与线程确定性） | ✅ | FX-04, DA-06 | 对官方 s-dftd3 逐项 |
 | 幽灵原子 / counterpoise（BSSE）单点 | ⚠ | M2 | 只支持 `sp`；色散/ECP/溶剂未审，显式拒绝 |
 | COSMO / C-PCM 单点 | ⚠ | SV-01 | 面积判据仍 blocked（解析球帽已部分落地）；缺非极性项 |
-| SMD 单点（静电 + `G_CDS`） | ⚠ | SV-03 | 8 溶剂 × 3 分子的 ΔG_solv MAE 判据未走完（缺热化学修正）；静电是 C-PCM 而非 IEF-PCM(SWIG) |
+| SMD 单点（静电 + `G_CDS`） | ⚠ | SV-03 | 判据（8 溶剂 × 3 分子对实验 MAE < 1.0）缺**实验参考集**与参数化层级；与 PySCF 的 SMD 比：`G_CDS` 差 3.9e-4、**静电差 1.2961** kcal/mol（表面表示不同）；标准态项 `RT ln(RT/p°) = +1.8943` 按对方约定加 |
 | 溶剂化解析梯度 / 优化 | ❌ | SV-02 | 依赖 SV-01 |
 | 溶液相频率 / 热化学 | ❌ | SV-05 | 依赖 SV-01/SV-02 |
 | `jobtype: freq`（**数值** Hessian：频率/IR/热化学） | ⚠ | RS-05 | 已接线（第 388 轮）：频率对 PySCF 解析 Hessian 差 ≤ 0.19 cm⁻¹；**解析** Hessian 仍 blocked（20× 的前提不成立），freq 因此是 3N+1 次 SCF 级的成本 |
