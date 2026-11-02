@@ -124,6 +124,17 @@ GENERATORS = {
         "scripts/pyscf_nmr_shieldings_reference.py",
     "qwb-core/crates/qwb-response/tests/reference/paramagnetic.csv":
         "scripts/pyscf_nmr_shieldings_reference.py",
+    # RS-04（GIAO）：PySCF 侧的 GIAO-HF 屏蔽总和与 GIAO Fock/重叠导数。PySCF 2.14.0 的这个
+    # 构建**没有 `pyscf.prop`**（PyPI 的 wheel 与 sdist 都没有那个子包，见
+    # `docs/choices.md` 八十一），所以生成器把 PySCF 自己的 GIAO 实现
+    # （`pyscf/prop/nmr/rhf.py` v1.7.6 源码）逐步转写到脚本里：积分走 PySCF 的 libcint
+    # GIAO 积分（`int1e_giao_a11part` / `int1e_a01gp` / `int1e_giao_irjxp` / `int1e_ig*` /
+    # `int2e_ig1`），SCF/CPHF 也走 PySCF。转写的真伪由那个文件 `__main__` 里的自检值钉住
+    # （`--self-test`：FH/6-31G 的 375.232839 / 483.002139 / 449.032227）。
+    "qwb-core/crates/qwb-response/tests/reference/giao_nmr.csv":
+        "scripts/pyscf_giao_nmr_reference.py",
+    "qwb-core/crates/qwb-response/tests/reference/giao_fock_derivative.csv":
+        "scripts/pyscf_giao_nmr_reference.py",
     # DA-06 / FX-04：色散校正的参考能量与解析梯度来自官方 s-dftd3（黑盒），几何与参考值
     # 出自同一个脚本（`d3_dimers.csv` 是几何的单一真相源）。
     "qwb-core/crates/qwb-scf/tests/reference/d3_dimers.csv":

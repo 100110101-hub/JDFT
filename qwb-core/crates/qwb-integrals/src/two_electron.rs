@@ -198,6 +198,90 @@ pub(crate) fn cartesian_block(
     block
 }
 
+/// 一个壳层四元组的**直角坐标**块，其中第一个壳层带一个 `r_axis` 权重
+/// （`⟨r_axis · χ_μ| ⋯⟩`，RS-04 的 GIAO 两电子相位导数用）。
+///
+/// 三个要点：
+///
+/// 1. `r_axis · χ_μ = χ_{μ+e_axis} + R_{μ,axis} · χ_μ`（`R_μ` 是**函数中心**）。**两项都算**，
+///    所以这里给出的就是完整的 `∫ r_axis χ_μ ⋯`。
+/// 2. 抬高的那一项**用原来的归一化** `N(powers)`，**不是** `N(powers+e_axis)` ——
+///    与 [`crate::giao`] 的磁矩积分、[`crate::momentum`] 同一约定（第 399 轮踩过的坑）。
+///    按分量归一化下比值为 `N(p)/N(p+e_axis) = sqrt(2 p_axis+1)/(2 sqrt α)`。
+/// 3. 球谐变换仍旧作用在**原壳层**的直角分量上：`T` 的行数不变，所以抬高的块可以直接
+///    用原壳层的 `transform` 收缩（`r_axis` 是乘性函数，与变换可交换）。
+pub(crate) fn cartesian_block_raised(
+    a: &ShellBlock,
+    b: &ShellBlock,
+    c: &ShellBlock,
+    d: &ShellBlock,
+    axis: usize,
+) -> Vec<f64> {
+    let dims = [
+        a.components.len(),
+        b.components.len(),
+        c.components.len(),
+        d.components.len(),
+    ];
+    let mut block = vec![0.0; dims[0] * dims[1] * dims[2] * dims[3]];
+    for (ma, &pa) in a.components.iter().enumerate() {
+        let mut raised = pa;
+        raised[axis] += 1;
+        for (mb, &pb) in b.components.iter().enumerate() {
+            for (mc, &pc) in c.components.iter().enumerate() {
+                for (md, &pd) in d.components.iter().enumerate() {
+                    let mut sum = 0.0;
+                    for (i, &alpha) in a.exponents.iter().enumerate() {
+                        let weight_a =
+                            a.coefficients[i] * primitive_norm((pa[0], pa[1], pa[2]), alpha);
+                        if weight_a == 0.0 {
+                            continue;
+                        }
+                        for (j, &beta) in b.exponents.iter().enumerate() {
+                            let weight_b =
+                                b.coefficients[j] * primitive_norm((pb[0], pb[1], pb[2]), beta);
+                            if weight_b == 0.0 {
+                                continue;
+                            }
+                            for (k, &gamma) in c.exponents.iter().enumerate() {
+                                let weight_c = c.coefficients[k]
+                                    * primitive_norm((pc[0], pc[1], pc[2]), gamma);
+                                if weight_c == 0.0 {
+                                    continue;
+                                }
+                                for (l, &delta) in d.exponents.iter().enumerate() {
+                                    let weight_d = d.coefficients[l]
+                                        * primitive_norm((pd[0], pd[1], pd[2]), delta);
+                                    if weight_d == 0.0 {
+                                        continue;
+                                    }
+                                    let weight = weight_a * weight_b * weight_c * weight_d;
+                                    // 抬高一次幂的那一项：`r_axis [N(pa)χ̃_p] = N(pa)(χ̃_{p+e} + R_axis χ̃_p)`，
+                                    // 所以抬高的那一项**不乘任何归一化比值**（`primitive_component`
+                                    // 给的就是未归一化的 `χ̃` —— 与 `crate::giao` 的磁矩积分同一约定）。
+                                    let lifted = primitive_component(
+                                        raised, a.center, alpha, pb, b.center, beta, pc, c.center,
+                                        gamma, pd, d.center, delta,
+                                    );
+                                    // 常数项 `R_{μ,axis} · χ_μ`
+                                    let plain = primitive_component(
+                                        pa, a.center, alpha, pb, b.center, beta, pc, c.center,
+                                        gamma, pd, d.center, delta,
+                                    );
+                                    sum += weight * (lifted + a.center[axis] * plain);
+                                }
+                            }
+                        }
+                    }
+                    let index = ((ma * dims[1] + mb) * dims[2] + mc) * dims[3] + md;
+                    block[index] = sum;
+                }
+            }
+        }
+    }
+    block
+}
+
 #[allow(clippy::needless_range_loop)] // flat 同时用于算 axis 下标与写回
 /// 对第 `axis` 个指标做一次球谐变换（`T` 的列数即该壳层的球谐维数）。
 ///

@@ -386,6 +386,92 @@ fn assemble_moments(
     Ok(out)
 }
 
+/// `[e_k × a]_l = ε_{lkm} a_m`（与 [`crate::core_hamiltonian`] 同一个叉积符号）。
+fn cross_unit(a: [f64; 3]) -> [[f64; 3]; 3] {
+    [[0.0, -a[2], a[1]], [a[2], 0.0, -a[0]], [-a[1], a[0], 0.0]]
+}
+
+/// 单电子核心哈密顿量对磁场的 GIAO 导数：三个**实**矩阵 `Y_k`，`∂H/∂B_k = i Y_k`。
+///
+/// # 公式与推导（与 [`crate::core_hamiltonian::core_hamiltonian_field_derivative`] 的区别）
+///
+/// London 轨道下 `⟨φ_μ|h|φ_ν⟩` 用**右矢**的相位做规范变换：
+///
+/// ```text
+/// e^{iK_ν·r} h(B) e^{−iK_ν·r} = ½(p + ½B×(r−R_ν))² + V          ← 规范原点变成 R_ν
+/// ```
+///
+/// 于是（`B = 0` 处，一次项）
+///
+/// ```text
+/// ∂H_μν/∂B_k = (i/2) Σ_l [e_k×(R_μ−R_ν)]_l M_l[μν] + ½ ⟨μ| L_k(R_ν) |ν⟩
+/// M_l = ⟨μ| r_l (T+V) |ν⟩（[`kinetic_moment_integrals`] + [`nuclear_moment_integrals`]）
+/// ```
+///
+/// 写成实矩阵（`L_k(R) = L_k(0) − (R×p)_k`，且 `L = −iN`、`p = −i·∂`）：
+///
+/// ```text
+/// Y_k = ½ Σ_l [e_k×(R_μ−R_ν)]_l M_l − ½ N_k(0) + ½ (e_k×R_ν)·∂
+/// ```
+///
+/// **规范原点 `O` 不出现**（`R_μ−R_ν` 里精确抵消）。
+///
+/// 这不是 [`crate::core_hamiltonian::core_hamiltonian_field_derivative`]：那个函数把
+/// 相位的两端都写成 `R−O`，等价于这里的 `Y_k + ½ N_k(O)` —— 差一个绕 `O` 的角动量。
+/// 物理的 `∂H/∂B` 只有一个，本函数与 PySCF 的 GIAO 单电子 Fock 导数一致
+/// （`crates/qwb-integrals/tests/reference/giao_fock_derivative.csv`，逐元素 ≤ 1e-11）。
+///
+/// # Errors
+///
+/// 球谐变换不可用（`l` 过大）、分子里出现元素表之外的符号。
+pub fn giao_core_field_derivative(
+    basis: &InternalBasis,
+    molecule: &Molecule,
+) -> Result<[Matrix; 3], EngineError> {
+    let n = basis.n_functions();
+    let kinetic = kinetic_moment_integrals(basis)?;
+    let nuclear = nuclear_moment_integrals(basis, molecule)?;
+    let angular = crate::angmom::angular_momentum_integrals(basis, molecule, [0.0; 3])?;
+    let momentum = crate::momentum::momentum_integrals(basis)?;
+    let mut centers: Vec<[f64; 3]> = Vec::with_capacity(n);
+    for shell in basis.shells() {
+        for _ in 0..shell.n_functions() {
+            centers.push(shell.center_bohr);
+        }
+    }
+    if centers.len() != n {
+        return Err(EngineError::Internal(format!(
+            "giao_core_field_derivative: {n} basis functions but {} centers",
+            centers.len()
+        )));
+    }
+    let mut out: [Matrix; 3] = std::array::from_fn(|_| Matrix::zeros(n, n));
+    for mu in 0..n {
+        for nu in 0..n {
+            let delta = [
+                centers[mu][0] - centers[nu][0],
+                centers[mu][1] - centers[nu][1],
+                centers[mu][2] - centers[nu][2],
+            ];
+            let cross_delta = cross_unit(delta);
+            let cross_center = cross_unit(centers[nu]);
+            for k in 0..3 {
+                let mut value = 0.0_f64;
+                for l in 0..3 {
+                    let core_moment = kinetic[l].get(mu, nu) + nuclear[l].get(mu, nu);
+                    value += 0.5 * cross_delta[k][l] * core_moment;
+                }
+                value -= 0.5 * angular[k].get(mu, nu);
+                for l in 0..3 {
+                    value += 0.5 * cross_center[k][l] * momentum[l].get(mu, nu);
+                }
+                out[k][(mu, nu)] = value;
+            }
+        }
+    }
+    Ok(out)
+}
+
 #[cfg(test)]
 mod tests {
     use super::{giao_overlap_derivative, giao_overlap_derivative_cartesian};
