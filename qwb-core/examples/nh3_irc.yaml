@@ -38,3 +38,4 @@ options:
     max_steps: 60
     step_size: 0.10
     direction: both
+    plateau_hartree: 1.0e-5

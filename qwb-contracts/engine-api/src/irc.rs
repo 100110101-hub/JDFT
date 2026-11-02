@@ -29,6 +29,12 @@ pub struct IrcOptions {
     pub step_size: f64,
     /// 走哪一端（`both` 双向、`forward`/`reverse` 单端）。
     pub direction: IrcDirection,
+    /// 平台的判据：某一步的能量下降小于这个值（Hartree）就停走，交给端点自由优化收尾。
+    ///
+    /// 定步长最速下降**不会**在极小点上按梯度收敛（它在谷底来回绕），所以停止条件用的是
+    /// "再走也不降能了"。不用 `max|g|` 判：鞍点附近梯度本来就小，按梯度停会在起点就停
+    /// （第一版正是这样，路径只有 2 个点）。
+    pub plateau_hartree: f64,
 }
 
 /// IRC 的方向。
@@ -76,6 +82,7 @@ impl IrcOptions {
             max_steps: 200,
             step_size: 0.1,
             direction: IrcDirection::Both,
+            plateau_hartree: 1.0e-5,
         }
     }
 
@@ -97,6 +104,13 @@ impl IrcOptions {
     #[must_use]
     pub fn with_direction(mut self, direction: IrcDirection) -> Self {
         self.direction = direction;
+        self
+    }
+
+    /// 改"平台"的判据（Hartree）。
+    #[must_use]
+    pub fn with_plateau(mut self, plateau_hartree: f64) -> Self {
+        self.plateau_hartree = plateau_hartree;
         self
     }
 }

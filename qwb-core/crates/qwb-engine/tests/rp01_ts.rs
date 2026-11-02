@@ -80,6 +80,8 @@ fn the_ammonia_umbrella_saddle_is_a_first_order_saddle() {
         "能量 {:.10} Ha",
         block.energy_hartree
     );
+    // 鞍点几何：`examples/nh3_irc.yaml` 的起点取自本测试跑出的 `artifacts/optimized.xyz`
+    // （手工填一个"大概平面"的几何会得到 4 个虚频 —— 非驻点的 Hessian 没有意义）。
     println!(
         "NH3 伞形鞍点：E = {:.10} Ha，max|g| = {:.3e} Ha/Bohr，虚频 {:.2} cm⁻¹，{} 步（{:.1} s）",
         block.energy_hartree,

@@ -602,7 +602,13 @@ fn energy_and_gradient(
     }
 }
 
-fn single_point(
+/// 只算一个几何的**能量**（不建梯度）。线搜索/回退重试只要能量时用这个 ——
+/// 解析梯度的装配（Pulay/XC 几何项）在中等体系上比 SCF 本身还贵。
+///
+/// # Errors
+///
+/// 同 [`analytic_energy_and_gradient`] 的 SCF 部分。
+pub fn single_point(
     registry: &Registry,
     molecule: &Molecule,
     options: &OptOptions,

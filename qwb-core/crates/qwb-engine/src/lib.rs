@@ -1529,6 +1529,7 @@ impl RksBackend {
                 &options,
                 options_irc.step_size,
                 options_irc.max_steps,
+                options_irc.plateau_hartree,
                 1.0,
                 reporter,
             )?;
@@ -1550,6 +1551,7 @@ impl RksBackend {
                 &options,
                 options_irc.step_size,
                 options_irc.max_steps,
+                options_irc.plateau_hartree,
                 -1.0,
                 reporter,
             )?;

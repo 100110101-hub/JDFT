@@ -81,23 +81,6 @@ fn props_points_at_the_required_input_field_when_missing() {
 }
 
 #[test]
-fn unimplemented_path_commands_exit_4_and_name_the_owner() {
-    // RP-01/RP-03 落地后 `ts`/`scan` 走真实现（见 t20_ts.rs / t19_scan.rs），这里只剩 irc。
-    #[allow(clippy::single_element_loop)]
-    for (command, owner) in [("irc", "RP-02")] {
-        let (code, text) = run(&[command, "h2_sto3g_svwn5.yaml"]);
-        assert_eq!(
-            code, 4,
-            "`qwb {command}` 未实装时必须退出 4，实际 {code}：\n{text}"
-        );
-        assert!(
-            text.contains(owner),
-            "`qwb {command}` 的输出必须点名 {owner}：\n{text}"
-        );
-    }
-}
-
-#[test]
 fn missing_input_file_exits_1_not_4() {
     let (code, text) = run(&["ts", "definitely-not-here.yaml"]);
     assert_eq!(

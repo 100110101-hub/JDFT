@@ -126,6 +126,10 @@ fn displace(molecule: &Molecule, cartesian: &[f64], factor: f64) -> Molecule {
     moved
 }
 
+fn flat_of(gradient: &[[f64; 3]]) -> Vec<f64> {
+    flatten(gradient)
+}
+
 fn flatten(gradient: &[[f64; 3]]) -> Vec<f64> {
     gradient
         .iter()
@@ -152,6 +156,7 @@ pub fn walk(
     options: &OptOptions,
     step_size: f64,
     max_steps: u32,
+    plateau_hartree: f64,
     sign: f64,
     reporter: &dyn crate::Reporter,
 ) -> Result<(Vec<IrcPoint>, Molecule), EngineError> {
@@ -196,34 +201,33 @@ pub fn walk(
     // 第一步必须沿虚频本征向量**离开鞍点**：鞍点上梯度本来就近零，直接按梯度判据会立刻
     // "收敛"（第一版就是这样，得到一个只有 1 个点的路径）。
     let mut current = displace(saddle, &cartesian_mode, direction * step_size);
-    let mut energy = analytic_energy_and_gradient(registry, &current, options)?.0;
+    let mut energy = crate::opt::single_point(registry, &current, options)?;
     if energy >= base_energy {
         return Err(EngineError::Internal(format!(
             "irc: the first step along the imaginary mode did not lower the energy \
              ({base_energy:.10} -> {energy:.10} Ha)"
         )));
     }
-    {
-        let (_, gradient) = analytic_energy_and_gradient(registry, &current, options)?;
-        points.push(IrcPoint::new(1, energy, max_abs(&flatten(&gradient))));
-    }
+    let (_, mut gradient) = analytic_energy_and_gradient(registry, &current, options)?;
+    let mut force = max_abs(&flatten(&gradient));
+    points.push(IrcPoint::new(1, energy, force));
     reporter.log(&format!(
-        "irc: left the saddle along the imaginary mode, E = {energy:.10} Ha"
+        "irc: left the saddle along the imaginary mode, E = {energy:.10} Ha, max|g| = {force:.3e}"
     ));
+
     for step in 2..=max_steps {
-        let (_, gradient) = analytic_energy_and_gradient(registry, &current, options)?;
-        let flat = flatten(&gradient);
-        let force = max_abs(&flat);
-        if force < options.force_threshold {
-            return Ok((points, current));
-        }
-        let step_vector = mass_weighted_step(&current, &flat, step_size)?;
-        // 单调性：只接受让能量下降的步（折半最多 4 次）。
+        // 停止条件是**能量不再下降**，不是 |g| 小：鞍点附近梯度本来就小，按 |g| 停会在起点
+        // 立刻停（第一版就是这样）。到谷底后下降量自然掉到平台以下，再交给 `refine_end`。
+        let previous_energy = energy;
+        // `step_vector` 已经是**负梯度方向**（质量加权、定长），所以这里不能再乘方向符号：
+        // 第一版乘了 `direction`，reverse 一端于是沿着上坡走，"只接受降能步"的回退立刻全失败。
+        let step_vector = mass_weighted_step(&current, &flat_of(&gradient), step_size)?;
+        // 单调性：只接受让能量下降的步（折半最多 4 次）。回退只算**能量**（不算梯度）。
         let mut scale = 1.0_f64;
         let mut accepted = None;
         for _ in 0..4 {
-            let trial = displace(&current, &step_vector, direction * scale);
-            let trial_energy = analytic_energy_and_gradient(registry, &trial, options)?.0;
+            let trial = displace(&current, &step_vector, scale);
+            let trial_energy = crate::opt::single_point(registry, &trial, options)?;
             if trial_energy < energy {
                 accepted = Some((trial, trial_energy));
                 break;
@@ -231,21 +235,26 @@ pub fn walk(
             scale *= 0.5;
         }
         let Some((next, next_energy)) = accepted else {
-            // 能量不再下降：已经到极小点的平地上了。
+            // 能量不再下降：已经到极小点的平地上了，交给 `refine_end`。
             return Ok((points, current));
         };
         current = next;
         energy = next_energy;
-        let (_, gradient) = analytic_energy_and_gradient(registry, &current, options)?;
-        let force = max_abs(&flatten(&gradient));
+        let (_, new_gradient) = analytic_energy_and_gradient(registry, &current, options)?;
+        gradient = new_gradient;
+        force = max_abs(&flat_of(&gradient));
         points.push(IrcPoint::new(step, energy, force));
+        if previous_energy - energy < plateau_hartree {
+            reporter.log(&format!(
+                "irc: plateau after {step} points (dE = {:.2e} Ha) — handing over to the optimiser",
+                previous_energy - energy
+            ));
+            return Ok((points, current));
+        }
         if step % 10 == 0 {
             reporter.log(&format!(
                 "irc step {step}: E = {energy:.10} Ha, max|g| = {force:.3e} Ha/Bohr"
             ));
-        }
-        if force < options.force_threshold {
-            return Ok((points, current));
         }
     }
     Err(EngineError::Unsupported(format!(

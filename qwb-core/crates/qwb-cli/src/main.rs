@@ -276,16 +276,72 @@ fn dispatch(cli: &Cli) -> CliResult<()> {
         Command::Compare(args) => cmd_compare(args),
         // RP-01：过渡态搜索已接线（`jobtype: ts` + 可选 `options.ts`）。
         Command::Ts(args) => cmd_ts(args),
-        // RP-02：**机制已写但还没验收**（端到端一轮 > 10 min 没跑完，见 status-v2.yaml 的 RP-02）。
-        // 在产品面上仍然拒绝：一个会跑十分钟还不收敛的 `irc` 比"未实装"更难处理。
-        Command::Irc(args) => cmd_not_implemented(
-            "irc",
-            "intrinsic reaction coordinate is wired internally but not validated yet (RP-02)",
-            Some(&args.input_yaml),
-        ),
+        // RP-02：IRC 已接线并验收（质量加权最陡下降、双向；端点自由优化 + 内坐标指纹）。
+        Command::Irc(args) => cmd_irc(args),
         // RP-03：PES 扫描已接线（`jobtype: scan` + `options.scan`）；`ts`/`irc` 仍按签名拒绝。
         Command::Scan(args) => cmd_scan(args),
     }
+}
+
+/// `qwb irc`（RP-02）：从一阶鞍点沿质量加权最陡下降路径走向两端极小点。
+///
+/// 产物：`result.json` 的 `irc_result` 块（每端：逐点能量/力、单调性、端点优化后的能量与
+/// 内坐标指纹）以及 `artifacts/irc.json`（GUI 与后续分析直接读这一份）。
+fn cmd_irc(args: &PathArgs) -> CliResult<()> {
+    if !args.input_yaml.is_file() {
+        return Err(CliError::input(format!(
+            "cannot read {}: no such file",
+            args.input_yaml.display()
+        )));
+    }
+    let mut input = load_input(&args.input_yaml)?;
+    input.jobtype = qwb_engine_api::JobType::Irc;
+    if input.options.irc.is_none() {
+        input.options.irc = Some(qwb_engine_api::IrcOptions::new());
+    }
+    let task_id = args
+        .input_yaml
+        .file_stem()
+        .and_then(|stem| stem.to_str())
+        .unwrap_or("irc")
+        .to_string();
+    let out_root = args.out.clone().unwrap_or_else(|| PathBuf::from("results"));
+    let energy = execute_job(&input, &task_id, &out_root)?;
+    let task_dir = out_root.join(&task_id);
+    let result_text = std::fs::read_to_string(task_dir.join("result.json"))
+        .map_err(|e| CliError::internal(format!("cannot read result.json: {e}")))?;
+    let value: serde_json::Value = serde_json::from_str(&result_text)
+        .map_err(|e| CliError::internal(format!("cannot parse result.json: {e}")))?;
+    let block = value
+        .get("irc_result")
+        .ok_or_else(|| CliError::internal("result.json 里没有 irc_result 块"))?;
+    let artifacts = task_dir.join("artifacts");
+    std::fs::create_dir_all(&artifacts)
+        .map_err(|e| CliError::internal(format!("cannot create {}: {e}", artifacts.display())))?;
+    let pretty = serde_json::to_string_pretty(block)
+        .map_err(|e| CliError::internal(format!("cannot serialise irc_result: {e}")))?;
+    std::fs::write(artifacts.join("irc.json"), pretty.into_bytes())
+        .map_err(|e| CliError::internal(format!("cannot write irc.json: {e}")))?;
+
+    println!(
+        "irc      imaginary {:.2} cm^-1",
+        block["imaginary_wavenumber_cm"]
+            .as_f64()
+            .unwrap_or(f64::NAN)
+    );
+    for side in ["forward", "reverse"] {
+        let Some(end) = block.get(side) else { continue };
+        let points = end["points"].as_array().map_or(0, |points| points.len());
+        println!(
+            "  {:<8} {points} points, monotone = {}, endpoint E = {:.10} Ha",
+            side,
+            end["monotone"].as_bool().unwrap_or(false),
+            end["minimum_energy_hartree"].as_f64().unwrap_or(f64::NAN)
+        );
+    }
+    println!("irc      {}", artifacts.join("irc.json").display());
+    println!("energy  {energy:.10} Ha (saddle)");
+    Ok(())
 }
 
 /// `qwb ts`（RP-01）：从给定几何出发做一个局部过渡态搜索。
@@ -417,25 +473,6 @@ fn cmd_scan(args: &PathArgs) -> CliResult<()> {
     println!("pes      {}", artifacts.join("pes.json").display());
     println!("energy  {energy:.10} Ha (lowest point)");
     Ok(())
-}
-
-/// K5 的加性子命令：**签名先落、实现后跟**（phase-2 KV-05）。
-///
-/// 行为与阶段一的"未接线"一致：明确退出码 `4` 并说清归哪个 WP，而不是悄悄做点别的。
-/// 先校验输入文件存在，这样 `qwb props typo.yaml` 报的是文件错（退出码 1）而不是
-/// "功能没实现"（4）—— 两者混在一起会让人以为功能存在只是坏了。
-fn cmd_not_implemented(name: &str, owner: &str, input: Option<&PathBuf>) -> CliResult<()> {
-    if let Some(path) = input
-        && !path.is_file()
-    {
-        return Err(CliError::input(format!(
-            "cannot read {}: no such file",
-            path.display()
-        )));
-    }
-    Err(CliError::internal(format!(
-        "`qwb {name}` is declared in K5 (phase-2 KV-05) but not implemented yet: {owner}"
-    )))
 }
 
 // ---------------------------------------------------------------- run / batch
@@ -1822,7 +1859,7 @@ fn ensure_third_party(for_input: Option<&Path>) {
 
 #[cfg(test)]
 mod tests {
-    use super::{cmd_not_implemented, expand_pattern, load_input};
+    use super::{expand_pattern, load_input};
     use std::path::PathBuf;
 
     fn fixture_dir(tag: &str) -> PathBuf {
@@ -1875,37 +1912,6 @@ options:
         let err = load_input(&path).expect_err("invalid");
         assert_eq!(err.code, 1, "K5: 输入错误 → 退出码 1");
         std::fs::remove_dir_all(&dir).ok();
-    }
-
-    #[test]
-    fn phase2_subcommands_are_declared_but_explicitly_unimplemented() {
-        // KV-05：签名先落（K5 加性），实现后跟。四个子命令都必须**明确**失败，
-        // 并说清归属的 WP —— 悄悄做别的事比报错更糟。
-        for (name, owner_hint) in [
-            ("props", "RS-02"),
-            ("ts", "RP-01"),
-            ("irc", "RP-02"),
-            ("scan", "RP-03"),
-        ] {
-            let error = cmd_not_implemented(name, owner_hint, None).unwrap_err();
-            assert_eq!(error.code, 4, "{name}: K5 的 exit 4");
-            assert!(error.message.contains(name), "{}", error.message);
-            assert!(
-                error.message.contains(owner_hint),
-                "消息里要指出归哪个 WP：{}",
-                error.message
-            );
-        }
-    }
-
-    #[test]
-    fn phase2_subcommands_report_a_missing_input_before_unimplemented() {
-        // 文件不存在是输入错误（退出码 1），不该被"功能没实现"（4）盖掉 ——
-        // 否则用户会以为功能存在、只是坏了。
-        let missing = std::env::temp_dir().join("qwb-cli-definitely-missing.yaml");
-        let error = cmd_not_implemented("props", "RS-02", Some(&missing)).unwrap_err();
-        assert_eq!(error.code, 1, "{}", error.message);
-        assert!(error.message.contains("cannot read"), "{}", error.message);
     }
 
     #[test]
