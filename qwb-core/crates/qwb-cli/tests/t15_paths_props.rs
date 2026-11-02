@@ -82,8 +82,9 @@ fn props_points_at_the_required_input_field_when_missing() {
 
 #[test]
 fn unimplemented_path_commands_exit_4_and_name_the_owner() {
-    // RP-03 落地后 `scan` 走真实现（见 t19_scan.rs），这里只剩 ts/irc。
-    for (command, owner) in [("ts", "RP-01"), ("irc", "RP-02")] {
+    // RP-01/RP-03 落地后 `ts`/`scan` 走真实现（见 t20_ts.rs / t19_scan.rs），这里只剩 irc。
+    #[allow(clippy::single_element_loop)]
+    for (command, owner) in [("irc", "RP-02")] {
         let (code, text) = run(&[command, "h2_sto3g_svwn5.yaml"]);
         assert_eq!(
             code, 4,

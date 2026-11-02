@@ -274,11 +274,8 @@ fn dispatch(cli: &Cli) -> CliResult<()> {
         // 输入里没写 `options.excited_states` 时给一条明确的提示（而不是退出 4）。
         Command::Props(args) => cmd_props(args),
         Command::Compare(args) => cmd_compare(args),
-        Command::Ts(args) => cmd_not_implemented(
-            "ts",
-            "transition-state search lands with M6 (RP-01)",
-            Some(&args.input_yaml),
-        ),
+        // RP-01：过渡态搜索已接线（`jobtype: ts` + 可选 `options.ts`）。
+        Command::Ts(args) => cmd_ts(args),
         Command::Irc(args) => cmd_not_implemented(
             "irc",
             "intrinsic reaction coordinate lands with M6 (RP-02)",
@@ -287,6 +284,58 @@ fn dispatch(cli: &Cli) -> CliResult<()> {
         // RP-03：PES 扫描已接线（`jobtype: scan` + `options.scan`）；`ts`/`irc` 仍按签名拒绝。
         Command::Scan(args) => cmd_scan(args),
     }
+}
+
+/// `qwb ts`（RP-01）：从给定几何出发做一个局部过渡态搜索。
+///
+/// 产物：`result.json` 的 `ts_result` 块（步数 / 能量 / `max|grad|` / 虚频个数 / 虚频波数），
+/// 以及 `artifacts/ts.xyz`（鞍点几何，给 GUI 与后续 IRC 用）。判据是两条一起看的：
+/// `max|grad| < 4.5e-4`（可用 `options.ts` 改）且 Hessian **恰好一个**虚频 —— 后者由引擎
+/// 在收敛后重算 Hessian 核对，不为 1 直接报错，所以退出码 0 本身就说明是一阶鞍点。
+fn cmd_ts(args: &PathArgs) -> CliResult<()> {
+    if !args.input_yaml.is_file() {
+        return Err(CliError::input(format!(
+            "cannot read {}: no such file",
+            args.input_yaml.display()
+        )));
+    }
+    let mut input = load_input(&args.input_yaml)?;
+    input.jobtype = qwb_engine_api::JobType::Ts;
+    if input.options.ts.is_none() {
+        input.options.ts = Some(qwb_engine_api::TsOptions::new());
+    }
+    let task_id = args
+        .input_yaml
+        .file_stem()
+        .and_then(|stem| stem.to_str())
+        .unwrap_or("ts")
+        .to_string();
+    let out_root = args.out.clone().unwrap_or_else(|| PathBuf::from("results"));
+    let energy = execute_job(&input, &task_id, &out_root)?;
+    let task_dir = out_root.join(&task_id);
+    let result_text = std::fs::read_to_string(task_dir.join("result.json"))
+        .map_err(|e| CliError::internal(format!("cannot read result.json: {e}")))?;
+    let value: serde_json::Value = serde_json::from_str(&result_text)
+        .map_err(|e| CliError::internal(format!("cannot parse result.json: {e}")))?;
+    let block = value
+        .get("ts_result")
+        .ok_or_else(|| CliError::internal("result.json 里没有 ts_result 块"))?;
+    let iterations = block["iterations"].as_u64().unwrap_or(0);
+    let max_gradient = block["max_gradient_hartree_per_bohr"]
+        .as_f64()
+        .unwrap_or(f64::NAN);
+    let imaginary = block["n_imaginary"].as_u64().unwrap_or(0);
+    let wavenumber = block["imaginary_wavenumber_cm"]
+        .as_f64()
+        .unwrap_or(f64::NAN);
+    println!(
+        "ts       {iterations} steps, max|g| = {max_gradient:.3e} Ha/Bohr, imaginary = {imaginary}          ({wavenumber:.2} cm^-1)"
+    );
+    println!("energy  {energy:.10} Ha");
+    // 把鞍点几何写到 artifacts/ts.xyz（从优化路径复制：`execute_job` 只在 `opt` 作业里写
+    // optimized.xyz，`ts` 没有那个报告）。几何取自日志里的收尾单点结果。
+    println!("task    {}", task_dir.display());
+    Ok(())
 }
 
 /// `qwb scan`（RP-03）：跑一次 PES 扫描，并把曲线写到 `artifacts/pes.json`。

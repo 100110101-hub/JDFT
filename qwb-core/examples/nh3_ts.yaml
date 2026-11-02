@@ -1,0 +1,36 @@
+# RP-01：NH3 的**伞形反转过渡态**（D3h 平面鞍点）/ STO-3G / HF。
+#
+# 初猜是略微锥形（不是平面）的 NH3：本征向量跟随会沿最软的方向（伞形振动）往上走，
+# 收敛到平面 D3h 的一阶鞍点 —— 那里 `max|grad| < 4.5e-4 Ha/Bohr`、Hessian **恰好一个虚频**。
+#
+# 运行：qwb ts examples/nh3_ts.yaml
+molecule:
+  atoms:
+    - symbol: N
+      position_angstrom: [0.0, 0.0, 0.06]
+    - symbol: H
+      position_angstrom: [0.94, 0.0, -0.20]
+    - symbol: H
+      position_angstrom: [-0.47, 0.814, -0.20]
+    - symbol: H
+      position_angstrom: [-0.47, -0.814, -0.20]
+  charge: 0
+  multiplicity: 1
+basis_name: sto-3g
+method_name: hf
+grid_level: normal
+solvent: vacuum
+jobtype: ts
+options:
+  scf_max_iter: 200
+  scf_energy_threshold_hartree: 1.0e-9
+  scf_density_threshold: 1.0e-7
+  diis_history: 8
+  threads: 0
+  max_opt_steps: 100
+  opt_gradient_threshold_hartree_per_bohr: 4.5e-4
+  freq_step_angstrom: 0.01
+  ecp_name: null
+  ts:
+    max_steps: 40
+    gradient_threshold_hartree_per_bohr: 4.5e-4

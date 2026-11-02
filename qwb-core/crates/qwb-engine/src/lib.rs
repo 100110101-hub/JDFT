@@ -30,6 +30,7 @@ pub mod gradient;
 pub mod hessian;
 pub mod opt;
 pub mod scan;
+pub mod ts;
 
 use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
@@ -1456,6 +1457,96 @@ impl RksBackend {
         Ok(job)
     }
 
+    /// 过渡态搜索（`Ts`，phase-2 `RP-01`）：Hessian 引导的局部本征向量跟随。
+    ///
+    /// 判据是**两条一起**：`max|g| < options.ts.gradient_threshold_hartree_per_bohr`（缺省
+    /// 4.5e-4）**且** 收敛后的 Hessian 恰好一个虚频。第二条不能省 —— 梯度小只说明停在驻点，
+    /// 极小点也满足它，所以引擎在收敛后重算一次 Hessian 并核对虚频个数，不为 1 就报错。
+    fn run_ts(&self, input: &JobInput, reporter: &dyn Reporter) -> Result<JobResult, EngineError> {
+        if let Some(ecp_name) = &input.options.ecp_name {
+            return Err(EngineError::Unsupported(format!(
+                "transition-state search with an ECP (`{ecp_name}`) is not implemented: the ECP \
+                 derivative w.r.t. nuclear coordinates is missing (I-05 covers energies only)"
+            )));
+        }
+        if input
+            .options
+            .scf_type
+            .is_some_and(|scf_type| scf_type.is_open_shell())
+        {
+            return Err(EngineError::Unsupported(
+                "transition-state search is implemented for closed-shell HF/KS only \
+                 (open-shell gradients have no acceptance tests)"
+                    .to_string(),
+            ));
+        }
+        let options_ts = input.options.ts.clone().unwrap_or_default();
+        let spec = self.spec(input)?;
+        let mut options = opt::OptOptions::new(
+            &input.basis_name,
+            spec.functional_name.clone(),
+            spec.grid_name.clone(),
+        );
+        options.max_iterations = options_ts.max_steps;
+        options.force_threshold = options_ts.gradient_threshold_hartree_per_bohr;
+        options.scf_max_iter = input.options.scf_max_iter;
+        options.scf_energy_threshold = input.options.scf_energy_threshold_hartree;
+        options.scf_density_threshold = input.options.scf_density_threshold;
+        options.scf_type = input.options.scf_type;
+        // 每一步最多走 0.2 Bohr：本征向量跟随在鞍点附近很好用，但远离鞍点时大步会发散。
+        options.max_step_bohr = 0.2;
+
+        reporter.progress("ts", 0.0);
+        reporter.log(&format!(
+            "jobtype = ts, method = {}, basis = {}, grid = {} (eigenvector following, \
+             max steps = {}, threshold = {:.1e} Ha/Bohr)",
+            if spec.functional_name.is_empty() {
+                "hf".to_string()
+            } else {
+                spec.functional_name.clone()
+            },
+            input.basis_name,
+            spec.grid_name,
+            options_ts.max_steps,
+            options_ts.gradient_threshold_hartree_per_bohr
+        ));
+        let outcome = ts::search(
+            &self.registry,
+            &input.molecule,
+            &options,
+            options_ts.max_steps,
+            options_ts.gradient_threshold_hartree_per_bohr,
+            reporter,
+        )?;
+        let mut block = ts::to_api(&outcome);
+        block.iterations = outcome.iterations;
+        if outcome.n_imaginary != 1 {
+            return Err(EngineError::Internal(format!(
+                "ts: search reported {} real imaginary modes, expected exactly 1",
+                outcome.n_imaginary
+            )));
+        }
+        block.validate()?;
+        reporter.progress("done", 100.0);
+        let summary = format!(
+            "ts = eig-following: E = {:.10} Ha, max|g| = {:.3e} Ha/Bohr, imaginary = {:.2} cm^-1, \
+             {} steps",
+            block.energy_hartree,
+            block.max_gradient_hartree_per_bohr,
+            block.imaginary_wavenumber_cm,
+            block.iterations
+        );
+        reporter.log(&summary);
+        // 收尾的单点在**鞍点几何**上跑（不是输入几何）：`energy_hartree` 与块里的能量
+        // 因此指向同一个点，轨道/偶极也是那个点的。
+        let mut final_input = input.clone();
+        final_input.molecule = outcome.molecule.clone();
+        final_input.jobtype = JobType::Sp;
+        let mut job = self.run_single_point(&final_input, reporter)?;
+        job = job.with_log(summary).with_ts_result(block);
+        Ok(job)
+    }
+
     /// PES 扫描（`Scan`，phase-2 `RP-03`）：把某个内坐标从 `start` 扫到 `stop`。
     ///
     /// `relax: false`（缺省）是**刚性**扫描：每个点只把坐标挪过去、其余原子不动，然后算一次
@@ -1978,6 +2069,7 @@ impl EngineBackend for RksBackend {
             JobType::Opt => self.run_optimisation(input, reporter),
             JobType::Freq => self.run_frequencies(input, reporter),
             JobType::Scan => self.run_scan(input, reporter),
+            JobType::Ts => self.run_ts(input, reporter),
             other => Err(EngineError::Unsupported(format!(
                 "jobtype `{}` is not wired into the engine backend yet (frequencies are \
                  available through qwb_engine::hessian, see F-01/F-02)",

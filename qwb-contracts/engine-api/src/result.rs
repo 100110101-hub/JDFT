@@ -15,6 +15,7 @@ use crate::numerics::NumericsReport;
 use crate::pes::PesScan;
 use crate::properties::{EprResult, ExcitedStates, Multipoles, NmrShieldings, Polarizability};
 use crate::solvation::SolvationResult;
+use crate::ts::TsResult;
 use crate::vibrations::{Thermochemistry, VibrationalFrequencies};
 
 /// 矩阵/向量与 JSON 数组之间的显式转换（K4）。
@@ -347,6 +348,9 @@ pub struct JobResult {
     /// 多极展开（四极/八极，phase-2 `RS-08`）。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub multipoles: Option<Multipoles>,
+    /// 过渡态搜索（`jobtype: ts`，phase-2 `RP-01`）。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ts_result: Option<TsResult>,
     /// PES 扫描（`jobtype: scan`，phase-2 `RP-03`）。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pes_scan: Option<PesScan>,
@@ -435,6 +439,7 @@ impl JobResult {
             vibrational_frequencies: None,
             thermochemistry: None,
             pes_scan: None,
+            ts_result: None,
             multipoles: None,
             epr: None,
             numerics_report: None,
@@ -502,6 +507,13 @@ impl JobResult {
     #[must_use]
     pub fn with_solvation(mut self, solvation: SolvationResult) -> Self {
         self.solvation = Some(solvation);
+        self
+    }
+
+    /// 挂上过渡态搜索结果（`jobtype: ts`）。
+    #[must_use]
+    pub fn with_ts_result(mut self, result: TsResult) -> Self {
+        self.ts_result = Some(result);
         self
     }
 

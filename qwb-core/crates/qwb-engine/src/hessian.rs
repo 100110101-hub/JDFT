@@ -41,7 +41,7 @@ pub const HESSIAN_METHOD: &str = "numerical-hessian";
 pub const WAVE_NUMBER_FACTOR: f64 = 5140.4871;
 
 /// IUPAC 2021 标准原子量（待迁移到 `qwb-data/`，见模块文档）。
-fn atomic_mass(symbol: &str) -> Option<f64> {
+pub fn atomic_mass(symbol: &str) -> Option<f64> {
     match symbol {
         "H" => Some(1.008),
         "He" => Some(4.002_602),

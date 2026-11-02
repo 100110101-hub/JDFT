@@ -1122,7 +1122,7 @@ gitignored 的 `qwb-data/reference/_*_staging/raw/` 里，派生物（CSV/JSON�
 * **近似路径**：`options.numerics` 一律退出码 4（IN-03 pseudospectral、IN-04 RI-J 都没过 K10）。
 * **解析 Hessian**（RS-05，blocked：20× 的两条前提都不成立）、**GIAO NMR**（RS-04，in_progress）、
   **Raman**（RS-06，blocked：要简正模式 → 要 RS-05）、**VCD**（RS-07 pending）。
-* **TS / IRC**（RP-01/RP-02 pending）：CLI 只落签名（退出码 4）。**PES 扫描已完成**
+* **TS 已接**（`qwb ts`，RP-01）：Hessian 引导的局部本征向量跟随，收敛后核对「恰好一个虚频」（只计波数 < −100 cm⁻¹ 的真虚频，零模噪声不算）；退出码 0 本身就说明是一阶鞍点。**IRC（RP-02）仍只落签名**（退出码 4）。**PES 扫描已完成**
   （`qwb scan`，RP-03）：距离/键角/二面角，刚性（逐点单点）与弛豫（**约束优化**：梯度投影 + 每步重设内坐标）都会写 `artifacts/pes.json`；结果块里 `relaxed` 与每点的 `optimised` 分开报。
 * **GPU**：只有 `gemm` 原语、显存预算 + 自动回退、AO→MO 变换（实测 60.8×）；格点 XC 的 GPU 核
   需要 NVRTC/cubin（另一类 unsafe 面），EX-03 仍 blocked。
@@ -1168,7 +1168,8 @@ ECP、频率库函数）在 `docs/status.yaml`；这里只列阶段二台账里�
 | GIAO NMR 屏蔽 | ❌ | RS-04 | 缺 London 复基组层（common-origin 下 O 差 1.50 ppm） |
 | Raman 活性 | ❌ | RS-06 | 要简正模式 → 要 RS-05 |
 | VCD | ❌ | RS-07 | pending |
-| TS / IRC | ❌ | RP-01, RP-02 | CLI 只落签名，退出码 4 |
+| 过渡态搜索（`qwb ts`，局部本征向量跟随） | ⚠ | RP-01 | 机制有了：NH3 伞形鞍点 5 步收敛（max\|g\| = 3.7e-6、一个虚频 −1081 cm⁻¹）；**判据的"3 个反应势垒对文献 < 1.5 kcal/mol"没做**（要 DFT 层级，受 EX-03 约束） |
+| IRC（`qwb irc`） | ❌ | RP-02 | CLI 只落签名，退出码 4 |
 | PES 扫描（`qwb scan`：距离/键角/二面角，**刚性 + 弛豫**） | ✅ | RP-03 | 刚性 9 点 O–H 扫描 max adjacent |ΔE| = 3.1e-2 Ha、极小 1.000 Å；弛豫（约束优化）三点 −74.9549/−74.9658/−74.9543 Ha，约束下解析 vs 数值方向导数差 3.9e-6；`artifacts/pes.json` 与 `result.json` 的块逐字一致 |
 | 近似路径：pseudospectral / RI-J 的 Fock 构建 | ❌ | IN-03, IN-04 | 都受 K10 等价性门禁约束，`options.numerics` 退出码 4 |
 | ωB97X-D / CAM-B3LYP / B3LYP | ❌ | DA-03 | LYP 要 `∇²ρ`，K1 冻结契约拒绝 `requires.laplacian` |

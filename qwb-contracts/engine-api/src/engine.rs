@@ -27,6 +27,7 @@ pub const SUPPORTED_FEATURES: &[&str] = &[
     "jobtype:opt",
     "jobtype:freq",
     "jobtype:scan",
+    "jobtype:ts",
     "basis:orbital",
     "basis:ri-j",
     "basis:ri-jk",

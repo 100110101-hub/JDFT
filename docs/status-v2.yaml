@@ -350,8 +350,12 @@ SV-05:
 # ───────────────────────── 反应路径轨（RP，4）─────────────────────────
 
 RP-01:
-  state: pending
-  note: "过渡态搜索（Hessian 引导的局部搜索）"
+  state: in_progress
+  ts: "2026-11-14T01:40:00Z"
+  artifact: "`qwb-contracts/engine-api/src/ts.rs`（K2 加性：`TsOptions`（max_steps / 判据）与 `TsResult`（iterations / energy / max|grad| / n_imaginary / 虚频波数）+ `JobType::Ts`、`TaskOptions.ts`、`JobResult.ts_result`、`SUPPORTED_FEATURES` 的 `jobtype:ts`）+ `qwb-engine/src/ts.rs`（本征向量跟随：质量加权 Hessian 对角化 → 把最低本征方向翻符号做 Newton 步 → 步长上限/折半回退 → 收敛后重算 Hessian 核对虚频个数）+ `qwb-engine/src/lib.rs` 的 `run_ts` + `qwb-cli` 的 `qwb ts` 子命令 + 示例 `qwb-core/examples/nh3_ts.yaml` + 测试 `qwb-engine/tests/rp01_ts.rs`（3 例）与 `qwb-cli/tests/t20_ts.rs`（2 例）"
+  verification: "**判据的两条各自有测试（第 393 轮）**。① **梯度 + 一个虚频**：`cargo test -p qwb-engine --test rp01_ts` 3 例绿（18.6 s）—— NH3 伞形反转（D3h 平面鞍点）/ STO-3G/HF，从略微锥形的初猜出发**5 步**收敛：`E = −55.4376653203 Ha`、`max|g| = 3.716e-6 Ha/Bohr`（判据 4.5e-4，小两个量级）、**n_imaginary = 1**、虚频 **−1081.15 cm⁻¹**（伞形振动的量级），`is_first_order_saddle(4.5e-4)` 为真。② **两条判据缺一不可**：K2 的单测钉住「梯度小但 0 虚频 = 极小点，不算过渡态」（`is_first_order_saddle` 为假）与「虚频两个也不算」。③ **没收敛必须说**：`max_steps: 1` → `Unsupported` 且消息含 `did not converge`（`rp01_ts` 与 `t20_ts` 各一条）；CLI 退出码 4、缺文件退出码 1。④ **零模噪声不许被算成虚频**：平面 NH3 的 3N 个本征值里有 6 个零模，实测噪声到 −16.4 与 −0.016 cm⁻¹ —— 第一版按「负本征值个数」统计，于是把一个已经收敛到伞形鞍点的搜索判成「3 个虚频」失败。现在按波数 **< −100 cm⁻¹** 统计（与 `freq` 同一个阈值），这条写进 `TsResult::n_imaginary` 的文档与 `IMAGINARY_THRESHOLD_CM` 常量。"
+  note: "**机制已交付，判据只过了一半**。RP-01 在 §6 的原文是「3 个反应（HCN↔HNC、CH₃NC↔CH₃CN、甲醛→H₂+CO）的势垒与**文献**差 < 1.5 kcal/mol（DFT 水平）；max|grad| < 4.5e-4；Hessian 恰有一个虚频」。后两条这一轮在 NH3 上做到了并有测试；前一条**没做**，原因不是机制而是层级：文献势垒是 M06-2X/6-31G(d) 一类的值，本项目当前能跑的 STO-3G/HF 上势垒会差几十 kcal/mol，而抬层级受 EX-03（meta-GGA 格点成本）与 TS 搜索的 Hessian 次数约束（每一步一次数值 Hessian = 6N 次解析梯度）。所以 RP-01 记 in_progress 而不是 done。**算法**：本征向量跟随的 Newton 变体 —— 质量加权 Hessian 对角化、把最低本征方向的本征值翻成负号（沿反应坐标**上坡**）、其余方向照常下山、步长 0.2 Bohr 上限并按「|g| 是否变小」折半重试。选它而不是 P-RFO/dimer 的理由：每一步只有一个可解释的自由度，失败模式清楚；**收敛之后重算 Hessian 核对虚频个数**是这条路径的验收而不是装饰 —— 梯度小只说明停在驻点，极小点也满足它。"
+  gap: "剩余：① **三个反应的势垒对文献 < 1.5 kcal/mol** —— 需要 DFT 层级（当前 STO-3G/HF 差几十 kcal/mol），受 EX-03 格点成本约束；② TS 搜索每步重算完整数值 Hessian（6N 次解析梯度），中大分子太贵 —— BFGS 式的 Hessian 更新是另一个 WP；③ 只有单端本征向量跟随，没有 QST2/QST3 那种双端路径；④ IRC（RP-02）依赖本 WP，尚未开始。"
 RP-02:
   state: pending
   note: "IRC（质量加权，双向）"

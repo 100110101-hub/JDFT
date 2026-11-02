@@ -57,6 +57,9 @@ pub enum JobType {
     /// PES 扫描（phase-2 `RP-03`）。
     #[serde(alias = "Scan", alias = "SCAN")]
     Scan,
+    /// 过渡态搜索（phase-2 `RP-01`）。
+    #[serde(alias = "Ts", alias = "TS")]
+    Ts,
 }
 
 impl JobType {
@@ -68,6 +71,7 @@ impl JobType {
             Self::Opt => "opt",
             Self::Freq => "freq",
             Self::Scan => "scan",
+            Self::Ts => "ts",
         }
     }
 }
@@ -108,6 +112,9 @@ pub struct TaskOptions {
     /// 没有意义，静默当成单点会给出一个看起来成功的单点结果。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub scan: Option<crate::pes::ScanOptions>,
+    /// 过渡态搜索的选项（`jobtype: ts`）；`None` = 不搜索。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ts: Option<crate::ts::TsOptions>,
     /// 转动对称数 σ（热化学用；`jobtype: freq`）。缺省 1 = 不做对称校正。
     ///
     /// 水 2、氨 3、甲烷 12、苯 12、同核双原子 2。它只影响**转动熵**（`S` 偏大 `R ln σ`
@@ -236,6 +243,7 @@ impl Default for TaskOptions {
             freq_step_angstrom: 0.01,
             ecp_name: None,
             scan: None,
+            ts: None,
             symmetry_number: 1,
             scf_type: None,
             mp2: None,
@@ -253,6 +261,13 @@ impl TaskOptions {
     #[must_use]
     pub fn with_scan(mut self, scan: crate::pes::ScanOptions) -> Self {
         self.scan = Some(scan);
+        self
+    }
+
+    /// 设置过渡态搜索（`jobtype: ts`）。
+    #[must_use]
+    pub fn with_ts(mut self, ts: crate::ts::TsOptions) -> Self {
+        self.ts = Some(ts);
         self
     }
 
