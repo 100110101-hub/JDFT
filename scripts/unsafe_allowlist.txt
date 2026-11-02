@@ -13,4 +13,10 @@
 # 没有 GPU 的机器照样构建/运行（运行时得到 GpuError::Unavailable 并退回 CPU），
 # 这比引入 cudarc 更符合附录 A.3 的「CPU 永远是基准、GPU 可回退」；cudarc 的 gemm 同样是
 # `unsafe fn`，并不能免除本例外。每处 unsafe 都有 `// SAFETY:` 说明。
-qwb-core/crates/qwb-gpu/src/lib.rs
+#
+# 2026-11-18（EX-03，人类决策记录在 docs/choices.md 二百 / 附录 A · EX-03）：XC 核允许
+# NVRTC/cubin 的不安全面，但**锁死在 JIT/驱动绑定层一个模块**。于是上面授权的 cuBLAS/libloading
+# 那段 FFI 从 `src/lib.rs` **原样搬进** `src/jit.rs`（纯代码搬移，公开 API 与数值一字未动），
+# 白名单随之从 lib.rs 换成 jit.rs —— 现在整个 crate 只有这一个文件出现 unsafe，其余模块继续
+# `deny(unsafe_code)`。这条边界由 `crates/qwb-gpu/tests/unsafe_boundary.rs` 逐字扫描源码钉住。
+qwb-core/crates/qwb-gpu/src/jit.rs

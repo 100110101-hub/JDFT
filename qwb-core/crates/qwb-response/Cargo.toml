@@ -26,4 +26,6 @@ qwb-props.workspace = true
 workspace = true
 
 [features]
-gpu-kernel = ["dep:qwb-gpu"]
+# EX-03：开 GPU 核（T1 走 cuBLAS）。`qwb-gpu/gpu-kernel` 顺带打开 NVRTC 的格点 XC 核 ——
+# 同一面"可选 GPU"的开关；不开时 NVRTC / 驱动层根本不参与编译。
+gpu-kernel = ["dep:qwb-gpu", "qwb-gpu/gpu-kernel"]

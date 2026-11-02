@@ -10,3 +10,20 @@ publish.workspace = true
 
 [dependencies]
 libloading.workspace = true
+
+[dev-dependencies]
+qwb-basis.workspace = true
+qwb-engine-api.workspace = true
+qwb-grid.workspace = true
+qwb-integrals.workspace = true
+qwb-linalg.workspace = true
+qwb-registry.workspace = true
+qwb-scf.workspace = true
+qwb-xc.workspace = true
+
+[features]
+# EX-03 的 NVRTC/驱动路径（`src/jit.rs` 里的 `kernel` 子模块）。
+#
+# 默认**关**：没有 GPU 的机器上这部分根本不参与编译（附录 A · EX-03 约束 ④），
+# `xc.rs` 会带着"feature 未启用"的理由退回 CPU，CPU 位模式一字不变。
+gpu-kernel = []

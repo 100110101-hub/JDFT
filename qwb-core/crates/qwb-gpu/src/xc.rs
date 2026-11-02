@@ -1,0 +1,421 @@
+//! EX-03 第四块：**DFT 格点 XC 的收缩段**（feature `gpu-kernel` 才有 GPU 路径）。
+//!
+//! # 这一段为什么值得单独做
+//!
+//! `qwb-scf` 的 `evaluate_xc_cached` 把网格 XC 拆成三段，实测收缩段占每步 85–96 %：
+//!
+//! ```text
+//! ρ_p      = Σ_μν P_μν Φ_pμ Φ_pν           # (ΦP) 一次 gemm + 一次**行点积**
+//! ε_p, v_p = 泛函(ρ_p)                      # 逐点超越函数，留在 host
+//! v_xc[μν] = Σ_p w_p v_p Φ_pμ Φ_pν          # = Φᵀ·(w·v·Φ)，又是一次 gemm
+//! E_xc     = Σ_p w_p ρ_p ε_p
+//! ```
+//!
+//! 中间那一步 `ρ_p = Σ_μ Φ_pμ (ΦP)_pμ` 是**两张同形矩阵按行点积压成一个向量**：BLAS 给不出
+//! 这个形状（`gemm` 只能算 `ΦP`），稠密收缩的算术强度 ≈ `n/4` flop/byte（n=24 时 6 flop/byte）
+//! 即**访存受限**。所以它是本次交付里唯一手写的 GPU 核（见 `jit.rs` 的 `XC_SOURCE`）。
+//!
+//! # 分界线：什么在设备上、什么在 host 上
+//!
+//! * 设备上：`(ΦP)` 的 gemm、行点积、按行缩比、`v_xc` 的 gemm（都是 `O(n_points·n²)`）；
+//! * host 上：泛函求值（`FunctionalTerm` 是 Rust trait object，不能搬进 CUDA 源）与
+//!   `E_xc` 的 `O(n_points)` 累加。所以每个 SCF 步有一次 `ρ` 上行、一次系数下行 ——
+//!   3 万点的 `ρ` 是 240 KB，量级上可以忽略。
+//!
+//! # 回退
+//!
+//! 没有 GPU / 没有 NVRTC / 驱动报错 / 显存预算不够 / `gpu-kernel` 没开 / 调用方要求走 CPU：
+//! 一律走 [`cpu_contract`]，它的求和顺序与 `qwb-scf` 的 `evaluate_xc_cached` **逐句一致**，
+//! 所以退回后的 `E_xc` 与 `v_xc` 与产品 CPU 路径**逐位相同**（`tests/ex03_xc_fallback.rs` 钉住）。
+
+#[cfg(feature = "gpu-kernel")]
+use std::sync::OnceLock;
+
+use crate::GpuError;
+
+/// 一次收缩实际走了哪条路。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum XcPath {
+    /// 设备路径（NVRTC 编译的核 + cuBLAS）。
+    Gpu,
+    /// CPU 基准路径（与产品路径逐位相同）。
+    Cpu,
+}
+
+/// 网格 XC 收缩的输入。全部是**行主序扁平切片**，刻意不依赖 `qwb-grid` / `qwb-xc` 的类型，
+/// 这样核本身与网格/泛函实现解耦。
+#[derive(Debug, Clone, Copy)]
+pub struct XcGridInputs<'a> {
+    /// 基函数个数。
+    pub n: usize,
+    /// 网格点数。
+    pub n_points: usize,
+    /// AO 值 `Φ[p·n + μ]`（`n_points × n`，行主序）。
+    pub ao_values: &'a [f64],
+    /// 密度矩阵 `P[μ·n + ν]`（`n × n`，行主序）。
+    pub density: &'a [f64],
+    /// 每个点的求积权重 `w_p`。
+    pub weights: &'a [f64],
+}
+
+/// 跑法选项（**注入式**开关：A3 的"禁用 GPU 路径"不靠改环境变量，靠这里）。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct XcGridOptions {
+    /// 强制走 CPU（与 `QWB_GPU_XC_DISABLE=1` 等价，但可复现、可并行测试）。
+    pub force_cpu: bool,
+    /// 显式显存预算（`None` = 空闲显存的 75 %）。
+    pub budget_bytes: Option<u64>,
+}
+
+/// 一次收缩的结果。
+#[derive(Debug, Clone)]
+pub struct XcGridOutput {
+    /// `E_xc = Σ_p w_p ρ_p ε_p`，Hartree。
+    pub energy: f64,
+    /// `v_xc[μ·n + ν]`（`n × n`，行主序）。
+    pub v_xc: Vec<f64>,
+    /// 实际走的路径。
+    pub path: XcPath,
+    /// 退回 CPU 的原因（`path == Cpu` 时总是有内容）。
+    pub fallback_reason: Option<String>,
+}
+
+/// 设备路径的显存需求（字节）：`Φ`、`P`、`(ΦP)`、`ρ`、系数、`v_xc` 六块。
+///
+/// 与 `gemm_bytes` 一样，**先按这个数判预算、不试分配** —— 试分配的失败点可能在第四块，
+/// 那时前三块已经分出去了。
+#[must_use]
+pub fn xc_bytes(n_points: usize, n: usize) -> u64 {
+    (2 * n_points * n + 2 * n * n + 2 * n_points) as u64 * 8
+}
+
+/// 是否被运维开关关掉了（`QWB_GPU_XC_DISABLE` 非空即关）。
+fn disabled_by_env() -> bool {
+    std::env::var_os("QWB_GPU_XC_DISABLE").is_some_and(|value| !value.is_empty())
+}
+
+#[cfg(feature = "gpu-kernel")]
+fn default_budget() -> Option<u64> {
+    static BUDGET: OnceLock<Option<u64>> = OnceLock::new();
+    *BUDGET.get_or_init(|| crate::memory_budget_bytes().ok())
+}
+
+fn validate(inputs: &XcGridInputs<'_>) -> Result<(), String> {
+    let XcGridInputs {
+        n,
+        n_points,
+        ao_values,
+        density,
+        weights,
+    } = *inputs;
+    if n == 0 || n_points == 0 {
+        return Err(format!("形状不合法：n={n}, n_points={n_points}"));
+    }
+    if ao_values.len() != n_points * n {
+        return Err(format!(
+            "形状不合法：ao_values.len()={}，应为 n_points·n = {}",
+            ao_values.len(),
+            n_points * n
+        ));
+    }
+    if density.len() != n * n {
+        return Err(format!(
+            "形状不合法：density.len()={}，应为 n² = {}",
+            density.len(),
+            n * n
+        ));
+    }
+    if weights.len() != n_points {
+        return Err(format!(
+            "形状不合法：weights.len()={}，应为 n_points = {n_points}",
+            weights.len()
+        ));
+    }
+    Ok(())
+}
+
+/// **CPU 基准收缩**：与 `qwb-scf` 的 `evaluate_xc_cached` 的 LDA 分支逐句同序。
+///
+/// 这里的求和顺序是契约（"CPU 位模式不得改变"）：外层 `i`、内层 `j`，`v_i · P_ij · v_j`；
+/// `v_xc` 外层 `i`、内层 `j`，`w_p · (v_i · v_j · pot)`；`E_xc` 是 `w_p · ρ_p · ε_p`。
+/// 改成 gemm / 改成累加别的顺序都能"看起来等价"，但会改变最后几位 —— 所以这里不优化。
+///
+/// # Errors
+///
+/// `ρ` 非有限（网格坐标或 AO 值坏了）、泛函求值失败、`v_xc` 值非有限。
+#[allow(clippy::needless_range_loop)] // 两个下标各有含义（AO 对 × 点），range 最接近被复刻的那段代码
+pub fn cpu_contract<F>(inputs: &XcGridInputs<'_>, evaluate: &mut F) -> Result<XcGridOutput, String>
+where
+    F: FnMut(&[f64]) -> Result<(Vec<f64>, Vec<f64>), String>,
+{
+    validate(inputs)?;
+    let XcGridInputs {
+        n,
+        n_points,
+        ao_values,
+        density,
+        weights,
+    } = *inputs;
+
+    let mut rho_values = Vec::with_capacity(n_points);
+    for p in 0..n_points {
+        let row = &ao_values[p * n..(p + 1) * n];
+        let mut rho = 0.0_f64;
+        for i in 0..n {
+            let v_i = row[i];
+            let base = i * n;
+            for j in 0..n {
+                rho += v_i * density[base + j] * row[j];
+            }
+        }
+        if !rho.is_finite() {
+            return Err(format!(
+                "density is not finite ({rho}) at grid point {p}; grid coordinates or AO \
+                 values are corrupted"
+            ));
+        }
+        rho_values.push(rho.max(0.0));
+    }
+
+    let (epsilon, potential) = evaluate(&rho_values)?;
+    if epsilon.len() != n_points {
+        return Err(format!(
+            "泛函返回 {} 个 ε，应为 n_points = {n_points}",
+            epsilon.len()
+        ));
+    }
+    if potential.len() != n_points {
+        return Err(format!(
+            "泛函返回 {} 个 v，应为 n_points = {n_points}",
+            potential.len()
+        ));
+    }
+
+    let mut energy = 0.0_f64;
+    let mut v_xc = vec![0.0_f64; n * n];
+    for p in 0..n_points {
+        let rho = rho_values[p];
+        energy += weights[p] * rho * epsilon[p];
+        let potential_here = potential[p];
+        if !potential_here.is_finite() {
+            return Err(format!(
+                "XC 势在网格点 {p} 非有限（{potential_here:.3e}），ρ = {rho:.3e}"
+            ));
+        }
+        let row = &ao_values[p * n..(p + 1) * n];
+        for i in 0..n {
+            if row[i] == 0.0 {
+                continue;
+            }
+            for j in 0..n {
+                let element = row[i] * row[j] * potential_here;
+                v_xc[i * n + j] += weights[p] * element;
+            }
+        }
+    }
+    Ok(XcGridOutput {
+        energy,
+        v_xc,
+        path: XcPath::Cpu,
+        fallback_reason: None,
+    })
+}
+
+/// 设备路径的失败。分成两类，因为**只有第一类能退回 CPU**：
+/// 第二类是泛函/输入本身坏了，退回 CPU 会得到同一个错误，所以直接上报。
+enum Attempt {
+    /// GPU 侧不可用（无库 / 无 NVRTC / 预算不够 / 驱动报错）。
+    Device(GpuError),
+    /// 输入或泛函出错。
+    #[cfg_attr(not(feature = "gpu-kernel"), allow(dead_code))]
+    // 无 feature 时设备路径整段不编译
+    Input(String),
+}
+
+/// 网格 XC 收缩：能上 GPU 就上，任何设备侧问题都退回 [`cpu_contract`]。
+///
+/// `evaluate` 把 `ρ_p` 列表变成 `(ε_p, v_p)`：`v_p` 是 `ε + ρ·dε/dρ`（ρ=0 时取 `ε`），
+/// 也就是 CPU 路径里那个 `potential`。泛函留在 host 上跑，所以核不需要知道泛函长什么样。
+///
+/// 只覆盖 **LDA 通道**：需要 `σ` / `∇²ρ` / `τ` 的泛函（GGA、meta-GGA）请直接走
+/// [`cpu_contract`] —— 那三个通道的 `v_xc` 项要多几张 `∇Φ`/`∇²Φ` 的收缩，目前没有实现，
+/// 也不假装实现。
+///
+/// # Errors
+///
+/// 形状不合法、`ρ` 或 `v_xc` 非有限、泛函求值失败 —— 与 [`cpu_contract`] 相同。
+pub fn xc_grid_lda<F>(
+    inputs: &XcGridInputs<'_>,
+    options: XcGridOptions,
+    mut evaluate: F,
+) -> Result<XcGridOutput, String>
+where
+    F: FnMut(&[f64]) -> Result<(Vec<f64>, Vec<f64>), String>,
+{
+    validate(inputs)?;
+    let mut reason = if options.force_cpu {
+        Some("调用方要求走 CPU（XcGridOptions::force_cpu）".to_string())
+    } else if disabled_by_env() {
+        Some("QWB_GPU_XC_DISABLE 已设置".to_string())
+    } else {
+        match crate::xc::gpu_contract(inputs, options, &mut evaluate) {
+            Ok(output) => return Ok(output),
+            Err(Attempt::Device(error)) => Some(format!("{error}")),
+            Err(Attempt::Input(why)) => return Err(why),
+        }
+    };
+    let mut output = cpu_contract(inputs, &mut evaluate)?;
+    output.fallback_reason = reason.take();
+    Ok(output)
+}
+
+#[cfg(feature = "gpu-kernel")]
+fn gpu_contract<F>(
+    inputs: &XcGridInputs<'_>,
+    options: XcGridOptions,
+    evaluate: &mut F,
+) -> Result<XcGridOutput, Attempt>
+where
+    F: FnMut(&[f64]) -> Result<(Vec<f64>, Vec<f64>), String>,
+{
+    use crate::jit::kernel::XcSession;
+
+    let XcGridInputs {
+        n,
+        n_points,
+        ao_values,
+        density,
+        weights,
+    } = *inputs;
+
+    let budget = match options.budget_bytes {
+        Some(bytes) => bytes,
+        None => default_budget().ok_or_else(|| {
+            Attempt::Device(GpuError::Unavailable(
+                "取不到显存预算（没有 CUDA 设备）".to_string(),
+            ))
+        })?,
+    };
+    let required = xc_bytes(n_points, n);
+    if required > budget {
+        return Err(Attempt::Device(GpuError::InsufficientMemory {
+            required,
+            available: budget,
+        }));
+    }
+
+    let session = XcSession::get().map_err(Attempt::Device)?;
+    let phi = session.upload(ao_values).map_err(Attempt::Device)?;
+    let p_matrix = session.upload(density).map_err(Attempt::Device)?;
+    let xm = session.alloc(n_points * n).map_err(Attempt::Device)?;
+    let rho_device = session.alloc(n_points).map_err(Attempt::Device)?;
+    let v_device = session.alloc(n * n).map_err(Attempt::Device)?;
+    session
+        .gemm_xm(&xm, &phi, &p_matrix, n, n_points)
+        .map_err(Attempt::Device)?;
+    session
+        .row_dot(&xm, &phi, &rho_device, n, n_points)
+        .map_err(Attempt::Device)?;
+    session.synchronize().map_err(Attempt::Device)?;
+    let raw_rho = session
+        .download(&rho_device, n_points)
+        .map_err(Attempt::Device)?;
+
+    let mut rho_values = Vec::with_capacity(n_points);
+    for (p, rho) in raw_rho.iter().enumerate() {
+        if !rho.is_finite() {
+            return Err(Attempt::Input(format!(
+                "density is not finite ({rho}) at grid point {p}; grid coordinates or AO \
+                 values are corrupted"
+            )));
+        }
+        rho_values.push(rho.max(0.0));
+    }
+
+    let (epsilon, potential) = evaluate(&rho_values).map_err(Attempt::Input)?;
+    if epsilon.len() != n_points || potential.len() != n_points {
+        return Err(Attempt::Input(format!(
+            "泛函返回 {} 个 ε / {} 个 v，应为 n_points = {n_points}",
+            epsilon.len(),
+            potential.len()
+        )));
+    }
+
+    // 装配：a_p = w_p · v_p，然后 v_xc = Φᵀ·(a·Φ)。
+    let mut scale = Vec::with_capacity(n_points);
+    let mut energy = 0.0_f64;
+    for p in 0..n_points {
+        let potential_here = potential[p];
+        if !potential_here.is_finite() {
+            return Err(Attempt::Input(format!(
+                "XC 势在网格点 {p} 非有限（{potential_here:.3e}），ρ = {:.3e}",
+                rho_values[p]
+            )));
+        }
+        scale.push(weights[p] * potential_here);
+        // 与 CPU 路径同一个求和顺序，所以 E_xc 的差只来自 ρ 的结合顺序。
+        energy += weights[p] * rho_values[p] * epsilon[p];
+    }
+    let scale_device = session.upload(&scale).map_err(Attempt::Device)?;
+    // `xm` 已经用完（ρ 出来了），按行缩比直接写回它，省一块 `n_points·n` 缓冲。
+    session
+        .scale_rows(&phi, &scale_device, &xm, n, n_points)
+        .map_err(Attempt::Device)?;
+    session
+        .gemm_v(&v_device, &phi, &xm, n, n_points)
+        .map_err(Attempt::Device)?;
+    session.synchronize().map_err(Attempt::Device)?;
+    let v_xc = session
+        .download(&v_device, n * n)
+        .map_err(Attempt::Device)?;
+    if !v_xc.iter().all(|value| value.is_finite()) {
+        return Err(Attempt::Input(
+            "v_xc 里出现非有限值（设备内核的结果不可信）".to_string(),
+        ));
+    }
+
+    Ok(XcGridOutput {
+        energy,
+        v_xc,
+        path: XcPath::Gpu,
+        fallback_reason: None,
+    })
+}
+
+#[cfg(not(feature = "gpu-kernel"))]
+fn gpu_contract<F>(
+    _inputs: &XcGridInputs<'_>,
+    _options: XcGridOptions,
+    _evaluate: &mut F,
+) -> Result<XcGridOutput, Attempt>
+where
+    F: FnMut(&[f64]) -> Result<(Vec<f64>, Vec<f64>), String>,
+{
+    Err(Attempt::Device(GpuError::Unavailable(
+        "feature `gpu-kernel` 未启用（编译期就没有 NVRTC/驱动层）".to_string(),
+    )))
+}
+
+/// NVRTC 是否真的可用、用的什么架构 —— 给验收报告与诊断用。
+///
+/// # Errors
+///
+/// feature 没开、或 NVRTC/驱动不可用（消息里带原因）。
+#[cfg(feature = "gpu-kernel")]
+pub fn nvrtc_status() -> Result<String, String> {
+    let session = crate::jit::kernel::XcSession::get().map_err(|error| format!("{error}"))?;
+    Ok(format!(
+        "NVRTC {}.{}, --gpu-architecture=compute_{}",
+        session.nvrtc_version.0, session.nvrtc_version.1, session.gpu_arch
+    ))
+}
+
+/// NVRTC 是否真的可用 —— feature 没开时恒为 `Err`。
+///
+/// # Errors
+///
+/// feature `gpu-kernel` 未启用。
+#[cfg(not(feature = "gpu-kernel"))]
+pub fn nvrtc_status() -> Result<String, String> {
+    Err("feature `gpu-kernel` 未启用".to_string())
+}

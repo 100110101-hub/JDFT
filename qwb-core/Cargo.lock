@@ -1370,6 +1370,14 @@ name = "qwb-gpu"
 version = "0.1.0"
 dependencies = [
  "libloading",
+ "qwb-basis",
+ "qwb-engine-api",
+ "qwb-grid",
+ "qwb-integrals",
+ "qwb-linalg",
+ "qwb-registry",
+ "qwb-scf",
+ "qwb-xc",
 ]
 
 [[package]]
