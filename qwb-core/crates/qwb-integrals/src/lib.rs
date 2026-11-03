@@ -37,6 +37,7 @@ pub mod deterministic;
 pub mod dipole;
 pub mod giao;
 pub mod giao_2e;
+pub mod giao_dia;
 pub mod hermite2e;
 pub mod momentum;
 pub mod one_electron;
@@ -53,6 +54,7 @@ pub use core_hamiltonian::{
 };
 pub use giao::{kinetic_moment_integrals, nuclear_moment_integrals};
 pub use giao_2e::{giao_two_electron_field_derivative, giao_two_electron_moments};
+pub use giao_dia::{giao_a01_integrals, giao_a11_integrals};
 pub use one_electron::{OneElectronIntegrals, one_electron};
 pub use ri::{ThreeCenterIntegrals, inverse_sqrt, three_center, two_center_coulomb};
 pub use second_moment::{second_moment_integrals, second_moment_integrals_at_origin};

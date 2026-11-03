@@ -135,6 +135,13 @@ GENERATORS = {
         "scripts/pyscf_giao_nmr_reference.py",
     "qwb-core/crates/qwb-response/tests/reference/giao_fock_derivative.csv":
         "scripts/pyscf_giao_nmr_reference.py",
+    # RS-04（GIAO dia）：libcint 的 `int1e_giao_a11part` / `int1e_a01gp` 逐元素参考值
+    # （水 × {STO-3G, LANL2DZ} × 三个核 × 9 个 (α,β) 块 × 两个算子 = 11772 个元素）。
+    # 两个算子的定义都是**测量**出来的（见生成脚本顶部：a01gp 是「相位导数 × 超精细算符」，
+    # 含绝对电子坐标 r，所以对整体平移不不变 —— 参考值因此只能在 libcint 的
+    # `with_rinv_origin` 约定下取）。
+    "qwb-core/crates/qwb-integrals/tests/reference/giao_dia.csv":
+        "scripts/pyscf_giao_dia_reference.py",
     # DA-06 / FX-04：色散校正的参考能量与解析梯度来自官方 s-dftd3（黑盒），几何与参考值
     # 出自同一个脚本（`d3_dimers.csv` 是几何的单一真相源）。
     "qwb-core/crates/qwb-scf/tests/reference/d3_dimers.csv":
