@@ -25,13 +25,14 @@
           6,
           7,
           8,
-          9
+          9,
+          14
         ]
       },
       "transcribe": {
         "name": "sto-3g",
         "version": "1.0.0",
-        "notes": "Transcribed from the BSE export of STO-3G (revision 2018-06-19, 'Data from Gaussian09') for H/C/N/O/F; numbers are from Hehre-Stewart-Pople 1969, BSE used only as the export channel (project.md 8.1). STO-3G has max l=1, where spherical and cartesian functions coincide, so angular=spherical carries no ambiguity.",
+        "notes": "Transcribed from the BSE export of STO-3G (revision 2018-06-19, 'Data from Gaussian09') for H/C/N/O/F/Si; numbers are from Hehre-Stewart-Pople 1969, BSE used only as the export channel (project.md 8.1). STO-3G has max l=1, where spherical and cartesian functions coincide, so angular=spherical carries no ambiguity. Si was added in 0.20.0 for RS-04's TMS reference (Si(CH3)4): the NMR criterion cannot be measured without a Si basis.",
         "citations": [
           {
             "title": "Self-Consistent Molecular-Orbital Methods. I. Use of Gaussian Expansions of Slater-Type Atomic Orbitals",
@@ -49,7 +50,7 @@
         "normalization": "l2",
         "role": "orbital"
       },
-      "sha256": "fce3af14b8b3ea121844756117a2489b5f7859be452be02b54509dc20b8ff249"
+      "sha256": "0fe5bf8737a02d6ed0ca592ceb0ca730c8707db265be4ce17e94b28d7f6b10b5"
     },
     {
       "path": "basis/def2-svp.yaml",
@@ -61,13 +62,14 @@
           1,
           6,
           7,
-          8
+          8,
+          14
         ]
       },
       "transcribe": {
         "name": "def2-svp",
         "version": "1.0.0",
-        "notes": "Transcribed from the BSE export of def2-SVP (revision 'Data from Turbomole 7.3') for H/C/N/O; spherical d. Declared normalization=none on purpose: the exported contraction coefficients are NOT renormalized (measured <f|f> = 0.978 for C 1s under normalized primitives, the Turbomole convention), so the loader normalizes once at load time (project.md 8.1).",
+        "notes": "Transcribed from the BSE export of def2-SVP (revision 'Data from Turbomole 7.3') for H/C/N/O/Si; spherical d. Declared normalization=none on purpose: the exported contraction coefficients are NOT renormalized (measured <f|f> = 0.978 for C 1s under normalized primitives, the Turbomole convention), so the loader normalizes once at load time (project.md 8.1). Si was added in 0.20.0 for RS-04's TMS reference (Si(CH3)4).",
         "citations": [
           {
             "title": "Balanced basis sets of split valence, triple zeta valence and quadruple zeta valence quality for H-Rn (Weigend & Ahlrichs, PCCP 7, 3297, 2005)",
@@ -85,7 +87,7 @@
         "normalization": "none",
         "role": "orbital"
       },
-      "sha256": "177675559ef883e087c3ead49936369dfc74357d4795ed92b02aa49bbe310021"
+      "sha256": "13191b144dfcf6f83c64b3bd46945bf96984bde28dfb3395082d4d19f386c8d3"
     },
     {
       "path": "basis/def2-tzvp.yaml",

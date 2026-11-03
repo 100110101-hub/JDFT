@@ -1,9 +1,12 @@
-//! D-04 验收（project.md §6.2）：`def2-SVP`（H,C,N,O）正式数据。
+//! D-04 验收（project.md §6.2）：`def2-SVP`（H,C,N,O,**Si**）正式数据。
 //!
 //! 与 D-03 同一套纪律：数据由 `scripts/bse_to_qwb_data.py` 从 **BSE 原始导出**
 //! 机器转录，逐项 diff < 1e-12；每元素基函数数**从导出文件算出来**，不靠记忆。
 //!
-//! def2-SVP：H = [2s1p] → 5；C/N/O = [3s2p1d] → 3+6+5 = 14（球谐 d = 5）。
+//! def2-SVP：H = [2s1p] → 5；C/N/O = [3s2p1d] → 3+6+5 = 14；Si = [4s3p1d] → 4+9+5 = 18。
+//!
+//! Si 是 qwb-data 0.20.0 加的（RS-04 的 TMS 参考物 Si(CH3)4；STO-3G 与 def2-SVP 两个基组
+//! 都补了，所以化学位移可以在两个级别上量）。
 
 use std::path::{Path, PathBuf};
 
@@ -12,7 +15,7 @@ use qwb_registry::basis::{Angular, BasisSet};
 use qwb_registry::elements::atomic_number;
 
 const BSE_EXPORT: &str = include_str!("fixtures/bse/def2-svp.json");
-const ELEMENTS: [&str; 4] = ["H", "C", "N", "O"];
+const ELEMENTS: [&str; 5] = ["H", "C", "N", "O", "Si"];
 
 type Triple = (u32, Vec<f64>, Vec<f64>);
 
@@ -163,13 +166,14 @@ fn per_element_basis_function_counts_come_from_the_export() {
         );
     }
 
-    // 具体数字（与上面的导出计算独立）：H = [2s1p] = 5；C/N/O = [3s2p1d] = 14。
+    // 具体数字（与上面的导出计算独立）：H = [2s1p] = 5；C/N/O = [3s2p1d] = 14；Si = [4s3p1d] = 18。
     assert_eq!(basis.n_basis_functions_for("H"), Some(5));
     for element in ["C", "N", "O"] {
         assert_eq!(basis.n_basis_functions_for(element), Some(14), "{element}");
     }
+    assert_eq!(basis.n_basis_functions_for("Si"), Some(18), "Si");
     // C/N/O 必须真的有 d 壳层（这是 def2-SVP 与 STO-3G 的关键差别）。
-    for element in ["C", "N", "O"] {
+    for element in ["C", "N", "O", "Si"] {
         let has_d = basis
             .shells_for(element)
             .expect(element)
@@ -178,7 +182,7 @@ fn per_element_basis_function_counts_come_from_the_export() {
             .any(|shell| shell.l == 2);
         assert!(has_d, "{element} 应有 d 壳层");
     }
-    assert_eq!(basis.n_basis_functions(), 5 + 14 * 3);
+    assert_eq!(basis.n_basis_functions(), 5 + 14 * 3 + 18);
 }
 
 #[test]

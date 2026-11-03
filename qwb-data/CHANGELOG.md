@@ -3,6 +3,30 @@
 数据仓独立 semver（§8.6）。**任何数据改动都必须 bump version 并在此登记**，
 否则 CI 拒绝（§8.6「变更必须 bump version」）。
 
+## 0.20.0 — 2026-11-14
+
+### 扩展：`basis/sto-3g.yaml` 与 `basis/def2-svp.yaml` 加 **Si**（RS-04 的 TMS 参考物）
+
+RS-04 §6 的第三条判据（¹H/¹³C 化学位移 vs 实验）要用 TMS（Si(CH3)4, 13 个原子）作参考物，
+而在此之前 `qwb-data/basis/` 里**没有任何含 Si 的基组**（sto-3g = H/C/N/O/F、
+def2-svp = H/C/N/O、6-311G(d,p) = H/C/N/O、def2-TZVP = H/C/N/O/F、LANL2DZ = H/O/Cu/Zn）——
+也就是说这条判据在数据层根本量不了。这一版把 Si 补进两个最常用的基组：
+
+- `sto-3g`：`fetch.elements` 加 14，Si = 1s/2s/3s + 2p/3p，**9 个基函数**（总数 21 → 30）；
+- `def2-svp`：`fetch.elements` 加 14，Si = [4s3p1d]，**18 个基函数**（总数 47 → 65）；
+- 两个文件的 H/C/N/O(/F) 字节**没有变**：从 BSE 重新导出、用同一份 `bse_data.transcribe`
+  转录，逐行 diff 只有 `notes` 里那句元素清单和新增的 Si 块（`fixtures/bse/*.json` 同样
+  只多出元素 14，既有元素的 JSON 逐位相同）。
+
+`registry.yaml` 0.19.0 → **0.20.0**（两条 sha256 重新钉：sto-3g
+`fcaa652c4b158b450e3d851686ad7ab8df4b3414b06c03d18a7bd99e745eb7d4`、def2-svp
+`f7f27a38738bb1cf9e21660f2d2453c349295f1e7c66b214edb96686909287df`）；`sources.json`
+的 `elements`/`notes`/`sha256` 同步；`DATA_LICENSES.md` 重新生成。
+
+**验证**：`qwb data verify` 34/34 通过；`cargo test -p qwb-registry`（d01/d03/d04）绿 ——
+d03/d04 仍然把整份数据与 BSE 导出逐项 diff 到 1e-12（现在包含 Si），并钉住 Si 的基函数数
+（STO-3G 9 / def2-SVP 18）与壳层组成。
+
 ## 0.13.0 — 2026-11-09
 
 ### 新增：`dispersion/d3zero.yaml`（DA-06 的零阻尼那一半）

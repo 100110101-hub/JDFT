@@ -35,6 +35,8 @@ __all__ = [
     "DFTD4_URL",
     "S22_DOI",
     "S22_URL",
+    "FULMER_DOI",
+    "FULMER_URL",
     "PYSCF_DOI",
     "PYSCF_URL",
     "SOURCE_COLUMNS",
@@ -80,6 +82,19 @@ S22_URL = "https://gitlab.com/ase/ase/-/raw/master/ase/data/s22.py"
 #: hydration free energies, with input files"。
 FREESOLV_DOI = "10.1007/s10822-014-9747-x"
 FREESOLV_URL = "https://github.com/MobleyLab/FreeSolv"
+
+#: RS-04（¹H/¹³C 化学位移 vs 实验）：Fulmer, Miller, Sherden, Gottlieb, Nudelman, Stoltz,
+#: Bercaw, Goldberg, Organometallics 29, 2176–2179 (2010) —— 常见溶剂/有机物/**气体**在
+#: 12 种氘代溶剂里的 ¹H 与 ¹³C 化学位移表（支持信息 Table S1/S2）。数的是**溶液**里的位移
+#: （CDCl3 那一列），不是气相 —— 这个差别写在 CSV 的 `phase`/`solvent` 两列里，比较时不许
+#: 凭记忆把它抹掉。2026-11-14 用 Crossref `api.crossref.org/works/10.1021/om100106e` 核对过
+#: 题名（"NMR Chemical Shifts of Trace Impurities: ..."）、卷 29 / 期 9 / 页 2176–2179 与
+#: 八位作者；URL 是 CaltechAUTHORS 上那份支持信息的**直链**（ACS 的 SI 地址被 403 挡住）。
+FULMER_DOI = "10.1021/om100106e"
+FULMER_URL = (
+    "https://authors.library.caltech.edu/records/q3m5b-fec90/files/"
+    "om100106e_si_001.pdf?download=1"
+)
 
 #: 每一行都必须带的两个来源列（加在最后一列之后，位置固定）。
 SOURCE_COLUMNS = ("source_doi", "source_url")
@@ -174,6 +189,13 @@ GENERATORS = {
     # 数据来自 ASE 的 `ase/data/s22.py`（sha256 钉住），DOI 见 `S22_DOI`。
     "qwb-core/crates/qwb-engine/tests/reference/s22_dimers.csv":
         "scripts/gen_s22_reference.py",
+    # RS-04（第三条判据：¹H/¹³C 化学位移 vs **实验**）：CH4 / CH3OH 的 ¹H 与 ¹³C 位移，
+    # 以及 TMS 的定义零点。这一份**不是**算出来的，是从 pinned 文献里逐字抄下来手写的
+    # （所以没有 `--check` 之外的可重建性可言）：生成器里那几行常量就是 CSV 的唯一真相源，
+    # `--check` 保证 CSV 与那几行常量逐字一致。出处见 `FULMER_DOI` / `FULMER_URL`
+    # （Organometallics 29, 2176 (2010) 的支持信息 Table S1/S2 的 CDCl3 一列）。
+    "qwb-core/crates/qwb-engine/tests/reference/nmr_shifts_experimental.csv":
+        "scripts/gen_nmr_shifts_experimental.py",
 }
 
 FAMILIES = tuple(GENERATORS)

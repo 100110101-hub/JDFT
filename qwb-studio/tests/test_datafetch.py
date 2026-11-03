@@ -326,7 +326,7 @@ def test_offline_fetch_reproduces_the_pinned_digest(tmp_path, monkeypatch):
     pin = _pin_for("basis/sto-3g.yaml")
     root = tmp_path / "qwb-data"
     write_sources(root, [{"path": "basis/sto-3g.yaml", "sha256": pin, "kind": "basis",
-                          "fetch": {"basis": "sto-3g", "elements": [1, 6, 7, 8, 9]},
+                          "fetch": _fetch_for("basis/sto-3g.yaml"),
                           "transcribe": _spec_for("basis/sto-3g.yaml")}])
 
     monkeypatch.setenv("QWB_BSE_FIXTURES", str(FIXTURES))
@@ -352,7 +352,7 @@ def test_offline_fetch_refuses_a_drifted_export(tmp_path, monkeypatch):
     pin = _pin_for("basis/sto-3g.yaml")
     root = tmp_path / "qwb-data"
     write_sources(root, [{"path": "basis/sto-3g.yaml", "sha256": pin, "kind": "basis",
-                          "fetch": {"basis": "sto-3g", "elements": [1, 6, 7, 8, 9]},
+                          "fetch": _fetch_for("basis/sto-3g.yaml"),
                           "transcribe": _spec_for("basis/sto-3g.yaml")}])
 
     monkeypatch.setenv("QWB_BSE_FIXTURES", str(fixtures))
@@ -391,6 +391,21 @@ def test_datafetch_import_is_stdlib_only():
     )
     assert completed.returncode == 0, completed.stderr
     assert completed.stdout.strip() == "False False", completed.stdout
+
+
+def _fetch_for(path: str) -> dict:
+    """**跟着数据走**，不硬编码元素清单。
+
+    第 416 轮把 Si 加进 STO-3G/def2-SVP 之后，这个测试里硬编码的
+    `elements: [1, 6, 7, 8, 9]` 立刻与钉住的摘要不符 —— 漂移的不是取数逻辑，
+    是**测试里的那份数据副本**。改成从 `sources.json` 读同一份 `fetch` 配方，
+    这一类漂移就没有了。
+    """
+    sources = json.loads((DATA / "sources.json").read_text(encoding="utf-8"))
+    for entry in sources["entries"]:
+        if entry["path"] == path:
+            return entry["fetch"]
+    raise AssertionError(f"sources.json 里没有 {path}")
 
 
 def _spec_for(path: str) -> dict:

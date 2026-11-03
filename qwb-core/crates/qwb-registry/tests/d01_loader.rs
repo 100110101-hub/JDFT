@@ -444,10 +444,10 @@ fn real_qwb_data_registry_loads() {
         "至少 sto-3g + svwn5 + 四个网格"
     );
 
-    // 生产数据（D-03 / D-09 / D-13）。
+    // 生产数据（D-03 / D-09 / D-13）。STO-3G 在 qwb-data 0.20.0 加了 Si（RS-04 的 TMS）。
     assert_eq!(
         registry.get_basis("sto-3g").expect("sto-3g").elements.len(),
-        5
+        6
     );
     assert!(registry.get_functional("svwn5").is_ok());
     for level in [

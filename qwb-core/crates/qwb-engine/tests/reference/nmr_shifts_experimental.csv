@@ -1,0 +1,7 @@
+molecule,nucleus,site,shift_ppm,phase,solvent,temperature,solvent_spread_ppm,note,source_doi,source_url
+methane,1H,CH4,0.22,solution,chloroform-d,not_stated,0.15-0.22,Table S1 / CDCl3 column,10.1021/om100106e,https://authors.library.caltech.edu/records/q3m5b-fec90/files/om100106e_si_001.pdf?download=1
+methane,13C,CH4,-4.63,solution,chloroform-d,not_stated,-5.88--4.01,Table S2 / CDCl3 column,10.1021/om100106e,https://authors.library.caltech.edu/records/q3m5b-fec90/files/om100106e_si_001.pdf?download=1
+methanol,1H,CH3,3.49,solution,chloroform-d,not_stated,3.03-3.49,Table S1 / CDCl3 column (the OH proton is exchange-broadened; not used),10.1021/om100106e,https://authors.library.caltech.edu/records/q3m5b-fec90/files/om100106e_si_001.pdf?download=1
+methanol,13C,CH3,50.41,solution,chloroform-d,not_stated,48.59-50.67,Table S2 / CDCl3 column,10.1021/om100106e,https://authors.library.caltech.edu/records/q3m5b-fec90/files/om100106e_si_001.pdf?download=1
+tms,1H,CH3,0.00,definition,chloroform-d,not_stated,,zero of the ppm scale by definition (delta = sigma(TMS) - sigma),10.1021/om100106e,https://authors.library.caltech.edu/records/q3m5b-fec90/files/om100106e_si_001.pdf?download=1
+tms,13C,CH3,0.00,definition,chloroform-d,not_stated,,zero of the ppm scale by definition (delta = sigma(TMS) - sigma),10.1021/om100106e,https://authors.library.caltech.edu/records/q3m5b-fec90/files/om100106e_si_001.pdf?download=1

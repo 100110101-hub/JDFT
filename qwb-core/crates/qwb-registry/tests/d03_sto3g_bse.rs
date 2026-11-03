@@ -1,11 +1,15 @@
-//! D-03 验收（project.md §6.2）：`STO-3G`（H,C,N,O,F）正式数据。
+//! D-03 验收（project.md §6.2）：`STO-3G`（H,C,N,O,F,**Si**）正式数据。
 //!
 //! ① 与 **BSE 导出**逐项 diff < 1e-12（相对）——`fixtures/bse/sto-3g.json` 是
 //!    BSE API 的原始导出（committed 的 ground truth），数据文件由
 //!    `scripts/bse_to_qwb_data.py` 从它生成；
-//! ② 每元素基函数数 H=1、C/N/O/F=5；
+//! ② 每元素基函数数 H=1、C/N/O/F=5、Si=9；
 //! ③ 球谐；
 //! ④ 数据必须能被 `Registry` 按生产名 `sto-3g` 取到（不是 `example-` 前缀的样例）。
+//!
+//! Si 是 qwb-data 0.20.0 加的（RS-04 的 TMS 参考物 Si(CH3)4 需要它；没有 Si 基组就量不了
+//! 化学位移判据）。它走的是同一条 BSE 通道：`sources.json` 的 `elements` 加了 14，数据文件
+//! 与 `fixtures/bse/sto-3g.json` 都重新从 BSE 导出转录，H/C/N/O/F 五个元素的字节没有变。
 
 use std::path::{Path, PathBuf};
 
@@ -16,7 +20,7 @@ use qwb_registry::elements::atomic_number;
 /// BSE 的原始导出（2018-06-19 revision，"Data from Gaussian09"）。
 const BSE_EXPORT: &str = include_str!("fixtures/bse/sto-3g.json");
 
-const ELEMENTS: [&str; 5] = ["H", "C", "N", "O", "F"];
+const ELEMENTS: [&str; 6] = ["H", "C", "N", "O", "F", "Si"];
 
 fn repo_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -142,7 +146,7 @@ fn sto3g_matches_the_bse_export_element_by_element() {
     assert_eq!(
         basis.elements,
         ELEMENTS.iter().map(ToString::to_string).collect::<Vec<_>>(),
-        "元素集合必须是 H,C,N,O,F"
+        "元素集合必须是 H,C,N,O,F,Si"
     );
 
     for element in ELEMENTS {
@@ -183,12 +187,19 @@ fn sto3g_matches_the_bse_export_element_by_element() {
     }
 }
 
-// ─────────────────── ② 每元素基函数数（H=1，C/N/O/F=5）───────────────────
+// ─────────────────── ② 每元素基函数数（H=1，C/N/O/F=5，Si=9）───────────────────
 
 #[test]
 fn per_element_basis_function_counts() {
     let basis = load();
-    let expected = [("H", 1_usize), ("C", 5), ("N", 5), ("O", 5), ("F", 5)];
+    let expected = [
+        ("H", 1_usize),
+        ("C", 5),
+        ("N", 5),
+        ("O", 5),
+        ("F", 5),
+        ("Si", 9),
+    ];
     for (element, count) in expected {
         assert_eq!(
             basis.n_basis_functions_for(element),
@@ -196,9 +207,9 @@ fn per_element_basis_function_counts() {
             "{element}/STO-3G 应有 {count} 个基函数"
         );
     }
-    // 五个元素加起来 21。
-    assert_eq!(basis.n_basis_functions(), 21);
-    // H 只有一个壳层；其余是 1s + 2s + 2p 三个壳层。
+    // 六个元素加起来 30（21 + Si 的 3s2p... 也就是 1s/2s/3s + 2p/3p = 3 + 6）。
+    assert_eq!(basis.n_basis_functions(), 30);
+    // H 只有一个壳层；C/N/O/F 是 1s + 2s + 2p 三个壳层；Si 多一层 3s/3p。
     assert_eq!(basis.shells_for("H").expect("H").shells.len(), 1);
     for element in ["C", "N", "O", "F"] {
         let shells = &basis.shells_for(element).expect(element).shells;
@@ -209,6 +220,13 @@ fn per_element_basis_function_counts() {
             "{element}: 壳层顺序（按 l 升序，同 l 保持来源顺序）"
         );
     }
+    let silicon = &basis.shells_for("Si").expect("Si").shells;
+    assert_eq!(silicon.len(), 5, "Si: 1s + 2s + 2p + 3s + 3p");
+    assert_eq!(
+        silicon.iter().map(|shell| shell.l).collect::<Vec<_>>(),
+        vec![0, 0, 0, 1, 1],
+        "Si: 三个 s（1s/2s/3s）+ 两个 p（2p/3p）"
+    );
 }
 
 // ───────────────────────── ③ 球谐 ─────────────────────────
@@ -240,8 +258,8 @@ fn sto3g_is_registered_under_its_production_name() {
     let basis = registry
         .get_basis("sto-3g")
         .expect("生产名 sto-3g 必须可加载");
-    assert_eq!(basis.elements.len(), 5);
-    assert_eq!(basis.n_basis_functions(), 21);
+    assert_eq!(basis.elements.len(), 6);
+    assert_eq!(basis.n_basis_functions(), 30);
 
     // 样例文件仍在磁盘上（D-02 的回归夹具按路径用它），但**不进**生产清单，
     // 否则 grid/functional 之类会出现两个同义定义。

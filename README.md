@@ -148,7 +148,7 @@ K1 schema 不漂移、G2 数据校验 → D-15 数据许可、DA-08 参考集来
 | 目录 | 内容 | 契约 |
 |---|---|---|
 | `qwb-contracts/` | K1 schema（`schemars` 从 Rust 类型生成，勿手改）、K2 `qwb-engine-api`、K3 task/result schema、K4 `.qwb`、K5 CLI 约定、K6 Python 桩；阶段二增补 K7–K10 | K1–K10 |
-| `qwb-data/` | 数据仓：`registry.yaml`（v0.19.0，34 个生产文件）、`sources.json`（10 个第三方文件的配方）、`basis/ ecp/ functional/ grid/ solvent/ dispersion/ numerics/`、`examples/`（K1 样例，非交付物） | K1 |
+| `qwb-data/` | 数据仓：`registry.yaml`（v0.20.0，34 个生产文件）、`sources.json`（10 个第三方文件的配方）、`basis/ ecp/ functional/ grid/ solvent/ dispersion/ numerics/`、`examples/`（K1 样例，非交付物） | K1 |
 | `qwb-core/` | Cargo workspace：`qwb-registry` / `qwb-basis` / `qwb-integrals` / `qwb-xc` / `qwb-grid` / `qwb-linalg` / `qwb-scf` / `qwb-props` / `qwb-response` / `qwb-gpu` / `qwb-engine` / `qwb-io` / `qwb-cli` | K2/K4/K5 |
 | `qwb-studio/` | Python 产品层：`qwb_studio`（pydantic 模型 / `.qwb` / 调度器 / 结果目录 / CLI 薄壳 / GUI / 数据取回）+ `rust/qwb-py`（pyo3 `qwb_engine`） | K3/K4/K6 |
 | `docs/` | `USAGE.md`、`status.yaml`（阶段一账本）、`status-v2.yaml`（阶段二账本）、`choices.md`（决策日志）、`error-budget.md`、`HANDOVER.md`、`unblock.md` | — |

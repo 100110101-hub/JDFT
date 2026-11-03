@@ -35,6 +35,9 @@ KNOWN_SOURCES = {
     (reference_sources.FREESOLV_DOI, reference_sources.FREESOLV_URL),
     # M2 ④：S22 的几何/参考能（DOI 是论文，URL 是实际取回的数据文件）。
     (reference_sources.S22_DOI, reference_sources.S22_URL),
+    # RS-04（第三条判据）：CH4 / CH3OH 的 ¹H/¹³C 位移是**实验**值，来自
+    # Organometallics 29, 2176 (2010) 的支持信息（不是 PySCF 算的，也不是"常识"）。
+    (reference_sources.FULMER_DOI, reference_sources.FULMER_URL),
 }
 
 

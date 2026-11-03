@@ -16,12 +16,12 @@
 | --- | --- | --- | --- | --- | --- |
 | `qwb-data/basis/6-311g-dp.yaml` | 1.0.0 | Apache-2.0 | true | true | `cfda92e209fe8705` |
 | `qwb-data/basis/def2-svp-ri.yaml` | 1.0.0 | Apache-2.0 | true | true | `dd7c72e050bc4240` |
-| `qwb-data/basis/def2-svp.yaml` | 1.0.0 | Apache-2.0 | true | true | `177675559ef883e0` |
+| `qwb-data/basis/def2-svp.yaml` | 1.0.0 | Apache-2.0 | true | true | `13191b144dfcf6f8` |
 | `qwb-data/basis/def2-tzvp-ri.yaml` | 1.0.0 | Apache-2.0 | true | true | `ba72aea87b0198f3` |
 | `qwb-data/basis/def2-tzvp.yaml` | 1.0.0 | Apache-2.0 | true | true | `263b684f8c936200` |
 | `qwb-data/basis/def2-universal-jkfit.yaml` | 1.0.0 | Apache-2.0 | true | true | `5ae0422479300349` |
 | `qwb-data/basis/lanl2dz.yaml` | 1.0.1 | NOASSERTION | false | false | `bc14a7e191563cb1` |
-| `qwb-data/basis/sto-3g.yaml` | 1.0.0 | Apache-2.0 | true | true | `fce3af14b8b3ea12` |
+| `qwb-data/basis/sto-3g.yaml` | 1.0.0 | Apache-2.0 | true | true | `0fe5bf8737a02d6e` |
 | `qwb-data/dispersion/d3bj.yaml` | 1.0.0 | LGPL-3.0-or-later | true | true | `85607c132bef00c4` |
 | `qwb-data/dispersion/d3zero.yaml` | 1.0.0 | LGPL-3.0-or-later | true | true | `28d0ad0091ecb9bb` |
 | `qwb-data/dispersion/d4.yaml` | 1.0.0 | LGPL-3.0-or-later | true | true | `150676400ae138f5` |
@@ -38,7 +38,7 @@
 | `qwb-data/grid/grid-normal.yaml` | 1.0.0 | Apache-2.0 | true | true | `a792b362b1fdb278` |
 | `qwb-data/grid/grid-veryfine.yaml` | 1.0.0 | Apache-2.0 | true | true | `5c630f5a1ec0688d` |
 | `qwb-data/numerics/numerics.yaml` | 1.1.0 | Apache-2.0 | true | true | `f3b34d54231b2ac2` |
-| `qwb-data/registry.yaml` | 0.19.0 | ? | ? | ? | `—（manifest，条目各自带` |
+| `qwb-data/registry.yaml` | 0.20.0 | ? | ? | ? | `—（manifest，条目各自带` |
 | `qwb-data/solvent/acetonitrile.yaml` | 2.1.0 | Apache-2.0 | true | true | `56d58923014a0c54` |
 | `qwb-data/solvent/chloroform.yaml` | 2.1.0 | Apache-2.0 | true | true | `c38ee6eaf924c523` |
 | `qwb-data/solvent/dmso.yaml` | 2.1.0 | Apache-2.0 | true | true | `0279f71b9c5d60bc` |
@@ -162,7 +162,7 @@
 - A multicenter numerical integration scheme for polyatomic molecules (Becke partitioning)
 - New Methods For Electronic Structure Calculations on Large Molecules (pseudospectral approach)
 
-### `qwb-data/registry.yaml`（qwb-data 0.19.0）
+### `qwb-data/registry.yaml`（qwb-data 0.20.0）
 
 
 ### `qwb-data/solvent/acetonitrile.yaml`（acetonitrile 2.1.0）

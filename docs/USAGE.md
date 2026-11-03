@@ -1120,7 +1120,7 @@ gitignored 的 `qwb-data/reference/_*_staging/raw/` 里，派生物（CSV/JSON�
   `docs/error-budget.md`。**旧账本的"三项非极性项在付费墙后"是错的**：SMD 的非极性项
   只有一项 `G_CDS`，参数来自公开的 MNSOL 描述符表，已随数据钉住（见 choices 一百八十二）。
 * **近似路径**：`options.numerics` 一律退出码 4（IN-03 pseudospectral、IN-04 RI-J 都没过 K10）。
-* **解析 Hessian**（RS-05，blocked：20× 的两条前提都不成立）、**GIAO NMR**（RS-04，in_progress）、
+* **解析 Hessian**（RS-05，blocked：20× 的两条前提都不成立）、**GIAO NMR**（RS-04，blocked：GIAO 已实现且对预言机 1e-5 ppm，但 HF/STO-3G 的位移精度 ¹H 0.68–1.28 ppm 达不到 0.5 的判据）、
   **Raman**（RS-06，blocked：要简正模式 → 要 RS-05）、**VCD**（RS-07 pending）。
 * **TS 已接**（`qwb ts`，RP-01）：Hessian 引导的局部本征向量跟随，收敛后核对「恰好一个虚频」（只计波数 < −100 cm⁻¹ 的真虚频，零模噪声不算）；退出码 0 本身就说明是一阶鞍点。**IRC 已完成**（RP-02）：从鞍点双向沿质量加权最陡下降走，端点自由优化 + 内坐标指纹。**PES 扫描已完成**
   （`qwb scan`，RP-03）：距离/键角/二面角，刚性（逐点单点）与弛豫（**约束优化**：梯度投影 + 每步重设内坐标）都会写 `artifacts/pes.json`；结果块里 `relaxed` 与每点的 `optimised` 分开报。
@@ -1165,7 +1165,7 @@ ECP、频率库函数）在 `docs/status.yaml`；这里只列阶段二台账里�
 | 溶剂化解析梯度 / 优化 | ❌ | SV-02 | 依赖 SV-01 |
 | 溶液相频率 / 热化学 | ❌ | SV-05 | 依赖 SV-01/SV-02 |
 | `jobtype: freq`（**数值** Hessian：频率/IR/热化学） | ⚠ | RS-05 | 已接线（第 388 轮）：频率对 PySCF 解析 Hessian 差 ≤ 0.19 cm⁻¹；**解析** Hessian 仍 blocked（20× 的前提不成立），freq 因此是 3N+1 次 SCF 级的成本 |
-| NMR 屏蔽（**共原规范** + 规范变化报告） | ⚠ | RS-04 | 抗磁 + 顺磁（含 CPHF）已接进 `nmr_shieldings` 块：水 O 172.26 / H 99.63 ppm、规范变化 **7.10** ppm；**GIAO 还没做**，所以判据「spread < 1 ppm」没满足 —— 这个数就是差距的量化 |
+| NMR 屏蔽（**共原规范** / **GIAO**，含规范变化报告） | ⚠ | RS-04 | GIAO 已实装（`gauge: giao`）：水 O 365.672801 / H 33.682095 ppm，**规范扩散 8.28e-7 ppm**（判据 1 ppm，达到；旧共原规范是 7.10 ppm）；对 PySCF GIAO 预言机 3e-5 ppm。**未达的是位移精度**：HF/STO-3G 下 ¹H |Δ| 0.676（CH4）/ 1.278（CH3OH）ppm，判据 0.5 没到；CH4 ¹³C 差 17.880 ppm —— 这是级别的能力而不是实现缺陷 |
 | Raman 活性 | ❌ | RS-06 | 要简正模式 → 要 RS-05 |
 | VCD | ❌ | RS-07 | pending |
 | 过渡态搜索（`qwb ts`，局部本征向量跟随） | ⚠ | RP-01 | 机制有了：NH3 伞形鞍点 5 步收敛（max\|g\| = 3.7e-6、一个虚频 −1081 cm⁻¹）；**判据的"3 个反应势垒对文献 < 1.5 kcal/mol"没做**（要 DFT 层级，受 EX-03 约束） |

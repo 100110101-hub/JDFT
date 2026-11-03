@@ -21,6 +21,7 @@
 from __future__ import annotations
 
 import hashlib
+import io
 import json
 import sys
 from pathlib import Path
@@ -288,7 +289,10 @@ def main() -> int:
             return 1
         print(f"ok: {OUTPUT.name} 与数据一致（{len(records)} 个文件）")
     else:
-        OUTPUT.write_text(text, encoding="utf-8")
+        # `newline="\n"`：本仓库的行尾统一是 LF（`.gitattributes` 的 `text=auto eol=lf`），
+        # 而 `Path.write_text()` 在 Windows 上会把 "\n" 写成 "\r\n" —— 那样工作区里的字节
+        # 与 commit 里的 LF 不一致，逐字节比对的检查会在新克隆上莫名变红（DA-08 的老坑）。
+        io.open(OUTPUT, "w", encoding="utf-8", newline="\n").write(text)
         print(f"wrote {OUTPUT.name}（{len(records)} 个文件）")
     for problem in problems:
         print(f"PROBLEM {problem}", file=sys.stderr)
