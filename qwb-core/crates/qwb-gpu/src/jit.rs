@@ -370,8 +370,8 @@ pub(crate) fn gemm_f64_budgeted(
 pub(crate) mod kernel {
     //! XC 核的 JIT 层：常量 CUDA C 源码 → NVRTC → PTX → `CUmodule` → `cuLaunchKernel`。
     //!
-    //! 只暴露**按名字命名的一次性操作**（行点积、按行缩比、两个固定形状的 gemm），
-    //! 调度层（`xc.rs`）看到的是安全的 Rust 函数，看不到裸指针。
+    //! 只暴露**按名字命名的一次性操作**（行点积、按行缩比、GGA 的密度/梯度/σ 收缩、
+    //! 两个固定形状的 gemm），调度层（`xc.rs`）看到的是安全的 Rust 函数，看不到裸指针。
 
     use super::{CUBLAS_OP_N, CUBLAS_OP_T, Cuda, init, load_first};
     use crate::GpuError;
@@ -380,13 +380,30 @@ pub(crate) mod kernel {
 
     /// 内核源码。**常量字符串**，不接受任何用户输入（附录 A · EX-03 约束 ①）。
     ///
-    /// 两个核，都是逐元素形状：
+    /// 三个核：
     ///
-    /// * `qwb_xc_row_dot`：`out[p] = Σ_μ left[p,μ]·right[p,μ]` —— **本次交付的主角**。
+    /// * `qwb_xc_row_dot`（LDA）：`out[p] = Σ_μ left[p,μ]·right[p,μ]` —— **LDA 的主角**。
     ///   BLAS 给不出它：`gemm` 只能算出 `ΦP`，而 `ρ_p = Σ_μ Φ_pμ (ΦP)_pμ` 是再把两张
     ///   同形矩阵**按行点积**压成一个向量。每个线程吃一整行，读 2·n 个 double、写 1 个。
     /// * `qwb_xc_scale_rows`：`out[p,μ] = scale[p]·phi[p,μ]` —— 把逐点系数摊到 AO 行上，
-    ///   之后 `v_xc = Φᵀ·(a·Φ)` 就又变回一次标准 gemm（`cuBLAS` 直接吃）。
+    ///   之后 `v_xc = Φᵀ·(a·Φ)` 就又变回一次标准 gemm（`cuBLAS` 直接吃）。LDA 与 GGA 共用。
+    /// * `qwb_xc_gga_rho_grad`（GGA）：一个线程吃一个网格点，从 `Φ`、`∇Φ`（三个分量）、`P`
+    ///   直接按下标次序收缩出 `ρ_p`、`∇ρ_p` 与 `σ_p = |∇ρ_p|²`。
+    ///
+    /// # 为什么 GGA 核要自己算 `ρ`，而不复用 LDA 的 gemm + 行点积
+    ///
+    /// GGA 的势里有两项（`σ` 通道）依赖 **`∇ρ` 的每一个分量**。把 `∇ρ` 算成两次 gemm 的
+    /// 行点积当然更快，但那样求和次序就与 `qwb-scf::rks::evaluate_xc_cached` 不同，
+    /// `σ` 会在最后一位上偏，`ε(ρ,σ)` 跟着偏 —— 于是"与 CPU 逐位相同"这条就没了。
+    /// 这里的取舍是**先逐位、再快**：一个线程按 CPU 的 `i` 外层 / `j` 内层次序串行累加。
+    ///
+    /// # 为什么用 `__dadd_rn`
+    ///
+    /// NVRTC 默认 `--fmad=true`，会把 `sum += x*y` 熔成一个 `fma`（一条指令、**一次**舍入），
+    /// 而 Rust 侧（x86-64 基线没有 FMA）是"先乘后加"的**两次**舍入。两者最后一位会不同，
+    /// 逐位相同就不成立。`__dadd_rn` 是 CUDA 文档里"不会被熔进 FMA"的显式舍入加法，
+    /// 它的 PTX 是 `add.rn.f64`（而不是 `fma.rn.f64`）—— 本次交付里逐位相同靠的就是它。
+    /// 只在新核里用它：`qwb_xc_row_dot` 的舍入行为一个字都没动。
     ///
     /// 求和顺序里没有原子操作、没有跨线程归约，所以结果是**确定**的。
     const XC_SOURCE: &str = r#"
@@ -412,6 +429,48 @@ extern "C" __global__ void qwb_xc_scale_rows(const double* __restrict__ phi,
     const double s = scale[p];
     const long long base = p * (long long)n;
     for (int mu = 0; mu < n; ++mu) { out[base + mu] = s * phi[base + mu]; }
+}
+
+extern "C" __global__ void qwb_xc_gga_rho_grad(const double* __restrict__ phi,
+                                               const double* __restrict__ gx,
+                                               const double* __restrict__ gy,
+                                               const double* __restrict__ gz,
+                                               const double* __restrict__ pmat,
+                                               double* __restrict__ rho_out,
+                                               double* __restrict__ grad_out,
+                                               double* __restrict__ sigma_out,
+                                               int n, long long points) {
+    long long p = (long long)blockIdx.x * (long long)blockDim.x + threadIdx.x;
+    if (p >= points) { return; }
+    const double* v = phi + p * (long long)n;
+    const double* vx = gx + p * (long long)n;
+    const double* vy = gy + p * (long long)n;
+    const double* vz = gz + p * (long long)n;
+    double rho = 0.0;
+    double dx = 0.0;
+    double dy = 0.0;
+    double dz = 0.0;
+    for (int i = 0; i < n; ++i) {
+        const double vi = v[i];
+        const double gxi = vx[i];
+        const double gyi = vy[i];
+        const double gzi = vz[i];
+        const double* row = pmat + (long long)i * (long long)n;
+        for (int j = 0; j < n; ++j) {
+            const double pij = row[j];
+            const double vj = v[j];
+            rho = __dadd_rn(rho, (vi * pij) * vj);
+            if (pij == 0.0) { continue; }
+            dx = __dadd_rn(dx, pij * __dadd_rn(gxi * vj, vi * vx[j]));
+            dy = __dadd_rn(dy, pij * __dadd_rn(gyi * vj, vi * vy[j]));
+            dz = __dadd_rn(dz, pij * __dadd_rn(gzi * vj, vi * vz[j]));
+        }
+    }
+    rho_out[p] = rho;
+    grad_out[p] = dx;
+    grad_out[points + p] = dy;
+    grad_out[2LL * points + p] = dz;
+    sigma_out[p] = __dadd_rn(__dadd_rn(dx * dx, dy * dy), dz * dz);
 }
 "#;
 
@@ -507,6 +566,7 @@ extern "C" __global__ void qwb_xc_scale_rows(const double* __restrict__ phi,
         _module: *mut c_void,
         row_dot_fn: *mut c_void,
         scale_rows_fn: *mut c_void,
+        gga_rho_grad_fn: *mut c_void,
         /// NVRTC 报出的版本号（诊断用：`13.0`）。
         pub(crate) nvrtc_version: (i32, i32),
         /// 编译期用的 `--gpu-architecture=compute_XY`。
@@ -634,7 +694,7 @@ extern "C" __global__ void qwb_xc_scale_rows(const double* __restrict__ phi,
             let (nvrtc_version, image) = compile_ptx(&nvrtc, gpu_arch)?;
 
             // SAFETY: `image` 是 NVRTC 刚写满的 PTX 文本（已含 NUL）；`module` 由驱动写出。
-            let (module, row_dot_fn, scale_rows_fn) = unsafe {
+            let (module, row_dot_fn, scale_rows_fn, gga_rho_grad_fn) = unsafe {
                 let mut module: *mut c_void = std::ptr::null_mut();
                 let status = (api.cu_module_load_data)(&mut module, image.as_ptr().cast());
                 if status != 0 {
@@ -658,7 +718,20 @@ extern "C" __global__ void qwb_xc_scale_rows(const double* __restrict__ phi,
                 if status != 0 {
                     return Err(call_error(&api, "cuModuleGetFunction(scale_rows)", status));
                 }
-                (module, row_dot_fn, scale_rows_fn)
+                let mut gga_rho_grad_fn: *mut c_void = std::ptr::null_mut();
+                let status = (api.cu_module_get_function)(
+                    &mut gga_rho_grad_fn,
+                    module,
+                    c"qwb_xc_gga_rho_grad".as_ptr(),
+                );
+                if status != 0 {
+                    return Err(call_error(
+                        &api,
+                        "cuModuleGetFunction(gga_rho_grad)",
+                        status,
+                    ));
+                }
+                (module, row_dot_fn, scale_rows_fn, gga_rho_grad_fn)
             };
 
             Ok(XcSession {
@@ -669,6 +742,7 @@ extern "C" __global__ void qwb_xc_scale_rows(const double* __restrict__ phi,
                 _module: module,
                 row_dot_fn,
                 scale_rows_fn,
+                gga_rho_grad_fn,
                 nvrtc_version,
                 gpu_arch,
             })
@@ -837,10 +911,122 @@ extern "C" __global__ void qwb_xc_scale_rows(const double* __restrict__ phi,
             )
         }
 
+        /// GGA 的密度通道：一次算出 `ρ_p`、`∇ρ_p`（写进 `grad_out` 的**轴优先**布局
+        /// `[x·points + p]`）与 `σ_p = |∇ρ_p|²`。
+        ///
+        /// 累加次序与 `qwb-scf::rks::evaluate_xc_cached` 的 GGA 分支逐句一致（`i` 外层、
+        /// `j` 内层，`P_ij == 0` 跳过），舍入用 `__dadd_rn` 钉成"先乘后加"，所以 `ρ`/`∇ρ`/`σ`
+        /// 与 CPU 逐位相同 —— 这不是"差不多"，是 `tests/ex03_xc_grid.rs` 里数出来的。
+        #[allow(clippy::too_many_arguments)]
+        pub(crate) fn gga_rho_grad(
+            &self,
+            phi: &DeviceBuffer,
+            gx: &DeviceBuffer,
+            gy: &DeviceBuffer,
+            gz: &DeviceBuffer,
+            pmat: &DeviceBuffer,
+            rho: &DeviceBuffer,
+            grad: &DeviceBuffer,
+            sigma: &DeviceBuffer,
+            n: usize,
+            points: usize,
+        ) -> Result<(), GpuError> {
+            let (n_i, points_i) = (i32::try_from(n)?, i64::try_from(points)?);
+            let (mut a, mut b, mut c, mut d, mut e) = (phi.ptr, gx.ptr, gy.ptr, gz.ptr, pmat.ptr);
+            let (mut f, mut g, mut h) = (rho.ptr, grad.ptr, sigma.ptr);
+            let (mut n_arg, mut points_arg) = (n_i, points_i);
+            self.launch(
+                self.gga_rho_grad_fn,
+                points,
+                &mut [
+                    (&raw mut a).cast::<c_void>(),
+                    (&raw mut b).cast::<c_void>(),
+                    (&raw mut c).cast::<c_void>(),
+                    (&raw mut d).cast::<c_void>(),
+                    (&raw mut e).cast::<c_void>(),
+                    (&raw mut f).cast::<c_void>(),
+                    (&raw mut g).cast::<c_void>(),
+                    (&raw mut h).cast::<c_void>(),
+                    (&raw mut n_arg).cast::<c_void>(),
+                    (&raw mut points_arg).cast::<c_void>(),
+                ],
+                "qwb_xc_gga_rho_grad",
+            )
+        }
+
         /// `xm = phi·p`：`phi` 是 `points×n`、`p` 是 `n×n`、`xm` 是 `points×n`（全行主序）。
         ///
         /// cuBLAS 是列主序，行主序的 `Φ` 在列主序里就是 `Φᵀ`，于是
         /// `xmᵀ = pᵀ·Φᵀ` 正好是一次 `(m=n, n=points, k=n)` 的无转置 `dgemm`。
+        pub(crate) fn gemm_xm(
+            &self,
+            xm: &DeviceBuffer,
+            phi: &DeviceBuffer,
+            p: &DeviceBuffer,
+            n: usize,
+            points: usize,
+        ) -> Result<(), GpuError> {
+            self.with_gemm_handle(|handle| handle.gemm_xm(xm, phi, p, n, points))
+        }
+
+        /// `v = phiᵀ·scaled`：`phi`/`scaled` 是 `points×n`，`v` 是 `n×n` 行主序。
+        ///
+        /// 列主序视角：`vᵀ = Φᵀ·scaled`，即 `dgemm(m=n, n=n, k=points)`，
+        /// 第一操作数是 `phi` 的列主序视图、第二操作数取转置。
+        pub(crate) fn gemm_v(
+            &self,
+            v: &DeviceBuffer,
+            phi: &DeviceBuffer,
+            scaled: &DeviceBuffer,
+            n: usize,
+            points: usize,
+        ) -> Result<(), GpuError> {
+            self.with_gemm_handle(|handle| handle.gemm_v(v, phi, scaled, n, points))
+        }
+
+        /// 在**同一个** cuBLAS handle 上跑一串 gemm。
+        ///
+        /// 为什么需要它：`cublasCreate` + `cublasDestroy` 实测 0.83 ms/次
+        /// （`available()` 十次平均，见 `tests/ex03_xc_grid.rs` 的报告）。LDA 每次收缩一个
+        /// gemm，白付也就算了；GGA 的 `v_xc` 装配要四个（LDA 那半边一个 + σ 通道三个），
+        /// 逐个建/销毁就是 3.2 ms —— 而 n=7 时整个设备侧才十几毫秒。所以 GGA 走这个入口，
+        /// LDA 的 [`Self::gemm_v`] 行为一个字没变（它内部就是"建一个、跑一个、销毁"）。
+        ///
+        /// # Errors
+        ///
+        /// `cublasCreate_v2` 失败，或 `action` 里的任一 gemm 失败。
+        pub(crate) fn with_gemm_handle<T>(
+            &self,
+            action: impl FnOnce(&GemmHandle<'_>) -> Result<T, GpuError>,
+        ) -> Result<T, GpuError> {
+            let cuda: &Cuda = init()?;
+            self.ensure_current()?;
+            let mut handle: *mut c_void = std::ptr::null_mut();
+            // SAFETY: handle 是局部变量；下面不论 `action` 成败都恰好销毁一次。
+            let status = unsafe { (cuda.cublas_create)(&mut handle) };
+            if status != 0 {
+                return Err(GpuError::Call {
+                    what: "cublasCreate_v2",
+                    code: status,
+                });
+            }
+            let result = action(&GemmHandle { api: cuda, handle });
+            // SAFETY: handle 由上面那个 `cublasCreate_v2` 建，这里销毁一次。
+            unsafe { (cuda.cublas_destroy)(handle) };
+            result
+        }
+    }
+
+    /// 一个已经建好的 cuBLAS handle（由 [`XcSession::with_gemm_handle`] 负责生命周期）。
+    ///
+    /// 只暴露安全的 `gemm` 方法：裸指针不出本模块。
+    pub(crate) struct GemmHandle<'a> {
+        api: &'a Cuda,
+        handle: *mut c_void,
+    }
+
+    impl GemmHandle<'_> {
+        /// 见 [`XcSession::gemm_xm`]。
         pub(crate) fn gemm_xm(
             &self,
             xm: &DeviceBuffer,
@@ -865,10 +1051,7 @@ extern "C" __global__ void qwb_xc_scale_rows(const double* __restrict__ phi,
             )
         }
 
-        /// `v = phiᵀ·scaled`：`phi`/`scaled` 是 `points×n`，`v` 是 `n×n` 行主序。
-        ///
-        /// 列主序视角：`vᵀ = Φᵀ·scaled`，即 `dgemm(m=n, n=n, k=points)`，
-        /// 第一操作数是 `phi` 的列主序视图、第二操作数取转置。
+        /// 见 [`XcSession::gemm_v`]。
         pub(crate) fn gemm_v(
             &self,
             v: &DeviceBuffer,
@@ -909,24 +1092,14 @@ extern "C" __global__ void qwb_xc_scale_rows(const double* __restrict__ phi,
             ldc: usize,
             what: &'static str,
         ) -> Result<(), GpuError> {
-            let cuda: &Cuda = init()?;
-            self.ensure_current()?;
-            let mut handle: *mut c_void = std::ptr::null_mut();
-            // SAFETY: handle 是局部变量；下面成功/失败两条路径都恰好销毁一次。
-            let status = unsafe { (cuda.cublas_create)(&mut handle) };
-            if status != 0 {
-                return Err(GpuError::Call {
-                    what: "cublasCreate_v2",
-                    code: status,
-                });
-            }
             let alpha = 1.0_f64;
             let beta = 0.0_f64;
             // SAFETY: 三个指针都是本会话分配的设备内存，形状/主维由调用方按上面的文档
-            // 逐项对齐；`cublasDgemm_v2` 只读 `a`/`b`、只写 `c`。
+            // 逐项对齐；`cublasDgemm_v2` 只读 `a`/`b`、只写 `c`。handle 由调用方持有、
+            // 在本借用期内一直有效。
             let status = unsafe {
-                (cuda.cublas_dgemm)(
-                    handle,
+                (self.api.cublas_dgemm)(
+                    self.handle,
                     op_a,
                     op_b,
                     m,
@@ -942,14 +1115,14 @@ extern "C" __global__ void qwb_xc_scale_rows(const double* __restrict__ phi,
                     i32::try_from(ldc)?,
                 )
             };
-            // SAFETY: handle 由上面那个 `cublasCreate_v2` 建，这里销毁一次。
-            unsafe { (cuda.cublas_destroy)(handle) };
             if status != 0 {
                 return Err(GpuError::Call { what, code: status });
             }
             Ok(())
         }
+    }
 
+    impl XcSession {
         /// 提交一个内核。`args` 里每一项都指向**调用方栈上**的参数副本（`cuLaunchKernel`
         /// 在返回前就把参数表读走了，所以只要它们活到本调用结束即可）。
         fn launch(
@@ -963,8 +1136,8 @@ extern "C" __global__ void qwb_xc_scale_rows(const double* __restrict__ phi,
             let grid = u32::try_from(points.div_ceil(BLOCK as usize))
                 .map_err(|_| GpuError::TooLarge(points))?;
             // SAFETY: `function` 来自本会话的 `cuModuleGetFunction`；`args` 的每一项都是
-            // 上面文档说的栈上参数地址，类型与常量源码里的形参表逐项一致
-            // （double*, double*, double*, int, long long）。
+            // 上面文档说的栈上参数地址，类型与常量源码里**那个内核**的形参表逐项一致
+            // （例如行点积是 double*, double*, double*, int, long long）。
             let status = unsafe {
                 (self.api.cu_launch_kernel)(
                     function,
