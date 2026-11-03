@@ -2,6 +2,50 @@
 
 语义化版本。**任何破坏性变更必须在此登记并经人类评审**（§4 契约前置要求）。
 
+## 2.2.0 — RS-04（末段）：NMR 的 GIAO 模式（`gauge: giao`）
+
+**加性变更**（旧 `input.yaml`、旧 `result.json`、旧代码继续工作）：没有删除/重命名/重排任何
+变体或字段，`NmrOptions::new()` 的缺省仍是 `gauge: nucleus`。
+
+### K2 · `NmrGauge` 新增变体 `Giao`
+
+- `NmrGauge` 现在是 `nucleus | common | giao`；`as_str()` 给 `"giao"`，另加 `is_giao()` 判据。
+  旧的两个变体的名字、序号、缺省行为**一个字节没变**（有回归测试
+  `properties::tests::nmr_gauge_giao_is_an_additive_variant`：
+  `{"gauge":"common",...}` 仍然解析成 `Common`）。
+- 语义补充（写进 `NmrGauge::Giao` 的文档）：GIAO 下**没有**「换 `L` 的原点」这个自由度，
+  所以 `report_gauge_spread` 在 GIAO 路径里的含义是**把整个分子平移到另一个坐标原点再算一遍**，
+  比较的是总和 `σ_iso`（非 GIAO 的两条路径比较的是顺磁项，抗磁项与 `L` 的原点无关）。
+- `NmrShieldings::method` 的取值现在冻结为三种：`giao` / `nucleus-origin` / `common-origin`
+  （字段仍是 `String`，schema 不变）。
+
+### 引擎侧（`qwb-engine`，不是契约面但决定落盘是否诚实）
+
+- `options.nmr.gauge = giao` 时跑 `qwb_response::giao_shielding_ppm`（RS-04 已验收的那份实现：
+  水/STO-3G 的 O 365.672798、H 33.682096 ppm，PySCF 参考 365.672764/33.682096），
+  落 `method = "giao"`、**完整的 3×3 张量**（GIAO 的 `total_ppm`，非 GIAO 那两条路径仍如实填零）、
+  以及真实的 `length_gauge_spread_ppm`（平移后重算的最大变化；水/STO-3G 实测 1e-7 ppm 量级）。
+- `gauge_origin_bohr` 在 GIAO 下是**坐标原点** `[0, 0, 0]`（GIAO 没有可选的规范原点）。
+- **新增三条显式拒绝**（`EngineError::Unsupported`，都不是静默降级）：
+  1. `options.nmr` + 开壳层 `scf_type`（`uhf`/`uks`/`rohf`）。这条以前是**静默忽略**
+     —— 那三个变体在 `run_single_point` 开头就分派到自旋通道，根本走不到 NMR 块，
+     `result.json` 里连 `nmr_shieldings` 都不出现；
+  2. `gauge: giao` + 非 `hf` 参考（GIAO 的响应算符是纯 HF 的 `−½K(dm)`，没有 XC kernel）；
+  3. `gauge: giao` + ECP（占据数得按 `z_eff` 数）。
+- **非 GIAO 的两个模式的数字逐位不变**：水/STO-3G 的 O 172.2631、H 99.6291、
+  `length_gauge_spread_ppm` 7.1041（`qwb-engine/tests/rs04_nmr_engine.rs` 里按 4 位小数冻结）。
+
+### K3 / K6 · 没有（或几乎没）改动的地方
+
+- `result.schema.yaml` 的 `NmrShieldings.method` 本来就是 `{type: string}`，加一个取值不需要改
+  schema；`required` / 属性集一条没动（只把两处 `description` 从"phase-2 只支持 GIAO"改成
+  三种取值的实话 —— 文档字符串，不是结构，`k3_schema_docs` 的逐字段比对仍然绿）。
+- `studio/python/qwb_engine.pyi` 是**手写冻结桩**，它本来就不建模 `TaskOptions.nmr`
+  （阶段二只补了 `scf_type` / `mp2` / `excited_states` / `solvent_model` / `numerics` /
+  `dispersion`），所以这一版同样没有可生成的增量 —— `mypy --strict` 仍然 0 issue。
+- 引擎 API 的 schema 不走 schemars（C-03 的约定），`qwb-gen-schemas` 只覆盖 K1 的
+  registry 数据（`basis`/`ecp`/…），所以 `--check` 与本次变体无关、照旧绿。
+
 ## 2.1.0 — FX-01：K1 的 `requires.kinetic_density`（2026-11-06）
 
 **加性变更**（旧数据、旧代码继续工作）：

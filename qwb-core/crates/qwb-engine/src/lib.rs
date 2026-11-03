@@ -1373,11 +1373,12 @@ impl RksBackend {
         if let Some(excited_states) = excited_states {
             job = job.with_excited_states(excited_states);
         }
-        // RS-04：NMR 屏蔽（抗磁 + 顺磁，共原/核中心两种规范原点）。
+        // RS-04：NMR 屏蔽（`options.nmr.gauge` 三种：核中心 / 共原 / **GIAO**）。
         //
-        // 顺磁项要解 CPHF，所以只在闭壳层 SCF 之后算；`length_gauge_spread_ppm` 是**换原点
-        // 重算的最大变化** —— phase-2 §4.2 的门禁（< 1 ppm）只有 GIAO 能满足，共原规范下实测
-        // 1.5 ppm（O）/ 7 ppm（H），所以这个数现在是"如实报出差距"而不是"通过判据"。
+        // 顺磁项与 GIAO 的响应都要解 CPHF，所以只在闭壳层 SCF 之后算；`length_gauge_spread_ppm`
+        // 是**换原点重算的最大变化** —— phase-2 §4.2 的门禁（< 1 ppm）只有 GIAO 能满足，
+        // 共原规范下实测 1.5 ppm（O）/ 7 ppm（H），所以对非 GIAO 的两条路径这个数现在是
+        // "如实报出差距"而不是"通过判据"。
         if let Some(nmr_options) = &input.options.nmr {
             if input
                 .options
@@ -1406,101 +1407,178 @@ impl RksBackend {
                 &dipole_ao,
                 n_occupied,
             )?;
-            let paramagnetic = |gauge: qwb_response::GaugeOrigin| {
-                qwb_response::paramagnetic_shielding_ppm(
+            // 数值本身已经验收（`qwb-response/tests/rs04_giao_nmr.rs`：水/STO-3G 的 O
+            // 365.672798、H 33.682096 ppm，PySCF 参考 365.672764 / 33.682096），所以这里只做
+            // 接线。
+            //
+            // 三条"拒绝而不是给一个静默错的数"的门禁都放在 `reject_unimplemented_options`
+            // （`run` 的入口）：开壳层 `scf_type`、`method_name` 不是 `hf`、带 ECP。放那里的
+            // 第二个原因很实际：`scf_type: uhf/uks/rohf` 在 `run_single_point` 开头就分派到
+            // 各自的自旋通道，**根本走不到本块** —— 以前 `options.nmr` 就是这么被静默忽略的。
+            let block = if nmr_options.gauge.is_giao() {
+                let shielding = qwb_response::giao_shielding_ppm(
                     &basis,
                     &input.molecule,
                     &result.coefficients,
                     &energies,
                     n_occupied,
                     &integrals,
-                    gauge,
-                )
-            };
-            // 共原规范的"公共原点"取**核电荷重心**（与 `GaugeOrigin::Common` 的文档一致）。
-            let common_origin = {
-                let mut total = 0.0_f64;
-                let mut weighted = [0.0_f64; 3];
-                for atom in &input.molecule.atoms {
-                    let z =
-                        f64::from(qwb_registry::elements::atomic_number(&atom.symbol).unwrap_or(0));
-                    total += z;
-                    for (axis, slot) in weighted.iter_mut().enumerate() {
-                        *slot += z * atom.position_bohr()[axis];
-                    }
-                }
-                if total > 0.0 {
-                    [
-                        weighted[0] / total,
-                        weighted[1] / total,
-                        weighted[2] / total,
-                    ]
-                } else {
-                    [0.0, 0.0, 0.0]
-                }
-            };
-            let chosen = match nmr_options.gauge {
-                qwb_engine_api::NmrGauge::Nucleus => qwb_response::GaugeOrigin::Nucleus,
-                qwb_engine_api::NmrGauge::Common => {
-                    qwb_response::GaugeOrigin::Common(common_origin)
-                }
-                _ => {
-                    return Err(EngineError::Unsupported(
-                        "options.nmr.gauge has an unknown value".to_string(),
+                    &tensor,
+                )?;
+                let mut nuclei = Vec::with_capacity(shielding.len());
+                for entry in &shielding {
+                    // GIAO 给的是**完整**的 3×3 张量（`α01` 与响应解都不对称，yz/zy 本来就
+                    // 不等），所以这里不像共原规范那样填零。各向异性留空：契约里的
+                    // `Δσ = σ_zz − (σ_xx+σ_yy)/2` 假定张量在输入坐标系里已经对角，
+                    // 而水/STO-3G 的 yz 分量实测 −7.5 ppm。
+                    nuclei.push(qwb_engine_api::NucleusShielding::new(
+                        &entry.symbol,
+                        entry.nucleus_index,
+                        entry.sigma_iso_ppm,
+                        entry.total_ppm,
                     ));
                 }
-            };
-            let dia =
-                qwb_props::diamagnetic_shielding_ppm(&basis, &input.molecule, &result.density)?;
-            let para = paramagnetic(chosen)?;
-            let mut nuclei = Vec::with_capacity(dia.len());
-            for (index, atom) in input.molecule.atoms.iter().enumerate() {
-                let sigma_dia = dia[index];
-                let sigma_para = para
-                    .iter()
-                    .find(|entry| entry.nucleus_index == index)
-                    .map_or(0.0, |entry| entry.sigma_p_ppm);
-                let isotropic = sigma_dia + sigma_para;
-                // 只有各向同性分量（张量需要顺磁项的三个分量，那一层还没落，如实留空）。
-                let zero = [[0.0_f64; 3]; 3];
-                nuclei.push(qwb_engine_api::NucleusShielding::new(
-                    &atom.symbol,
-                    index,
-                    isotropic,
-                    zero,
-                ));
-            }
-            let origin = match chosen {
-                qwb_response::GaugeOrigin::Nucleus => [0.0, 0.0, 0.0],
-                qwb_response::GaugeOrigin::Common(point) => point,
-            };
-            let method = match nmr_options.gauge {
-                qwb_engine_api::NmrGauge::Nucleus => "nucleus-origin",
-                _ => "common-origin",
-            };
-            let mut block = qwb_engine_api::NmrShieldings::new(origin, nuclei).with_method(method);
-            if nmr_options.report_gauge_spread {
-                let other = match chosen {
-                    qwb_response::GaugeOrigin::Nucleus => {
+                // GIAO 没有"选一个规范原点"这个自由度（London 相位里的原点到 `R_μ−R_ν` 就
+                // 抵消了），所以落盘的是**坐标原点**，固定 `[0, 0, 0]`；"结果对原点不敏感"
+                // 这件事由 `length_gauge_spread_ppm` 量。
+                let mut block =
+                    qwb_engine_api::NmrShieldings::new([0.0, 0.0, 0.0], nuclei).with_method("giao");
+                if nmr_options.report_gauge_spread {
+                    // 与非 GIAO 路径**同一个定义**（"换原点重算的最大变化"），只是 GIAO 换的是
+                    // **坐标**原点：把整个分子平移后重算一遍。平移下 Hamiltonian 不变，所以
+                    // 收敛的 MO 系数/轨道能/CPHF 两块/两电子张量直接复用，只有依赖绝对坐标的
+                    // GIAO 积分要重算（`giao_a01_integrals` 的 `r` 是绝对的）。比较的是**总和**
+                    // `σ_iso` —— GIAO 里只有总和规范不变（dia/para 的分解会跟着动）。
+                    let translated =
+                        translated_molecule(&input.molecule, GIAO_ORIGIN_SHIFT_ANGSTROM);
+                    let translated_basis = qwb_basis::InternalBasis::build(basis_k1, &translated)?;
+                    let alternate = qwb_response::giao_shielding_ppm(
+                        &translated_basis,
+                        &translated,
+                        &result.coefficients,
+                        &energies,
+                        n_occupied,
+                        &integrals,
+                        &tensor,
+                    )?;
+                    let mut spread = 0.0_f64;
+                    for (base, other) in shielding.iter().zip(alternate.iter()) {
+                        if base.nucleus_index != other.nucleus_index {
+                            return Err(EngineError::Internal(
+                                "giao: the gauge-spread pass returned the nuclei in a different \
+                                 order"
+                                    .to_string(),
+                            ));
+                        }
+                        spread = spread.max((other.sigma_iso_ppm - base.sigma_iso_ppm).abs());
+                    }
+                    block = block.with_length_gauge_spread(spread);
+                    reporter.log(&format!(
+                        "nmr: gauge = giao, length-gauge spread = {spread:.3e} ppm \
+                         (molecule translated by {GIAO_ORIGIN_SHIFT_ANGSTROM:?} Å)"
+                    ));
+                }
+                block
+            } else {
+                let paramagnetic = |gauge: qwb_response::GaugeOrigin| {
+                    qwb_response::paramagnetic_shielding_ppm(
+                        &basis,
+                        &input.molecule,
+                        &result.coefficients,
+                        &energies,
+                        n_occupied,
+                        &integrals,
+                        gauge,
+                    )
+                };
+                // 共原规范的"公共原点"取**核电荷重心**（与 `GaugeOrigin::Common` 的文档一致）。
+                let common_origin = {
+                    let mut total = 0.0_f64;
+                    let mut weighted = [0.0_f64; 3];
+                    for atom in &input.molecule.atoms {
+                        let z = f64::from(
+                            qwb_registry::elements::atomic_number(&atom.symbol).unwrap_or(0),
+                        );
+                        total += z;
+                        for (axis, slot) in weighted.iter_mut().enumerate() {
+                            *slot += z * atom.position_bohr()[axis];
+                        }
+                    }
+                    if total > 0.0 {
+                        [
+                            weighted[0] / total,
+                            weighted[1] / total,
+                            weighted[2] / total,
+                        ]
+                    } else {
+                        [0.0, 0.0, 0.0]
+                    }
+                };
+                let chosen = match nmr_options.gauge {
+                    qwb_engine_api::NmrGauge::Nucleus => qwb_response::GaugeOrigin::Nucleus,
+                    qwb_engine_api::NmrGauge::Common => {
                         qwb_response::GaugeOrigin::Common(common_origin)
                     }
-                    _ => qwb_response::GaugeOrigin::Nucleus,
+                    _ => {
+                        return Err(EngineError::Unsupported(
+                            "options.nmr.gauge has an unknown value".to_string(),
+                        ));
+                    }
                 };
-                let alternate = paramagnetic(other)?;
-                let mut spread = 0.0_f64;
-                for entry in &alternate {
-                    let base = para
+                let dia =
+                    qwb_props::diamagnetic_shielding_ppm(&basis, &input.molecule, &result.density)?;
+                let para = paramagnetic(chosen)?;
+                let mut nuclei = Vec::with_capacity(dia.len());
+                for (index, atom) in input.molecule.atoms.iter().enumerate() {
+                    let sigma_dia = dia[index];
+                    let sigma_para = para
                         .iter()
-                        .find(|item| item.nucleus_index == entry.nucleus_index)
-                        .map_or(0.0, |item| item.sigma_p_ppm);
-                    spread = spread.max((entry.sigma_p_ppm - base).abs());
+                        .find(|entry| entry.nucleus_index == index)
+                        .map_or(0.0, |entry| entry.sigma_p_ppm);
+                    let isotropic = sigma_dia + sigma_para;
+                    // 只有各向同性分量（张量需要顺磁项的三个分量，那一层还没落，如实留空）。
+                    let zero = [[0.0_f64; 3]; 3];
+                    nuclei.push(qwb_engine_api::NucleusShielding::new(
+                        &atom.symbol,
+                        index,
+                        isotropic,
+                        zero,
+                    ));
                 }
-                block = block.with_length_gauge_spread(spread);
-                reporter.log(&format!(
-                    "nmr: gauge = {}, length-gauge spread = {spread:.4} ppm (GIAO would make this < 1)",
-                    nmr_options.gauge.as_str()
-                ));
-            }
+                let origin = match chosen {
+                    qwb_response::GaugeOrigin::Nucleus => [0.0, 0.0, 0.0],
+                    qwb_response::GaugeOrigin::Common(point) => point,
+                };
+                let method = match nmr_options.gauge {
+                    qwb_engine_api::NmrGauge::Nucleus => "nucleus-origin",
+                    _ => "common-origin",
+                };
+                let mut block =
+                    qwb_engine_api::NmrShieldings::new(origin, nuclei).with_method(method);
+                if nmr_options.report_gauge_spread {
+                    let other = match chosen {
+                        qwb_response::GaugeOrigin::Nucleus => {
+                            qwb_response::GaugeOrigin::Common(common_origin)
+                        }
+                        _ => qwb_response::GaugeOrigin::Nucleus,
+                    };
+                    let alternate = paramagnetic(other)?;
+                    let mut spread = 0.0_f64;
+                    for entry in &alternate {
+                        let base = para
+                            .iter()
+                            .find(|item| item.nucleus_index == entry.nucleus_index)
+                            .map_or(0.0, |item| item.sigma_p_ppm);
+                        spread = spread.max((entry.sigma_p_ppm - base).abs());
+                    }
+                    block = block.with_length_gauge_spread(spread);
+                    reporter.log(&format!(
+                        "nmr: gauge = {}, length-gauge spread = {spread:.4} ppm (GIAO would make this < 1)",
+                        nmr_options.gauge.as_str()
+                    ));
+                }
+                block
+            };
             job = job.with_nmr_shieldings(block);
         }
         if let Some(spectrum) = uv_vis_spectrum {
@@ -2475,6 +2553,27 @@ fn epr_block(
     Ok(qwb_engine_api::EprResult::new(method, nuclei))
 }
 
+/// GIAO 规范检验用的平移量（Å）。
+///
+/// 与 `qwb-response/tests/rs04_giao_nmr.rs::the_giao_shielding_is_invariant_under_a_change_of_
+/// coordinate_origin` 的第二个检验点逐字相同：平移量级 ~0.6 Å 足够暴露"把绝对坐标当相对坐标
+/// 用"那类错误（实测的规范变化在 1e-8 ppm 量级，不是 0）。
+const GIAO_ORIGIN_SHIFT_ANGSTROM: [f64; 3] = [0.37, -0.21, 0.43];
+
+/// 把整个分子平移 `shift_angstrom`：只换**坐标原点**，物理不变（ghost 标记跟着原子走）。
+///
+/// GIAO 里"换规范原点"没有自由度（London 相位里的原点到 `R_μ−R_ν` 就抵消了），所以规范
+/// 检验只能这么做：平移后重算，总和必须不动。
+fn translated_molecule(molecule: &Molecule, shift_angstrom: [f64; 3]) -> Molecule {
+    let mut moved = molecule.clone();
+    for atom in &mut moved.atoms {
+        for (axis, delta) in shift_angstrom.iter().enumerate() {
+            atom.position_angstrom[axis] += delta;
+        }
+    }
+    moved
+}
+
 fn closed_shell_electrons(molecule: &Molecule) -> Result<usize, EngineError> {
     let mut electrons = -i64::from(molecule.charge);
     for atom in &molecule.atoms {
@@ -2527,6 +2626,47 @@ fn reject_unimplemented_options(input: &JobInput) -> Result<(), EngineError> {
                 "options.epr is only available for `sp` jobs, got jobtype = `{}`",
                 input.jobtype.as_str()
             )));
+        }
+    }
+    if let Some(nmr) = &options.nmr {
+        // RS-04：NMR 屏蔽的两条路径（GIAO 与非 GIAO）都只在**闭壳层**参考上定义 —— 开壳层
+        // 要分自旋通道，响应方程与 `hyperfine`/`a01` 那套都得重推（phase-2 没有这条 WP）。
+        //
+        // 这条守卫**必须**在这里（`run` 的入口），只留在 `run_single_point` 的 NMR 块里不够：
+        // `scf_type: uhf/uks/rohf` 在那段代码之前就分派到各自的自旋通道，于是 `options.nmr`
+        // 会被静默忽略 —— `result.json` 里既没有 `nmr_shieldings` 块、也没有一句解释。
+        if let Some(scf_type) = options.scf_type
+            && scf_type.is_open_shell()
+        {
+            return Err(EngineError::Unsupported(format!(
+                "options.nmr is implemented for closed-shell HF/KS only; scf_type = `{}` is \
+                 open-shell (the response equation and the GIAO/hyperfine operators would have to \
+                 be re-derived per spin channel)",
+                scf_type.as_str()
+            )));
+        }
+        if nmr.gauge.is_giao() {
+            // GIAO 的两条额外门禁，都是"拒绝而不是给一个静默错的数"：
+            //
+            // 1. GIAO 的响应算符在本项目里是**纯 HF** 的那一套（`−½K(dm)`，对应 PySCF 的
+            //    `gen_response(..., hermi=2)`），没有 XC kernel；DFT 参考会少一整块 f_xc。
+            // 2. ECP 把核电子拿掉了，占据数得按 `z_eff` 数，而 `closed_shell_electrons` 是
+            //    全电子计数 —— 两者不一致时 `n_occupied` 偏大，占据/虚的分界就错了。
+            if !input.method_name.eq_ignore_ascii_case("hf") {
+                return Err(EngineError::Unsupported(format!(
+                    "options.nmr.gauge = `giao` needs an `hf` reference (method_name = `{}`): \
+                     the GIAO response operator is the bare HF one (−½K(dm), no XC kernel), so a \
+                     DFT reference would silently drop the f_xc term",
+                    input.method_name
+                )));
+            }
+            if options.ecp_name.is_some() {
+                return Err(EngineError::Unsupported(
+                    "options.nmr.gauge = `giao` with an ECP is not implemented (the occupied \
+                     space would have to be counted from z_eff, not from the all-electron Z sum)"
+                        .to_string(),
+                ));
+            }
         }
     }
     if let Some(scf_type) = options.scf_type {

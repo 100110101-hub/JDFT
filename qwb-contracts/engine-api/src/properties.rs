@@ -253,6 +253,13 @@ pub enum NmrGauge {
     Nucleus,
     /// 核电荷重心为原点（「自由分子」共原规范）。
     Common,
+    /// **GIAO / London 轨道**（phase-2 RS-04 的最终形态，v2.2.0 新增）。
+    ///
+    /// 波函数带 London 相位，所以结果（总和）**没有**「换规范原点」这个自由度：本项目的
+    /// 规范检验做成「把整个分子平移到另一个**坐标**原点再算一遍」，总和必须不动，判据 < 1 ppm。
+    /// 这与 [`Self::Nucleus`] / [`Self::Common`] 的语义不同（那两种是换 `L` 的原点重算），
+    /// 所以在 [`NmrShieldings::method`] 里分别写成 `giao` / `nucleus-origin` / `common-origin`。
+    Giao,
 }
 
 impl NmrGauge {
@@ -262,7 +269,17 @@ impl NmrGauge {
         match self {
             Self::Nucleus => "nucleus",
             Self::Common => "common",
+            Self::Giao => "giao",
         }
+    }
+
+    /// 是否走 GIAO 路径。
+    ///
+    /// 用方法而不是让调用方写 `== NmrGauge::Giao`：`non_exhaustive` 枚举将来再加变体时，
+    /// 这个判据的语义（「带 London 相位 / 规范不变」）不会跟着漂。
+    #[must_use]
+    pub fn is_giao(self) -> bool {
+        matches!(self, Self::Giao)
     }
 }
 
@@ -273,10 +290,14 @@ impl NmrGauge {
 pub struct NmrOptions {
     /// 用哪个规范原点报屏蔽。
     pub gauge: NmrGauge,
-    /// 是否额外报 `length_gauge_spread_ppm`（两个原点各算一次，成本 2 倍）。
+    /// 是否额外报 `length_gauge_spread_ppm`（每个**检验点**各算一次，成本 ×2）。
     ///
     /// phase-2 §4.2 的门禁是「换原点重算的变化 < 1 ppm」—— 那是 GIAO 才有的性质；共原规范下
     /// 实测 1.5 ppm（O）/ 7 ppm（H），所以这个数现在的作用是如实报出差距。
+    ///
+    /// 对 [`NmrGauge::Giao`]，「换原点」= **把整个分子平移到另一个坐标原点再算一遍**
+    /// （GIAO 里没有可以单独挪动的 `L` 原点），比较的是**总和** `σ_iso`；另外两种规范比较的是
+    /// 顺磁项（抗磁项与 `L` 的原点无关）。
     pub report_gauge_spread: bool,
 }
 
@@ -315,10 +336,19 @@ impl Default for NmrOptions {
 #[serde(deny_unknown_fields)]
 #[non_exhaustive]
 pub struct NmrShieldings {
-    /// 规范/方法名；phase-2 只支持 `giao`（§13 #30）。
+    /// 规范/方法名。取值（冻结，v2.2.0 起三种）：
+    ///
+    /// * `giao` —— GIAO / London 轨道（[`NmrGauge::Giao`]；phase-2 §13 #30 的目标实现）；
+    /// * `nucleus-origin` / `common-origin` —— 非 GIAO 的共原规范（`L` 的原点取该核 /
+    ///   核电荷重心）。这两种不是 GIAO，`length_gauge_spread_ppm` 因此会大于 1 ppm。
+    ///
+    /// 写实方法名是刻意的：读者不能把「共原规范的结果」当成「GIAO 的结果」。
     pub method: String,
     /// 规范原点，单位 Bohr（GIAO 下结果对原点不该敏感——这正是
     /// [`Self::length_gauge_spread_ppm`] 检查的东西）。
+    ///
+    /// `giao` 时这里是**坐标原点**（London 相位里的那个绝对原点，固定 `[0, 0, 0]`）——
+    /// GIAO 没有「选一个规范原点」的自由度，所以它不随 `options.nmr.gauge` 变。
     pub gauge_origin_bohr: [f64; 3],
     /// 每个核的屏蔽。
     pub nuclei: Vec<NucleusShielding>,
@@ -347,9 +377,10 @@ impl NmrShieldings {
 
     /// 改方法名。
     ///
-    /// `new` 里的缺省是 `giao`（契约的目标），但**共原规范不是 GIAO**：本项目的实现现在报的是
+    /// `new` 里的缺省是 `giao`（契约的目标），而**共原规范不是 GIAO**：非 GIAO 的两条路径报的是
     /// `nucleus-origin` / `common-origin`，`length_gauge_spread_ppm` 因此会大于 1 ppm。把方法名
-    /// 写实，读者才不会把"共原规范的结果"当成"GIAO 的结果"。
+    /// 写实，读者才不会把「共原规范的结果」当成「GIAO 的结果」（v2.2.0 起 `NmrGauge::Giao`
+    /// 走真的 GIAO，方法名就是缺省的 `giao`）。
     #[must_use]
     pub fn with_method(mut self, method: impl Into<String>) -> Self {
         self.method = method.into();
@@ -566,8 +597,9 @@ impl EprResult {
 #[cfg(test)]
 mod tests {
     use super::{
-        ExcitedStateMethod, ExcitedStates, Multipoles, NmrReference, NmrShieldings,
-        NucleusShielding, Polarizability, SumRules, Transition, TransitionContribution,
+        ExcitedStateMethod, ExcitedStates, Multipoles, NmrGauge, NmrOptions, NmrReference,
+        NmrShieldings, NucleusShielding, Polarizability, SumRules, Transition,
+        TransitionContribution,
     };
 
     fn transitions() -> Vec<Transition> {
@@ -622,6 +654,42 @@ mod tests {
         let json = serde_json::to_string(&block).expect("serialize");
         let back: NmrShieldings = serde_json::from_str(&json).expect("deserialize");
         assert_eq!(back, block);
+    }
+
+    /// RS-04 的最后一刀是**加性**的：`NmrGauge::Giao` 只是多一个变体。
+    ///
+    /// 三条一起钉住：(1) 旧的两个变体的名字/缺省一个字节没变（`NmrOptions::new()` 仍是
+    /// `nucleus`）；(2) 新变体序列化成 `giao`（与 `NmrShieldings::method` 的 `giao` 同名，
+    /// 但**语义不同**：一个是输入端的规范选择，一个是输出端的方法名）；(3) 旧 `input.yaml`
+    /// 里 `gauge: common` 仍然解析成同一个变体（不重命名、不改序）。
+    #[test]
+    fn nmr_gauge_giao_is_an_additive_variant() {
+        // (1) 缺省不变。
+        let options = NmrOptions::new();
+        assert_eq!(options.gauge, NmrGauge::Nucleus);
+        assert_eq!(options.gauge.as_str(), "nucleus");
+        assert!(options.report_gauge_spread);
+
+        // 旧的两个变体的冻结小写名。
+        assert_eq!(NmrGauge::Common.as_str(), "common");
+        assert_eq!(NmrGauge::Giao.as_str(), "giao");
+        assert!(!NmrGauge::Nucleus.is_giao());
+        assert!(!NmrGauge::Common.is_giao());
+        assert!(NmrGauge::Giao.is_giao());
+
+        // (2) 新变体的 serde 形态与 `gauge_origin_bohr` 的读写往返。
+        let giao = options.clone().with_gauge(NmrGauge::Giao);
+        let json = serde_json::to_string(&giao).expect("serialize");
+        assert!(json.contains("\"gauge\":\"giao\""), "{json}");
+        let back: NmrOptions = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(back, giao);
+        assert_eq!(back.gauge, NmrGauge::Giao);
+
+        // (3) 旧输入的文本仍然解析成旧变体。
+        let old = r#"{"gauge":"common","report_gauge_spread":false}"#;
+        let parsed: NmrOptions = serde_json::from_str(old).expect("old input still parses");
+        assert_eq!(parsed.gauge, NmrGauge::Common);
+        assert!(!parsed.report_gauge_spread);
     }
 
     #[test]

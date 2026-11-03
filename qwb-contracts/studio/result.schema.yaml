@@ -82,7 +82,7 @@ $defs:
         anyOf:
           - $ref: "#/$defs/NmrShieldings"
           - type: "null"
-        description: NMR 屏蔽（GIAO，phase-2 RS-04）。
+        description: NMR 屏蔽（GIAO 或共原规范，phase-2 RS-04）。
       polarizability:
         anyOf:
           - $ref: "#/$defs/Polarizability"
@@ -225,9 +225,13 @@ $defs:
     type: object
     additionalProperties: false
     required: [method, gauge_origin_bohr, nuclei]
-    description: NMR 屏蔽（K7；phase-2 只支持 GIAO）。
+    description: >-
+      NMR 屏蔽（K7；RS-04）。`method` 冻结为 `giao` / `nucleus-origin` / `common-origin`：
+      只有前者是 GIAO，只有它的 `length_gauge_spread_ppm` 会 < 1 ppm。
     properties:
-      method: {type: string}
+      method:
+        type: string
+        description: 方法名（`giao` / `nucleus-origin` / `common-origin`）。
       gauge_origin_bohr:
         type: array
         items: {type: number}
