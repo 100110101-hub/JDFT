@@ -91,13 +91,18 @@ def read_xyz(path):
     return atoms
 
 
-def run_qwb(workdir, name):
+def run_qwb(workdir, name, profile="debug"):
     # 工作目录是临时目录，`qwb` 按相对路径找不到 qwb-data —— 用 QWB_DATA_ROOT 指回去。
     environment = dict(os.environ)
     environment["QWB_DATA_ROOT"] = os.path.join(ROOT, "qwb-data")
     environment["QWB_AUTO_FETCH"] = "0"
+    # `profile` 只换 cargo 的构建档：同一个代码路径，`--release` 快一个数量级。数值上
+    # 两者可以差在浮点末位（求和顺序/指令选择），所以谁测的数就记谁的档。
+    # 默认 debug 保持本脚本原来的行为，`measure_freesolv_sample.py` 显式要 release。
+    extra = ["--release"] if profile == "release" else []
     binary = subprocess.run(
-        ["cargo", "run", "--quiet", "--manifest-path", os.path.join(ROOT, "qwb-core", "Cargo.toml"),
+        ["cargo", "run", "--quiet", *extra,
+         "--manifest-path", os.path.join(ROOT, "qwb-core", "Cargo.toml"),
          "-p", "qwb-cli", "--", "run", f"{name}.yaml", "--out", "out"],
         cwd=workdir,
         env=environment,

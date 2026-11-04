@@ -1176,7 +1176,7 @@ ECP、频率库函数）在 `docs/status.yaml`；这里只列阶段二台账里�
 | EPR 超精细耦合 | ❌ | ST-05 | 未过 K10（anchor 定标仍差 0.169% 量级之外的判据） |
 | LMP2 | ❌ | ST-03 | pending |
 | pKa 工作流 | ❌ | ST-04 | pending |
-| 溶剂化自由能 / 势垒 / NMR 基准集 | ❌ | VF-02, VF-03, VF-04 | VF-02 **水相两行已交付**（FreeSolv CC0：甲醇/乙腈）；其余七个溶剂卡在 MNSOL v2012 的 403 WAF + 学术-only 许可；实测 HF/STO-3G 的 MAE **2.956** kcal/mol（判据 1.0 是参数化层级的能力）；势垒/NMR 仍无参考集 |
+| 溶剂化自由能 / 势垒 / NMR 基准集 | ❌ | VF-02, VF-03, VF-04 | 参考族已建成 **457 行**（FreeSolv，DOI 10.1007/s10822-014-9747-x，sha256 钉住）；水柱实测（HF/STO-3G、atom_count ≤ 8 的 17 个分子）MAE **2.084** kcal/mol、偏置 **+2.052**、|error| ≤ 1 的只有 3/17 —— 判据 1.0 是 SMD 参数化层级的能力；其余七个溶剂仍卡在 MNSOL v2012 的 403 WAF；柔性分子另有约 0.5 kcal/mol 的构象/优化阈值不确定性（实测 2.013 kcal/mol 气相能差）；势垒/NMR 仍无参考集 |
 | GPU：`gemm`、显存预算 + 自动回退、AO→MO（60.8×） | ⚠ | EX-01, EX-02, EX-03 | 格点 XC 的 GPU 核要 NVRTC/cubin（另一类 unsafe 面），EX-03 blocked |
 | `--threads` / `options.threads` 驱动并行度 | ⚠ | IN-05 | Fock 构建按行并行（确定性归约），但线程数只写进 `env.json`，4 指标张量仍单线程 |
 | 开壳层的布居 / cube | ⚠ | SC-01b | 只有 α 套轨道，宁可不写（§3.4） |

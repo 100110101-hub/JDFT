@@ -123,6 +123,12 @@ GENERATORS = {
     # WAF 403（见 status-v2.yaml 的 VF-02），所以先交付水这一列。
     "qwb-core/crates/qwb-engine/tests/reference/solvation_free_energy.csv":
         "scripts/gen_freesolv_reference.py",
+    # SV-03：FreeSolv 的**全量受限子集**（642 → 457：元素 ⊆ {H,C,N,O,F}、单一分子、净电荷 0）。
+    # 与上面那一份同源同一个 pin（`database.json` 620,456 B / sha256 9133b243…），列不同：
+    # 这一份每行带 freesolv_id / SMILES / 分子式 / 原子数 / 实验 ΔG_hyd 与它引用的原始文献，
+    # 是 SV-03 判据被**实测**而不是被 2 行样本猜出来的依据。
+    "qwb-core/crates/qwb-engine/tests/reference/freesolv_hydration.csv":
+        "scripts/gen_freesolv_reference.py",
     "qwb-core/crates/qwb-engine/tests/reference/smd_water.csv":
         "scripts/pyscf_smd_reference.py",
     "qwb-core/crates/qwb-engine/tests/reference/hessian_water.csv":

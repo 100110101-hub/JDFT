@@ -75,3 +75,6 @@ cccbdb-raw.json
 
 # FreeSolv 原始快照（CC0，可再分发，但按项目惯例原始数据不进仓库：数据进 QWB 侧 CSV + sha256 钉）
 /qwb-data/reference/_freesolv_staging/raw/
+# SV-03 的实测样本用 PubChem 3D conformer 当**起点**（随后由本项目优化器重优化），
+# 坐标摘要钉在 `scripts/measure_freesolv_sample.py` 的 GEOMETRY_PINS 里，SDF 本身不入库。
+/qwb-data/reference/_freesolv_staging/geom3d/
