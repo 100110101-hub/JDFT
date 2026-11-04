@@ -616,7 +616,7 @@ where
 ///
 /// 返回 `(E_xc, potential_p, sigma_coefficient_p)`；后两个就是 `v_xc` 装配要的两个逐点系数。
 #[allow(clippy::type_complexity)]
-fn gga_evaluate_and_coefficients<F>(
+pub(crate) fn gga_evaluate_and_coefficients<F>(
     rho_values: &[f64],
     sigma_values: &[f64],
     weights: &[f64],

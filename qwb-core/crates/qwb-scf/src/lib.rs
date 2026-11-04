@@ -36,6 +36,7 @@ pub mod rks;
 pub mod rohf;
 pub mod uhf;
 pub mod uks;
+pub mod xc_device;
 
 use qwb_integrals::two_electron::TwoElectronIntegrals;
 use qwb_linalg::{LinalgError, Matrix};

@@ -24,6 +24,13 @@ qwb-grid.workspace = true
 qwb-xc.workspace = true
 rayon.workspace = true
 nalgebra.workspace = true
+# EX-03：网格 XC 的设备后端（`gpu-kernel` 下注入给 `qwb-scf`）。默认关，构建期不参与。
+qwb-gpu = { workspace = true, optional = true }
 
 [lints]
 workspace = true
+
+[features]
+# EX-03：把 `qwb-gpu` 的网格 XC 收缩器接到产品 SCF 上（`RksBackend::with_xc_grid_gpu`）。
+# 默认**关**：默认构建里 `qwb-gpu` 既不编译也不链接，产品路径与 CPU 位模式一字不变。
+gpu-kernel = ["dep:qwb-gpu", "qwb-gpu/gpu-kernel"]

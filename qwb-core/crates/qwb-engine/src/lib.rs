@@ -101,6 +101,10 @@ impl OptSink {
 pub struct RksBackend {
     registry: qwb_registry::Registry,
     opt_sink: OptSink,
+    /// EX-03：网格 XC 走 CPU 还是设备（默认 CPU）。
+    xc_path: qwb_scf::xc_device::XcGridPath,
+    /// EX-03：设备后端（只有 `gpu-kernel` feature 下才可能非 `None`）。
+    xc_backend: Option<qwb_scf::xc_device::XcGridBackendHandle>,
 }
 
 impl RksBackend {
@@ -110,6 +114,8 @@ impl RksBackend {
         Self {
             registry,
             opt_sink: OptSink::new(),
+            xc_path: qwb_scf::xc_device::XcGridPath::Cpu,
+            xc_backend: None,
         }
     }
 
@@ -120,11 +126,38 @@ impl RksBackend {
         self
     }
 
+    /// EX-03：把网格 XC 的收缩段交给设备（`qwb-gpu`）跑。
+    ///
+    /// 关掉 `gpu-kernel` feature 时这个方法**仍然存在**（API 一致），只是不注入后端 ——
+    /// SCF 会退回 CPU 并把「没注入设备后端」写进结果日志。开了 feature 但机器上没有
+    /// GPU / NVRTC / 显存不够时同样退回 CPU，日志里带原因。**没有任何一条路径会因为
+    /// 没有 GPU 而失败。**
+    #[must_use]
+    pub fn with_xc_grid_gpu(mut self) -> Self {
+        self.xc_path = qwb_scf::xc_device::XcGridPath::Gpu;
+        self.xc_backend = gpu_xc_backend();
+        self
+    }
+
     /// 数据注册表（结果快照从它来）。
     #[must_use]
     pub fn registry(&self) -> &qwb_registry::Registry {
         &self.registry
     }
+}
+
+/// `gpu-kernel` 下的设备后端：一个常驻的网格 XC 收缩器。
+#[cfg(feature = "gpu-kernel")]
+fn gpu_xc_backend() -> Option<qwb_scf::xc_device::XcGridBackendHandle> {
+    Some(qwb_scf::xc_device::XcGridBackendHandle::new(
+        std::sync::Arc::new(qwb_gpu::xc_device::XcDeviceAccelerator::new()),
+    ))
+}
+
+/// 没有 `gpu-kernel` 时恒为 `None` —— 这条构建里 `qwb-gpu` 不参与编译。
+#[cfg(not(feature = "gpu-kernel"))]
+fn gpu_xc_backend() -> Option<qwb_scf::xc_device::XcGridBackendHandle> {
+    None
 }
 
 fn grid_level_from_api(level: qwb_engine_api::GridLevel) -> qwb_registry::grid::GridLevelName {
@@ -799,6 +832,9 @@ impl RksBackend {
         options.hf_exchange = spec.hf_exchange;
         // K2 的 `TaskOptions.diis_history` 真的接到 DIIS 子空间长度上（之前漏掉了）。
         options.diis_max_vectors = input.options.diis_history as usize;
+        // EX-03：网格 XC 的设备路径。默认 `Cpu` + `None`，所以这一行在默认构建里是 no-op。
+        options.xc_path = self.xc_path;
+        options.xc_backend.clone_from(&self.xc_backend);
 
         // I-05：ECP。核吸引用 z_eff，超出的部分作为矩阵元加进 H_core。
         if let Some(ecp_name) = &input.options.ecp_name {
@@ -1113,6 +1149,27 @@ impl RksBackend {
                 max: input.options.scf_max_iter,
             });
         }
+        // EX-03：网格 XC 的落点写进日志 —— 「走没走成、为什么没走成」必须能被读到。
+        let xc_log = match (&result.xc_path, &result.xc_fallback_reason) {
+            (qwb_scf::xc_device::XcGridPath::Gpu, None) => {
+                let device = result.xc_device_report.unwrap_or_default();
+                format!(
+                    "xc = gpu ({} call(s), {} upload(s), {:.1} MB up / {:.1} MB down, \
+                     upload {:.1} / kernel {:.1} / gemm {:.1} / download {:.1} ms)",
+                    device.calls,
+                    device.uploads,
+                    device.uploaded_bytes as f64 / 1.0e6,
+                    device.downloaded_bytes as f64 / 1.0e6,
+                    device.upload_seconds * 1.0e3,
+                    device.kernel_seconds * 1.0e3,
+                    device.gemm_seconds * 1.0e3,
+                    device.download_seconds * 1.0e3,
+                )
+            }
+            (_, Some(reason)) => format!("xc = cpu (fell back: {reason})"),
+            _ => "xc = cpu".to_string(),
+        };
+        reporter.log(&xc_log);
         // ── M3 / SC-04：canonical MP2（闭壳层参考、单点）─────────────
         //
         // 参考态就是上面这一遍 SCF（**同一个**基组与**同一份** 2e 张量），所以 MP2
@@ -1309,7 +1366,7 @@ impl RksBackend {
             density_to_api(&result.coefficients),
         )
         .with_log(format!(
-            "method = {}, basis = {}, grid = {}, iterations = {}, E_elec = {:.10}, E_xc = {:.10}, dipole = [{:.4}, {:.4}, {:.4}] D",
+            "method = {}, basis = {}, grid = {}, iterations = {}, E_elec = {:.10}, E_xc = {:.10}, dipole = [{:.4}, {:.4}, {:.4}] D, {xc_log}",
             if spec.functional_name.is_empty() {
                 "hf".to_string()
             } else {

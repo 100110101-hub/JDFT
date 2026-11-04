@@ -10,6 +10,11 @@ publish.workspace = true
 
 [dependencies]
 libloading.workspace = true
+# EX-03（第 5 块）：`gpu-kernel` 下实现 `qwb-scf` 的网格 XC 注入点（`XcGridAccelerator`）。
+# 方向是 **qwb-gpu → qwb-scf**（高层定接口、低层实现），不是反过来：`qwb-scf` 的可选依赖里
+# 没有 `qwb-gpu`，包图因此无环（`project.md` §3.7）。optional 且不开 feature 时它完全不
+# 参与编译 —— 默认构建里 `qwb-gpu` 依然只有 `libloading` 一个依赖。
+qwb-scf = { workspace = true, optional = true }
 
 [dev-dependencies]
 qwb-basis.workspace = true
@@ -22,8 +27,9 @@ qwb-scf.workspace = true
 qwb-xc.workspace = true
 
 [features]
-# EX-03 的 NVRTC/驱动路径（`src/jit.rs` 里的 `kernel` 子模块）。
+# EX-03 的 NVRTC/驱动路径（`src/jit.rs` 里的 `kernel` 子模块）与产品接线
+# （`src/xc_device.rs` 里 `qwb-scf` 的 `XcGridAccelerator` 实现）。
 #
 # 默认**关**：没有 GPU 的机器上这部分根本不参与编译（附录 A · EX-03 约束 ④），
 # `xc.rs` 会带着"feature 未启用"的理由退回 CPU，CPU 位模式一字不变。
-gpu-kernel = []
+gpu-kernel = ["dep:qwb-scf"]

@@ -794,28 +794,49 @@ extern "C" __global__ void qwb_xc_gga_rho_grad(const double* __restrict__ phi,
             })
         }
 
-        /// 上传一块 host `f64` 切片。
+        /// 上传一块 host `f64` 切片（分配 + 拷贝）。
         pub(crate) fn upload(&self, data: &[f64]) -> Result<DeviceBuffer, GpuError> {
             let buffer = self.alloc(data.len())?;
-            if !data.is_empty() {
-                self.ensure_current()?;
-                // SAFETY: 源是 `data.as_ptr()`（有效、只读、长度 `size_of_val(data)`），
-                // 目标是 `buffer.ptr`（本会话刚分配的 ≥ 同样大小的设备内存）。
-                let status = unsafe {
-                    (self.api.cu_memcpy_htod)(
-                        buffer.ptr,
-                        data.as_ptr().cast(),
-                        std::mem::size_of_val(data),
-                    )
-                };
-                if status != 0 {
-                    return Err(GpuError::Call {
-                        what: "cuMemcpyHtoD",
-                        code: status,
-                    });
-                }
-            }
+            self.copy_htod(&buffer, data)?;
             Ok(buffer)
+        }
+
+        /// 把 `data` 拷进**已有的**设备缓冲（不重新分配）。
+        ///
+        /// 每步都变的那几张（`P`、逐点系数）走这个入口：`cuMemAlloc`/`cuMemFree` 一次往返的
+        /// 代价比 `n²` 个双精度的 H2D 本身还大，而驻留的意义正是把它去掉。
+        ///
+        /// 这是**同一个** `cuMemcpyHtoD_v2`：`upload` 现在也走这里（同一次调用、同一个函数
+        /// 指针），所以不安全面的块数与 `unsafe_boundary.rs` 冻结的 68 一致 —— 没有新增面，
+        /// 只是多了一个**不分配**的调用点。
+        ///
+        /// # Panics
+        ///
+        /// `data.len() > dst` 的分配长度（本 crate 内由调用方先校验形状，见 `xc_device.rs`
+        /// 的 `validate`；这是内部约定，不是公开 API 的契约）。
+        pub(crate) fn copy_htod(&self, dst: &DeviceBuffer, data: &[f64]) -> Result<(), GpuError> {
+            if data.is_empty() {
+                return Ok(());
+            }
+            self.ensure_current()?;
+            // SAFETY: 源是 `data.as_ptr()`（有效、只读、长度 `size_of_val(data)`）。目标是
+            // `dst.ptr`：它只可能由本模块的 `alloc` 按**元素个数**分配；`upload` 传的是刚按
+            // `data.len()` 分配的那块，`xc_device.rs` 则在调用前按同一组 `n`/`n_points`
+            // 校验过 `data.len()`。两种调用点都保证这次写入落在分配范围内。
+            let status = unsafe {
+                (self.api.cu_memcpy_htod)(
+                    dst.ptr,
+                    data.as_ptr().cast(),
+                    std::mem::size_of_val(data),
+                )
+            };
+            if status != 0 {
+                return Err(GpuError::Call {
+                    what: "cuMemcpyHtoD",
+                    code: status,
+                });
+            }
+            Ok(())
         }
 
         /// 下载 `len` 个 `f64`。

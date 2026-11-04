@@ -38,6 +38,10 @@ use qwb_registry::elements::atomic_number;
 use qwb_xc::{DensityBatch, FunctionalTerm};
 
 use crate::diis::Diis;
+use crate::xc_device::{
+    XcGridAccelerator, XcGridBackendHandle, XcGridDeviceOutcome, XcGridDeviceReport, XcGridPath,
+    XcGridRequest,
+};
 use crate::{FockMatrices, build_fock};
 
 /// 由**当前密度**给出的一电子算子 —— SCF 内的"外部自洽场"通道。
@@ -161,6 +165,19 @@ pub struct RksOptions {
     ///
     /// `None`（默认）= 真空 SCF，逐位不变。
     pub external_field: Option<ExternalFieldHandle>,
+    /// EX-03：网格 XC 收缩走 CPU 还是设备。默认 [`XcGridPath::Cpu`]。
+    ///
+    /// 默认值就是产品路径（`tests/xc_grid_bit_pattern.rs` 钉住的那条），所以不显式选
+    /// `Gpu` 时行为一个字没变。选 [`XcGridPath::Gpu`] 却没有注入
+    /// [`Self::xc_backend`]（或后端报告不可用、显存不够、这台机器没有 GPU）时，
+    /// **退回 CPU 并继续**，原因写进 [`RksResult::xc_fallback_reason`] —— 绝不让没有 GPU
+    /// 的机器红，也绝不静默给出少一项的势。
+    pub xc_path: XcGridPath,
+    /// EX-03：网格 XC 的设备收缩后端（`None` = 没注入）。
+    ///
+    /// `qwb-scf` **不依赖** `qwb-gpu`：实现由上层在 `gpu-kernel` feature 下注入
+    /// （见 [`crate::xc_device`] 的模块文档）。默认 `None`。
+    pub xc_backend: Option<XcGridBackendHandle>,
 }
 
 impl Default for RksOptions {
@@ -183,6 +200,8 @@ impl Default for RksOptions {
             smearing_temperature: 0.0,
             damping: 0.0,
             external_field: None,
+            xc_path: XcGridPath::Cpu,
+            xc_backend: None,
         }
     }
 }
@@ -218,6 +237,15 @@ pub struct RksResult {
     pub grid_points: usize,
     /// 终态检查点（可直接存盘续算）。
     pub checkpoint: crate::checkpoint::ScfCheckpoint,
+    /// EX-03：网格 XC 实际走的路径（默认 [`XcGridPath::Cpu`]）。
+    pub xc_path: XcGridPath,
+    /// EX-03：设备路径退回 CPU 的原因（`None` = 没发生退回）。
+    pub xc_fallback_reason: Option<String>,
+    /// EX-03：设备路径的累计分项记账（CPU 路径为 `None`）。
+    ///
+    /// 四项时间（上传 / 手写核 / gemm / 下载）是互斥的阶段计时，逐次累加；
+    /// `uploads` 是其中真的重传了 `Φ`/`∇Φ` 的次数 —— 网格与基组不变时它应当只有 1。
+    pub xc_device_report: Option<XcGridDeviceReport>,
 }
 
 pub(crate) fn linalg(err: LinalgError) -> EngineError {
@@ -832,34 +860,16 @@ pub fn evaluate_xc_cached(
         (false, true, false) => DensityBatch::new(&rho_values, &sigma_values),
         (false, false, false) => DensityBatch::from_rho(&rho_values),
     };
-    let mut epsilon = vec![0.0; grid.len()];
-    let mut d_epsilon = vec![0.0; grid.len()];
-    let mut d_sigma = vec![0.0; grid.len()];
-    let mut d_laplacian = vec![0.0; grid.len()];
-    let mut d_tau = vec![0.0; grid.len()];
-
-    for term in terms {
-        let mut local_epsilon = vec![0.0; grid.len()];
-        let mut local_d_rho = vec![0.0; grid.len()];
-        let mut local_d_sigma = vec![0.0; grid.len()];
-        let mut local_d_laplacian = vec![0.0; grid.len()];
-        let mut local_d_tau = vec![0.0; grid.len()];
-        term.energy_density(&batch, &mut local_epsilon);
-        term.potential_derivatives_full(
-            &batch,
-            &mut local_d_rho,
-            &mut local_d_sigma,
-            &mut local_d_laplacian,
-            &mut local_d_tau,
-        );
-        for index in 0..grid.len() {
-            epsilon[index] += local_epsilon[index];
-            d_epsilon[index] += local_d_rho[index];
-            d_sigma[index] += local_d_sigma[index];
-            d_laplacian[index] += local_d_laplacian[index];
-            d_tau[index] += local_d_tau[index];
-        }
-    }
+    // 泛函项的四路逐点导数：**与设备通道共用同一段代码**（`term_derivatives`），
+    // 所以两条路径的 `ε`、`dε/dρ`、`dε/dσ`、`dε/d∇²ρ`、`dε/dτ` 只可能因为 `ρ`/`σ`
+    // 从哪来而不同，不可能因为「谁写的这段循环」而不同。
+    let TermDerivatives {
+        epsilon,
+        d_epsilon,
+        d_sigma,
+        d_laplacian,
+        d_tau,
+    } = term_derivatives(&batch, grid.len(), terms);
 
     let mut energy = 0.0;
     let mut v_xc = Matrix::zeros(n, n);
@@ -954,6 +964,346 @@ pub fn evaluate_xc_cached(
         }
     }
     Ok((energy, v_xc))
+}
+
+/// 泛函项对 `ρ`、`σ`、`∇²ρ`、`τ` 的四路逐点导数（`ε` 是能量密度）。
+struct TermDerivatives {
+    epsilon: Vec<f64>,
+    d_epsilon: Vec<f64>,
+    d_sigma: Vec<f64>,
+    d_laplacian: Vec<f64>,
+    d_tau: Vec<f64>,
+}
+
+/// CPU 与设备两条通道**共用**的泛函求和：逐项算进局部数组、再按点累加。
+///
+/// 从 `evaluate_xc_cached` 里抽出来（纯搬移，累加序与分配大小一字未动），目的是让设备
+/// 通道的 `ε`/`dε/d*` 与产品路径**走同一段代码** —— 两条路径的差别只剩「`ρ`/`σ` 从哪来」。
+/// `tests/xc_grid_bit_pattern.rs` 是这次搬移的守卫：位级锚点必须逐位不变。
+fn term_derivatives(
+    batch: &DensityBatch,
+    points: usize,
+    terms: &[Box<dyn FunctionalTerm>],
+) -> TermDerivatives {
+    let mut epsilon = vec![0.0; points];
+    let mut d_epsilon = vec![0.0; points];
+    let mut d_sigma = vec![0.0; points];
+    let mut d_laplacian = vec![0.0; points];
+    let mut d_tau = vec![0.0; points];
+
+    for term in terms {
+        let mut local_epsilon = vec![0.0; points];
+        let mut local_d_rho = vec![0.0; points];
+        let mut local_d_sigma = vec![0.0; points];
+        let mut local_d_laplacian = vec![0.0; points];
+        let mut local_d_tau = vec![0.0; points];
+        term.energy_density(batch, &mut local_epsilon);
+        term.potential_derivatives_full(
+            batch,
+            &mut local_d_rho,
+            &mut local_d_sigma,
+            &mut local_d_laplacian,
+            &mut local_d_tau,
+        );
+        for index in 0..points {
+            epsilon[index] += local_epsilon[index];
+            d_epsilon[index] += local_d_rho[index];
+            d_sigma[index] += local_d_sigma[index];
+            d_laplacian[index] += local_d_laplacian[index];
+            d_tau[index] += local_d_tau[index];
+        }
+    }
+    TermDerivatives {
+        epsilon,
+        d_epsilon,
+        d_sigma,
+        d_laplacian,
+        d_tau,
+    }
+}
+
+/// 设备收缩要的**行主序扁平 AO 数据**（`n_points × n`，`∇Φ` 按轴三张）。
+///
+/// 一次构造、SCF 各步复用。为什么单独一个类型而不是就地摊平：摊平是 `O(n_points·n)`
+/// 的拷贝（水/def2-SVP、grid-normal 实测 `Φ` 14 MB、`∇Φ` 42 MB），每步重做一次就等于
+/// 把设备驻留省下来的 H2D 又还回去一半。`residency()` 是给设备后端的键：
+/// **键不同 = 必须重传**，所以它只需要单调不重复，不需要全局唯一。
+pub struct XcGridFlatAo {
+    residency: u64,
+    n: usize,
+    n_points: usize,
+    values: Vec<f64>,
+    gradients: Option<[Vec<f64>; 3]>,
+    weights: Vec<f64>,
+}
+
+impl XcGridFlatAo {
+    /// 把 [`GridAoCached`] 摊平成设备核的布局。
+    ///
+    /// `need_gradients` 为假时只摊平 `Φ`（LDA 通道），为真时连 `∇Φ` 的三个分量一起
+    /// （GGA 通道）。
+    ///
+    /// # Errors
+    ///
+    /// AO 缓存与网格/基组的形状对不上（点数或每个点的基函数个数不符）。
+    pub fn build(
+        basis: &InternalBasis,
+        grid: &Grid,
+        cache: &GridAoCached,
+        need_gradients: bool,
+    ) -> Result<Self, EngineError> {
+        use std::sync::atomic::{AtomicU64, Ordering};
+        static NEXT_RESIDENCY: AtomicU64 = AtomicU64::new(1);
+
+        let n = basis.n_functions();
+        let n_points = grid.len();
+        if cache.values.len() != n_points {
+            return Err(EngineError::Internal(format!(
+                "AO cache has {} points, grid has {n_points}",
+                cache.values.len()
+            )));
+        }
+        let mut values = Vec::with_capacity(n_points * n);
+        let mut gradients = if need_gradients {
+            Some([
+                Vec::with_capacity(n_points * n),
+                Vec::with_capacity(n_points * n),
+                Vec::with_capacity(n_points * n),
+            ])
+        } else {
+            None
+        };
+        for index in 0..n_points {
+            let row = &cache.values[index];
+            if row.len() != n {
+                return Err(EngineError::Internal(format!(
+                    "AO cache row {index} has {} functions, basis has {n}",
+                    row.len()
+                )));
+            }
+            values.extend_from_slice(row);
+            if let Some([gx, gy, gz]) = gradients.as_mut() {
+                let point_gradients = &cache.gradients[index];
+                if point_gradients.len() != n {
+                    return Err(EngineError::Internal(format!(
+                        "AO gradient row {index} has {} functions, basis has {n}",
+                        point_gradients.len()
+                    )));
+                }
+                for element in point_gradients {
+                    gx.push(element[0]);
+                    gy.push(element[1]);
+                    gz.push(element[2]);
+                }
+            }
+        }
+        let weights: Vec<f64> = grid.points.iter().map(|point| point.weight).collect();
+        Ok(Self {
+            residency: NEXT_RESIDENCY.fetch_add(1, Ordering::Relaxed),
+            n,
+            n_points,
+            values,
+            gradients,
+            weights,
+        })
+    }
+
+    /// 驻留键（同一份 `Φ`/`∇Φ` 在 SCF 各步之间不变）。
+    #[must_use]
+    pub fn residency(&self) -> u64 {
+        self.residency
+    }
+
+    /// 基函数个数。
+    #[must_use]
+    pub fn n(&self) -> usize {
+        self.n
+    }
+
+    /// 网格点数。
+    #[must_use]
+    pub fn n_points(&self) -> usize {
+        self.n_points
+    }
+
+    /// 摊平后占多少字节（`Φ` + `∇Φ` + `w`）—— 记进报告用。
+    #[must_use]
+    pub fn host_bytes(&self) -> u64 {
+        let mut doubles = self.values.len() + self.weights.len();
+        if let Some(gradients) = &self.gradients {
+            for axis in gradients {
+                doubles += axis.len();
+            }
+        }
+        (doubles as u64) * 8
+    }
+
+    /// 按这次要走的通道组一个设备请求（借用摊平后的 AO 与调用方给的密度）。
+    ///
+    /// `with_gradients == false` 时 `ao_gradients` 是 `None`（LDA 通道）；`true` 时把三张
+    /// `∇Φ` 一起给出去（GGA 通道）—— 没预取 `∇Φ` 时仍然是 `None`，`evaluate_xc_on_device`
+    /// 会把它当形状错误报出来，而不是让设备核去读空切片。
+    #[must_use]
+    pub fn request<'a>(&'a self, density: &'a [f64], with_gradients: bool) -> XcGridRequest<'a> {
+        XcGridRequest {
+            residency: self.residency,
+            n: self.n,
+            n_points: self.n_points,
+            ao_values: &self.values,
+            ao_gradients: if with_gradients {
+                self.gradients
+                    .as_ref()
+                    .map(|[gx, gy, gz]| [&gx[..], &gy[..], &gz[..]])
+            } else {
+                None
+            },
+            density,
+            weights: &self.weights,
+        }
+    }
+}
+
+/// 一次设备收缩的结局（设备不可用不是错误 —— 是**退回 CPU** 的信号）。
+#[derive(Debug, Clone)]
+pub enum XcDeviceEvaluation {
+    /// 设备路径完成。
+    Done {
+        /// `E_xc`，Hartree。
+        energy: f64,
+        /// `v_xc`（`n × n`）。
+        v_xc: Matrix,
+    },
+    /// 设备不可用（附原因）；调用方退回 [`evaluate_xc_cached`]。
+    Unavailable {
+        /// 为什么退回。
+        reason: String,
+    },
+}
+
+/// 把这一点的收缩交给设备后端（EX-03）。
+///
+/// 与 [`evaluate_xc_cached`] 的关系：**`ρ`/`σ` 由设备算、泛函求值仍在 host**（`terms` 是
+/// trait object，搬不进 CUDA 源），`E_xc` 的 `O(n_points)` 累加也在 host、且与 CPU 路径
+/// 同一个函数。需要 `∇²ρ` 或 `τ` 的泛函直接返回 [`XcDeviceEvaluation::Unavailable`] ——
+/// 设备核只实现到 GGA，**不假装**支持那两个通道。
+///
+/// # Errors
+///
+/// 密度与摊平后的 AO 形状不一致、设备返回的 `v_xc` 长度不对 → [`EngineError::Internal`]。
+/// 设备侧的任何失败**不是**错误：它回来是 `Ok(Unavailable { reason })`，调用方走 CPU。
+#[allow(clippy::type_complexity)] // 两个回调签名就是两条通道的契约，起别名只会更难对着核核对
+pub fn evaluate_xc_on_device(
+    flat: &XcGridFlatAo,
+    density: &Matrix,
+    terms: &[Box<dyn FunctionalTerm>],
+    backend: &dyn XcGridAccelerator,
+    report: &mut XcGridDeviceReport,
+) -> Result<XcDeviceEvaluation, EngineError> {
+    let n = flat.n;
+    if density.nrows() != n || density.ncols() != n {
+        return Err(EngineError::Internal(format!(
+            "density is {}x{}, device XC contraction needs {n}x{n}",
+            density.nrows(),
+            density.ncols()
+        )));
+    }
+    let needs_sigma = terms.iter().any(|term| term.requires().sigma);
+    let needs_laplacian = terms.iter().any(|term| term.requires().laplacian);
+    let needs_tau = terms.iter().any(|term| term.requires().kinetic_density);
+    if needs_laplacian || needs_tau {
+        return Ok(XcDeviceEvaluation::Unavailable {
+            reason: "泛函项需要 ∇²ρ/τ 通道；设备核只实现到 GGA（ρ, σ），没有假装支持".to_string(),
+        });
+    }
+    if needs_sigma && flat.gradients.is_none() {
+        return Err(EngineError::Internal(
+            "device XC contraction needs ∇Φ but the flattened AO cache has no gradients"
+                .to_string(),
+        ));
+    }
+
+    // 行主序密度副本（`O(n²)`，每步一次）。与 CPU 路径同一个 `i` 外层、`j` 内层。
+    let mut flat_density = vec![0.0_f64; n * n];
+    for i in 0..n {
+        for j in 0..n {
+            flat_density[i * n + j] = density[(i, j)];
+        }
+    }
+    let request = flat.request(&flat_density, needs_sigma);
+
+    let outcome = if needs_sigma {
+        let mut evaluate =
+            |rho: &[f64], sigma: &[f64]| -> Result<(Vec<f64>, Vec<f64>, Vec<f64>), String> {
+                let batch = DensityBatch::new(rho, sigma);
+                let derivatives = term_derivatives(&batch, rho.len(), terms);
+                // 与 `evaluate_xc_cached` 的 GGA 分支同一个 batch 形状、同一段求和。
+                let mut epsilon = derivatives.epsilon;
+                if epsilon.len() != rho.len() {
+                    return Err(format!(
+                        "泛函返回 {} 个 ε，应为 n_points = {}",
+                        epsilon.len(),
+                        rho.len()
+                    ));
+                }
+                epsilon.truncate(rho.len());
+                Ok((epsilon, derivatives.d_epsilon, derivatives.d_sigma))
+            };
+        backend.contract_gga(&request, &mut evaluate)
+    } else {
+        let mut evaluate = |rho: &[f64]| -> Result<(Vec<f64>, Vec<f64>), String> {
+            let batch = DensityBatch::from_rho(rho);
+            let derivatives = term_derivatives(&batch, rho.len(), terms);
+            let epsilon = derivatives.epsilon;
+            if epsilon.len() != rho.len() {
+                return Err(format!(
+                    "泛函返回 {} 个 ε，应为 n_points = {}",
+                    epsilon.len(),
+                    rho.len()
+                ));
+            }
+            // v = ε + ρ dε/dρ；ρ=0 时不乘（0×∞ = NaN）—— 与产品路径同一条分支。
+            let potential = (0..rho.len())
+                .map(|point| {
+                    if rho[point] > 0.0 {
+                        epsilon[point] + rho[point] * derivatives.d_epsilon[point]
+                    } else {
+                        epsilon[point]
+                    }
+                })
+                .collect();
+            Ok((epsilon, potential))
+        };
+        backend.contract_lda(&request, &mut evaluate)
+    };
+
+    match outcome {
+        XcGridDeviceOutcome::Unavailable { reason } => Ok(XcDeviceEvaluation::Unavailable {
+            reason: format!("{}：{reason}", backend.name()),
+        }),
+        XcGridDeviceOutcome::Done {
+            energy,
+            v_xc,
+            report: call_report,
+        } => {
+            report.accumulate(&call_report);
+            if v_xc.len() != n * n {
+                return Err(EngineError::Internal(format!(
+                    "device XC returned {} v_xc entries for n = {n}",
+                    v_xc.len()
+                )));
+            }
+            let mut matrix = Matrix::zeros(n, n);
+            for i in 0..n {
+                for j in 0..n {
+                    matrix[(i, j)] = v_xc[i * n + j];
+                }
+            }
+            Ok(XcDeviceEvaluation::Done {
+                energy,
+                v_xc: matrix,
+            })
+        }
+    }
 }
 
 /// 闭壳层 RKS SCF。
@@ -1104,10 +1454,10 @@ pub fn rks_scf(
     let mut electronic = 0.0;
 
     // AO 三元组与密度无关，整次 SCF 只算一次（苯/STO-3G 的网格求值实测占每步开销的大头）。
+    let needs_sigma = !terms.is_empty() && terms.iter().any(|term| term.requires().sigma);
     let xc_cache = if terms.is_empty() {
         None
     } else {
-        let needs_sigma = terms.iter().any(|term| term.requires().sigma);
         let needs_laplacian = terms.iter().any(|term| term.requires().laplacian);
         let needs_tau = terms.iter().any(|term| term.requires().kinetic_density);
         Some(GridAoCached::build(
@@ -1117,6 +1467,34 @@ pub fn rks_scf(
             needs_laplacian,
             needs_tau,
         )?)
+    };
+
+    // ── EX-03：设备收缩（默认关） ───────────────────────────────────────────────
+    //
+    // 三件事在这里定下来，循环里只做「调用 + 记账」：
+    //   * `xc_backend`：真的拿到后端才不是 `None`。选了 Gpu 但没有后端（没注入 /
+    //     构建没开 `gpu-kernel`）时**在循环之前**就记下原因、什么都不试；
+    //   * `xc_flat`：设备核要的行主序 AO，一次摊平（`O(n_points·n)`），各步复用；
+    //   * `xc_report`：逐次累加的分项记账，最后放进 `RksResult::xc_device_report`。
+    let mut xc_backend: Option<&dyn XcGridAccelerator> = None;
+    let mut xc_fallback_reason: Option<String> = None;
+    let mut xc_path_used = XcGridPath::Cpu;
+    let mut xc_report = XcGridDeviceReport::default();
+    if !terms.is_empty() {
+        match (options.xc_path, &options.xc_backend) {
+            (XcGridPath::Gpu, Some(handle)) => xc_backend = Some(handle.backend()),
+            (XcGridPath::Gpu, None) => {
+                xc_fallback_reason = Some(
+                    "选了 XcGridPath::Gpu 但 RksOptions::xc_backend 是 None（没注入设备后端）"
+                        .to_string(),
+                );
+            }
+            (XcGridPath::Cpu, _) => {}
+        }
+    }
+    let xc_flat = match (&xc_cache, xc_backend) {
+        (Some(cache), Some(_)) => Some(XcGridFlatAo::build(basis, grid, cache, needs_sigma)?),
+        _ => None,
     };
 
     for step in 0..options.max_iter {
@@ -1162,9 +1540,30 @@ pub fn rks_scf(
         let (xc_energy, v_xc) = if terms.is_empty() {
             (0.0, Matrix::zeros(basis.n_functions(), basis.n_functions()))
         } else {
-            match &xc_cache {
-                Some(cache) => evaluate_xc_cached(basis, grid, cache, &density, terms)?,
-                None => evaluate_xc(basis, grid, &density, terms)?,
+            // EX-03：先试设备后端；它说不可用就**本步**退回 CPU、把原因记下来，
+            // 并且**此后不再试**（否则每一步都要付一次失败的探测代价）。
+            let mut device = None;
+            if let (Some(backend), Some(flat)) = (xc_backend, xc_flat.as_ref()) {
+                match evaluate_xc_on_device(flat, &density, terms, backend, &mut xc_report)? {
+                    XcDeviceEvaluation::Done {
+                        energy,
+                        v_xc: device_vxc,
+                    } => {
+                        xc_path_used = XcGridPath::Gpu;
+                        device = Some((energy, device_vxc));
+                    }
+                    XcDeviceEvaluation::Unavailable { reason } => {
+                        xc_fallback_reason = Some(reason);
+                        xc_backend = None;
+                    }
+                }
+            }
+            match device {
+                Some(pair) => pair,
+                None => match &xc_cache {
+                    Some(cache) => evaluate_xc_cached(basis, grid, cache, &density, terms)?,
+                    None => evaluate_xc(basis, grid, &density, terms)?,
+                },
             }
         };
         e_xc = xc_energy;
@@ -1369,6 +1768,13 @@ pub fn rks_scf(
         last_energy_change: last_change,
         grid_points: grid.len(),
         checkpoint,
+        xc_path: xc_path_used,
+        xc_fallback_reason,
+        xc_device_report: if xc_report.calls == 0 {
+            None
+        } else {
+            Some(xc_report)
+        },
     })
 }
 

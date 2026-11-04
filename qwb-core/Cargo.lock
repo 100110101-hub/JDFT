@@ -1342,6 +1342,7 @@ dependencies = [
  "nalgebra",
  "qwb-basis",
  "qwb-engine-api",
+ "qwb-gpu",
  "qwb-grid",
  "qwb-integrals",
  "qwb-linalg",

@@ -27,6 +27,8 @@ pub(crate) mod jit;
 pub mod ri_j;
 pub mod t1;
 pub mod xc;
+#[cfg(feature = "gpu-kernel")]
+pub mod xc_device;
 
 /// GPU 后端错误。**没有**任何变体会让调用方 panic —— 全部可回退到 CPU。
 #[derive(Debug, Clone, PartialEq, Eq)]
