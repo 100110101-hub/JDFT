@@ -162,7 +162,7 @@ qwb-engine::t4_frequencies_6311gdp h2o_hf_6311gdp_scaled_frequencies
 qwb-engine::t4_hessian_step hessian_step_convergence
 qwb-engine::t4_ir_frequencies h2o_ir_frequencies_match_experiment
 qwb-engine::t5_ecp cuh_lanl2dz_grid_normal_is_pinned
-qwb-engine::t5_ecp zno_equilibrium_is_at_one_point_eight_five
+qwb-engine::t5_ecp zno_equilibrium_is_at_one_point_seven_seven
 qwb-engine::t5_ecp zno_lanl2dz_single_point_matches_the_reference
 qwb-engine::t6_b3lyp_gradient b3lyp_gradient_error_per_grid_level
 qwb-integrals::h05_second_derivatives cost_ratio_second_over_first_derivative

@@ -1,30 +1,45 @@
-# T5 参考值：ZnO / LANL2DZ（Zn 18 芯 ECP，z_eff = 12）/ PBE
+# T5 参考值：ZnO / LANL2DZ（Zn 18 芯 ECP，z_eff = 12）/ PBE —— **PySCF 2.14.0 的复算值**
 #
-# 几何（r1p70 行）：Zn 在原点、O 在 (0, 0, 1.70) Å —— 取整的对比几何，不是平衡点。
-# 几何（equilibrium 行）：r(Zn–O) = 1.85 Å，是本项目 PBE/LANL2DZ 位能曲线的最低点
-#   （扫描 1.60/1.65/1.70/1.75/1.80/1.82/1.85/1.88/1.90 Å，grid-normal：
-#    -103.536353 / -103.634135 / -103.706953 / -103.751835 / -103.773792 /
-#    -103.777321 / -103.777930 / -103.773732 / -103.768676 Ha）。
+# 生成器：scripts/pyscf_zno_lanl2dz_reference.py（`--check` 用同一份代码重算并逐字比对）。
+# 几何/基组/ECP/泛函的口径与对齐方式写在该脚本的文件头里；简言之：BSE 的 LANL2DZ 与
+# PySCF 的 `lanl2dz` 逐壳层一致（nao = 27、nelectron = 20），Zn 的 ECP 逐项一致
+# （18 芯，z_eff = 12，l = 0,1,2 非局域 + l = 3 局域），O/H 全电子，`grids.level = 3`。
 #
-# 网格：门禁测试跑 grid-coarse（一次 SCF 在 debug 下也要几分钟），慢档跑 grid-normal。
-#   两个等级的差：r = 1.70 Å 上 coarse -103.7068571731 vs normal -103.7069534201，
-#   差 9.6e-5 Ha（远小于 5 mHa 的判据）。
+# 行与几何（5 mHa 是 T5 判据给的容差）：
+#   r1p70_coarse / r1p70  —— r(Zn–O) = 1.70 Å，门禁版（grid-coarse）与慢档（grid-normal）
+#                            都对照**同一个** oracle 值：PySCF 的 grids.level = 1/2/3 之间
+#                            只差 1.4e-5 Ha，本项目 coarse/normal/fine 之间约 1e-4 Ha，
+#                            两者都远在 5 mHa 之内。
+#   equilibrium           —— r(Zn–O) = 1.77 Å，oracle 曲线的最低点（离散扫描 1.60–1.95，
+#                            细扫 1.74–1.81：1.76 = -140.9656042058、1.77 = -140.9656054282、
+#                            1.78 = -140.9655225639）。**不是**原来的 1.85 Å。
 #
-# 来源标注（重要，§7.0）：
-#   internal-independent-path —— PBE/LANL2DZ 的 ZnO 总能量在可引用表里查不到
-#   （CCCBDB 没有 ECP/def2/LANL 系列；def2-ECP 对 3d 元素不存在，见 status.yaml 的 D-07）。
-#   这些值是**本项目自己算的回归钉**，钉的是"ECP 接线 + SCF 退火不会被后续改动悄悄改掉"，
-#   不声称是外部基准。5 mHa 的容差是 T5 判据给的。
+# ── 旧的三行是 RP-02 缺陷的产物（实测，2026-11）───────────────────────────────
+# 旧行：r1p70_coarse -103.7068571731、r1p70 -103.7069534201、equilibrium -103.7779303565。
+# 它们都等于 `H_core` 初猜密度的能量，而不是 ZnO 的能量：同一个基组/网格上独立算
+# E[P_guess] = Tr(PH) + ½Tr(PJ) + E_xc + E_nuc 得
+#     grid-coarse r=1.70: -103.7068819011   （旧行 -103.7068571731，差 2.5e-5）
+#     grid-normal r=1.70: -103.7069781304   （旧行 -103.7069534201，差 2.5e-5）
+#     grid-normal r=1.85: -103.7779550527   （旧行 -103.7779303565，差 2.5e-5）
+# 残差来自展宽结束后那一步的 DIIS 外推没有恰好回到初猜（HCN 上同一现象的残差是 3e-7）。
+# 机制（见 qwb-scf/src/rks.rs 的 fermi_occupations 与收敛验收）：费米二分的两个分支写反，
+# 占据数全塌成 0 → 密度归零 → 展宽结束后从零密度出发落回初猜 → 「能量不再变、密度不再动」
+# 两条旧判据全过 → 把初猜能量当收敛解返回。初猜能量**与展宽温度无关**，所以旧 note 里
+# 「与展宽温度/步数无关，T = 0.1–0.5、步数 10–80 给同一个能量」正是缺陷的签名。
 #
-# 物理合理性（不是判据，是佐证）：本项目的 r_e = 1.85 Å，实验值 1.704 Å，偏长 0.15 Å。
-#   这是 LANL2DZ 对 ZnO 的**已知**系统性偏差（Zn 3d / O 2p 平衡差），不是实现问题；
-#   本项目没有可引用的 LANL2DZ/ZnO 外部能量，所以只能把它当成"已知偏差"记下来。
+# ── 现状：本项目的引擎还没到这三行，而且不是差一点 ──────────────────────────
+# RP-02 修好之后，ZnO/LANL2DZ/PBE（grid-coarse, r = 1.70, max_iter = 200）的四级退路
+# 全都不收敛：单初猜 DIIS 200 步在 -119…-121 Ha 之间振荡；多初猜 5×60 步不行；
+# 费米展宽退火 200 步不收敛（sum(f) = 20 全程正确，占据不再是零）；阻尼 Roothaan 进
+# 极限环（dE → 7e-9 Ha 而 max|dP| 卡在 4.445e-1）。最终 `scf not converged`。
 #
-# SCF 说明：ZnO/LANL2DZ 的**单初猜 DIIS 不收敛**（闭壳层受限的 O 原子本身是伪解）。
-#   引擎在第一级退路里用**费米展宽退火**（前 20 步展宽 0.3 Ha，之后切回整数占据），
-#   23 步收敛；且结果与展宽温度/步数无关（实测 T = 0.1–0.5、步数 10–80 给同一个能量，
-#   见 docs/choices.md 四十二节）。
-quantity,value_hartree,tolerance_hartree,source
-zno_total_energy_r1p70_coarse,-103.7068571731,0.005,internal-independent-path
-zno_total_energy_r1p70,-103.7069534201,0.005,internal-independent-path
-zno_total_energy_equilibrium,-103.7779303565,0.005,internal-independent-path
+# 根因是一个**独立于 RP-02 的既有缺陷**：Zn 的 LANL2DZ ECP 的 l=2（d）非局域通道被
+# 弱化了约 8 倍。同一套参数、同一套基组：Tr(S⁻¹ V_ecp) 本项目 +1.331 vs PySCF -21.701；
+# S⁻¹V_ecp 最负的 5 个本征值 本项目 -0.78…-0.14 vs PySCF -6.98…-6.27。3d¹⁰ 没被束缚住，
+# 总能量比 oracle 高约 20 Ha，SCF 停在伪态上。
+# 所以：这三行是**答案**，T5 的两个慢档测试现在会红，直到那个 ECP 缺陷被单独修掉。
+# 在那之前，把这三行改回"本项目自己的输出"才是真正的错误。
+quantity,value_hartree,tolerance_hartree,source,source_doi,source_url
+zno_total_energy_r1p70_coarse,-140.9635394365,0.005,pyscf-2.14.0-pbe-grids3,10.1063/5.0006074,https://github.com/pyscf/pyscf
+zno_total_energy_r1p70,-140.9635394365,0.005,pyscf-2.14.0-pbe-grids3,10.1063/5.0006074,https://github.com/pyscf/pyscf
+zno_total_energy_equilibrium,-140.9656054282,0.005,pyscf-2.14.0-pbe-grids3,10.1063/5.0006074,https://github.com/pyscf/pyscf

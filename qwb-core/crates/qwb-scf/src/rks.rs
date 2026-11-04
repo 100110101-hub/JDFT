@@ -1306,6 +1306,26 @@ pub fn evaluate_xc_on_device(
     }
 }
 
+/// RP-02：收敛验收里 DIIS 交换子误差相对密度判据的宽松倍数。
+///
+/// 交换子误差对密度的响应是线性的（`e ≈ (∂/∂P)(F P S − S P F)·ΔP`，量级 `‖F‖·‖ΔP‖`），
+/// 所以「密度已经不动了（`max|ΔP| < density_threshold`）」在交换子身上对应的上限就是
+/// `density_threshold · ‖F‖_F`。这个常数只是**上限之上的余量**，不是判据本身。
+/// 实测（`QWB_SCF_TRACE=1`，默认 `density_threshold = 1e-6` ⇒ 上限 `|e|/|F| = 1e-4`）：
+///
+/// * 真收敛：HCN/PBE/def2-SVP `8.7e-10`、H2O/PBE/def2-SVP `7.6e-10`、
+///   H2O/SVWN5/STO-3G `1.0e-9` —— 比上限低**五个**数量级；
+/// * RP-02 的缺陷态（密度冻在 `H_core` 初猜上、DIIS 子空间全是零误差的陈旧向量）：
+///   `3.058e-1` —— 比上限高**三千倍**。
+///
+/// 见 `tests/rp02_stale_diis_guard.rs`。
+const DIIS_ERROR_SLACK: f64 = 100.0;
+
+/// 收敛验收允许的交换子误差上限（`|e|_diis` 的量纲与 `F` 相同）。
+fn diis_error_limit(options: &RksOptions, fock_norm: f64) -> f64 {
+    DIIS_ERROR_SLACK * options.density_threshold * (fock_norm + 1.0)
+}
+
 /// 闭壳层 RKS SCF。
 ///
 /// # Errors
@@ -1605,6 +1625,17 @@ pub fn rks_scf(
                 fock_used = extrapolated;
             }
         }
+        // 交换子误差范数 ‖F P S − S P F‖_F（用子空间里最后推入的那一组，就是当步的）。
+        // 没开 DIIS 时它是 0 —— 所以下面的收敛验收只在 `use_diis` 时才拿它当判据。
+        let diis_error = diis.as_ref().map_or(0.0, Diis::error_norm);
+        // ‖F‖_F：交换子误差的量级基准（见 `DIIS_ERROR_SLACK`）。O(n²)，与 Fock 构建比可忽略。
+        let mut fock_norm_squared = 0.0_f64;
+        for i in 0..n {
+            for j in 0..n {
+                fock_norm_squared += fock[(i, j)] * fock[(i, j)];
+            }
+        }
+        let fock_norm = fock_norm_squared.sqrt();
 
         // F' = Xᵀ F X，对角化，C = X C'
         let xt = x.transpose();
@@ -1631,6 +1662,9 @@ pub fn rks_scf(
             }
             integer
         };
+        // 诊断用：占据数之和必须等于体系电子数（Σ f_i = n_electrons）。展宽阶段它是一次
+        // 真实的检验 —— 费米二分写错方向时它会塌到 0 或 2n，两者都让密度失去意义。
+        let occupation_sum: f64 = occupations.iter().sum();
         let mut new_density = Matrix::zeros(n, n);
         for i in 0..n {
             for j in 0..n {
@@ -1703,7 +1737,10 @@ pub fn rks_scf(
         // 不写进结果（产品面的日志走 `Reporter`）。
         if std::env::var_os("QWB_SCF_TRACE").is_some() {
             eprintln!(
-                "scf step {iterations}: E = {energy:+.9}  dE = {last_change:.3e}  max|dP| = {max_dp:.3e}"
+                "scf step {iterations}: E = {energy:+.9}  dE = {last_change:.3e}  max|dP| = {max_dp:.3e}  \
+                 sum(f) = {occupation_sum:.6}  |e|_diis = {diis_error:.3e}  \
+                 |e|/|F| = {:.3e}",
+                diis_error / (fock_norm + 1.0)
             );
         }
 
@@ -1725,7 +1762,37 @@ pub fn rks_scf(
             && max_dp < options.density_threshold
             && step >= options.smearing_steps
         {
-            converged = true;
+            // ── RP-02：收敛验收的第三道门 ──────────────────────────────────────────
+            //
+            // 「能量不再变 + 密度不再动」两条**不足以**说明自洽：密度塌成零矩阵、或者
+            // 停在 `H_core` 初猜上时，这两条照样成立，而解一个都没自洽。这正是 RP-02
+            // 的形状 —— 展宽二分把占据数打成 0，密度归零，展宽结束后 SCF 从零密度出发
+            // 落在初猜的固定点上，DIIS 子空间里全是零误差的陈旧向量，于是 23 步
+            // 「收敛」到 -81.7122547541 Ha（PySCF：-93.172 Ha）。
+            //
+            // `Diis::error_norm` 正是这种状态的反例度量：真解上 `F` 与 `P` 对易
+            // （`e → 0`），停在没走的那一步上的 `e` 不小。判据按**调用方自己的密度阈值**
+            // 取上限（交换子对密度是线性响应），所以它不会跟一个更松的阈值打架 ——
+            // 你声明的密度收敛到什么程度，交换子就得降到相应的量级（见 `DIIS_ERROR_SLACK`）。
+            //
+            // 能级移动不影响这个度量：`λ(S − ½SPS)` 与 `P` 的交换子是**恒零**
+            // （`(S − ½SPS)PS = SPS − ½SPSPS = SP(S − ½SPS)`），所以抬过能级的 Fock
+            // 判出来的 `e` 与物理 Fock 相同。没开 DIIS（阻尼 Roothaan 那一级）时
+            // 拿不到交换子，这一门跳过 —— 那条路由 `fermi_occupations` 的电子数
+            // 不变量兜底（它保证占据数不会塌成 0）。
+            let self_consistent = diis_error <= diis_error_limit(&options, fock_norm);
+            if !options.use_diis || self_consistent {
+                converged = true;
+            } else if std::env::var_os("QWB_SCF_TRACE").is_some() {
+                eprintln!(
+                    "scf step {iterations}: REFUSED as converged: |e|_diis = {diis_error:.3e} > \
+                     上限 {:.3e}（密度没停在自洽解上，不返回能量）",
+                    diis_error_limit(&options, fock_norm)
+                );
+            }
+            // 无论接受还是拒绝都结束这一级退路：拒绝时 `converged = false`，调用方拿到
+            // `ScfNotConverged`，引擎按既有顺序换下一级退路（RP-02 实测就是靠这一步
+            // 落到阻尼 Roothaan，给出 -93.1720303941 Ha）。
             break;
         }
     }
@@ -1816,20 +1883,42 @@ pub fn fermi_occupations(
     let mut high = energies.iter().copied().fold(f64::NEG_INFINITY, f64::max) + 40.0 * temperature;
     for _ in 0..200 {
         let middle = 0.5 * (low + high);
+        // `fill(μ)` 对 μ **单调递增**：μ 越高，占据越多。所以
+        //   * `fill(middle) > n_electrons` ⇒ 根在 middle 的**左边** ⇒ 上界收到 middle；
+        //   * 否则根在右边 ⇒ 下界抬到 middle。
+        // 这两个分支原先写反了（`low = middle` 放在上面），二分于是**发散**到
+        // `high = max + 40T`：每一级的 `fill` 都比目标大，代码却把它当成「还不够」。
+        // 后果是占据数全部塌到 **0**，密度变成零矩阵，能量退化成纯核排斥
+        // （HCN/PBE/def2-SVP 实测 step 1–20 全是 `sum(f) = 0`、`E = +23.883886438`），
+        // 展宽结束后 SCF 从**零密度**重新出发，落在 `H_core` 初猜的解上却因为
+        // 「密度不再动」而报收敛（RP-02：报 -81.71 Ha，PySCF 是 -93.17 Ha）。
         if fill(middle) > n_electrons {
-            low = middle;
-        } else {
             high = middle;
+        } else {
+            low = middle;
         }
         if (high - low).abs() < 1.0e-14 {
             break;
         }
     }
     let mu = 0.5 * (low + high);
-    Ok(energies
+    let occupations: Vec<f64> = energies
         .iter()
         .map(|energy| 2.0 / (1.0 + ((energy - mu) / temperature).exp()))
-        .collect())
+        .collect();
+    // 二分必须真的解出了 `Σ f_i = n_electrons`。这一条是 RP-02 的**根因级**护栏：
+    // 方向写反时返回的是「全部 0」（或全部 2）的占据，把这个数直接交给 SCF 会让密度
+    // 失去意义，而下游只看到「密度不动了」。宁可在这里报错让引擎换下一级退路，
+    // 也不许把一串假的占据数交给 Fock 构建。
+    let total: f64 = occupations.iter().sum();
+    if (total - n_electrons).abs() > 1.0e-8 * n_electrons.max(1.0) {
+        return Err(EngineError::Internal(format!(
+            "fermi_occupations: bisection returned occupations summing to {total}, \
+             not {n_electrons} electrons (T = {temperature}, {} orbitals)",
+            energies.len()
+        )));
+    }
+    Ok(occupations)
 }
 
 /// 初猜密度：对角化 `H_core` 并占据前 `n_occ` 个轨道（`P = 2 sum c c^T`）。

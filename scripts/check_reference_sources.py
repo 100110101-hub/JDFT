@@ -49,7 +49,15 @@ def check_family(relative: str) -> list[str]:
     rows = list(csv.reader(io.open(path, encoding="utf-8", newline="")))
     if not rows:
         return [f"{relative}: empty file"]
-    header = rows[0]
+    # 表头是**第一个不以 `#` 开头的行**：参考集 CSV 允许带一段 `#` 出处说明（
+    # `zno_lanl2dz_pbe_ecp.csv` 就有，它要写清"旧行是初猜能量的伪解"这件事）。
+    # 这一条只改"表头在哪"，不改任何判据：每一行数据仍然必须带白名单里的两列来源。
+    header_index = 0
+    while header_index < len(rows) and rows[header_index] and rows[header_index][0].startswith("#"):
+        header_index += 1
+    if header_index >= len(rows):
+        return [f"{relative}: no header row (only comments?)"]
+    header = rows[header_index]
     expected_tail = list(reference_sources.SOURCE_COLUMNS)
     if header[-len(expected_tail):] != expected_tail:
         problems.append(
@@ -58,7 +66,7 @@ def check_family(relative: str) -> list[str]:
         return problems
     doi_index = header.index("source_doi")
     url_index = header.index("source_url")
-    for lineno, row in enumerate(rows[1:], start=2):
+    for lineno, row in enumerate(rows[header_index + 1 :], start=header_index + 2):
         if not row:
             continue
         if len(row) != len(header):

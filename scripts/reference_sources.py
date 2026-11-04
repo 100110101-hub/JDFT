@@ -202,6 +202,13 @@ GENERATORS = {
     # （Organometallics 29, 2176 (2010) 的支持信息 Table S1/S2 的 CDCl3 一列）。
     "qwb-core/crates/qwb-engine/tests/reference/nmr_shifts_experimental.csv":
         "scripts/gen_nmr_shifts_experimental.py",
+    # T5：ZnO / LANL2DZ（Zn 18 芯 ECP，z_eff = 12）/ PBE 的三行。它们**曾经**是本项目
+    # 自己的回归钉（`internal-independent-path`），而那三行实测就是 `H_core` 初猜密度的
+    # 能量 —— RP-02 的缺陷把初猜能量当成收敛解返回了（证据见 CSV 的 note 与
+    # `scripts/pyscf_zno_lanl2dz_reference.py` 的文件头）。现在这三行是 PySCF 2.14.0 的
+    # 复算值（基组与 ECP 与 qwb-data 逐壳层/逐项一致），所以按 PySCF 的来源标注。
+    "qwb-core/crates/qwb-engine/tests/reference/zno_lanl2dz_pbe_ecp.csv":
+        "scripts/pyscf_zno_lanl2dz_reference.py",
 }
 
 FAMILIES = tuple(GENERATORS)
