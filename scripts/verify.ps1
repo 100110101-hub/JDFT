@@ -11,8 +11,17 @@
 # break parsing. Keep it ASCII.
 #
 # Exit code: 0 = all green, 1 = at least one failure.
+#
+# 用法（与 verify.sh 的行为必须一致）：
+#   pwsh -NoProfile -File scripts\verify.ps1         # 快道（默认）：#[ignore] 的慢档测试不跑
+#   pwsh -NoProfile -File scripts\verify.ps1 -Slow   # 慢道：core: test 连 #[ignore] 的一起跑
+[CmdletBinding()]
+param(
+    [switch]$Slow
+)
 
 $ErrorActionPreference = 'Continue'
+$script:slowLane = [bool]$Slow
 $root = Split-Path -Parent $PSScriptRoot
 Set-Location $root
 
@@ -139,21 +148,89 @@ Step -Name 'core: test binaries (prebuild, not part of the test wall clock)' -Di
 }
 # EX-02：进程级并行（cargo-nextest）。**测试集合不变** —— nextest 不跑 doctest，
 # 所以 doctest 单独跑一步补上；没装 nextest 的机器退回 `cargo test --workspace`（同一个集合）。
+#
+# EX-02 慢道（slow lane）：`#[ignore]` 的慢档测试**恰好**是下面 `$slowTests` 这份名单。
+# 默认只跑快道（nextest 默认 --run-ignored default，忽略集一个都不跑）；`-Slow` 时给两条
+# 泳道都加 `--run-ignored all`，连慢道一起跑。名单就是契约，由下面的守卫断言（见下）。
 Step -Name 'core: test' -Dir 'qwb-core' -Body {
     if (-not (Get-Command cargo-nextest -ErrorAction SilentlyContinue)) {
-        & cargo test --workspace
+        if ($script:slowLane) {
+            Write-Host '   slow lane: ON (--include-ignored)'
+            & cargo test --workspace -- --include-ignored
+        }
+        else {
+            & cargo test --workspace
+        }
         return
+    }
+    # ── 慢道守卫（EX-02）──────────────────────────────────────────────────────
+    # 「被忽略的集合」= `nextest list --run-ignored all`（全量）− `nextest list`（快道）。
+    # 差集必须与名单**逐字相等**，两种情况都红：
+    #   ① 差集里出现名单外的名字 —— 有人把一个本该在快道跑的用例偷偷 #[ignore] 掉
+    #      （正是「静默少测」，比慢更危险）；
+    #   ② 名单上的名字不在差集里 —— 慢测试被删/改名/取消忽略（慢道悄悄变瘦）。
+    # 与 pytest 泳道那几条计数断言是同一个纪律：集合一变就必须显式改这里。
+    $slowTests = @(
+        'qwb-engine::f01_hessian_water water_has_three_real_vibrational_modes'
+        'qwb-engine::f02_frequencies h2o_scaled_harmonic_frequencies_match_experiment'
+        'qwb-engine::f02_ir water_has_three_active_modes_with_expected_ordering'
+        'qwb-engine::g01_analytic_def2svp def2svp_hf_analytic_gradient_matches_finite_differences'
+        'qwb-engine::g01_analytic_def2svp def2svp_pbe_analytic_gradient_matches_finite_differences'
+        'qwb-engine::g01_gradient_localize def2svp_hf_water_analytic_gradient_matches_finite_differences'
+        'qwb-engine::g01_gradient_localize sto3g_pbe_water_analytic_gradient_matches_finite_differences'
+        'qwb-engine::g01_numeric_gradient gradient_is_translation_invariant_for_a_three_atom_system'
+        'qwb-engine::g02_optimize_water h2o_optimises_to_a_stationary_point'
+        'qwb-engine::g03_three_molecules three_molecules_converge'
+        'qwb-engine::rs04_nmr_shifts_experiment measured_shifts_against_the_pinned_experimental_values'
+        'qwb-engine::t03_water_geometry water_geometry_matches_experiment'
+        'qwb-engine::t3_water_b3lyp pbe0_def2svp_water_geometry_matches_experiment'
+        'qwb-engine::t3_water_geometry pbe_def2tzvp_water_geometry_matches_experiment'
+        'qwb-engine::t4_frequencies_6311gdp h2o_hf_6311gdp_scaled_frequencies'
+        'qwb-engine::t4_hessian_step hessian_step_convergence'
+        'qwb-engine::t4_ir_frequencies h2o_ir_frequencies_match_experiment'
+        'qwb-engine::t5_ecp cuh_lanl2dz_grid_normal_is_pinned'
+        'qwb-engine::t5_ecp zno_equilibrium_is_at_one_point_eight_five'
+        'qwb-engine::t5_ecp zno_lanl2dz_single_point_matches_the_reference'
+        'qwb-engine::t6_b3lyp_gradient b3lyp_gradient_error_per_grid_level'
+        'qwb-integrals::h05_second_derivatives cost_ratio_second_over_first_derivative'
+        'qwb-scf cphf_hessian::tests::cost_measurement_def2svp'
+        'qwb-scf::in04_ri_j_measurement ri_j_versus_exact_j'
+        'qwb-scf::sc05_rimp2 ri_path_is_faster_on_the_larger_system'
+        'qwb-scf::t02_h2o_def2svp h2o_def2svp_pbe_grid_and_threads'
+        'qwb-scf::t06_benzene benzene_matches_cccbdb'
+        'qwb-scf::t06_benzene benzene_pbe_converges_through_the_retry'
+        'qwb-scf::t06_reference cccbdb_slow_tier_species_agree'
+    )
+    & cargo nextest list --workspace *> nextest-list.log
+    if ($LASTEXITCODE -ne 0) { throw 'nextest list (fast lane) failed' }
+    $listed = (Get-Content nextest-list.log | Where-Object { $_ -match '\S' }).Count
+    & cargo nextest list --workspace --run-ignored all *> nextest-list-all.log
+    if ($LASTEXITCODE -ne 0) { throw 'nextest list (--run-ignored all) failed' }
+    $fastNames = @(Get-Content nextest-list.log | Where-Object { $_ -match '^\S+ \S+$' })
+    $allNames = @(Get-Content nextest-list-all.log | Where-Object { $_ -match '^\S+ \S+$' })
+    $ignoredNames = @($allNames | Where-Object { $fastNames -notcontains $_ })
+    $unknown = @($ignoredNames | Where-Object { $slowTests -notcontains $_ })
+    $missing = @($slowTests | Where-Object { $ignoredNames -notcontains $_ })
+    Write-Host ("   slow lane: {0} ignored tests（名单 {1}）" -f $ignoredNames.Count, $slowTests.Count)
+    $ignoredNames | ForEach-Object { Write-Host "     - $_" }
+    $unknown | ForEach-Object { Write-Host "!! 未知的被忽略用例（不在慢道名单里）：$_" -ForegroundColor Red }
+    $missing | ForEach-Object { Write-Host "!! 名单上的用例不再被忽略（被删/改名/去掉 #[ignore]）：$_" -ForegroundColor Red }
+    if ($unknown.Count -gt 0 -or $missing.Count -gt 0) {
+        throw 'slow lane drifted: unknown or missing ignored tests'
     }
     # EX-02 两泳道：`--partition` 由 nextest 保证「两片恰好覆盖全集、互不重叠」，
     # 所以不会因为名单写错而静默漏测（上一版按名字过滤就出过这个问题）。
     # 两条进程各 4 线程 = 8 = 物理核数；单进程 8 线程时最长的测试常常最后才起，
     # 两个独立调度器能把这种「阶梯尾巴」摊平。
-    & cargo nextest list --workspace *> nextest-list.log
-    $listed = (Get-Content nextest-list.log | Where-Object { $_ -match '\S' }).Count
+    $slowArgs = @()
+    if ($script:slowLane) {
+        $slowArgs = @('--run-ignored', 'all')
+        Write-Host '   slow lane: ON (--run-ignored all)'
+    }
     $laneA = Start-Process -FilePath 'cargo' -PassThru -NoNewWindow `
         -RedirectStandardOutput slow-lane.log -RedirectStandardError slow-lane.err `
-        -ArgumentList @('nextest', 'run', '--workspace', '-j', '4', '--partition', 'count:1/2', '--no-fail-fast')
-    & cargo nextest run --workspace -j 4 --partition 'count:2/2' --no-fail-fast
+        -ArgumentList (@('nextest', 'run', '--workspace', '-j', '4', '--partition', 'count:1/2', '--no-fail-fast') + $slowArgs)
+    & cargo nextest run --workspace -j 4 --partition 'count:2/2' --no-fail-fast @slowArgs
     $codeB = $LASTEXITCODE
     $laneA.WaitForExit()
     $codeA = $laneA.ExitCode

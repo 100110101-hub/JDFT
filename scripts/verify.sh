@@ -3,11 +3,27 @@
 #
 # Windows 原生等价入口：scripts/verify.ps1（覆盖同一清单；改一个就同步改另一个）。
 #
+# 用法（与 verify.ps1 的行为必须一致）：
+#   bash scripts/verify.sh          # 快道（默认）：#[ignore] 的慢档测试不跑
+#   bash scripts/verify.sh --slow   # 慢道：core: test 连 #[ignore] 的一起跑
+#
 # 退出码：0 = 全绿；1 = 至少一项失败。
 set -uo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$root"
+
+# EX-02 慢道开关：默认 0 = 只跑快道。与 verify.ps1 的 -Slow 是同一个开关。
+slow=0
+for arg in "$@"; do
+    case "$arg" in
+        --slow) slow=1 ;;
+        *)
+            printf '!! FAILED: 未知参数 %s（只支持 --slow）\n' "$arg" >&2
+            exit 2
+            ;;
+    esac
+done
 
 pass=0
 fail=0
@@ -109,24 +125,84 @@ step "core: test binaries (prebuild, not part of the test wall clock)" bash -c '
     cd qwb-core || exit 1
     cargo test --workspace --all-targets --no-run
 '
+# EX-02 慢道（slow lane）：`#[ignore]` 的慢档测试**恰好**是下面 expected-slow 那份名单。
+# 默认只跑快道（nextest 默认不跑忽略集）；`--slow` 时给两条泳道都加 `--run-ignored all`。
+# 守卫取「被忽略的集合」= `nextest list --run-ignored all`（全量）− `nextest list`（快道），
+# 差集必须与名单**逐字相等**：出现名单外的名字 = 有人把快道用例偷偷 #[ignore] 掉（静默少测），
+# 名单上的名字不在差集里 = 慢测试被删/改名/取消忽略（慢道悄悄变瘦）—— 两种都红。
+# 与 verify.ps1 的 $slowTests 同一份名单、同一个纪律：改一边必须改另一边。
 step "core: test" bash -c '
     cd qwb-core || exit 1
     NEXTEST="$(command -v cargo-nextest || command -v cargo-nextest.exe || true)"
     if [ -z "$NEXTEST" ]; then
-        "$0" test --workspace
+        if [ "$1" = "1" ]; then
+            echo "   slow lane: ON (--include-ignored)"
+            "$0" test --workspace -- --include-ignored
+        else
+            "$0" test --workspace
+        fi
         exit $?
     fi
+    cat > expected-slow.log <<EOF
+qwb-engine::f01_hessian_water water_has_three_real_vibrational_modes
+qwb-engine::f02_frequencies h2o_scaled_harmonic_frequencies_match_experiment
+qwb-engine::f02_ir water_has_three_active_modes_with_expected_ordering
+qwb-engine::g01_analytic_def2svp def2svp_hf_analytic_gradient_matches_finite_differences
+qwb-engine::g01_analytic_def2svp def2svp_pbe_analytic_gradient_matches_finite_differences
+qwb-engine::g01_gradient_localize def2svp_hf_water_analytic_gradient_matches_finite_differences
+qwb-engine::g01_gradient_localize sto3g_pbe_water_analytic_gradient_matches_finite_differences
+qwb-engine::g01_numeric_gradient gradient_is_translation_invariant_for_a_three_atom_system
+qwb-engine::g02_optimize_water h2o_optimises_to_a_stationary_point
+qwb-engine::g03_three_molecules three_molecules_converge
+qwb-engine::rs04_nmr_shifts_experiment measured_shifts_against_the_pinned_experimental_values
+qwb-engine::t03_water_geometry water_geometry_matches_experiment
+qwb-engine::t3_water_b3lyp pbe0_def2svp_water_geometry_matches_experiment
+qwb-engine::t3_water_geometry pbe_def2tzvp_water_geometry_matches_experiment
+qwb-engine::t4_frequencies_6311gdp h2o_hf_6311gdp_scaled_frequencies
+qwb-engine::t4_hessian_step hessian_step_convergence
+qwb-engine::t4_ir_frequencies h2o_ir_frequencies_match_experiment
+qwb-engine::t5_ecp cuh_lanl2dz_grid_normal_is_pinned
+qwb-engine::t5_ecp zno_equilibrium_is_at_one_point_eight_five
+qwb-engine::t5_ecp zno_lanl2dz_single_point_matches_the_reference
+qwb-engine::t6_b3lyp_gradient b3lyp_gradient_error_per_grid_level
+qwb-integrals::h05_second_derivatives cost_ratio_second_over_first_derivative
+qwb-scf cphf_hessian::tests::cost_measurement_def2svp
+qwb-scf::in04_ri_j_measurement ri_j_versus_exact_j
+qwb-scf::sc05_rimp2 ri_path_is_faster_on_the_larger_system
+qwb-scf::t02_h2o_def2svp h2o_def2svp_pbe_grid_and_threads
+qwb-scf::t06_benzene benzene_matches_cccbdb
+qwb-scf::t06_benzene benzene_pbe_converges_through_the_retry
+qwb-scf::t06_reference cccbdb_slow_tier_species_agree
+EOF
+    "$0" nextest list --workspace > nextest-list.log 2>&1 || { echo "!! nextest list（快道）失败"; exit 1; }
+    "$0" nextest list --workspace --run-ignored all > nextest-list-all.log 2>&1 || { echo "!! nextest list（全量）失败"; exit 1; }
+    grep -E "^[^ ]+ [^ ]+$" nextest-list.log | LC_ALL=C sort > nextest-fast.log
+    grep -E "^[^ ]+ [^ ]+$" nextest-list-all.log | LC_ALL=C sort > nextest-all.log
+    LC_ALL=C sort expected-slow.log > expected-slow-sorted.log
+    comm -13 nextest-fast.log nextest-all.log > nextest-ignored.log
+    unknown="$(comm -13 expected-slow-sorted.log nextest-ignored.log)"
+    missing="$(comm -23 expected-slow-sorted.log nextest-ignored.log)"
+    echo "   slow lane: $(grep -c . nextest-ignored.log || true) ignored tests（名单 $(grep -c . expected-slow-sorted.log || true)）"
+    sed "s/^/     - /" nextest-ignored.log
+    if [ -n "$unknown" ]; then printf "!! 未知的被忽略用例（不在慢道名单里）：\n%s\n" "$unknown"; fi
+    if [ -n "$missing" ]; then printf "!! 名单上的用例不再被忽略（被删/改名/去掉 #[ignore]）：\n%s\n" "$missing"; fi
+    if [ -n "$unknown" ] || [ -n "$missing" ]; then exit 1; fi
+    ri=""
+    if [ "$1" = "1" ]; then ri="--run-ignored all"; echo "   slow lane: ON (--run-ignored all)"; fi
     # EX-02：与 verify.ps1 同步 —— --partition 保证两片恰好覆盖全集（不会漏测）。
-    "$NEXTEST" run --workspace -j 4 --partition count:1/2 --no-fail-fast > shard1.log 2>&1 &
+    # 都用 `cargo nextest run`（而不是直接跑 cargo-nextest）：cargo 自己分派子命令，
+    # 于是 Windows 的 cargo-nextest.exe 在 WSL/Git Bash 下也能用（直接跑 .exe 会被
+    # 它当成 cargo 的参数，报 "unrecognized subcommand 'run'"）。
+    "$0" nextest run --workspace -j 4 --partition count:1/2 --no-fail-fast $ri > shard1.log 2>&1 &
     shard1_pid=$!
-    "$NEXTEST" run --workspace -j 4 --partition count:2/2 --no-fail-fast
+    "$0" nextest run --workspace -j 4 --partition count:2/2 --no-fail-fast $ri
     shard2_code=$?
     wait $shard1_pid
     shard1_code=$?
     tail -3 shard1.log
     if [ $shard1_code -ne 0 ] || [ $shard2_code -ne 0 ]; then exit 1; fi
     "$0" test --workspace --doc
-' "$CARGO"
+' "$CARGO" "$slow"
 # I-00 验收：两个后端都必须编译，且给出同样的数（tests/backend_consistency.rs 的 golden 值）。
 step "core: I-06 integral cache" bash -c "cd qwb-core && \"\$0\" test -p qwb-integrals --features integral-cache --test i06_cache" "$CARGO"
 step "core: I-00 faer backend" bash -c "cd qwb-core && \"\$0\" test -p qwb-linalg --no-default-features --features faer" "$CARGO"

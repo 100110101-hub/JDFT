@@ -252,6 +252,7 @@ fn the_pinned_geometries_are_the_optimiser_outputs() {
 }
 
 #[test]
+#[ignore = "slow: 重测 CH4/CH3OH 的 GIAO 屏蔽并与实验值表对 |Δ|（两个 GIAO SCF 作业，本机实测 57.5 s）；run with -Slow"]
 fn measured_shifts_against_the_pinned_experimental_values() {
     let methane = giao(METHANE);
     let methanol = giao(METHANOL);
