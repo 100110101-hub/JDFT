@@ -178,8 +178,13 @@ fn cuh_lanl2dz_grid_normal_is_pinned() {
         .run(&job(cuh(1.46), "lanl2dz-cu", GridLevel::Normal), &Silent)
         .expect("grid-normal 单点");
     assert!(
-        (first.energy_hartree - (-213.906_905_418_6)).abs() < 1.0e-6,
-        "grid-normal 能量 {:.10} 与钉住值 -213.9069054186 不一致",
+        // 第 421 轮：旧钉值 -213.9069054186 是 `pbe_mu = 0.21951`（5 位）时代的数。
+        // `d852bb2`（SC-01b）把 `pbe_mu` 换成精确值 0.21951497276451704（= beta*pi^2/3,
+        // beta = 0.066725），相对变化 2.27e-5，PBE 梯度项随之把 CuH 的总能量推了 1.64e-5 Ha。
+        // **这不是回归**：把数据改回 0.21951 重跑，本断言复现旧钉值（< 1e-6），
+        // 所以因果关系是量出来的而不是猜的（choices 二百〇九）。
+        (first.energy_hartree - (-213.906_921_804_5)).abs() < 1.0e-6,
+        "grid-normal 能量 {:.10} 与钉住值 -213.9069218045 不一致",
         first.energy_hartree
     );
     // ECP 矩阵元是确定性求积：同一输入两次跑必须逐位相同。
