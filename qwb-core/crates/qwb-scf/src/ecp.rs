@@ -2,13 +2,29 @@
 //!
 //! # 数据形态（K1 `ecp`）
 //!
-//! `V_l(r) = Σ_k c_k r^{n_k} e^{−α_k r²}`，通道按 `l` 分组；**最大的 `l` 是局域通道**
-//! （EMSL/Stuttgart 约定），其余 `l < L` 是投影通道。于是
+//! 数据按角动量 `l` 给出一组 Gauss 项：`V_l(r) = Σ_k c_k r^{n_k} e^{−α_k r²}`。
+//! **最大的 `l`（`L`）是局域通道 `V_L`，其余 `l < L` 的块是相对局域的差分**
+//! `ΔV_l = V_l − V_L`（EMSL/BSE/Hay-Wadt 的表格就是这么给的）。于是
 //!
 //! ```text
-//! V_ECP(r) = V_L(r) + Σ_{l<L} [V_l(r) − V_L(r)] P_l
+//! V_ECP(r) = V_L(r) + Σ_{l<L} ΔV_l(r) P_l        ← 本文实现（经 PySCF/libcint 逐项核对）
 //! P_l      = Σ_m |lm⟩⟨lm|
 //! ```
+//!
+//! # 两个"静默错数"的坑（2026-11 都实测过）
+//!
+//! ① **`r` 的幂次约定**：`n_k` 是内部约定 `r^n` 的指数（`n_k ∈ [-2, 2]`）。数据文件里的
+//! `r^(n-2)` 写法已经由加载器减 2 归一过（`qwb_registry::ecp::Ecp::normalise`）。少了这个
+//! −2，每一项都被整体抬 `r²`，局域通道的 `-Z_core/r` 会变成 `-Z_core·r`
+//! （LANL2DZ 的 Zn：`-18/r` → `-18 r`）。
+//!
+//! ② **非局域通道要不要再减一次局域**：数据里的 `l < L` 块**已经是** `ΔV_l = V_l − V_L`，
+//! 所以通道贡献就是 `ΔV_l P_l`，**不能**再减一次 `V_L`。相减那一版在 Zn 上是
+//! `d` 通道只剩 1/18：`S⁻¹V_ecp` 的 d 子块对角元 `-0.283` 而 PySCF 是 `-5.166`
+//! —— 3d¹⁰ 于是没被束缚住，ZnO 高出 oracle 约 20 Ha。
+//!
+//! 两条都被同一个外部标尺（PySCF 2.14.0 / libcint 的 `ECPscalar`）逐项定量核对过：
+//! `V_local + Σ_l V_l P_l` 与 `ECPscalar` 的差是 `8.9e-16`（矩阵尺度 `5.2`）。
 //!
 //! 电子-核的点电荷吸引那一半**不在这里**：它用 `z_eff = Z − n_core` 交给
 //! `qwb_integrals::one_electron_with_charges`，这里只给"超出点电荷的那部分"。
@@ -26,7 +42,7 @@
 //!
 //! ```text
 //! c^μ_{lm}(r_i) = Σ_j u_j Y_lm(Ω_j) φ_μ(A + r_i Ω_j)
-//! ⟨μ|[V_l−V_L]P_l|ν⟩ = Σ_i w_i r_i² [V_l(r_i) − V_L(r_i)] Σ_m c^μ_{lm}(r_i) c^ν_{lm}(r_i)
+//! ⟨μ|ΔV_l P_l|ν⟩ = Σ_i w_i r_i² ΔV_l(r_i) Σ_m c^μ_{lm}(r_i) c^ν_{lm}(r_i)
 //! ```
 //!
 //! 这样一中心（μ、ν 都在 ECP 原子上）与异中心（one-center expansion 是无穷级数）两种情况
@@ -50,7 +66,12 @@ use qwb_registry::ecp::{Ecp, RPowerConvention};
 /// 一个 ECP 高斯项：`coefficient * r^power * exp(-exponent * r^2)`。
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct EcpTerm {
-    /// `r` 的幂次（按内部约定 `r^n`）。
+    /// `r` 的幂次（**内部约定 `r^n`**）。
+    ///
+    /// 数据里的 `r^(n-2)` 约定（BSE 导出的 ECP 就是这一种）已经在加载器里减 2
+    /// （`qwb_registry::ecp::Ecp::normalise`），所以这里直接就是 `r` 的指数，
+    /// 取值落在 `[-2, 2]`：局域/投影通道的 `r^-2`、`r^-1` 项是真实的、不是笔误
+    /// —— LANL2DZ 的局域通道里 `-18.0 r^-1`（Zn）就是 `-Z_core/r`。
     pub power: i32,
     /// 高斯指数（Bohr^-2）。
     pub exponent: f64,
@@ -78,21 +99,32 @@ pub struct EcpOperator {
     pub element: String,
     /// `z_eff = Z − n_core`：点电荷吸引那一半的电荷。
     pub z_eff: f64,
-    /// 局域通道 `V_L`。
+    /// 局域通道 `V_L`（对**所有** `l` 都作用，「最大 `l` 覆盖其余」）。
     pub local: Vec<EcpTerm>,
-    /// 投影通道（`l < L`，按 `l` 升序）。
+    /// 非局域通道 `ΔV_l = V_l − V_L`（`l < L`，按 `l` 升序）。
+    ///
+    /// 数据里的块已经是差分，所以这里**不再**减 `V_L`：通道贡献就是 `ΔV_l P_l`。
     pub projectors: Vec<EcpChannel>,
 }
 
 impl EcpOperator {
     /// 从 K1 的 [`Ecp`] 构造，并在分子里定位它的元素（必须**恰好一个**原子）。
     ///
+    /// `r_power_convention` 是 `r^(n-2)` 的数据（BSE 的导出就是这一种）在这里先按
+    /// [`qwb_registry::ecp::Ecp::normalise`] 归一成内部 `r^n` 再取项 —— 正常路径上加载器
+    /// 已经做过一次（幂等），这里再兜一次是因为**猜错幂次的后果是静默的、而且很大**：
+    /// 少了 −2，局域通道的 `-Z_core/r` 会变成 `-Z_core·r`，每个通道的量级都错。
+    ///
     /// # Errors
     ///
     /// * 分子的元素与 ECP 的 `element` 不匹配 → [`EngineError::Data`]；
-    /// * 出现两个同元素原子（一个 `ecp_name` 只描述一个中心）→ [`EngineError::Unsupported`]；
-    /// * `r_power_convention` 是 `r^(n-2)`（本该在数据层就归一成 `r^n`）→ [`EngineError::Data`]。
+    /// * 出现两个同元素原子（一个 `ecp_name` 只描述一个中心）→ [`EngineError::Unsupported`]。
     pub fn from_ecp(ecp: &Ecp, molecule: &Molecule) -> Result<Self, EngineError> {
+        if ecp.r_power_convention != RPowerConvention::Rn {
+            let mut owned = ecp.clone();
+            owned.normalise();
+            return Self::from_ecp(&owned, molecule);
+        }
         let mut matching = Vec::new();
         for (index, atom) in molecule.atoms.iter().enumerate() {
             if atom.symbol == ecp.element {
@@ -118,13 +150,6 @@ impl EcpOperator {
                 )));
             }
         };
-        if ecp.r_power_convention != RPowerConvention::Rn {
-            return Err(EngineError::Data(format!(
-                "ecp `{}`: r_power_convention is {:?}, expected r^n (the loader must have \
-                 normalised it)",
-                ecp.name, ecp.r_power_convention
-            )));
-        }
         let convert = |terms: &[qwb_registry::ecp::EcpTerm]| -> Vec<EcpTerm> {
             terms
                 .iter()
@@ -274,9 +299,10 @@ pub fn matrix_elements(
             }
         }
 
-        // 非局域投影：Σ_m c^μ_lm c^ν_lm × (V_l − V_L)
+        // 非局域投影：Σ_m c^μ_lm c^ν_lm × ΔV_l（数据里的块已经是 ΔV_l = V_l − V_L，
+        // 局域通道已经在前一步整体加过，这里不再减一次）
         for l in projector_ls.clone() {
-            let delta = operator.projector_value(l, *radius) - local;
+            let delta = operator.projector_value(l, *radius);
             if delta == 0.0 {
                 continue;
             }
@@ -387,12 +413,12 @@ pub fn one_center_matrix(
             let transform_b = spherical_transform(shell_b)?;
             let components_b = qwb_basis::cartesian_components(shell_b.l);
 
-            // 该壳层对上的算符通道：局域始终 + 角动量匹配的投影通道。
+            // 该壳层对上的算符通道：局域始终作用 + 角动量匹配的差分通道 ΔV_l
+            // （数据里的块已经是 ΔV_l = V_l − V_L，不再叠一个 −V_L）。
             let mut channels: Vec<(f64, &[EcpTerm])> = vec![(1.0, &operator.local)];
             for channel in &operator.projectors {
                 if channel.l == shell_a.l && channel.l == shell_b.l {
                     channels.push((1.0, &channel.terms));
-                    channels.push((-1.0, &operator.local));
                 }
             }
 

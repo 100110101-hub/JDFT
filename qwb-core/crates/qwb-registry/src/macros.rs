@@ -1,22 +1,39 @@
 //! 内部宏：为数据类型实现 [`crate::common::DataCommon`]。
 //!
-//! # 为什么共同字段是“复制粘贴”的
+//! # 为什么共同字段是"复制粘贴"的
 //!
 //! K1 的共同字段（`name`/`version`/`citation`/`license`/`created`/`sha256`/`notes`）
 //! 在每个数据类型里**直接内联声明**，原因有两条：
 //!
 //! 1. `#[serde(flatten)]` + `deny_unknown_fields` 不兼容（serde 明确不支持），
-//!    而本项目要求“字段拼错必须报错”；
+//!    而本项目要求"字段拼错必须报错"；
 //! 2. Rust 的 `macro_rules!` **不能出现在 struct 的字段列表位置**（只在 item /
 //!    type / expr / pattern 位置可用），所以没法用宏展开字段。
 //!
 //! 复制粘贴的风险由**测试**兜底，而不是靠约定：`schema.rs` 的
 //! `common_fields_are_identical_across_kinds` 断言 5 个数据类别的共同字段在生成的
 //! JSON Schema 里逐字节一致 —— 任何一处漏字段或改类型都会让 C-01 验收失败。
+//!
+//! # 两种形态
+//!
+//! * `impl_data_common!(Type)` —— 没有加载期归一化的数据（默认什么都不做）；
+//! * `impl_data_common!(Type, normalise: Type::normalise)` —— 把
+//!   [`crate::common::DataCommon::normalise`] 接到类型自己的 inherent 方法上
+//!   （目前只有 [`crate::ecp::Ecp`]：表格的 `r^(n-2)` 约定要归一成内部 `r^n`）。
 
 /// 为具体类型实现 [`crate::common::DataCommon`]。
 macro_rules! impl_data_common {
     ($t:ty) => {
+        impl_data_common!(@inner $t {});
+    };
+    ($t:ty, normalise: $hook:path) => {
+        impl_data_common!(@inner $t {
+            fn normalise(&mut self) {
+                $hook(self)
+            }
+        });
+    };
+    (@inner $t:ty { $($hook:tt)* }) => {
         impl crate::common::DataCommon for $t {
             fn name(&self) -> &str {
                 &self.name
@@ -36,6 +53,7 @@ macro_rules! impl_data_common {
             fn declared_sha256(&self) -> Option<&str> {
                 self.sha256.as_deref()
             }
+            $($hook)*
         }
     };
 }

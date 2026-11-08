@@ -209,6 +209,17 @@ GENERATORS = {
     # 复算值（基组与 ECP 与 qwb-data 逐壳层/逐项一致），所以按 PySCF 的来源标注。
     "qwb-core/crates/qwb-engine/tests/reference/zno_lanl2dz_pbe_ecp.csv":
         "scripts/pyscf_zno_lanl2dz_reference.py",
+    # T5：CuH / LANL2DZ（Cu 10 芯 ECP，z_eff = 19）/ PBE 在 r(Cu–H) = 1.46 Å 的两行
+    # （grid level 1 ↔ 本项目 grid-coarse，level 2 ↔ grid-normal）。这一份是 2026-11 修掉
+    # ECP 的 `r` 幂次约定与通道语义之后重新钉 CuH 能量时**必需的独立标尺**：两个 CuH 能量
+    # 本身是回归钉（本项目的输出、1e-6），而"钉在 oracle 上"这件事由这一份 + 5 mHa 断言证明。
+    "qwb-core/crates/qwb-engine/tests/reference/cuh_lanl2dz_pbe_ecp.csv":
+        "scripts/pyscf_cuh_lanl2dz_reference.py",
+    # I-05：LANL2DZ ECP 矩阵**按 l 通道拆开**的外部对照（Cu、Zn，各含局域 + ΔV_l 通道）。
+    # 这一份存在的理由是"两条内部实现会一起错"：解析与半数值共享同一套数据解释，
+    # 2026-11 实测它们互差 3e-14 而同时与 PySCF 差 8 个量级以上。
+    "qwb-core/crates/qwb-scf/tests/reference/ecp_lanl2dz_channels.csv":
+        "scripts/pyscf_ecp_channels_reference.py",
 }
 
 FAMILIES = tuple(GENERATORS)

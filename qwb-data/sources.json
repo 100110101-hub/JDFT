@@ -321,7 +321,7 @@
       "transcribe": {
         "name": "lanl2dz-cu",
         "version": "1.0.0",
-        "notes": "LANL2DZ ECP for Cu, transcribed from the BSE export (revision 2013-03-25). 10 core electrons ([Ne] core), so 3s/3p stay in the valence: the Hay-Wadt K..Au paper (10.1063/1.448975). Local channel = l=2 (the highest l in the export); l=0,1 are the nonlocal projectors. The valence basis is qwb-data/basis/lanl2dz.yaml (same family); K1 pairs them through Registry::load_pair. License: BSE export, the original paper states no explicit commercial/redistribution terms, so both flags are false (project.md 14 #20 strict reading).",
+        "notes": "LANL2DZ ECP for Cu, transcribed from the BSE export (revision 2013-03-25). 10 core electrons ([Ne] core), so 3s/3p stay in the valence: the Hay-Wadt K..Au paper (10.1063/1.448975). Local channel = l=2 (the highest l in the export); l=0,1 are the nonlocal projectors. The valence basis is qwb-data/basis/lanl2dz.yaml (same family); K1 pairs them through Registry::load_pair. r_power_convention is r^(n-2), NOT r^n: BSE's r_exponents n denote coefficient*r^(n-2)*exp(-zeta*r^2) (BSE's own CRYSTAL writer subtracts 2 with the comment that other formats carry the r^-2 prefactor), and the local channel's n=1 coefficients -10.0 == n_core are exactly the -Z_core/r piece. The loader normalises to the internal r^n convention by subtracting 2 from every power. License: BSE export, the original paper states no explicit commercial/redistribution terms, so both flags are false (project.md 14 #20 strict reading).",
         "citations": [
           {
             "title": "Ab initio effective core potentials for molecular calculations. Potentials for K to Au including the outermost core orbitals",
@@ -337,7 +337,7 @@
         "created": "2026-10-26T14:00:00Z",
         "element": "Cu"
       },
-      "sha256": "a44df71fd56eea385eec3b7f3dbce2a04ae633e1aa0ee685096f682c9912f299"
+      "sha256": "c65d414eb498dee87a48cb84c7361ccb7a6d0683ed1af0fdaa14595268e90ef5"
     },
     {
       "path": "ecp/lanl2dz-zn.yaml",
@@ -352,7 +352,7 @@
       "transcribe": {
         "name": "lanl2dz-zn",
         "version": "1.0.0",
-        "notes": "LANL2DZ ECP for Zn, transcribed from the BSE export (revision 2013-03-25). 18 core electrons ([Ar] core, 3d/4s in the valence): the Hay-Wadt Sc..Hg paper (10.1063/1.448799). Local channel = l=3 (the highest l in the export, an f channel); l=0,1,2 are the nonlocal projectors -- the d channel matters because the valence basis has d functions. License: BSE export, no explicit commercial/redistribution terms, both flags false (project.md 14 #20).",
+        "notes": "LANL2DZ ECP for Zn, transcribed from the BSE export (revision 2013-03-25). 18 core electrons ([Ar] core, 3d/4s in the valence): the Hay-Wadt Sc..Hg paper (10.1063/1.448799). Local channel = l=3 (the highest l in the export, an f channel); l=0,1,2 are the nonlocal projectors -- the d channel matters because the valence basis has d functions. r_power_convention is r^(n-2), NOT r^n: BSE's r_exponents n denote coefficient*r^(n-2)*exp(-zeta*r^2) (BSE's own CRYSTAL writer subtracts 2 with the comment that other formats carry the r^-2 prefactor), and the local channel's n=1 coefficients -18.0 == n_core are exactly the -Z_core/r piece. The loader normalises to the internal r^n convention by subtracting 2 from every power. License: BSE export, no explicit commercial/redistribution terms, both flags false (project.md 14 #20).",
         "citations": [
           {
             "title": "Ab initio effective core potentials for molecular calculations. Potentials for the transition metal atoms Sc to Hg",
@@ -368,7 +368,7 @@
         "created": "2026-10-26T14:00:00Z",
         "element": "Zn"
       },
-      "sha256": "55b3391680aaad1d6adaa1f4ed9475533776ba9eb5a11d7318e0de08b7b46692"
+      "sha256": "9f5169f805cd33b5388cbba5b8510aaa519931813a062f58bc3097f9f7ae58bd"
     }
   ]
 }

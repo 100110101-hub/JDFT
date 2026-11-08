@@ -143,6 +143,7 @@ fn measure(job_input: &JobInput, reps: usize) -> Measured {
 }
 
 #[test]
+#[ignore = "slow: 端到端 CPU vs GPU SCF 重测（诚实 SCF 之后单跑 >2 min），时序/能量重测而非正确性；run with -Slow"]
 fn a1_a2_pbe_scf_cpu_vs_gpu_end_to_end() {
     const WARMUP: usize = 1;
     const REPS: usize = 3;
@@ -204,6 +205,7 @@ fn a1_a2_pbe_scf_cpu_vs_gpu_end_to_end() {
 }
 
 #[test]
+#[ignore = "slow: 端到端 CPU vs GPU SCF 重测（诚实 SCF 之后单跑 >2 min），时序/能量重测而非正确性；run with -Slow"]
 fn a2b_small_systems_do_not_win_on_the_device_path() {
     // 「GPU 也可能更慢」必须自己量出来、自己报出来：小体系上每步 XC 只有
     // `O(n_points·n²)` 这么点活（H2/STO-3G 的 n = 2、网格 29 400 点），而设备侧有

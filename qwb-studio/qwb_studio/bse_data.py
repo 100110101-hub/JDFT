@@ -224,8 +224,12 @@ def transcribe_ecp(spec: dict, data: dict) -> str:
     """BSE 的 ECP JSON → K1 `ecp` YAML 文本（不含 `sha256`）。
 
     约定：**局域通道 = 导出里最大的 `l`**（EMSL/Stuttgart 的通行约定），其余 `l` 是投影；
-    `r_power_convention` 固定写 `"r^n"`（BSE 的 `r_exponents` 就是这个约定，
-    Stuttgart 原始表的 `r^(n-2)` 差 2 次，§8.2 要求显式声明）。
+    `r_power_convention` 固定写 `"r^(n-2)"` —— BSE 的 `r_exponents` 值 `n` 对应的算符项
+    是 `c r^(n-2) e^(-ζr²)`（BSE 自己的 CRYSTAL 写出器就做 `rexp - 2` 并注明"其它格式带
+    `r^-2` 前因子"），而不是 `r^n`。这个差别正好是 2026-11 修掉的 l 通道缺陷：把 BSE 的
+    幂次当 `r^n` 用会把每个 ECP 项整体抬 `r²`，局域 `-Z_core/r` 变成 `-Z_core·r`，
+    LANL2DZ 的 Zn 3d 于是几乎感觉不到 ECP。内部约定是 `r^n`，加载器
+    （`qwb_registry::ecp::Ecp::normalise`）负责减 2。
     """
     symbol = spec["element"]
     z = atomic_number(symbol)
@@ -276,7 +280,7 @@ def transcribe_ecp(spec: dict, data: dict) -> str:
     add(f"element: {symbol}")
     add(f"n_core_electrons: {n_core}")
     add(f"z_eff: {float(z - n_core)}")
-    add('r_power_convention: "r^n"')
+    add('r_power_convention: "r^(n-2)"')
     add("local_part:")
     add(f'  id: "l={local_l} (BSE local channel: the highest l in the export)"')
     add("  terms:")

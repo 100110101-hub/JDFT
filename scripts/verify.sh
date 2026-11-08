@@ -144,6 +144,8 @@ step "core: test" bash -c '
         exit $?
     fi
     cat > expected-slow.log <<EOF
+    qwb-engine::ex03_scf_gpu_xc a1_a2_pbe_scf_cpu_vs_gpu_end_to_end
+    qwb-engine::ex03_scf_gpu_xc a2b_small_systems_do_not_win_on_the_device_path
 qwb-engine::f01_hessian_water water_has_three_real_vibrational_modes
 qwb-engine::f02_frequencies h2o_scaled_harmonic_frequencies_match_experiment
 qwb-engine::f02_ir water_has_three_active_modes_with_expected_ordering

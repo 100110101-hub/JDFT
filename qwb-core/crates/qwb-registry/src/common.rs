@@ -95,6 +95,14 @@ pub trait DataCommon {
     /// 文件内声明的 sha256（工具生成，可能尚未生成）。
     fn declared_sha256(&self) -> Option<&str>;
 
+    /// 加载时的**归一化钩子**：把数据里"同一件事的两种写法"转成内部唯一的形态。
+    ///
+    /// 加载器（`loader::load_all`）在 `check(&value)` **之前**调用它，所以
+    /// `check_structure` 看到的一定是归一后的形态；默认实现什么也不做（多数数据类别
+    /// 没有这个问题）。目前唯一的实现是 [`crate::ecp::Ecp::normalise`]
+    /// （表格的 `r^(n-2)` 约定 → 内部 `r^n`）。
+    fn normalise(&mut self) {}
+
     /// G2 数据门禁的通用部分：citation 非空且每项完整、license 完整、版本/时间非空。
     ///
     /// 返回人类可读的问题列表；空 `Vec` 表示通过。

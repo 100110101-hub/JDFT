@@ -7,7 +7,7 @@
     `QWB_BSE_FIXTURES` 指向它时完全不联网。
 
 本文件不复制任何转录规则：断言的对象是 `bse_data` 的**行为**（哪些 region 能过、
-局域通道取哪个 l、`r^n` 约定、摘要是否与钉相等）。
+局域通道取哪个 l、`r^(n-2)` 约定、摘要是否与钉相等）。
 """
 
 from __future__ import annotations
@@ -191,7 +191,7 @@ def test_transcribe_ecp_local_channel_is_highest_l():
     assert "element: Cu" in text
     assert "n_core_electrons: 10" in text
     assert "z_eff: 19.0" in text
-    assert 'r_power_convention: "r^n"' in text
+    assert 'r_power_convention: "r^(n-2)"' in text
     # 局域通道是 l=2（最高 l），l=0 是投影
     assert 'l=2 (BSE local channel' in text
     assert "- l: 0" in text

@@ -271,11 +271,15 @@ fn ecp_matches_the_bse_export() {
         );
         ecp.z_eff_consistent().expect("z_eff 必须自洽");
 
-        // §8.2 的陷阱必须在数据里显式声明；BSE 的 r_exponents 就是 `r^n`。
+        // §8.2 的陷阱必须在数据里显式声明。BSE 的 `r_exponents` 是 **`r^(n-2)`** 约定
+        // （不是 `r^n`）：BSE 自己的 CRYSTAL 写出器在写"完整幂次"时做 `rexp - 2`，并注明
+        // 其它格式带 `r^-2` 前因子；LANL2DZ 的局域通道正好印证（Zn 的 `n=1` 系数 -18.0
+        // == `n_core`，也就是 `-Z_core/r` 那一项）。2026-11 之前这里断言的是 `Rn`，
+        // 那个错误声明让每个 ECP 项整体抬了 `r²`（ZnO 因此高约 20 Ha）。
         assert_eq!(
             ecp.r_power_convention,
-            RPowerConvention::Rn,
-            "{name}: BSE 的 r_exponents 是 r^n 约定"
+            RPowerConvention::RnMinus2,
+            "{name}: BSE 的 r_exponents 是 r^(n-2) 约定"
         );
 
         let channels = bse_channels(entry);
@@ -316,6 +320,47 @@ fn z_eff_and_n_core_use_the_corrected_t5_numbers() {
     assert_eq!((cu.n_core_electrons, cu.z_eff), (10, 19.0));
     let zn = load_ecp("lanl2dz-zn");
     assert_eq!((zn.n_core_electrons, zn.z_eff), (18, 12.0));
+}
+
+/// 加载器必须把表格的 `r^(n-2)` 约定归一成内部的 `r^n`（每一项幂次 **-2**）。
+///
+/// 这条钉的是缺陷本身：数据声明了 `r^(n-2)`、消费方按 `r^n` 用，两者之间**必须**有一次
+/// 减 2。2026-11 之前这次转换根本不存在（`RPowerConvention` 只是个装饰字段），于是每个
+/// ECP 项被整体抬 `r²`，Zn 的 `-18/r` 变成 `-18 r`。
+#[test]
+fn the_loader_normalises_r_powers_to_the_internal_rn_convention() {
+    let registry = Registry::open(repo_root().join("qwb-data")).expect("qwb-data");
+    for (name, raw_exponent, expected_power) in [
+        // BSE 的局域通道第一项：`n=1`（`-18.0 r^(1-2)`）→ 内部 `r^-1`。
+        ("lanl2dz-zn", 386.737966, (-18.0, -1)),
+        ("lanl2dz-cu", 511.9951763, (-10.0, -1)),
+    ] {
+        let loaded = registry.get_ecp(name).expect(name);
+        assert_eq!(
+            loaded.r_power_convention,
+            RPowerConvention::Rn,
+            "{name}: 加载之后内部约定必须是 r^n（归一幂等的标志）"
+        );
+        let term = loaded
+            .local_part
+            .terms
+            .iter()
+            .find(|term| (term.exponent - raw_exponent).abs() < 1e-9)
+            .unwrap_or_else(|| panic!("{name}: 局域通道里没有 exponent = {raw_exponent} 的项"));
+        assert_eq!(
+            (term.coefficient, term.power),
+            expected_power,
+            "{name}: `r^(n-2)` 的 n=1 项归一之后必须是 `r^-1`（系数不变）"
+        );
+        // 文件里的原始写法仍然是 BSE 的约定（`load_ecp` 直接 serde）。两条路径读同一份
+        // 文件、给出不同形态，这正是"归一在加载器里做一次"的意思。
+        let raw = load_ecp(name);
+        assert_eq!(raw.r_power_convention, RPowerConvention::RnMinus2);
+        assert!(
+            raw.local_part.terms.iter().all(|term| term.power >= 0),
+            "{name}: 文件里的原始幂次按 BSE 约定应 >= 0"
+        );
+    }
 }
 
 #[test]

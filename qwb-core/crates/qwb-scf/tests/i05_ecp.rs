@@ -144,9 +144,17 @@ fn copper_d_channel_is_nonzero_and_matches_the_analytic_value() {
     let molecule = Molecule::new(vec![atom("Cu", [0.0, 0.0, 0.0])], 0, 2);
     let basis = basis_for(&registry, &["Cu"], &molecule);
     let mut operator = operator(&registry, "lanl2dz-cu", &molecule);
+    // Cu 局域通道的第一项是 `-10.0 r^-1`：BSE 里写 `r^(n-2)`（`n = 1`），也就是
+    // `-Z_core/r`（Cu 的 `n_core = 10`）。**内部约定是 `r^n`**，加载器已经把每一项
+    // 的幂次减了 2，所以这里看到的幂次是 **-1** —— 2026-11 之前看到的是 `+1`
+    // （那次缺陷里整项被抬了 `r²`，`-10/r` 变成 `-10 r`）。
     assert!(
-        operator.local.iter().any(|term| term.power == 1),
-        "Cu 的局域通道应含 r 的一次项（BSE 里的系数是 -10）"
+        operator
+            .local
+            .iter()
+            .any(|term| term.power == -1 && (term.coefficient + 10.0).abs() < 1.0e-9),
+        "Cu 的局域通道应含 `-10.0 r^-1`（= -Z_core/r）：{:?}",
+        operator.local
     );
 
     // 把投影通道拿掉 ⇒ 只剩 V_local ⇒ 两条路径都要给出同一个矩阵。

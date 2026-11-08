@@ -10,13 +10,31 @@ use crate::elements;
 ///
 /// Stuttgart 系的表格常用 `r^(n-2)`，其他来源常用 `r^n`。字符差异会直接改变
 /// 非局域项的量级，所以必须在数据里声明，由加载器统一转成内部约定。
+///
+/// **内部约定是 `r^n`**（`qwb_scf::ecp` 把 `power` 直接当 `r` 的指数用），所以
+/// `r^(n-2)` 的数据在 [`Ecp::normalise`] 里把每一项的 `power` 减 2 —— 归一后的
+/// 内部幂次因此落在 `[-2, 2]`（`r^-2 … r^2`），这正是 `qwb_scf::ecp::radial_power`
+/// 显式覆盖的范围。
+///
+/// # 为什么 BSE 属于 `r^(n-2)`
+///
+/// BSE 的 `r_exponents` 值 `n` 对应的算符项是 `c r^(n-2) e^(-ζ r^2)`：
+///
+/// * BSE 自己的 CRYSTAL 写出器在写"完整幂次"时做 `rexp - 2`，并注明
+///   "r exponent in CRYSTAL format is the full one: it does NOT have the r^{-2}
+///   prefactor as in other formats"（`basis_set_exchange/writers/crystal.py`）；
+/// * libcint/PySCF 的 ECP 块同样把 `r_exponents` 当成 `n` 去算 `r^(n-2)`
+///   （实测：单个 Gauss 项 `rorder = 1` 给出的积分等于 `c r^-1 e^(-ζr^2)` 的解析值）。
+///
+/// LANL2DZ 的局域通道正好印证：Zn 的 `-18.0`（= `n_core`）落在 `r^(1-2) = r^-1` 上，
+/// 也就是 `-Z_core/r` 那一项。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[non_exhaustive]
 pub enum RPowerConvention {
-    /// 表格里写的是 `r^n`。
+    /// 表格里写的是 `r^n`（= 内部约定，加载后一定是它）。
     #[serde(rename = "r^n")]
     Rn,
-    /// 表格里写的是 `r^(n-2)`。
+    /// 表格里写的是 `r^(n-2)`（BSE 的 `r_exponents` 就是这一种）。
     #[serde(rename = "r^(n-2)")]
     RnMinus2,
 }
@@ -46,6 +64,14 @@ pub struct EcpLocalPart {
 }
 
 /// 非局域部分（按角量子数 `l` 分组）。
+///
+/// **语义（§8.2 的第二个陷阱）**：这些块是**相对局域通道的差分** `ΔV_l = V_l − V_L`
+/// （`L` = 导出里最大的 `l`，见 [`Ecp::local_part`]），不是绝对 `V_l`。EMSL/BSE 的
+/// `ecp_potentials` 就是这么给的，PySCF/libcint 也按这个语义算：实测
+/// `ECPscalar == V_local + Σ_l V_l P_l`（差 `8.9e-16`，见
+/// `qwb-core/crates/qwb-scf/tests/i05_ecp_oracle.rs`）。所以算子
+/// `V_ECP = V_L + Σ_{l<L} ΔV_l P_l`，通道那一项**不许**再减一次 `V_L` ——
+/// 2026-11 之前就是这么错的，Zn 的 d 通道因此只剩 1/18。
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 #[non_exhaustive]
@@ -93,9 +119,33 @@ pub struct Ecp {
     pub nonlocal_parts: Vec<EcpNonlocalPart>,
 }
 
-impl_data_common!(Ecp);
+impl_data_common!(Ecp, normalise: Ecp::normalise);
 
 impl Ecp {
+    /// 把 `r` 幂次归一成**内部约定** `r^n`（加载器在 `check_structure` 之前调用）。
+    ///
+    /// `r^(n-2)` 的数据（BSE 导出的 ECP 就是这一种，见 [`RPowerConvention`]）每一项的
+    /// `power` 减 2，然后把 `r_power_convention` 改写成 [`RPowerConvention::Rn`]，所以
+    /// 归一之后的数据只有一种形态，消费方不需要再分支。幂等：已经是 `r^n` 的数据原样返回。
+    ///
+    /// 归一后的内部幂次是 `[-2, 2]`（局域/投影通道里的 `r^-2`、`r^-1` 项），
+    /// `qwb_scf::ecp` 的两条实现都按 `r^n` 用它们。
+    pub fn normalise(&mut self) {
+        let offset = match self.r_power_convention {
+            RPowerConvention::Rn => return,
+            RPowerConvention::RnMinus2 => -2,
+        };
+        for term in &mut self.local_part.terms {
+            term.power += offset;
+        }
+        for part in &mut self.nonlocal_parts {
+            for term in &mut part.terms {
+                term.power += offset;
+            }
+        }
+        self.r_power_convention = RPowerConvention::Rn;
+    }
+
     /// 校验 `z_eff == Z - n_core` 是否与元素表一致（T5 断言的前置条件）。
     ///
     /// # Errors
@@ -180,8 +230,16 @@ fn check_terms(issues: &mut Vec<String>, at: &str, terms: &[EcpTerm]) {
         if !term.coefficient.is_finite() {
             issues.push(format!("{at}.terms[{j}].coefficient must be finite"));
         }
-        if term.power < 0 {
-            issues.push(format!("{at}.terms[{j}].power must be >= 0"));
+        // 原始文件里是表格的幂次（`r^n` 或 `r^(n-2)`，两者都有 `power >= 0`）；归一之后
+        // 是内部 `r^n`，BSE 那一套会落成 `r^-2 … r^0`。两条路径共用一个下界 −2：
+        // `r^(-3)` 会让 `∫ r^m e^(-γr²)` 在原点发散（见 `qwb_scf::ecp::radial_integral`），
+        // 所以比 −2 更负的幂次是数据错误。
+        if term.power < -2 {
+            issues.push(format!(
+                "{at}.terms[{j}].power = {} must be >= -2 (r^-2 is the most singular \
+                 integrable factor for a Gaussian ECP)",
+                term.power
+            ));
         }
     }
 }

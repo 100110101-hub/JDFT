@@ -1,0 +1,12 @@
+# T5：CuH / LANL2DZ（Cu 10 芯 ECP，z_eff = 19）/ PBE —— **PySCF 2.14.0 的复算值**
+#
+# 生成器：scripts/pyscf_cuh_lanl2dz_reference.py（`--check` 用同一份代码重算并逐字比对）。
+# 几何 r(Cu–H) = 1.46 Å，Cu 在原点、H 在 +z；泛函 PBE；`grids.level = 1`（对应本项目的
+# grid-coarse）与 `2`（grid-normal）。RKS（Cu 的 z_eff = 19 加 H 的 1 个电子 = 20，闭壳层单重态，与 Molecule::new(..., 0, 1) 的 multiplicity 一致）。
+#
+# 为什么需要这份 CSV：t5_ecp.rs 的两个 CuH 能量是**回归钉**（internal-independent-path），
+# 2026-11 修掉 ECP 的 `r` 幂次约定与通道语义之后它们整体移动，重新钉必须用**外部标尺**
+# （PySCF）而不是本项目自己的输出。
+quantity,value_hartree,tolerance_hartree,source,source_doi,source_url
+cuh_total_energy_grid_coarse,-196.6933563155,0.005,pyscf-2.14.0-pbe,10.1063/5.0006074,https://github.com/pyscf/pyscf
+cuh_total_energy_grid_normal,-196.6933577633,0.005,pyscf-2.14.0-pbe,10.1063/5.0006074,https://github.com/pyscf/pyscf

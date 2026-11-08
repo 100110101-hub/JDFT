@@ -2,7 +2,7 @@
 """把 BSE 导出的 **ECP 参数**转成 K1 `ecp` YAML —— **薄封装**。
 
 project.md §8.1/§8.2 允许「BSE 网站导出 + 一手文献核对」。转录规则（局域通道 =
-导出里最大的 `l`、`r^n` 约定、`z_eff` 自洽）只在 `qwb-studio/qwb_studio/bse_data.py`
+导出里最大的 `l`、`r^(n-2)` 约定、`z_eff` 自洽）只在 `qwb-studio/qwb_studio/bse_data.py`
 里有一份实现：规则一旦有两份就一定会漂移，而漂移的后果是**静默错数**。
 
 日常用途：取回数据用 `python -m qwb_studio.datafetch --all`（或 `qwb data install`），

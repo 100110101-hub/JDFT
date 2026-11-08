@@ -538,7 +538,7 @@ where
                 )));
             }
         };
-        let value: T = serde_yaml::from_slice(&bytes).map_err(|err| {
+        let mut value: T = serde_yaml::from_slice(&bytes).map_err(|err| {
             EngineError::Data(format!(
                 "{domain}/{} ({}): {err}",
                 entry.name,
@@ -555,6 +555,10 @@ where
                 entry.name
             )));
         }
+
+        // 布局归一（现在只有 ECP 的 `r` 幂次约定：表格的 `r^(n-2)` → 内部 `r^n`）。
+        // 必须在 `check` 之前：`check_structure` 校验的是内部形态。
+        value.normalise();
 
         let issues = check(&value);
         if !issues.is_empty() {

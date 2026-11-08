@@ -25,8 +25,8 @@
 | `qwb-data/dispersion/d3bj.yaml` | 1.0.0 | LGPL-3.0-or-later | true | true | `85607c132bef00c4` |
 | `qwb-data/dispersion/d3zero.yaml` | 1.0.0 | LGPL-3.0-or-later | true | true | `28d0ad0091ecb9bb` |
 | `qwb-data/dispersion/d4.yaml` | 1.0.0 | LGPL-3.0-or-later | true | true | `150676400ae138f5` |
-| `qwb-data/ecp/lanl2dz-cu.yaml` | 1.0.0 | NOASSERTION | false | false | `a44df71fd56eea38` |
-| `qwb-data/ecp/lanl2dz-zn.yaml` | 1.0.0 | NOASSERTION | false | false | `55b3391680aaad1d` |
+| `qwb-data/ecp/lanl2dz-cu.yaml` | 1.0.0 | NOASSERTION | false | false | `c65d414eb498dee8` |
+| `qwb-data/ecp/lanl2dz-zn.yaml` | 1.0.0 | NOASSERTION | false | false | `9f5169f805cd33b5` |
 | `qwb-data/functional/b88.yaml` | 1.0.0 | Apache-2.0 | true | true | `efa0fa7b9f8aa98d` |
 | `qwb-data/functional/m06-2x.yaml` | 1.0.0 | Apache-2.0 | true | true | `e277f61ab597f848` |
 | `qwb-data/functional/m06-l.yaml` | 1.0.0 | Apache-2.0 | true | true | `6894c5ebbee3b960` |
