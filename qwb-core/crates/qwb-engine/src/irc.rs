@@ -174,6 +174,13 @@ pub fn walk(
         .zip(&weights)
         .map(|(value, weight)| value / weight)
         .collect();
+    // 方向由**调用方**给定（`sign`：forward = +v、reverse = −v），这里**只**用 ±v 两个探测点
+    // 验证"起点的确是一阶鞍点"，不再用它们来选方向。选方向是错的：一阶鞍点的**两侧**都降能
+    // （这就是虚频的定义），「哪边更低就走哪边」于是永远选到同一侧，forward 与 reverse
+    // 逐点相同 —— NH3 这种两端等价（镜像）的反应看不出来，HCN↔HNC 这种两端差 19 kcal/mol
+    // 的反应一眼就露（RP-01 的实测就是在这里发现的，见 `tests/rp02_irc.rs` 的
+    // `the_two_ends_of_an_unsymmetrical_irc_reach_different_minima`）。
+    let direction = if sign >= 0.0 { 1.0 } else { -1.0 };
     let probe = step_size * 0.5;
     let (base_energy, base_gradient) = analytic_energy_and_gradient(registry, saddle, options)?;
     let mut points = vec![IrcPoint::new(
@@ -181,10 +188,9 @@ pub fn walk(
         base_energy,
         max_abs(&flatten(&base_gradient)),
     )];
-    let mut direction = if sign >= 0.0 { 1.0 } else { -1.0 };
     {
-        let plus = displace(saddle, &cartesian_mode, direction * probe);
-        let minus = displace(saddle, &cartesian_mode, -direction * probe);
+        let plus = displace(saddle, &cartesian_mode, probe);
+        let minus = displace(saddle, &cartesian_mode, -probe);
         let plus_energy = analytic_energy_and_gradient(registry, &plus, options)?.0;
         let minus_energy = analytic_energy_and_gradient(registry, &minus, options)?.0;
         if plus_energy > base_energy && minus_energy > base_energy {
@@ -193,9 +199,6 @@ pub fn walk(
                  first-order saddle (run `qwb ts` first)"
                     .to_string(),
             ));
-        }
-        if minus_energy < plus_energy {
-            direction = -direction;
         }
     }
     // 第一步必须沿虚频本征向量**离开鞍点**：鞍点上梯度本来就近零，直接按梯度判据会立刻

@@ -38,6 +38,10 @@ KNOWN_SOURCES = {
     # RS-04（第三条判据）：CH4 / CH3OH 的 ¹H/¹³C 位移是**实验**值，来自
     # Organometallics 29, 2176 (2010) 的支持信息（不是 PySCF 算的，也不是"常识"）。
     (reference_sources.FULMER_DOI, reference_sources.FULMER_URL),
+    # RP-01：三个反应的文献势垒 —— 三篇论文各自的理论级别与零点能口径写在 CSV 里。
+    (reference_sources.RP01_HCN_DOI, reference_sources.RP01_HCN_URL),
+    (reference_sources.RP01_MECN_DOI, reference_sources.RP01_MECN_URL),
+    (reference_sources.RP01_H2CO_DOI, reference_sources.RP01_H2CO_URL),
 }
 
 

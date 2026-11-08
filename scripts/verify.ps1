@@ -182,6 +182,9 @@ Step -Name 'core: test' -Dir 'qwb-core' -Body {
         'qwb-engine::g02_optimize_water h2o_optimises_to_a_stationary_point'
         'qwb-engine::g03_three_molecules three_molecules_converge'
         'qwb-engine::rs04_nmr_shifts_experiment measured_shifts_against_the_pinned_experimental_values'
+        # RP-01 的实测在 HCN↔HNC 上抓到的 IRC 缺陷（`walk` 把两端走成同一条路）的回归钉：
+        # 不对称反应的两端必须落到两个不同的极小点（差 19.3 kcal/mol）。HF/STO-3G，本机 89 s。
+        'qwb-engine::rp02_irc the_two_ends_of_an_unsymmetrical_irc_reach_different_minima'
         'qwb-engine::t03_water_geometry water_geometry_matches_experiment'
         'qwb-engine::t3_water_b3lyp pbe0_def2svp_water_geometry_matches_experiment'
         'qwb-engine::t3_water_geometry pbe_def2tzvp_water_geometry_matches_experiment'

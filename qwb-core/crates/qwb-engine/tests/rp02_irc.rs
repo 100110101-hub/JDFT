@@ -245,3 +245,98 @@ fn a_single_direction_only_walks_that_side() {
     );
     block.validate().expect("单向块也自洽");
 }
+
+/// **两端必须走到两个不同的极小点** —— HCN ↔ HNC 是这条判据的尺子。
+///
+/// 这个用例是 RP-01 的实测**抓出来的缺陷**的回归钉（第 397 轮）：`irc::walk` 原来用
+/// 「沿 ±v 各探一步、取能量更低的那边」来决定起始方向，而**一阶鞍点的两侧都降能**（这就是
+/// 虚频的定义）—— 于是 forward 与 reverse 无论传进来的 `sign` 是什么，都走同一条路，
+/// 两端落在同一个极小点上。NH3 的伞形反转两端是**镜像**（同一个能量、同一套指纹），
+/// 那条验收看不出任何异常；HCN ↔ HNC 两端差 19.3 kcal/mol，一眼就露。
+///
+/// 几何是 `qwb ts` 在 HF/STO-3G 上从文献鞍点几何收敛出来的（`E = -91.5648510258 Ha`、
+/// 虚频 −1248.5 cm⁻¹、2 步收敛、max|g| = 1.12e-4）。两个极小点是本项目优化器在同层级
+/// 上的输出：HCN `E = -91.6752089899 Ha`（2 步）、HNC `E = -91.6444372254 Ha`（4 步）。
+/// 独立实现（PySCF 2.14.0）在同一层级给出同样的鞍点：`E = -91.5648510208 Ha`、
+/// 虚频 −1248.37 cm⁻¹ —— 两套实现互差 5e-9 Ha / 0.17 cm⁻¹。
+#[test]
+#[ignore = "slow: HCN↔HNC 的双向 IRC（HF/STO-3G / grid-coarse，本机实测约 150 s）；run with -Slow"]
+fn the_two_ends_of_an_unsymmetrical_irc_reach_different_minima() {
+    // `qwb ts` 的鞍点输出（`artifacts/optimized.xyz` 逐字抄下来）。
+    let saddle = Molecule::new(
+        vec![
+            Atom::new("C", [0.002_070_926_774, 0.0, -0.017_611_583_955]),
+            Atom::new("N", [-0.003_712_698_394, 0.0, 1.203_676_105_275]),
+            Atom::new("H", [1.148_414_368_756, 0.0, 0.343_830_922_593]),
+        ],
+        0,
+        1,
+    );
+    let input = JobInput::new(
+        saddle,
+        "sto-3g",
+        "hf",
+        GridLevel::Coarse,
+        "vacuum",
+        JobType::Irc,
+        TaskOptions::default().with_irc(
+            IrcOptions::new()
+                .with_max_steps(80)
+                .with_step_size(0.20)
+                .with_direction(IrcDirection::Both),
+        ),
+    );
+    let started = std::time::Instant::now();
+    let block = backend()
+        .run(&input, &NullReporter)
+        .expect("HCN→HNC 鞍点的双向 IRC 应跑通")
+        .irc_result
+        .expect("irc_result");
+    block.validate().expect("块自洽");
+
+    let forward = block.forward.expect("forward 端");
+    let reverse = block.reverse.expect("reverse 端");
+    for (label, end) in [("forward", &forward), ("reverse", &reverse)] {
+        assert!(end.monotone, "{label} 端能量不单调");
+        assert!(
+            end.points.len() >= 5,
+            "{label} 端只有 {} 点",
+            end.points.len()
+        );
+    }
+
+    // 两个极小点在同一层级上的能量（上面的文档注释里写明了它们怎么来的）。
+    let hcn = -91.675_208_989_9_f64;
+    let hnc = -91.644_437_225_4_f64;
+    let forward_energy = forward.minimum_energy_hartree;
+    let reverse_energy = reverse.minimum_energy_hartree;
+
+    // ① 两端**不是**同一个极小点：HNC − HCN = 19.31 kcal/mol（0.03077 Ha）。
+    let gap = (forward_energy - reverse_energy).abs();
+    assert!(
+        gap > 0.02,
+        "两端能量差 {gap:.6} Ha 太小 —— forward 与 reverse 大概走了同一条路（这个用例正是\
+         为了钉住那条缺陷）"
+    );
+    // ② 一端是 HCN、另一端是 HNC（各 1 mHa 之内）。
+    let mut ends = [forward_energy, reverse_energy];
+    ends.sort_by(|a, b| a.partial_cmp(b).expect("finite"));
+    assert!(
+        (ends[0] - hcn).abs() < 1.0e-3,
+        "低的一端 {:.10} Ha 不是 HCN 的 {hcn:.10}",
+        ends[0]
+    );
+    assert!(
+        (ends[1] - hnc).abs() < 1.0e-3,
+        "高的一端 {:.10} Ha 不是 HNC 的 {hnc:.10}",
+        ends[1]
+    );
+    println!(
+        "HCN↔HNC 双向 IRC：{} + {} 点，两端 E = {forward_energy:.10} / {reverse_energy:.10} Ha\
+         （差 {:.4} kcal/mol），{:.1} s",
+        forward.points.len(),
+        reverse.points.len(),
+        gap * 627.5094740631,
+        started.elapsed().as_secs_f64()
+    );
+}

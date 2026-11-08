@@ -37,6 +37,12 @@ __all__ = [
     "S22_URL",
     "FULMER_DOI",
     "FULMER_URL",
+    "RP01_HCN_DOI",
+    "RP01_HCN_URL",
+    "RP01_H2CO_DOI",
+    "RP01_H2CO_URL",
+    "RP01_MECN_DOI",
+    "RP01_MECN_URL",
     "PYSCF_DOI",
     "PYSCF_URL",
     "SOURCE_COLUMNS",
@@ -95,6 +101,23 @@ FULMER_URL = (
     "https://authors.library.caltech.edu/records/q3m5b-fec90/files/"
     "om100106e_si_001.pdf?download=1"
 )
+
+#: RP-01（势垒 vs 文献）：三条**外部**来源，一条反应一条。这三个 DOI 都用 Crossref
+#: `api.crossref.org/works/<doi>` 核对过题名、卷、页、年份与摘要原文（2026-11-15）。
+#:
+#: 1. HCN ↔ HNC：Makhnev et al., J. Phys. Chem. A 122, 1326–1343 (2018)。值 16 809.4 cm⁻¹
+#:    （ic-MRCI/aug-cc-pCV6Z + BODC + 标量相对论，**不含** ZPE）。URL 指 UCL Discovery 上
+#:    那份**接受稿 PDF** —— 全文可读，Table 12/13 的分解就是从那上面读的。
+RP01_HCN_DOI = "10.1021/acs.jpca.7b10483"
+RP01_HCN_URL = "https://discovery.ucl.ac.uk/id/eprint/10047737/1/hcn27.pdf"
+#: 2. CH₃NC → CH₃CN：Redmon, Purvis, Bartlett, J. Chem. Phys. 69, 5386–5392 (1978)。
+#:    值 "∼41 kcal/mol"（SDQ–MBPT(4)/DZP，ZPE 未说明）。正文在付费墙后，只读到摘要。
+RP01_MECN_DOI = "10.1063/1.436568"
+RP01_MECN_URL = "https://doi.org/10.1063/1.436568"
+#: 3. H₂CO → H₂ + CO：Feller, Dupuis, Garrett, J. Chem. Phys. 113, 218–226 (2000)。
+#:    值 81.9 ± 0.3 kcal/mol（**含** ZPE，来源原话）。正文在付费墙后，只读到摘要。
+RP01_H2CO_DOI = "10.1063/1.481788"
+RP01_H2CO_URL = "https://doi.org/10.1063/1.481788"
 
 #: 每一行都必须带的两个来源列（加在最后一列之后，位置固定）。
 SOURCE_COLUMNS = ("source_doi", "source_url")
@@ -220,6 +243,13 @@ GENERATORS = {
     # 2026-11 实测它们互差 3e-14 而同时与 PySCF 差 8 个量级以上。
     "qwb-core/crates/qwb-scf/tests/reference/ecp_lanl2dz_channels.csv":
         "scripts/pyscf_ecp_channels_reference.py",
+    # RP-01：三个反应的**文献势垒**（HCN↔HNC / CH₃NC↔CH₃CN / H₂CO→H₂+CO）。这一份不是算
+    # 出来的，是逐字抄自三篇论文的摘要与表格（所以 `--check` 证明的是"CSV 与那几行常量逐字
+    # 一致"，不是"能被重算"）：生成器里那几行常量是唯一真相源。每条都带 `zpe_included` 与
+    # `level_of_theory`，因为"差 1.5 kcal/mol"这句话少了这两栏就不能比。出处见
+    # `RP01_HCN_DOI` / `RP01_MECN_DOI` / `RP01_H2CO_DOI`。
+    "qwb-core/crates/qwb-engine/tests/reference/rp01_literature_barriers.csv":
+        "scripts/gen_rp01_literature.py",
 }
 
 FAMILIES = tuple(GENERATORS)
