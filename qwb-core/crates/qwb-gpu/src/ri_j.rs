@@ -52,7 +52,16 @@ fn gemm_or_cpu(
 ) -> Result<(Vec<f64>, bool, Option<String>), String> {
     match gemm_f64(m, k, n, a, b) {
         Ok(values) => Ok((values, true, None)),
+        // 第 428 轮：**显存不足也必须回退**。原先只把 `Unavailable` 翻成 CPU，
+        // 于是 `InsufficientMemory` 会一路变成 `Err`，而调用方（含测试）用 `expect()`
+        // 就变成 panic —— 与「没有 GPU 时不得红」「调用方据此退回 CPU」这两条契约
+        // 都矛盾。两张卡都不缺显存时这条分支从不被走到，所以它一直是隐患而不是故障。
         Err(GpuError::Unavailable(why)) => Ok((naive_matmul(m, k, n, a, b), false, Some(why))),
+        Err(GpuError::InsufficientMemory { .. }) => Ok((
+            naive_matmul(m, k, n, a, b),
+            false,
+            Some("显存预算不够，已退回 CPU".to_string()),
+        )),
         Err(other) => Err(format!("gemm 失败：{other}")),
     }
 }

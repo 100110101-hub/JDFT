@@ -197,6 +197,9 @@ Step -Name 'core: test' -Dir 'qwb-core' -Body {
         'qwb-engine::t5_ecp zno_equilibrium_is_at_one_point_seven_seven'
         'qwb-engine::t5_ecp zno_lanl2dz_single_point_matches_the_reference'
         'qwb-engine::t6_b3lyp_gradient b3lyp_gradient_error_per_grid_level'
+        # IN-04 的 CUDA 侧补充测量（`qwb-scf` 拿不到 `qwb_gpu::ri_j`，所以放在 `qwb-gpu`）：
+        # 水 + 苯的 RI-J 全管线 vs 4 索引 J，热身 1 次、重复 2–3 次，本机约 10 min。
+        'qwb-gpu::ex03_ri_j_pipeline_measurement ri_j_pipeline_cpu_versus_gpu_measurement'
         'qwb-integrals::h05_second_derivatives cost_ratio_second_over_first_derivative'
         'qwb-scf cphf_hessian::tests::cost_measurement_def2svp'
         'qwb-scf::in04_ri_j_measurement ri_j_versus_exact_j'

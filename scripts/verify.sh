@@ -9,10 +9,8 @@
 #
 # 退出码：0 = 全绿；1 = 至少一项失败。
 set -uo pipefail
-
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$root"
-
 # EX-02 慢道开关：默认 0 = 只跑快道。与 verify.ps1 的 -Slow 是同一个开关。
 slow=0
 for arg in "$@"; do
@@ -24,11 +22,9 @@ for arg in "$@"; do
             ;;
     esac
 done
-
 pass=0
 fail=0
 names_failed=""
-
 step_times=""
 step() { # step <name> <cmd...>
     local name="$1"
@@ -50,9 +46,7 @@ step() { # step <name> <cmd...>
         printf '\n!! FAILED: %s (exit %d)\n' "$name" "$rc"
     fi
 }
-
 echo "QWB verify · 仓库 $root"
-
 # ---- 工具定位 ----
 # WSL 下 Windows 的 cargo 是 cargo.exe（bash 不会自动补 .exe），所以要显式兜底。
 CARGO="${CARGO:-}"
@@ -63,14 +57,12 @@ if [ -z "$CARGO" ]; then
     echo "!! FAILED: 找不到 cargo（Windows 请用 scripts/verify.ps1；Linux/CI 请装 Rust toolchain）"
     exit 1
 fi
-
 PY=""
 if [ -x "$root/.venv/Scripts/python.exe" ]; then
     PY="$root/.venv/Scripts/python.exe" # Windows venv（WSL 下 cwd 会被翻译，故只用相对路径）
 elif command -v python3 >/dev/null 2>&1 && python3 -c 'import mypy' >/dev/null 2>&1; then
     PY="$(command -v python3)"
 fi
-
 # P-01 需要 pydantic v2 + pytest（依赖白名单 §2.4 允许 pydantic；pytest 只在 test extra 里）。
 PY_STUDIO=""
 if [ -x "$root/.venv/Scripts/python.exe" ]; then
@@ -78,7 +70,6 @@ if [ -x "$root/.venv/Scripts/python.exe" ]; then
 elif command -v python3 >/dev/null 2>&1 && python3 -c 'import pydantic, pytest' >/dev/null 2>&1; then
     PY_STUDIO="$(command -v python3)"
 fi
-
 # ---- 门禁脚本 ----
 step "data: DATA_LICENSES.md 与数据一致（D-15）"
 python scripts/gen_data_licenses.py --check
@@ -87,7 +78,6 @@ step "data: 误差预算逐行可核（VF-05）" python scripts/check_error_budg
 # PR-08：USAGE §9.5 的诚实清单与台账一致；再跑 --self-test 证明这条检查抓得住漂移。
 step "docs: USAGE 诚实清单与账本一致（PR-08）" python scripts/check_usage_honest_list.py
 step "docs: 诚实清单检查器自测（PR-08）" python scripts/check_usage_honest_list.py --self-test
-
 # DA-06：色散数据能从上游源码重新生成（容差 0），且能复现官方 s-dftd3 的能量与梯度。
 # 前者读 .d3-upstream 缓存（缺失时取回），后者只读仓库里的参考 CSV，都不需要 WSL。
 step "data: 色散数据与上游逐项一致（DA-06）" "$PY" scripts/gen_d3_params.py --check
@@ -101,20 +91,17 @@ python scripts/check_status.py docs/status-v2.yaml
 step "gate: deps centralized" bash scripts/check_deps_centralized.sh
 step "gate: no unsafe outside allowlist" bash scripts/check_unsafe.sh
 step "gate: rayon determinism" bash scripts/check_rayon_determinism.sh
-
 # ---- 第三方数据（仓库故意不含这些文件，见 qwb-data/README.md）----
 # BSE 导出的基组/ECP **不提交**（再分发条款，project.md §14 #20）：仓库带的是配方
 # （qwb-data/sources.json）与 sha256 钉。后面每一步打开 qwb-data 都需要这些文件，
 # 所以在这里取一次；新 clone 需要网络，取回之后就是纯本地。
 # 等价入口：`qwb data install` / `python scripts/fetch_data.py --all`。
 step "data: 第三方数据就位（缺则取回）" bash -c "python scripts/fetch_data.py --check || python scripts/fetch_data.py --all"
-
 # ---- K2 契约 crate ----
 step "contracts(K2): fmt" bash -c "cd qwb-contracts/engine-api && \"\$0\" fmt --check" "$CARGO"
 step "contracts(K2): clippy -D warnings" bash -c "cd qwb-contracts/engine-api && \"\$0\" clippy --all-targets -- -D warnings" "$CARGO"
 step "contracts(K2): cargo doc" bash -c "cd qwb-contracts/engine-api && RUSTDOCFLAGS='-D warnings' \"\$0\" doc --no-deps" "$CARGO"
 step "contracts(K2): test" bash -c "cd qwb-contracts/engine-api && \"\$0\" test --all-targets" "$CARGO"
-
 # ---- qwb-core ----
 step "core: fmt" bash -c "cd qwb-core && \"\$0\" fmt --all --check" "$CARGO"
 step "core: clippy -D warnings" bash -c "cd qwb-core && \"\$0\" clippy --workspace --all-targets -- -D warnings" "$CARGO"
@@ -144,8 +131,8 @@ step "core: test" bash -c '
         exit $?
     fi
     cat > expected-slow.log <<EOF
-    qwb-engine::ex03_scf_gpu_xc a1_a2_pbe_scf_cpu_vs_gpu_end_to_end
-    qwb-engine::ex03_scf_gpu_xc a2b_small_systems_do_not_win_on_the_device_path
+qwb-engine::ex03_scf_gpu_xc a1_a2_pbe_scf_cpu_vs_gpu_end_to_end
+qwb-engine::ex03_scf_gpu_xc a2b_small_systems_do_not_win_on_the_device_path
 qwb-engine::f01_hessian_water water_has_three_real_vibrational_modes
 qwb-engine::f02_frequencies h2o_scaled_harmonic_frequencies_match_experiment
 qwb-engine::f02_ir water_has_three_active_modes_with_expected_ordering
@@ -168,6 +155,7 @@ qwb-engine::t5_ecp cuh_lanl2dz_grid_normal_is_pinned
 qwb-engine::t5_ecp zno_equilibrium_is_at_one_point_seven_seven
 qwb-engine::t5_ecp zno_lanl2dz_single_point_matches_the_reference
 qwb-engine::t6_b3lyp_gradient b3lyp_gradient_error_per_grid_level
+qwb-gpu::ex03_ri_j_pipeline_measurement ri_j_pipeline_cpu_versus_gpu_measurement
 qwb-integrals::h05_second_derivatives cost_ratio_second_over_first_derivative
 qwb-scf cphf_hessian::tests::cost_measurement_def2svp
 qwb-scf::in04_ri_j_measurement ri_j_versus_exact_j
@@ -212,7 +200,6 @@ step "core: I-00 faer backend" bash -c "cd qwb-core && \"\$0\" test -p qwb-linal
 step "core: cargo deny" bash -c "cd qwb-core && \"\$0\" deny check" "$CARGO"
 step "core: K1 schema freshness" bash -c "cd qwb-core && \"\$0\" run -q -p qwb-registry --bin qwb-gen-schemas -- ../qwb-contracts/schema --check" "$CARGO"
 step "core: G2 data verify" bash -c "cd qwb-core && \"\$0\" run -q -p qwb-cli --bin qwb -- data verify" "$CARGO"
-
 # ---- K6 Python 类型门禁 ----
 # 在桩文件所在目录里跑 mypy：cwd 本身就是模块搜索根，因此不需要 MYPYPATH
 # （MYPYPATH 在 Windows/WSL 之间会变成路径转义的雷区）。
@@ -261,7 +248,6 @@ else
         step "P-02: .qwb fixture freshness" bash -c "\"\$0\" scripts/gen_p02_fixture.py --check" "$PY_STUDIO"
     fi
 fi
-
 printf '\n────────────────────────────────────────\n'
 printf '\nEX-04 最慢五步：\n'
 printf '%s' "$step_times" | sort -rn | head -5 | awk '{printf "  slowest: %7ss  %s\n", $1, substr($0, index($0,$2))}'
