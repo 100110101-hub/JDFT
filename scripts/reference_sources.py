@@ -43,6 +43,8 @@ __all__ = [
     "RP01_H2CO_URL",
     "RP01_MECN_DOI",
     "RP01_MECN_URL",
+    "RAMAN_INTENSITY_DOI",
+    "RAMAN_INTENSITY_URL",
     "PYSCF_DOI",
     "PYSCF_URL",
     "SOURCE_COLUMNS",
@@ -118,6 +120,17 @@ RP01_MECN_URL = "https://doi.org/10.1063/1.436568"
 #:    值 81.9 ± 0.3 kcal/mol（**含** ZPE，来源原话）。正文在付费墙后，只读到摘要。
 RP01_H2CO_DOI = "10.1063/1.481788"
 RP01_H2CO_URL = "https://doi.org/10.1063/1.481788"
+
+#: RS-06（Raman 相对强度 vs 文献）：水（气相）三个基频的**绝对** Raman 强度（Å⁴/amu）。
+#: 正式版 Walter & Moseler, "Ab Initio Wavelength-Dependent Raman Spectra: Placzek
+#: Approximation and Beyond", J. Chem. Theory Comput. 16 (1), 576–586 (2019)，DOI 用
+#: Crossref `api.crossref.org/works/10.1021/acs.jctc.9b00584` 核对过题名、卷 16 / 期 1 /
+#: 页 576–586 / 年份 2019 与两位作者（2026-11-16）。正式版在 ACS 付费墙后，所以 URL 指
+#: 作者自存的 arXiv 全文（`arXiv:1806.03840v2`，13 Jun 2019）—— 数值是从那份 PDF 的
+#: Table 2 逐字读的，转引链（`exp.` 列脚注 f = Stirling, JCP 104, 1254 (1996)）写在 CSV 的
+#: `note` 列与生成脚本里。
+RAMAN_INTENSITY_DOI = "10.1021/acs.jctc.9b00584"
+RAMAN_INTENSITY_URL = "https://arxiv.org/abs/1806.03840"
 
 #: 每一行都必须带的两个来源列（加在最后一列之后，位置固定）。
 SOURCE_COLUMNS = ("source_doi", "source_url")
@@ -256,6 +269,13 @@ GENERATORS = {
     # `RP01_HCN_DOI` / `RP01_MECN_DOI` / `RP01_H2CO_DOI`。
     "qwb-core/crates/qwb-engine/tests/reference/rp01_literature_barriers.csv":
         "scripts/gen_rp01_literature.py",
+    # RS-06（第三条判据的另一半：per-mode 强度 vs **文献**）：水（气相）三个基频的绝对 Raman
+    # 强度（Å⁴/amu，实验值，514.5 nm），逐字读自 Walter & Moseler (JCTC 2019) 的 Table 2
+    # `exp.` 列（arXiv 全文）。CH4 那一半**没有**进这份 CSV：本轮没有找到任何"逐模式、可机读、
+    # 带 DOI"的 CH4 实验强度表（读到的最细的一份是 Hibben 1939 的目视强度 10/2/1，而那本书
+    # 在 Crossref 里没有 DOI）——理由与三条已取回原话写在生成脚本的文件头里。
+    "qwb-core/crates/qwb-engine/tests/reference/raman_bands_experimental.csv":
+        "scripts/gen_raman_bands_experimental.py",
 }
 
 FAMILIES = tuple(GENERATORS)

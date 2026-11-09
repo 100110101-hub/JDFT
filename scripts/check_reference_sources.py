@@ -42,6 +42,9 @@ KNOWN_SOURCES = {
     (reference_sources.RP01_HCN_DOI, reference_sources.RP01_HCN_URL),
     (reference_sources.RP01_MECN_DOI, reference_sources.RP01_MECN_URL),
     (reference_sources.RP01_H2CO_DOI, reference_sources.RP01_H2CO_URL),
+    # RS-06（第三条判据的另一半）：水（气相）三个基频的**绝对** Raman 强度（Å⁴/amu，实验值）。
+    # DOI 是正式论文（JCTC 2019），URL 是实际取回的那份 arXiv 全文（ACS 付费墙后）。
+    (reference_sources.RAMAN_INTENSITY_DOI, reference_sources.RAMAN_INTENSITY_URL),
 }
 
 
