@@ -158,6 +158,7 @@ qwb-engine::t6_b3lyp_gradient b3lyp_gradient_error_per_grid_level
 qwb-gpu::ex03_ri_j_pipeline_measurement ri_j_pipeline_cpu_versus_gpu_measurement
 qwb-integrals::h05_second_derivatives cost_ratio_second_over_first_derivative
 qwb-scf cphf_hessian::tests::cost_measurement_def2svp
+qwb-scf::in04_ri_j_measurement ri_j_stage_breakdown_and_determinism
 qwb-scf::in04_ri_j_measurement ri_j_versus_exact_j
 qwb-scf::sc05_rimp2 ri_path_is_faster_on_the_larger_system
 qwb-scf::t02_h2o_def2svp h2o_def2svp_pbe_grid_and_threads

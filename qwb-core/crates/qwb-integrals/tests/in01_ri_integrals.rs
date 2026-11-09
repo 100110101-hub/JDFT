@@ -22,7 +22,11 @@ use std::collections::BTreeMap;
 use std::path::PathBuf;
 
 use qwb_engine_api::{Atom, Molecule};
-use qwb_integrals::ri::{inverse_sqrt, symmetric_eigenvalues, three_center, two_center_coulomb};
+use qwb_integrals::ri::{
+    inverse_sqrt, symmetric_eigenvalues, three_center, three_center_with_threads,
+    two_center_coulomb, two_center_coulomb_with_threads, whiten_three_center,
+    whiten_three_center_with_threads,
+};
 use qwb_registry::Registry;
 
 fn data_root() -> PathBuf {
@@ -342,4 +346,91 @@ fn ri_identity_residual_is_the_fit_error() {
         "def2-SVP 当辅助基时残差应小于 STO-3G"
     );
     assert!(ri > 0.0, "RI 残差恰好为 0：辅助基不完备，说明比较写错了");
+}
+
+/// 所有元素的 `to_bits()` 之和（`wrapping_add`）：一个对**逐位**敏感的指纹。
+fn fingerprint(values: &[f64]) -> u64 {
+    values
+        .iter()
+        .fold(0u64, |acc, value| acc.wrapping_add(value.to_bits()))
+}
+
+/// 逐位比较两个切片：不同元素必须是 **0 个**（不是"容差内"，是 `to_bits()` 全等）。
+fn assert_bit_identical(label: &str, left: &[f64], right: &[f64]) {
+    assert_eq!(left.len(), right.len(), "{label}: 两个切片的长度不同");
+    let mut differ = 0usize;
+    let mut first_difference: Option<(usize, f64, f64)> = None;
+    let mut worst = 0.0_f64;
+    for (index, (a, b)) in left.iter().zip(right).enumerate() {
+        if a.to_bits() != b.to_bits() {
+            differ += 1;
+            worst = worst.max((a - b).abs());
+            first_difference.get_or_insert((index, *a, *b));
+        }
+    }
+    println!(
+        "{label}: {} 个元素，逐位不同 {differ} 个（max|Δ| = {worst:.3e}），指纹 {:#018x}",
+        left.len(),
+        fingerprint(left)
+    );
+    assert_eq!(
+        differ, 0,
+        "{label}: 线程数改变了结果；首个不同 {:?}",
+        first_difference
+    );
+}
+
+/// **G7 / R-13（IN-04）**：RI 路径（三中心 / 度量 / `B' = M^{-1/2}B`）的结果与线程数**逐位无关**。
+///
+/// 为什么这是可比的一条：并行只改变"谁算哪一块"，不改变"按什么顺序加" ——
+/// 散射进张量仍然串行、`q` 累加仍按原顺序，所以浮点加法序列与单线程完全相同。
+/// 反例（不能这么做）：多线程往同一个输出元素上 `+=`，求和顺序随调度变化。
+#[test]
+fn ri_path_is_bit_identical_across_thread_counts() {
+    let registry = Registry::open(data_root()).expect("qwb-data");
+    let molecule = water();
+    let basis = qwb_basis::InternalBasis::build(
+        registry.get_basis("def2-svp").expect("def2-svp"),
+        &molecule,
+    )
+    .expect("orbital basis");
+    let aux = qwb_basis::InternalBasis::build(
+        registry
+            .get_basis("def2-universal-jkfit")
+            .expect("def2-universal-jkfit"),
+        &molecule,
+    )
+    .expect("aux basis");
+
+    // 三中心 `(ij|P)`：线程数 1 / 2 / 产品默认（rayon 默认线程数）三条路径。
+    let serial = three_center_with_threads(&basis, &aux, &molecule, 1).expect("3c threads=1");
+    let two = three_center_with_threads(&basis, &aux, &molecule, 2).expect("3c threads=2");
+    let product = three_center(&basis, &aux, &molecule).expect("3c default");
+    assert_bit_identical("(ij|P) 1 vs 默认", &serial.values, &product.values);
+    assert_bit_identical("(ij|P) 2 vs 默认", &two.values, &product.values);
+
+    // 度量 `(P|Q)`。
+    let metric_serial =
+        two_center_coulomb_with_threads(&aux, &molecule, 1).expect("metric threads=1");
+    let metric_product = two_center_coulomb(&aux, &molecule).expect("metric default");
+    assert_bit_identical(
+        "V=(P|Q) 1 vs 默认",
+        metric_serial.as_column_major(),
+        metric_product.as_column_major(),
+    );
+
+    // `B' = M^{-1/2}·B`。
+    let w = inverse_sqrt(&metric_product, 1.0e-10).expect("V^{-1/2}");
+    let whiten_serial = whiten_three_center_with_threads(&serial, &w, 1).expect("B' threads=1");
+    let whiten_two = whiten_three_center_with_threads(&two, &w, 2).expect("B' threads=2");
+    let whiten_product = whiten_three_center(&product, &w).expect("B' default");
+    assert_bit_identical("B' 1 vs 默认", &whiten_serial, &whiten_product);
+    assert_bit_identical("B' 2 vs 默认", &whiten_two, &whiten_product);
+
+    println!(
+        "线程数无关性：n_orb = {}, n_aux = {}, B' 指纹 {:#018x}",
+        product.n_orbital,
+        product.n_auxiliary,
+        fingerprint(&whiten_product)
+    );
 }

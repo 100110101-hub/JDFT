@@ -21,7 +21,7 @@ use std::time::Instant;
 use qwb_basis::InternalBasis;
 use qwb_engine_api::{Atom, Molecule};
 use qwb_gpu::ri_j::{ri_j_gemm, ri_j_naive};
-use qwb_integrals::ri::{inverse_sqrt, three_center, two_center_coulomb};
+use qwb_integrals::ri::{inverse_sqrt, three_center, two_center_coulomb, whiten_three_center};
 use qwb_registry::Registry;
 
 fn data_root() -> std::path::PathBuf {
@@ -87,7 +87,8 @@ fn min_of(values: &[f64]) -> f64 {
 ///
 /// `threads = 0` 是产品默认（rayon 默认线程数），`threads = 1` 是**单线程** —— 后者用来做
 /// 「同等的并行度条件下」的对照：`two_electron` 早已并行（`DeterministicReduce`），
-/// 而 `qwb_integrals::ri::three_center` 与 `B'` 变换**没有**并行实现。
+/// IN-04 第二轮起 `qwb_integrals::ri` 的三中心 / 度量 / `B'` 变换也并行，
+/// 所以 `threads = 1` 这一列仍然是「RI 侧一行并行都没有」的那个世界。
 fn exact_j(
     basis: &InternalBasis,
     molecule: &Molecule,
@@ -126,13 +127,10 @@ struct Setup {
 
 /// RI-J 的**共享 setup**：三中心 + 2 中心度量 + `M^{-1/2}` + `B' = M^{-1/2}·B`（`B'` 行主序
 /// `(μν) × P`）。这一段没有 GPU 实现（`qwb-gpu` 只有收缩核），任何 RI-J 变体都要付这笔钱。
-fn ri_setup(
-    basis: &InternalBasis,
-    aux: &InternalBasis,
-    molecule: &Molecule,
-    n: usize,
-    n_aux: usize,
-) -> Setup {
+///
+/// 三个积分/变换步骤都走 `qwb_integrals::ri` 的**默认线程数**入口（IN-04 第二轮把它们并行化了：
+/// 3 中心、度量、`B'` 各自 `DeterministicReduce::map_ordered`，逐位与单线程相同）。
+fn ri_setup(basis: &InternalBasis, aux: &InternalBasis, molecule: &Molecule) -> Setup {
     let started = Instant::now();
     let b = three_center(basis, aux, molecule).expect("three_center");
     let three_center_seconds = started.elapsed().as_secs_f64();
@@ -143,18 +141,7 @@ fn ri_setup(
     let metric_seconds = metric_started.elapsed().as_secs_f64();
 
     let b_prime_started = Instant::now();
-    let mut b_fit = vec![0.0_f64; n * n * n_aux];
-    for i in 0..n {
-        for j in 0..n {
-            for p in 0..n_aux {
-                let mut sum = 0.0_f64;
-                for q in 0..n_aux {
-                    sum += m_inv_sqrt[(p, q)] * b.get(i, j, q);
-                }
-                b_fit[(i * n + j) * n_aux + p] = sum;
-            }
-        }
-    }
+    let b_fit = whiten_three_center(&b, &m_inv_sqrt).expect("whiten_three_center");
     Setup {
         b_fit,
         total: started.elapsed().as_secs_f64(),
@@ -189,8 +176,7 @@ fn measure(label: &str, registry: &Registry, molecule: &Molecule, reps: usize) {
 
     // ── 4 索引 J ────────────────────────────────────────────────────────────
     // 产品默认路径（`two_electron` 用 rayon 默认线程数）与**单线程**版本各量一遍：
-    // 前者是与台账/判据对齐的「现状」，后者回答「如果 RI 侧也有同样的并行度会是怎样」——
-    // 因为 `two_electron` 早就并行，而 `ri::three_center` 与 `B'` 变换一行并行都没有。
+    // 前者是与台账/判据对齐的「现状」，后者是「两边都串行」的对照（RI 侧这一轮也并行化了）。
     let mut exact_runs = Vec::new();
     let mut exact_tensor_runs = Vec::new();
     let mut serial_exact_runs = Vec::new();
@@ -222,7 +208,7 @@ fn measure(label: &str, registry: &Registry, molecule: &Molecule, reps: usize) {
     let mut fallback_reason: Option<String> = None;
     let mut repeat_bits_equal = (false, false);
     for run in 0..=reps {
-        let setup = ri_setup(&basis, &aux, molecule, n, n_aux);
+        let setup = ri_setup(&basis, &aux, molecule);
         let b_fit = &setup.b_fit;
 
         let started = Instant::now();
