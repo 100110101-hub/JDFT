@@ -152,6 +152,77 @@ pub struct TaskOptions {
     /// 色散校正（FX-04 / DA-06）；`None` = 不加色散，旧输入逐位不变。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub dispersion: Option<DispersionOptions>,
+    /// Raman 活性/相对强度（RS-06）；`None` = 不算，`jobtype: freq` 的费用不变。
+    ///
+    /// 它是**按需求才付**的加性块：`∂α/∂R` 的有限差分要 `6N` 次 SCF + CPHF，比
+    /// Hessian 之外的任何一项都贵，所以不给 `freq` 作业默认打开。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub raman: Option<RamanOptions>,
+}
+
+/// Raman 的选项（`options.raman`，RS-06）。
+///
+/// 相对强度依赖激发光的波数（4 次幂的 Stokes 因子）与温度（Boltzmann 因子），所以这两个数
+/// **必须由输入给**、并随结果一起落盘 —— 否则「相对强度」这句话就没有意义。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+#[non_exhaustive]
+pub struct RamanOptions {
+    /// 激发光波长（nm）；缺省 532 nm（`qwb_engine::raman` 里的同名常量）。
+    #[serde(default = "default_raman_wavelength_nm")]
+    pub excitation_wavelength_nm: f64,
+    /// 相对强度里的温度（K）；缺省 298.15。
+    #[serde(default = "default_raman_temperature_k")]
+    pub temperature_k: f64,
+}
+
+/// `RamanOptions.excitation_wavelength_nm` 的缺省值（532 nm = 倍频 Nd:YAG）。
+fn default_raman_wavelength_nm() -> f64 {
+    532.0
+}
+
+/// `RamanOptions.temperature_k` 的缺省值（298.15 K，与热化学同一个标准温度）。
+fn default_raman_temperature_k() -> f64 {
+    298.15
+}
+
+impl Default for RamanOptions {
+    fn default() -> Self {
+        Self {
+            excitation_wavelength_nm: default_raman_wavelength_nm(),
+            temperature_k: default_raman_temperature_k(),
+        }
+    }
+}
+
+impl RamanOptions {
+    /// 构造。
+    #[must_use]
+    pub fn new(excitation_wavelength_nm: f64, temperature_k: f64) -> Self {
+        Self {
+            excitation_wavelength_nm,
+            temperature_k,
+        }
+    }
+
+    /// 区间检查：波长与温度都必须是正的有限数。
+    ///
+    /// # Errors
+    ///
+    /// 任一非正/非有限 → [`EngineError::InvalidInput`]。
+    pub fn validate(&self) -> Result<(), EngineError> {
+        for (name, value) in [
+            ("excitation_wavelength_nm", self.excitation_wavelength_nm),
+            ("temperature_k", self.temperature_k),
+        ] {
+            if !value.is_finite() || value <= 0.0 {
+                return Err(EngineError::InvalidInput(format!(
+                    "options.raman.{name} must be a positive finite number, got {value}"
+                )));
+            }
+        }
+        Ok(())
+    }
 }
 
 /// 色散校正选项（`TaskOptions.dispersion`，FX-04）。
@@ -266,6 +337,7 @@ impl Default for TaskOptions {
             numerics: None,
             epr: false,
             dispersion: None,
+            raman: None,
         }
     }
 }
@@ -354,6 +426,13 @@ impl TaskOptions {
         self
     }
 
+    /// 挂上 Raman 选项（RS-06；`jobtype: freq` 才有效）。
+    #[must_use]
+    pub fn with_raman(mut self, raman: RamanOptions) -> Self {
+        self.raman = Some(raman);
+        self
+    }
+
     /// 校验取值区间。
     ///
     /// # Errors
@@ -410,6 +489,9 @@ impl TaskOptions {
         }
         if let Some(dispersion) = &self.dispersion {
             dispersion.validate()?;
+        }
+        if let Some(raman) = &self.raman {
+            raman.validate()?;
         }
         Ok(())
     }

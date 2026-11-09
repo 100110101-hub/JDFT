@@ -151,6 +151,7 @@ qwb-engine::t3_water_geometry pbe_def2tzvp_water_geometry_matches_experiment
 qwb-engine::t4_frequencies_6311gdp h2o_hf_6311gdp_scaled_frequencies
 qwb-engine::t4_hessian_step hessian_step_convergence
 qwb-engine::t4_ir_frequencies h2o_ir_frequencies_match_experiment
+qwb-engine::rs06_raman water_raman_activities_match_the_oracle_at_def2svp
 qwb-engine::t5_ecp cuh_lanl2dz_grid_normal_is_pinned
 qwb-engine::t5_ecp zno_equilibrium_is_at_one_point_seven_seven
 qwb-engine::t5_ecp zno_lanl2dz_single_point_matches_the_reference
@@ -165,6 +166,8 @@ qwb-scf::t02_h2o_def2svp h2o_def2svp_pbe_grid_and_threads
 qwb-scf::t06_benzene benzene_matches_cccbdb
 qwb-scf::t06_benzene benzene_pbe_converges_through_the_retry
 qwb-scf::t06_reference cccbdb_slow_tier_species_agree
+qwb-engine::rs06_raman the_finite_difference_step_is_converged_at_the_hessian_convention
+qwb-engine::rs06_raman methane_raman_activities_match_the_oracle_with_degenerate_subspaces_grouped
 EOF
     "$0" nextest list --workspace > nextest-list.log 2>&1 || { echo "!! nextest list（快道）失败"; exit 1; }
     "$0" nextest list --workspace --run-ignored all > nextest-list-all.log 2>&1 || { echo "!! nextest list（全量）失败"; exit 1; }

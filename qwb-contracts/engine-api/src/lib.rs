@@ -38,7 +38,8 @@ pub use correlation::{CorrelationResult, Mp2Kind, Mp2Options, ScfType, SpinResul
 pub use engine::{Engine, EngineBackend, SUPPORTED_FEATURES};
 pub use error::EngineError;
 pub use input::{
-    DispersionOptions, ExcitedStatesOptions, GridLevel, JobInput, JobType, TaskOptions,
+    DispersionOptions, ExcitedStatesOptions, GridLevel, JobInput, JobType, RamanOptions,
+    TaskOptions,
 };
 pub use irc::{IrcDirection, IrcEnd, IrcOptions, IrcPoint, IrcResult};
 pub use molecule::{Atom, Molecule};
@@ -56,4 +57,4 @@ pub use reporter::Reporter;
 pub use result::{DataSnapshot, EnvInfo, JobResult, UvVisSpectrum};
 pub use solvation::{SolvationResult, SolventModel};
 pub use ts::{TsOptions, TsResult};
-pub use vibrations::{Thermochemistry, VibrationalFrequencies, VibrationalMode};
+pub use vibrations::{RamanIntensities, Thermochemistry, VibrationalFrequencies, VibrationalMode};

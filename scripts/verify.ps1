@@ -191,8 +191,13 @@ Step -Name 'core: test' -Dir 'qwb-core' -Body {
         'qwb-engine::t4_frequencies_6311gdp h2o_hf_6311gdp_scaled_frequencies'
         'qwb-engine::t4_hessian_step hessian_step_convergence'
         'qwb-engine::t4_ir_frequencies h2o_ir_frequencies_match_experiment'
+        # RS-06：H2O/def2-SVP 的 ∂α/∂R 是 18 次 SCF+CPHF（每次 25 个基函数），debug 下分钟级；
+        # STO-3G 的那两条（水/甲烷 vs PySCF oracle、活性与相对强度）在快道里。
+        'qwb-engine::rs06_raman water_raman_activities_match_the_oracle_at_def2svp'
           'qwb-engine::ex03_scf_gpu_xc a1_a2_pbe_scf_cpu_vs_gpu_end_to_end'
   'qwb-engine::ex03_scf_gpu_xc a2b_small_systems_do_not_win_on_the_device_path'
+    'qwb-engine::rs06_raman the_finite_difference_step_is_converged_at_the_hessian_convention'
+  'qwb-engine::rs06_raman methane_raman_activities_match_the_oracle_with_degenerate_subspaces_grouped'
   'qwb-engine::t5_ecp cuh_lanl2dz_grid_normal_is_pinned'
         'qwb-engine::t5_ecp zno_equilibrium_is_at_one_point_seven_seven'
         'qwb-engine::t5_ecp zno_lanl2dz_single_point_matches_the_reference'

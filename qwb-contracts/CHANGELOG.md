@@ -2,6 +2,42 @@
 
 语义化版本。**任何破坏性变更必须在此登记并经人类评审**（§4 契约前置要求）。
 
+## 2.3.0 — RS-06：Raman 活性与相对强度（`jobtype: freq` + `options.raman`）
+
+**加性变更**（旧 `input.yaml`、旧 `result.json`、旧代码继续工作）：两个新字段都带
+`#[serde(default, skip_serializing_if = "Option::is_none")]`，缺省时**一个字节都不写出**，
+所以旧结果目录、旧输入、旧读者都不受影响。
+
+### K2 · `TaskOptions.raman: Option<RamanOptions>`
+
+- `RamanOptions { excitation_wavelength_nm (缺省 532.0), temperature_k (缺省 298.15) }`；
+  `validate()` 要求两者为正的有限数。
+- 语义：**只有 `jobtype: freq` 才有意义**（活性要投影到 Hessian 的简正模上）。别的 jobtype
+  由引擎在 `reject_unimplemented_options` 里**显式拒绝**（`Unsupported`），与 `options.nmr`
+  同一条纪律：不许静默忽略一个用户明确要求的性质。
+- 为什么不做成 `freq` 的缺省：`∂α/∂R` 的有限差分要 `6N` 次 SCF + CPHF，比 Hessian 之外的
+  任何一项都贵。
+
+### K7 · `VibrationalFrequencies.raman: Option<RamanIntensities>`
+
+- `RamanIntensities { method, activity_unit, delta_bohr, excitation_wavenumber_cm,
+  temperature_k, activities[], intensities[] }`，顺序与 `vibrational_frequencies.modes`
+  一一对应（`VibrationalFrequencies::validate` 核对长度）。
+- **约定写进类型里**（这是本块存在的理由）：活性是 Placzek 的 `A_k = 45 ᾱ'² + 7 γ'²`，
+  单位 `Å⁴/amu`（`activity_unit` 是冻结字符串 `angstrom^4/amu`）；强度是活性乘散射因子
+  `(ν̃0−ν̃)⁴/[ν̃(1−e^{−hcν̃/kT})]` 再归一化到**最强 = 100**，所以它依赖激发线与温度
+  （两者都落盘）。绝对强度（微分散射截面）**没有**给 —— 给一个单位不明的"绝对强度"比
+  不给更糟，`§6.6` 要的也只是相对强度排序。
+- `method` 现在只有一个值 `finite-difference-polarizability`（与 K7 的 `method` 字符串
+  是同一个"加值不加字段"的约定）。
+
+### 没改的地方
+
+- `result.schema.yaml` / `task.schema.yaml`：K3 的 schema 本来就不建模
+  `vibrational_frequencies`（阶段二的加性块在 K3 里没有 `properties` 条目，`k3_schema_docs`
+  只核对 `JobResult` 的**顶层**字段集），所以这一版没有 schema 增量。
+- `studio/python/qwb_engine.pyi`（手写冻结桩）不建模 `TaskOptions`，无增量。
+
 ## 2.2.0 — RS-04（末段）：NMR 的 GIAO 模式（`gauge: giao`）
 
 **加性变更**（旧 `input.yaml`、旧 `result.json`、旧代码继续工作）：没有删除/重命名/重排任何

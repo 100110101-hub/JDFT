@@ -55,6 +55,120 @@ impl VibrationalMode {
     }
 }
 
+/// Raman 活性与相对强度（`options.raman`，phase-2 `RS-06`）。
+///
+/// # 约定（读数的人必须先读这一段）
+///
+/// * **活性**（`activities`）是 Placzek 的常规定义 `A_k = 45 ᾱ'_k² + 7 γ'_k²`，
+///   其中 `ᾱ'`/`γ'` 是 `∂α/∂Q_k` 的各向同性与各向异性部分，`∂α/∂Q` 的单位是 `Å²/√amu`；
+///   所以活性的单位是 `Å⁴/amu`（`activity_unit` 把它写成冻结字符串，不许由读者猜）。
+/// * **强度**（`intensities`）**不是**活性：它是活性乘上散射因子
+///   `(ν̃_0 − ν̃_k)⁴ / [ν̃_k (1 − e^{−hcν̃_k/k_BT})]`，再**归一化到最强模 = 100**。
+///   所以它与激发线（`excitation_wavenumber_cm`）和温度（`temperature_k`）都有关 ——
+///   换一条激发线，相对强度就会变，而活性不变。**绝对**强度（微分散射截面）没有给：
+///   给一个单位不明的「绝对强度」比不给更糟。
+/// * `∂α/∂R` 是**数值**导数（中心差分，步长 `delta_bohr`），模式来自
+///   [`VibrationalFrequencies::method`]（现在是数值 Hessian）—— 两件事都写进字段，
+///   这样「这个数是怎么来的」不用靠日志考古。
+/// * 顺序与 [`VibrationalFrequencies::modes`] **一一对应**（`validate` 会核对长度）。
+///   虚频模（鞍点）不该出现在这里：`freq` 的入口在出现真虚频时直接拒绝，因为
+///   「取最大的 `3N−6` 个模当振动」只在极小点成立。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+#[non_exhaustive]
+pub struct RamanIntensities {
+    /// 活性的来源（现在只有 `finite-difference-polarizability`）。
+    pub method: String,
+    /// 活性单位（冻结字符串 `angstrom^4/amu`）。
+    pub activity_unit: String,
+    /// `∂α/∂R` 中心差分的步长，单位 Bohr。
+    pub delta_bohr: f64,
+    /// 激发光的波数（cm⁻¹），由 `options.raman.excitation_wavelength_nm` 换算而来。
+    pub excitation_wavenumber_cm: f64,
+    /// 相对强度里的温度（K）。
+    pub temperature_k: f64,
+    /// 每个振动模的活性（`Å⁴/amu`）。
+    pub activities: Vec<f64>,
+    /// 每个振动模的相对强度（归一化到最强 = 100，任意单位）。
+    pub intensities: Vec<f64>,
+}
+
+impl RamanIntensities {
+    /// 构造（`activities`/`intensities` 的顺序必须与模式表一致）。
+    #[must_use]
+    #[allow(clippy::too_many_arguments)]
+    pub fn new(
+        method: impl Into<String>,
+        activity_unit: impl Into<String>,
+        delta_bohr: f64,
+        excitation_wavenumber_cm: f64,
+        temperature_k: f64,
+        activities: Vec<f64>,
+        intensities: Vec<f64>,
+    ) -> Self {
+        Self {
+            method: method.into(),
+            activity_unit: activity_unit.into(),
+            delta_bohr,
+            excitation_wavenumber_cm,
+            temperature_k,
+            activities,
+            intensities,
+        }
+    }
+
+    /// 自洽性检查：长度与 `n_modes` 一致、活性非负且有限、强度有限、参数为正。
+    ///
+    /// # Errors
+    ///
+    /// 任一条不满足 → [`EngineError::Internal`]（这是**写出前**的自检，不是用户输入校验）。
+    pub fn validate(&self, n_modes: usize) -> Result<(), EngineError> {
+        if self.activities.len() != n_modes || self.intensities.len() != n_modes {
+            return Err(EngineError::Internal(format!(
+                "raman: {} activities and {} intensities for {n_modes} modes",
+                self.activities.len(),
+                self.intensities.len()
+            )));
+        }
+        if !self.delta_bohr.is_finite() || self.delta_bohr <= 0.0 {
+            return Err(EngineError::Internal(
+                "raman: delta_bohr must be finite and positive".into(),
+            ));
+        }
+        if !self.excitation_wavenumber_cm.is_finite() || self.excitation_wavenumber_cm <= 0.0 {
+            return Err(EngineError::Internal(
+                "raman: excitation_wavenumber_cm must be finite and positive".into(),
+            ));
+        }
+        if !self.temperature_k.is_finite() || self.temperature_k <= 0.0 {
+            return Err(EngineError::Internal(
+                "raman: temperature_k must be finite and positive".into(),
+            ));
+        }
+        for (index, activity) in self.activities.iter().enumerate() {
+            if !activity.is_finite() || *activity < 0.0 {
+                return Err(EngineError::Internal(format!(
+                    "raman.activities[{index}] = {activity} is not a finite non-negative activity"
+                )));
+            }
+        }
+        for (index, intensity) in self.intensities.iter().enumerate() {
+            if !intensity.is_finite() || *intensity < 0.0 {
+                return Err(EngineError::Internal(format!(
+                    "raman.intensities[{index}] = {intensity} is not finite non-negative"
+                )));
+            }
+        }
+        let strongest = self.intensities.iter().cloned().fold(0.0_f64, f64::max);
+        if strongest > 0.0 && (strongest - 100.0).abs() > 1.0e-9 {
+            return Err(EngineError::Internal(format!(
+                "raman.intensities: the strongest mode must be normalised to 100, got {strongest}"
+            )));
+        }
+        Ok(())
+    }
+}
+
 /// 振动分析结果块。
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -70,6 +184,12 @@ pub struct VibrationalFrequencies {
     pub vibrational_modes: usize,
     /// 笛卡尔自由度数 `3N`。
     pub degrees_of_freedom: usize,
+    /// Raman 活性与相对强度（`options.raman`；缺省不算，块不出现）。
+    ///
+    /// 它是**加性块**：算不算都不影响频率/热化学，所以缺省关闭（`RS-06` 的代价是
+    /// `6N` 次 SCF + CPHF，不该让每个 `freq` 作业都付）。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub raman: Option<RamanIntensities>,
 }
 
 impl VibrationalFrequencies {
@@ -88,7 +208,15 @@ impl VibrationalFrequencies {
             zero_point_cm,
             vibrational_modes,
             degrees_of_freedom,
+            raman: None,
         }
+    }
+
+    /// 挂上 Raman 活性（`options.raman`；RS-06）。
+    #[must_use]
+    pub fn with_raman(mut self, raman: RamanIntensities) -> Self {
+        self.raman = Some(raman);
+        self
     }
 
     /// 虚频个数。
@@ -138,6 +266,9 @@ impl VibrationalFrequencies {
             return Err(EngineError::Internal(
                 "vibrational_frequencies: zero_point_cm must be finite and non-negative".into(),
             ));
+        }
+        if let Some(raman) = &self.raman {
+            raman.validate(self.modes.len())?;
         }
         Ok(())
     }
@@ -258,7 +389,7 @@ impl Thermochemistry {
 
 #[cfg(test)]
 mod tests {
-    use super::{Thermochemistry, VibrationalFrequencies, VibrationalMode};
+    use super::{RamanIntensities, Thermochemistry, VibrationalFrequencies, VibrationalMode};
 
     fn water() -> VibrationalFrequencies {
         VibrationalFrequencies::new(
@@ -333,6 +464,50 @@ mod tests {
         let mut bad = block.clone();
         bad.entropy_j_per_mol_k = -1.0;
         assert!(bad.validate(electronic).is_err());
+    }
+
+    #[test]
+    fn raman_block_is_additive_and_self_consistent() {
+        // 缺省不出现（旧结果/旧读者不受影响）。
+        let plain = water();
+        let json = serde_json::to_string(&plain).expect("serialize");
+        assert!(!json.contains("raman"), "{json}");
+
+        let raman = RamanIntensities::new(
+            "finite-difference-polarizability",
+            "angstrom^4/amu",
+            1.0e-2,
+            18_796.992_481_203_008,
+            298.15,
+            vec![74.6, 12.1, 33.0],
+            vec![100.0, 3.4, 12.2],
+        );
+        let block = water().with_raman(raman);
+        block.validate().expect("块与 Raman 都自洽");
+        let json = serde_json::to_string(&block).expect("serialize");
+        assert!(
+            json.contains("\"activity_unit\":\"angstrom^4/amu\""),
+            "{json}"
+        );
+        let back: VibrationalFrequencies = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(back, block);
+
+        // 长度对不上、或强度没归一化到 100 → 拒绝（不许写出一个读数的人会误会的块）。
+        let mut bad = block.clone();
+        if let Some(raman) = &mut bad.raman {
+            raman.activities.pop();
+        }
+        assert!(bad.validate().is_err());
+        let mut bad = block.clone();
+        if let Some(raman) = &mut bad.raman {
+            raman.intensities[0] = 50.0;
+        }
+        assert!(bad.validate().is_err());
+        let mut bad = block.clone();
+        if let Some(raman) = &mut bad.raman {
+            raman.activities[0] = -1.0;
+        }
+        assert!(bad.validate().is_err());
     }
 
     #[test]

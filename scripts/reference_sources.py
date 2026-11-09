@@ -156,6 +156,12 @@ GENERATORS = {
         "scripts/pyscf_smd_reference.py",
     "qwb-core/crates/qwb-engine/tests/reference/hessian_water.csv":
         "scripts/pyscf_hessian_reference.py",
+    # RS-06（Raman 活性）：PySCF 侧的**解析 Hessian**（模式）+ **有限场极化率**（α）+
+    # numpy 投影给出的 `45 ᾱ'² + 7 γ'²`。本仓库那一半是数值 Hessian + 自研 CPHF 的 α +
+    # 中心差分 —— 两条路只在「中心差分」这一层是共同的数学（Hessian、SCF、极化率、投影
+    # 四条都是各自独立的实现）。
+    "qwb-core/crates/qwb-engine/tests/reference/raman_activities.csv":
+        "scripts/pyscf_raman_reference.py",
     "qwb-core/crates/qwb-props/tests/reference/epr_spin_density.csv":
         "scripts/pyscf_epr_reference.py",
     "qwb-core/crates/qwb-response/tests/reference/dynamic_polarizability.csv":

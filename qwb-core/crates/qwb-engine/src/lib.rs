@@ -30,6 +30,7 @@ pub mod gradient;
 pub mod hessian;
 pub mod irc;
 pub mod opt;
+pub mod raman;
 pub mod scan;
 pub mod ts;
 
@@ -2186,6 +2187,89 @@ impl RksBackend {
             .modes
             .len()
             .saturating_sub(hessian.vibrational_modes);
+        // RS-06：Raman 活性（`options.raman`）。`∂α/∂R` 的有限差分要 `6N` 次 SCF + CPHF，
+        // 所以是按需求才付的加性块。约定（Placzek 45/7、`Å⁴/amu`、`∂α/∂Q` 的 `Å²/√amu`）
+        // 写在 `raman` 模块文档与 K7 的 `RamanIntensities` 里。
+        let mut raman_block = None;
+        if let Some(request) = &input.options.raman {
+            reporter.progress("raman", 80.0);
+            let excitation_wavenumber_cm =
+                raman::wavenumber_from_wavelength_nm(request.excitation_wavelength_nm)?;
+            let derivatives = raman::polarizability_derivatives(
+                &self.registry,
+                &input.molecule,
+                &input.basis_name,
+                &spec.functional_name,
+                &spec.grid_name,
+            )?;
+            let activities = raman::raman_activities(&hessian, &derivatives);
+            let activity_values: Vec<f64> = activities
+                .iter()
+                .skip(start)
+                .map(|mode| mode.activity_a4_per_amu)
+                .collect();
+            let vibrational_wavenumbers: Vec<f64> = hessian
+                .modes
+                .iter()
+                .skip(start)
+                .map(|mode| mode.wavenumber)
+                .collect();
+            let raw = raman::raman_intensities(
+                &activity_values,
+                &vibrational_wavenumbers,
+                excitation_wavenumber_cm,
+                request.temperature_k,
+            )?;
+            let relative = raman::relative_to_strongest(&raw);
+            let strongest = activity_values
+                .iter()
+                .enumerate()
+                .max_by(|left, right| left.1.total_cmp(right.1))
+                .map(|(index, activity)| (vibrational_wavenumbers[index], *activity));
+            reporter.log(&format!(
+                "raman: λ (excitation) = {:.1} nm = {:.2} cm^-1, T = {:.2} K, {} vibrational \
+                 modes, FD step = {:.1e} bohr, method = {}",
+                request.excitation_wavelength_nm,
+                excitation_wavenumber_cm,
+                request.temperature_k,
+                activity_values.len(),
+                hessian::HESSIAN_DELTA_BOHR,
+                raman::RAMAN_METHOD
+            ));
+            for (index, (mode, activity)) in hessian
+                .modes
+                .iter()
+                .skip(start)
+                .zip(&activity_values)
+                .enumerate()
+            {
+                reporter.log(&format!(
+                    "  raman mode {:2}: {:9.2} cm^-1  A = {:12.6} A^4/amu  I_rel = {:8.3}",
+                    index + 1,
+                    mode.wavenumber,
+                    activity,
+                    relative[index]
+                ));
+            }
+            if let Some((wavenumber, activity)) = strongest {
+                reporter.log(&format!(
+                    "raman: strongest activity {activity:.6} A^4/amu at {wavenumber:.2} cm^-1 \
+                     (n.b. the strongest *intensity* need not be the strongest activity — the \
+                     (ν̃0−ν̃)⁴ factor is not flat)"
+                ));
+            }
+            let block = qwb_engine_api::RamanIntensities::new(
+                raman::RAMAN_METHOD,
+                raman::RAMAN_ACTIVITY_UNIT,
+                hessian::HESSIAN_DELTA_BOHR,
+                excitation_wavenumber_cm,
+                request.temperature_k,
+                activity_values,
+                relative,
+            );
+            block.validate(hessian.vibrational_modes)?;
+            raman_block = Some(block);
+        }
         let modes: Vec<qwb_engine_api::VibrationalMode> = hessian
             .modes
             .iter()
@@ -2195,13 +2279,16 @@ impl RksBackend {
                 qwb_engine_api::VibrationalMode::new(mode.wavenumber).with_ir(*intensity)
             })
             .collect();
-        let frequencies = qwb_engine_api::VibrationalFrequencies::new(
+        let mut frequencies = qwb_engine_api::VibrationalFrequencies::new(
             hessian::HESSIAN_METHOD,
             modes,
             hessian.zero_point_cm,
             hessian.vibrational_modes,
             hessian.degrees_of_freedom,
         );
+        if let Some(block) = raman_block {
+            frequencies = frequencies.with_raman(block);
+        }
         frequencies.validate()?;
 
         reporter.progress("thermochemistry", 90.0);
@@ -2835,6 +2922,29 @@ fn reject_unimplemented_options(input: &JobInput) -> Result<(), EngineError> {
              gated by K10 equivalence)"
                 .into(),
         ));
+    }
+    if let Some(raman) = &options.raman {
+        // RS-06：Raman 活性是**投影到简正模**上的量，所以它只能跟着 `freq` 一起给。
+        // 放在 `run` 的入口（而不是只留在 `run_frequencies` 里）的理由与 NMR 那条一样：
+        // 别的 jobtype 根本走不到频率那一段，`options.raman` 会被**静默忽略**。
+        raman.validate()?;
+        if input.jobtype != JobType::Freq {
+            return Err(EngineError::Unsupported(format!(
+                "options.raman needs `jobtype: freq` (Raman activities are ∂α/∂R projected onto \
+                 the normal modes of the numerical Hessian); jobtype = `{}`",
+                input.jobtype.as_str()
+            )));
+        }
+        if let Some(scf_type) = options.scf_type
+            && scf_type.is_open_shell()
+        {
+            return Err(EngineError::Unsupported(format!(
+                "options.raman is implemented for closed-shell HF/KS only; scf_type = `{}` is \
+                 open-shell (the CPHF polarizability and its derivatives would have to be \
+                 re-derived per spin channel)",
+                scf_type.as_str()
+            )));
+        }
     }
     if let Some(model) = options.solvent_model {
         // SV-01 落地后 cosmo 是**已实装**的（需要 `input.solvent` 给出溶剂名）；
