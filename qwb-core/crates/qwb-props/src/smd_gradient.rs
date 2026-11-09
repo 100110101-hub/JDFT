@@ -32,28 +32,49 @@
 //! [`crate::smd_sigma`] 没写它们、这里也没写。入口会**先检查**这七项确实为 0，否则报错 ——
 //! 而不是悄悄漏掉它们对梯度的贡献。
 //!
-//! # 坐标系：这条路径微分的是 `CavityFrame::Global` 的表面（**不是**默认的协变面）
+//! # 坐标系：两种坐标架都微分（本轮补齐协变坐标架）
 //!
-//! [`crate::cavity::cavity`] 与 [`crate::smd_surface::smd_surface`] 的默认坐标架已经翻成
-//! 转动协变的 [`CavityFrame::Covariant`]，但**这里的解析梯度还只对
-//! [`CavityFrame::Global`] 成立**：协变坐标架的每个轴依赖邻居几何
-//! （[`crate::cavity::atom_frame`]），于是采样点 `p_k = c_i + R_i·F_i·l_k` 对核坐标的导数
-//! 多出一项 `R_i·(∂F_i/∂c_m)·l_k`。那一项（坐标架雅可比）**没有实装**，所以
-//! [`smd_cds_energy_gradient_with_frame`] 传 `Covariant` 会显式返回
-//! [`EngineError::Unsupported`]，而不是把"另一张面"的导数当成本面的导数返回。
+//! [`crate::cavity::cavity`] 与 [`crate::smd_surface::smd_surface`] 的默认坐标架是转动协变的
+//! [`CavityFrame::Covariant`]：采样点 `p_k = c_i + R_i·F_i·l_k`，`F_i = atom_frame(molecule, i)`
+//! 依赖邻居几何，于是
 //!
-//! 后果是明写的：对协变（默认）面的能量做有限差分，与这里的解析梯度会差一个采样量级的
-//! 坐标架项 —— 量值由 `tests/sv03_smd_gradient.rs` 的
-//! `the_covariant_frame_is_refused_by_the_analytic_gradient` 实测并钉住。溶剂化的梯度目前
-//! 在任何生产路径上都还没接线（`opt` + 溶剂由引擎显式拒绝，见 SV-02），所以这是**已知缺口**
-//! 而不是活着的错误：补它需要坐标架雅可比，那是 SV-02 的前置。
+//! ```text
+//! ∂p_k/∂c_m = δ_im·1 + R_i·(∂F_i/∂c_m)·l_k
+//! ```
+//!
+//! 第 435 轮把默认翻成协变时**只有第一项**实装，所以传 `Covariant` 会显式返回
+//! [`EngineError::Unsupported`]（而不是把"另一张面"的导数当成本面的导数）。本轮补上
+//! 第二项：`∂F_i/∂c_m` 是**解析**雅可比 —— [`crate::cavity::atom_frame_jacobian`]，每个原子
+//! 最多只有三个非零源（`i` 自己、最近邻、给 `e2` 的那个原子），`∂E/∂F_i` 的收缩在
+//! [`surface_areas_and_gradients`] 里按"通量矩阵"一次做完。选解析而不用"只对 `atom_frame`
+//! 做差分"的理由写在 [`crate::cavity::atom_frame_jacobian`]：后者在分支边界上会把坐标架的
+//! **跳变**除成一个巨大的伪导数。
+//!
+//! ## 分支边界：能量在离散选择换支时**不连续**（实测，不是假设）
+//!
+//! `atom_frame` 的 `e1`/`e2` 来自离散选择（最近邻、第一根不共线方向，并列按原子序号取小者）。
+//! 雅可比只对**当前分支**求导（单侧导数），所以在"离散选择换人"的构型上导数不存在。这不是
+//! 记账上的小事：`tests/sv02_covariant_gradient.rs` 的
+//! `the_symmetric_geometries_sit_on_a_frame_branch_boundary` 实测到
+//!
+//! * 对称的水（`O` 的两个 `H` 严格等距）：换支只改采样取向，能量差 ∝ h（连续，1e-5 量级）；
+//! * 手搭的甲醇（`C` 的两个 `H` 严格等距）：换支让能量跳 **4.7e-3 kcal/mol**（不随 h 缩小）——
+//!   那里任何导数都不存在（解析与差分都没有）。
+//!
+//! 所以 SV-02 的判据（解析 vs 差分 < 1e-5 Ha/Bohr）在**分支内部**验证：判据表用错开对称性
+//! 的几何，并且每一步先用"坐标架是否跨支"的守卫确认（见那个测试文件的 `branch_guard`）。
+//! 生产含义同样是明写的：几何优化走到分支边界附近时，CDS 能量会有 ~1e-3 kcal/mol 量级的
+//! 跳变、梯度会跳 —— 那是这套坐标架的定义带来的，不是这里的求导错。
 #![deny(unsafe_code)]
 
 use qwb_engine_api::{EngineError, Molecule};
 use qwb_registry::elements::atomic_number;
 use qwb_registry::smd_atomic::SmdAtomic;
 
-use crate::cavity::{CavityFrame, fibonacci_point};
+use crate::cavity::{
+    CavityFrame, FrameJacobianTerm, atom_frame, atom_frame_jacobian, compose_direction,
+    fibonacci_point,
+};
 use crate::smd::SmdDescriptors;
 use crate::smd_sigma::{
     DEFAULT_DELTA, ISTS, cot_weight, hsigma_at, pair_sigma_at, smd_sts, soft_weight,
@@ -225,23 +246,62 @@ fn add_scaled(target: &mut [f64; 3], vector: [f64; 3], scale: f64) {
 }
 
 /// `(A_i, ∂A_i/∂c_m)`：`derivatives[i][m]`。
+///
+/// # 坐标架项（`CavityFrame::Covariant`）
+///
+/// 采样点是 `p_k = c_i + R_i·F_i·l_k`（`F_i` 来自 [`atom_frame`]，`l_k` 是局部
+/// Fibonacci 点）。`F_i` 也依赖构型，所以
+///
+/// ```text
+/// ∂p_k/∂c_m = δ_im·1 + R_i·(∂F_i/∂c_m)·l_k
+/// ```
+///
+/// 第一项是既有实现（球心平移），第二项按"通量矩阵"一次收缩：
+///
+/// ```text
+/// flux[a][b] = Σ_k (area_per_point·R_i·l_k[a])·(∂exposed_k/∂p_k[b])
+/// ∂A_i/∂c_m[axis] += Σ_{a,b} flux[a][b]·(∂e_a[b]/∂x_m[axis])
+/// ```
+///
+/// `∂exposed_k/∂p_k` 本来就要算（就是 `unit[j]` 那几项），`∂F_i/∂c_m` 来自
+/// [`atom_frame_jacobian`]（每个原子最多 3 个非零源），所以这一项的开销相对点循环可以
+/// 忽略。`CavityFrame::Global` 的 `F_i` 恒为单位架（导数为 0），**完全不进这段代码** ——
+/// 全局路径因此逐位不变。
 fn surface_areas_and_gradients(
     data: &SmdAtomic,
     geometry: &Geometry<'_>,
     points_per_atom: usize,
     width: f64,
+    frame: CavityFrame,
     // 每原子面积 + 每个 (i, m) 的偏导：`derivatives[i][m]`。
 ) -> Result<(Vec<f64>, AreaDerivatives), EngineError> {
     let radii = cds_effective_radii(data, geometry.molecule)?;
     let n = geometry.natoms;
+    let covariant = frame == CavityFrame::Covariant;
+    let frames: Option<Vec<[[f64; 3]; 3]>> = covariant.then(|| {
+        (0..n)
+            .map(|index| atom_frame(geometry.molecule, index))
+            .collect()
+    });
+    let jacobians: Option<Vec<Vec<FrameJacobianTerm>>> = covariant.then(|| {
+        (0..n)
+            .map(|index| atom_frame_jacobian(geometry.molecule, index))
+            .collect()
+    });
     let mut areas = vec![0.0_f64; n];
     let mut derivatives = vec![vec![[0.0_f64; 3]; n]; n];
     for i in 0..n {
         let radius = radii[i];
         let area_per_point = 4.0 * std::f64::consts::PI * radius * radius / points_per_atom as f64;
         let center = geometry.position(i);
+        // 通量矩阵（只有协变坐标架非平凡，见函数文档）。
+        let mut flux = covariant.then_some([[0.0_f64; 3]; 3]);
         for k in 0..points_per_atom {
-            let normal = fibonacci_point(k, points_per_atom);
+            let local = fibonacci_point(k, points_per_atom);
+            let normal = match &frames {
+                Some(frames) => compose_direction(&frames[i], local),
+                None => local,
+            };
             let point = [
                 center[0] + radius * normal[0],
                 center[1] + radius * normal[1],
@@ -271,6 +331,7 @@ fn surface_areas_and_gradients(
                 }
             }
             areas[i] += area_per_point * exposed;
+            let mut flux_vector = [0.0_f64; 3];
             for j in 0..n {
                 if j == i || dtheta[j] == 0.0 {
                     continue;
@@ -284,6 +345,27 @@ fn surface_areas_and_gradients(
                 let scale = area_per_point * product_without_j * dtheta[j];
                 add_scaled(&mut derivatives[i][i], unit[j], scale);
                 add_scaled(&mut derivatives[i][j], unit[j], -scale);
+                add_scaled(&mut flux_vector, unit[j], scale);
+            }
+            if let Some(flux) = flux.as_mut() {
+                for (axis, coefficient) in local.iter().enumerate() {
+                    for (component, value) in flux_vector.iter().enumerate() {
+                        flux[axis][component] += coefficient * radius * value;
+                    }
+                }
+            }
+        }
+        if let (Some(jacobians), Some(flux)) = (&jacobians, &flux) {
+            for (source, derivative) in &jacobians[i] {
+                for axis in 0..3 {
+                    let mut value = 0.0_f64;
+                    for (row, flux_row) in flux.iter().enumerate() {
+                        for (column, flux_value) in flux_row.iter().enumerate() {
+                            value += flux_value * derivative[axis][row][column];
+                        }
+                    }
+                    derivatives[i][*source][axis] += value;
+                }
             }
         }
     }
@@ -500,7 +582,18 @@ fn sts_derivatives(
     Ok(derivatives)
 }
 
-/// CDS 的能量与解析梯度（[`CavityFrame::Global`] 的表面，见模块文档）。
+/// CDS 的能量与解析梯度，**用 [`CavityFrame::default()`]（= Covariant）**，与能量侧一致。
+///
+/// 第 439 轮：此前这里显式取 `Global`，而 `smd_surface` 的默认早已是 `Covariant` ——
+/// 于是「默认能量」与「默认梯度」在求导**不同的曲面**（实测差 1.49e-2 kcal/(mol·Å)）。
+/// 共变梯度补上并按 FD 验到 1.96e-8 Ha/Bohr（判据 1e-5）之后，这一处必须跟上：
+/// 一个默认入口求导另一个曲面，是本项目最忌讳的静默不一致。`Global` 仍可用显式参数取到。
+///
+/// 注意这里的默认与 [`crate::smd_surface::smd_surface`] 的默认**不同**：
+/// [`crate::smd_surface::smd_surface`] 的默认是转动协变的 [`CavityFrame::Covariant`]
+/// （第 435 轮翻的），而本函数保留 `Global` 是为了逐位不动（`tests/sv03_smd_gradient.rs` 的
+/// `the_global_path_is_pinned_bit_for_bit` 钉着位模式）。要**默认面**的梯度就用
+/// [`smd_cds_energy_gradient_with_frame`] 传 [`CavityFrame::default()`]，两者现在都实装。
 ///
 /// `switch_width_angstrom` **必须**大于 0（见模块文档：`w = 0` 的梯度不存在）。
 ///
@@ -522,21 +615,25 @@ pub fn smd_cds_energy_gradient(
         switch_width_angstrom,
         water,
         descriptors,
-        CavityFrame::Global,
+        CavityFrame::default(),
     )
 }
 
 /// CDS 的能量与解析梯度，**可选坐标架**（与 [`crate::smd_surface::smd_surface_with_frame`]
 /// 同形状）。
 ///
-/// 目前只实现了 [`CavityFrame::Global`]：协变坐标架要求 [`crate::cavity::atom_frame`] 对核
-/// 坐标的雅可比 `∂F_i/∂c_m`（采样点 `p_k = c_i + R_i·F_i·l_k` 通过它依赖构型），本模块没有
-/// 实装它，所以传 [`CavityFrame::Covariant`] 会返回 [`EngineError::Unsupported`] —— 显式
-/// 报错，而不是静默地把另一张面的导数当成本面的导数。
+/// 两种坐标架都实装：
+///
+/// * [`CavityFrame::Global`]：`F_i = 1`，采样点 `p_k = c_i + R_i·l_k`，逐位等于本模块历史上
+///   的（也是唯一实现过的）路径；
+/// * [`CavityFrame::Covariant`]：`F_i = atom_frame(molecule, i)`，多算一项
+///   `R_i·(∂F_i/∂c_m)·l_k`（坐标架雅可比，[`atom_frame_jacobian`]，见
+///   [`surface_areas_and_gradients`] 的文档）。这一项是**同一分支内**的单侧导数：在
+///   "最近邻身份/`e2` 伙伴身份发生改变"的构型上坐标架本身不连续，见模块文档。
 ///
 /// # Errors
 ///
-/// 加上一条：`frame = Covariant` → [`EngineError::Unsupported`]。
+/// `switch_width <= 0`、点数太少、元素缺数据、成对分支与实现不符 → 显式错误。
 pub fn smd_cds_energy_gradient_with_frame(
     data: &SmdAtomic,
     molecule: &Molecule,
@@ -546,14 +643,6 @@ pub fn smd_cds_energy_gradient_with_frame(
     descriptors: Option<&SmdDescriptors>,
     frame: CavityFrame,
 ) -> Result<CdsEnergyGradient, EngineError> {
-    if frame != CavityFrame::Global {
-        return Err(EngineError::Unsupported(format!(
-            "smd: the CDS analytic gradient only differentiates the global-frame surface; the \
-             {frame:?} frame needs the frame Jacobian dF_i/dc_m (atom_frame depends on the nuclear \
-             coordinates), which is not implemented - refusing to return the derivative of a \
-             different surface"
-        )));
-    }
     if !switch_width_angstrom.is_finite() || switch_width_angstrom <= 0.0 {
         return Err(EngineError::InvalidInput(format!(
             "smd: the CDS gradient needs a positive switch width (the binary limit is not \
@@ -566,8 +655,13 @@ pub fn smd_cds_energy_gradient_with_frame(
         )));
     }
     let geometry = Geometry::new(data, molecule)?;
-    let (areas, darea) =
-        surface_areas_and_gradients(data, &geometry, points_per_atom, switch_width_angstrom)?;
+    let (areas, darea) = surface_areas_and_gradients(
+        data,
+        &geometry,
+        points_per_atom,
+        switch_width_angstrom,
+        frame,
+    )?;
     let sts = smd_sts(data, molecule, water, descriptors)?;
     let dsts = sts_derivatives(data, &geometry, &areas, water, descriptors)?;
     let cssigm = crate::smd::cds_constant_term(data, water, descriptors);

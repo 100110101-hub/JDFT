@@ -30,9 +30,10 @@
 //! * [`CavityFrame::Global`]（SV-01 的原始行为，保留但**不再是默认**）：点钉在**全局**坐标轴上。
 //!   分子整体转动时点集不跟着转，遮蔽边界上的碎片会翻转，面积/体积漂移 `O(1/√N)`（水 + Bondi
 //!   半径、250 点/原子实测 4.76e-3 / 3.56e-3）。这一模式**逐位不变**（历史数值在
-//!   `tests/sv04_covariant_cavity.rs` 里按位钉着），并且仍然是 CDS 解析梯度所用的模式
-//!   （见 `crate::smd_gradient`：那里的坐标架雅可比 ∂F/∂c 未实装，所以显式报错而不是
-//!   静默换一套点集）。
+//!   `tests/sv04_covariant_cavity.rs` 里按位钉着），并且仍然是 [`crate::smd_gradient`] 的
+//!   `smd_cds_energy_gradient` 入口所用的模式（那一路逐位不变）。本轮起协变坐标架的
+//!   解析梯度也实装了（[`atom_frame_jacobian`]），所以两种坐标架都能求导 —— 分支边界上的
+//!   不可微性见 [`atom_frame_jacobian`] 的文档。
 //!
 //! **本轮（第 435 轮）把默认从 `Global` 翻到 `Covariant`**：不翻转的话，同一个分子转一下就
 //! 让 `ΔG_solv` 移动 1.276 kcal/mol，判据（< 1.5 kcal/mol）被离散化伪影吃掉一半。翻转的
@@ -56,8 +57,9 @@ use qwb_registry::elements::atomic_number;
 /// [`CavityFrame::Global`] 是 SV-01 的原始做法：每个原子的 Fibonacci 点在全局坐标轴下生成。
 /// 分子整体转动时这些点**不**跟着转，于是"哪些点被别的球遮住"会变，面积/体积对刚性转动
 /// 有 `O(1/√N)` 的漂移（水 + Bondi 半径、250 点/原子实测 4.76e-3 / 3.56e-3）—— 与
-/// SV-01 的判据（< 1e-6）不符。它保留下来有两个用途：把历史数值按位钉住（回归），以及
-/// 给 CDS 的解析梯度用（那一半的坐标架雅可比还没实装，见 `crate::smd_gradient`）。
+/// SV-01 的判据（< 1e-6）不符。它保留下来有两个用途：把历史数值按位钉住（回归），以及做
+/// "换坐标架动了多少"的参照。两种坐标架现在都能求解析梯度（补上协变的坐标架雅可比
+/// [`atom_frame_jacobian`]）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 #[non_exhaustive]
 pub enum CavityFrame {
@@ -205,13 +207,17 @@ fn unit3(a: [f64; 3]) -> Option<[f64; 3]> {
     Some([a[0] / length, a[1] / length, a[2] / length])
 }
 
-/// 给定一根单位轴 `axis`，返回一根**确定但不协变**的垂直单位向量。
+/// 给定一根单位轴 `axis`，返回**兜底的参考轴**与它在 `axis` 上的垂直分量。
 ///
 /// 取绝对分量最小的全局坐标轴做参考向量。这条分支只在"其余所有原子都与 `axis` 共线"
 /// 时用到（双原子、直线分子、孤立原子之外的 0/1 方向体系）—— 那种几何**不存在**
 /// 转动协变的垂直向量（绕轴转动是对称操作，任何协变构造都只能给出与轴平行的向量，
 /// 矛盾），所以这里是显式的兜底而不是疏漏。
-fn fallback_perpendicular(axis: [f64; 3]) -> [f64; 3] {
+///
+/// 返回 `(参考轴, 垂直分量)`；垂直分量的长度 ≥ 0.816（见内联注释），不会为零。
+/// [`atom_frame_jacobian`] 需要这两个量（参考轴在分支内当常值处理），所以这里不把它
+/// 藏进 `unit3` 里。
+fn fallback_axis(axis: [f64; 3]) -> ([f64; 3], [f64; 3]) {
     let mut reference = [0.0_f64; 3];
     let components = [axis[0].abs(), axis[1].abs(), axis[2].abs()];
     let mut smallest = 0;
@@ -228,8 +234,7 @@ fn fallback_perpendicular(axis: [f64; 3]) -> [f64; 3] {
         reference[1] - projection * axis[1],
         reference[2] - projection * axis[2],
     ];
-    // 上面的界保证 `unit3` 不会返回 None；真要出现非有限值就退回全局 z 的垂直（+x）。
-    unit3(orthogonal).unwrap_or([1.0, 0.0, 0.0])
+    (reference, orthogonal)
 }
 
 /// 按（距离，序号）排序候选方向，**并列判定带容差**。
@@ -283,7 +288,7 @@ fn order_candidates(mut candidates: Vec<(f64, usize, [f64; 3])>) -> Vec<(f64, us
 ///   取向信息，它的面积仍然精确是 `4πR²`（所有碎片都暴露），但体积的散度定理式
 ///   `(1/3)Σ(r·n)A` 带一个**预先存在**的原点依赖，因此孤立原子**不可能**做到转动不变 ——
 ///   这是 `cavity()` 体积公式本身的性质，不在坐标架这一层能修。
-/// * **其余原子都与 `e1` 共线**（双原子、直线分子）：退到本文件里 `fallback_perpendicular`
+/// * **其余原子都与 `e1` 共线**（双原子、直线分子）：退到本文件里 `fallback_axis`
 ///   的确定性兜底（取绝对分量最小的全局轴做参考），确定但**不**协变，同样是因为那种几何
 ///   不存在协变的垂直向量。实测（`tests/sv04_covariant_cavity.rs`）：这种体系的面积/体积
 ///   在三次刚性转动下**仍然逐位不变** —— 共线体系的遮蔽判据只依赖 `n·e1`，而 `n·e1` 是
@@ -291,9 +296,56 @@ fn order_candidates(mut candidates: Vec<(f64, usize, [f64; 3])>) -> Vec<(f64, us
 ///   转，改不了"哪些点被遮住"。也就是说兜底只影响坐标架，不影响观测量。
 #[must_use]
 pub fn atom_frame(molecule: &Molecule, index: usize) -> [[f64; 3]; 3] {
-    let identity = [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]];
+    select_frame(molecule, index).axes
+}
+
+/// 单位架（退化情形的兜底）。
+const IDENTITY_FRAME: [[f64; 3]; 3] = [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]];
+
+/// 坐标架的**离散分支**：坐标架在分支内光滑、在分支边界上不连续。
+///
+/// [`atom_frame_jacobian`] 只对**当前分支**求导，所以这个判别式必须与 [`atom_frame`]
+/// 的选择逻辑共用同一份实现（否则两处会漂移）。
+#[derive(Debug, Clone, Copy)]
+enum FrameBranch {
+    /// 没有任何可用邻居（孤立原子、或所有其它原子都与它重合）：单位架，对坐标的导数为 0。
+    Identity,
+    /// `nearest`（最近邻）给出 `e1`；`secondary` 给出 `e2`，`None` = 退到
+    /// [`fallback_axis`] 的确定性兜底（共线体系）。
+    Neighbours {
+        /// `e1` 来自哪个原子（最近邻）。
+        nearest: usize,
+        /// `e2` 来自哪个原子（第一根与 `e1` 不共线的方向）；`None` = 兜底垂直向量。
+        secondary: Option<usize>,
+    },
+}
+
+/// 一次坐标架选择的完整结果（分支 + 三根轴 + 雅可比要用的中间量）。
+struct FrameSelection {
+    branch: FrameBranch,
+    axes: [[f64; 3]; 3],
+    /// `e2` 归一化之前的长度 `|w|`（或兜底垂直分量的长度）：`∂e2 = (I − e2e2ᵀ)·∂w / |w|`。
+    secondary_norm: f64,
+    /// 兜底分支用的参考轴（分支内当常值）。
+    fallback_reference: [f64; 3],
+}
+
+impl FrameSelection {
+    const fn identity() -> Self {
+        Self {
+            branch: FrameBranch::Identity,
+            axes: IDENTITY_FRAME,
+            secondary_norm: 0.0,
+            fallback_reference: [0.0; 3],
+        }
+    }
+}
+
+/// [`atom_frame`] 的实现：把"选最近邻 / 选第一根不共线方向"这两个离散选择的结果连同
+/// 雅可比需要的中间量一起返回。
+fn select_frame(molecule: &Molecule, index: usize) -> FrameSelection {
     let Some(origin) = molecule.atoms.get(index).map(|atom| atom.position_angstrom) else {
-        return identity;
+        return FrameSelection::identity();
     };
     // 候选方向只依赖相对几何，所以随分子一起转动。
     let mut candidates: Vec<(f64, usize, [f64; 3])> = Vec::new();
@@ -317,31 +369,198 @@ pub fn atom_frame(molecule: &Molecule, index: usize) -> [[f64; 3]; 3] {
         ));
     }
     let candidates = order_candidates(candidates);
-    let Some(&(_, _, e1)) = candidates.first() else {
-        return identity;
+    let Some(&(_, nearest, e1)) = candidates.first() else {
+        return FrameSelection::identity();
     };
-    let mut secondary: Option<[f64; 3]> = None;
-    for &(_, _, direction) in &candidates {
+    let mut secondary: Option<(usize, [f64; 3], f64)> = None;
+    for &(_, other, direction) in &candidates {
         let projection = dot3(direction, e1);
         let orthogonal = [
             direction[0] - projection * e1[0],
             direction[1] - projection * e1[1],
             direction[2] - projection * e1[2],
         ];
-        if norm3(orthogonal) > NON_COLLINEAR_SINE
+        let length = norm3(orthogonal);
+        if length > NON_COLLINEAR_SINE
             && let Some(unit) = unit3(orthogonal)
         {
-            secondary = Some(unit);
+            secondary = Some((other, unit, length));
             break;
         }
     }
-    let e2 = secondary.unwrap_or_else(|| fallback_perpendicular(e1));
+    let (e2, secondary, secondary_norm, fallback_reference) = match secondary {
+        Some((other, unit, length)) => (unit, Some(other), length, [0.0_f64; 3]),
+        None => {
+            let (reference, orthogonal) = fallback_axis(e1);
+            let length = norm3(orthogonal);
+            // 与历史上的 `fallback_perpendicular` 逐位相同的归一化与兜底。
+            let unit = unit3(orthogonal).unwrap_or([1.0, 0.0, 0.0]);
+            (unit, None, length, reference)
+        }
+    };
     let Some(e3) = unit3(cross3(e1, e2)) else {
         // `e1 ⟂ e2` 且都单位化，叉积长度应为 1；走到这里说明输入是非有限值。
-        return identity;
+        return FrameSelection::identity();
     };
     let e2 = cross3(e3, e1);
-    [e1, e2, e3]
+    FrameSelection {
+        branch: FrameBranch::Neighbours { nearest, secondary },
+        axes: [e1, e2, e3],
+        secondary_norm,
+        fallback_reference,
+    }
+}
+
+/// 坐标架雅可比的一项：源原子 `m` 与 `∂F_i/∂c_m`。
+///
+/// `derivative[axis][row][column] = ∂ e_row[column] / ∂ x_m[axis]`（`row` = 第几根轴
+/// `e1/e2/e3`，`column` = 分量 `x/y/z`）。`F_i` 的三行就是 `atom_frame` 返回的三根轴。
+pub type FrameJacobianTerm = (usize, [[[f64; 3]; 3]; 3]);
+
+/// 一根单位方向向量对某个源原子坐标的导数：`derivative[axis][column]`。
+type DirectionDerivatives = [[f64; 3]; 3];
+
+/// 一个源原子：`e1` 与 `e2` 各自经过它的那一半导数（不经过的那一半是全零）。
+type FrameSource = (usize, DirectionDerivatives, DirectionDerivatives);
+
+/// 全零的"轴导数"（`[axis][row][column]`）：该源原子不影响这根轴。
+const ZERO_AXIS_DERIVATIVE: [[[f64; 3]; 3]; 3] = [[[0.0_f64; 3]; 3]; 3];
+
+/// 全零的单位方向导数（`[axis][column]`）：某个源原子不参与这条单位向量。
+const ZERO_DIRECTION_DERIVATIVE: DirectionDerivatives = [[0.0_f64; 3]; 3];
+
+/// `(I − n nᵀ)·v / d`（`n` 单位）：单位向量 `u = Δ/d` 对 `Δ` 的导数那一半。
+///
+/// `∂u/∂Δ = (I − u uᵀ)/d`，于是"对源原子坐标求导"= `±(I − u uᵀ)/d·e_axis`，
+/// 正负号取决于扰动的是哪个端点（`−` 给球心端、`+` 给另一个端点）。
+fn transverse(vector: [f64; 3], direction: [f64; 3], distance: f64) -> [f64; 3] {
+    let projection = dot3(vector, direction);
+    [
+        (vector[0] - projection * direction[0]) / distance,
+        (vector[1] - projection * direction[1]) / distance,
+        (vector[2] - projection * direction[2]) / distance,
+    ]
+}
+
+/// 坐标架对核坐标的**解析**雅可比 `∂F_i/∂c_m`（[`atom_frame`] 的导数）。
+///
+/// 返回**只有非零项**的稀疏表：`(m, D)`，其中 `D[axis][row][column] = ∂e_row[column]/∂x_m[axis]`，
+/// `e1/e2/e3` 是 [`atom_frame`] 的三根轴。分支内的非零源**最多三个**：
+///
+/// * `m = i`（球心自己）、`m = nearest`（最近邻）、`m = secondary`（给 `e2` 的那个原子）；
+/// * 其它原子的坐标只在**分支判定**里出现（换最近邻 / 换 `e2` 伙伴），所以分支内导数为 0。
+///
+/// # 分支边界（重要）
+///
+/// 坐标架是**分段**光滑的：最近邻的身份、或"第一根与 `e1` 不共线"的原子身份一变，
+/// `F_i` 就跳变（不是连续的 0 阶跳跃能忽略的那种跳变 —— `e1` 可以整根换方向）。这里
+/// 在**给定几何处生效的那个分支内**求导（单侧导数），所以：
+///
+/// * 在分支内部（真实分子的绝大多数构型），它就是普通导数，与 [`atom_frame`] 的中心
+///   差分一致到 ~1e-10（实测见 `tests/sv02_covariant_gradient.rs`）；
+/// * 在分支边界上（例如对称的水分子里 `O` 的两个 `H` 严格等距、甲醇里 `C` 的两个 `H`
+///   严格等距），**导数不存在**：跳到邻居分支的那一侧值不同。返回的是当前分支
+///   （并列时按原子序号取小者）的那一侧。
+///
+/// 这一条不是实现偷懒，而是 `atom_frame` 本身的定义：离散选择要么冻结（我们的做法），
+/// 要么在边界上取值不定。`smd_gradient` 的模块文档记了它对能量的后果。
+#[must_use]
+pub fn atom_frame_jacobian(molecule: &Molecule, index: usize) -> Vec<FrameJacobianTerm> {
+    let selection = select_frame(molecule, index);
+    let FrameBranch::Neighbours { nearest, secondary } = selection.branch else {
+        return Vec::new();
+    };
+    let [e1, e2, _e3] = selection.axes;
+    let Some(origin) = molecule.atoms.get(index).map(|atom| atom.position_angstrom) else {
+        return Vec::new();
+    };
+    let Some((e1_at_origin, e1_at_nearest)) = unit_direction_derivatives(molecule, origin, nearest)
+    else {
+        return Vec::new();
+    };
+    let secondary_terms =
+        secondary.and_then(|other| unit_direction_derivatives(molecule, origin, other));
+    // `e2` 的公式（分支内）：`w = u1 − (u1·e1)e1`、`e2 = w/|w|`（或兜底的垂直分量）。
+    let mut sources: Vec<FrameSource> = Vec::with_capacity(3);
+    sources.push((
+        index,
+        e1_at_origin,
+        secondary_terms.map_or(ZERO_DIRECTION_DERIVATIVE, |pair| pair.0),
+    ));
+    sources.push((nearest, e1_at_nearest, ZERO_DIRECTION_DERIVATIVE));
+    if let (Some((_, at_other)), Some(other)) = (secondary_terms, secondary) {
+        sources.push((other, ZERO_DIRECTION_DERIVATIVE, at_other));
+    }
+    // `u1`（指向 `secondary` 的单位向量）在分支内是常量场，逐源原子只改它的导数。
+    let u1 = secondary.map_or([0.0_f64; 3], |other| {
+        unit3(sub3(molecule.atoms[other].position_angstrom, origin)).unwrap_or([0.0; 3])
+    });
+    let beta = dot3(u1, e1);
+    let mut terms = Vec::with_capacity(sources.len());
+    for (atom, e1_axis, u1_axis) in sources {
+        let mut derivative = ZERO_AXIS_DERIVATIVE;
+        for axis in 0..3 {
+            let de1 = e1_axis[axis];
+            let de2 = if secondary.is_some() {
+                // ∂w = ∂u1 − [(∂u1·e1) + (u1·∂e1)]e1 − (u1·e1)∂e1
+                let dbeta = dot3(u1_axis[axis], e1) + dot3(u1, de1);
+                let mut dw = u1_axis[axis];
+                for component in 0..3 {
+                    dw[component] -= dbeta * e1[component] + beta * de1[component];
+                }
+                transverse(dw, e2, selection.secondary_norm)
+            } else {
+                // 兜底分支：orth = ref − (ref·e1)e1，参考轴在分支内当常值。
+                let reference = selection.fallback_reference;
+                let projection = dot3(reference, e1);
+                let dprojection = dot3(reference, de1);
+                let mut d_orthogonal = [0.0_f64; 3];
+                for component in 0..3 {
+                    d_orthogonal[component] =
+                        -dprojection * e1[component] - projection * de1[component];
+                }
+                transverse(d_orthogonal, e2, selection.secondary_norm)
+            };
+            // e3 = e1 × e2（两根单位正交轴的叉积，长度恒为 1）。
+            let de3 = [
+                de1[1] * e2[2] + e1[1] * de2[2] - de1[2] * e2[1] - e1[2] * de2[1],
+                de1[2] * e2[0] + e1[2] * de2[0] - de1[0] * e2[2] - e1[0] * de2[2],
+                de1[0] * e2[1] + e1[0] * de2[1] - de1[1] * e2[0] - e1[1] * de2[0],
+            ];
+            derivative[axis][0] = de1;
+            derivative[axis][1] = de2;
+            derivative[axis][2] = de3;
+        }
+        terms.push((atom, derivative));
+    }
+    terms
+}
+
+/// 一个点对 `origin` 的单位方向 `u` 对**两端**坐标的导数（行 = 扰动轴）。
+///
+/// 返回 `(∂u/∂c_origin, ∂u/∂c_other)`：`∂u/∂Δ = (I − uuᵀ)/d`，而 `Δ = c_other − c_origin`，
+/// 于是球心端是负号、另一个端点是正号。`d` 非正/非有限时返回 `None`。
+fn unit_direction_derivatives(
+    molecule: &Molecule,
+    origin: [f64; 3],
+    other: usize,
+) -> Option<(DirectionDerivatives, DirectionDerivatives)> {
+    let offset = sub3(molecule.atoms.get(other)?.position_angstrom, origin);
+    let distance = norm3(offset);
+    if !distance.is_finite() || distance <= 0.0 {
+        return None;
+    }
+    let direction = unit3(offset)?;
+    let mut at_origin = [[0.0_f64; 3]; 3];
+    let mut at_other = [[0.0_f64; 3]; 3];
+    for axis in 0..3 {
+        let mut basis = [0.0_f64; 3];
+        basis[axis] = 1.0;
+        let transverse = transverse(basis, direction, distance);
+        at_origin[axis] = [-transverse[0], -transverse[1], -transverse[2]];
+        at_other[axis] = transverse;
+    }
+    Some((at_origin, at_other))
 }
 
 /// 把局部坐标下的单位方向 `local` 组合成全局方向 `Σ_k local_k · frame_k`。
