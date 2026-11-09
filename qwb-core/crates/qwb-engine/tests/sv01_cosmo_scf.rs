@@ -139,12 +139,15 @@ fn report(
     name: &str,
     registry: &Registry,
     molecule: &Molecule,
+    epsilon: f64,
     experimental: f64,
     criterion_met: bool,
 ) {
     let vacuum = run_scf(registry, molecule, None, 250).expect("vacuum scf");
     assert!(vacuum.converged, "{name}: vacuum SCF did not converge");
-    let solvated = run_scf(registry, molecule, Some(78.355), 250).expect("cosmo scf");
+    // 第 434 轮：ε 由调用方给，**不再硬编码 78.355（水的值）**。审计发现甲醇的验收用例一直用水 ε，
+    // 于是"ε 32.613 → −5.789"这条记录是错的；按甲醇自己的 ε 实测 −5.676（差距 −1.97，仍在判据外）。
+    let solvated = run_scf(registry, molecule, Some(epsilon), 250).expect("cosmo scf");
     assert!(solvated.converged, "{name}: COSMO SCF did not converge");
     let delta_g = solvated.energy_hartree - vacuum.energy_hartree;
     let measured = delta_g * hartree_to_kcal();
@@ -200,14 +203,15 @@ fn report(
 fn sv01_water_solvation_energy_against_experiment() {
     let registry = Registry::open(data_root()).expect("qwb-data");
     // 水：−7.274 kcal/mol vs 实验 −6.32 → 差 −0.95 kcal/mol（判据内）
-    report("water", &registry, &water(), -6.32, true);
+    report("water", &registry, &water(), 78.355, -6.32, true);
 }
 
 #[test]
 fn sv01_methanol_solvation_energy_against_experiment() {
     let registry = Registry::open(data_root()).expect("qwb-data");
-    // 甲醇：−5.789 kcal/mol vs 实验 −3.71 → 差 −2.08 kcal/mol（判据外，卡点 = 缺非极性项）
-    report("methanol", &registry, &methanol(), -3.71, false);
+    // 甲醇：用**甲醇自己的 ε = 32.613**（`qwb-data/solvent/methanol.yaml`），不是水的 78.355。
+    // 实测 −5.676 vs 实验 −3.71 → 差 −1.97 kcal/mol（判据外，卡点 = 缺非极性项）。
+    report("methanol", &registry, &methanol(), 32.613, -3.71, false);
 }
 
 #[test]
