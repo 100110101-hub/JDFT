@@ -40,12 +40,15 @@ GEOMETRIES = {
         ("H", (0.0, 0.0, -1.09)),
     ],
     "acetonitrile": [
-        ("C", (0.0, 0.0, 0.0)),
-        ("C", (0.0, 0.0, 1.46)),
-        ("N", (0.0, 0.0, 2.62)),
-        ("H", (-0.51, 0.89, 0.0)),
-        ("H", (-0.51, -0.89, 0.0)),
-        ("H", (1.02, 0.0, 0.0)),
+  ("C", (0.0, 0.0, 0.0)),
+  ("C", (0.0, 0.0, 1.46)),
+  ("N", (0.0, 0.0, 2.62)),
+  # 第 438 轮：原来的三个甲基 H 全在 z=0 平面上、其中一个沿 C–C 轴延伸，
+  # 化学上不成立（甲基应为四面体，H 应向 N 的反方向倾斜）。按 C–H 1.09 Å、
+  # H–C–C 109.5° 重放：z = −1.09·cos(70.5°) = −0.363、r_xy = 1.027。
+  ("H", (1.027, 0.0, -0.363)),
+  ("H", (-0.5135, 0.8894, -0.363)),
+  ("H", (-0.5135, -0.8894, -0.363)),
     ],
 }
 
@@ -120,6 +123,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--basis", default="sto-3g")
     parser.add_argument("--method", default="hf")
+    parser.add_argument("--release", action="store_true", help="用 --release 构建（同一个代码路径，数值不变，快一个数量级）")
     args = parser.parse_args()
 
     with io.open(REFERENCE, encoding="utf-8") as handle:
@@ -134,7 +138,7 @@ def main() -> int:
             raise SystemExit(f"no starting geometry for `{solute}`")
         write_input(os.path.join(workdir, f"{solute}_opt.yaml"), GEOMETRIES[solute],
                     args.basis, args.method, "opt", "vacuum", None)
-        optimized = run_qwb(workdir, f"{solute}_opt")
+        optimized = run_qwb(workdir, f"{solute}_opt", profile="release" if args.release else "debug")
         atoms = read_xyz(os.path.join(workdir, "out", f"{solute}_opt", "artifacts", "optimized.xyz"))
         write_input(os.path.join(workdir, f"{solute}_smd.yaml"), atoms,
                     args.basis, args.method, "sp", row["solvent"], "smd")
