@@ -236,15 +236,19 @@ Step -Name 'core: test' -Dir 'qwb-core' -Body {
         $slowArgs = @('--run-ignored', 'all')
         Write-Host '   slow lane: ON (--run-ignored all)'
     }
-    $laneA = Start-Process -FilePath 'cargo' -PassThru -NoNewWindow `
-        -RedirectStandardOutput slow-lane.log -RedirectStandardError slow-lane.err `
-        -ArgumentList (@('nextest', 'run', '--workspace', '-j', '4', '--partition', 'count:1/2', '--no-fail-fast') + $slowArgs)
-    & cargo nextest run --workspace -j 4 --partition 'count:2/2' --no-fail-fast @slowArgs
-    $codeB = $LASTEXITCODE
-    $laneA.WaitForExit()
-    $codeA = $laneA.ExitCode
-    Write-Host ("   lanes: shard1 exit {0}, shard2 exit {1}, nextest list count {2}" -f $codeA, $codeB, $listed)
-    if ($codeA -ne 0 -or $codeB -ne 0) { throw 'test lane failed' }
+    # 第 431 轮：2 泳道 -> 4 泳道（各 -j 4，共 16 线程 = 16 逻辑核）。实测同一份代码
+    # 2 泳道 436 s / 4 泳道 360 s：瓶颈已不是总 CPU 时间，而是「最长的单个测试最后才起」
+    # 造成的阶梯尾巴，多两个独立调度器能把它摊平。`--partition count:i/4` 仍保证四片恰好覆盖全集。
+    $laneProcs = @()
+    for ($lane = 1; $lane -le 4; $lane++) {
+        $laneProcs += Start-Process -FilePath 'cargo' -PassThru -NoNewWindow `
+            -RedirectStandardOutput "slow-lane-$lane.log" -RedirectStandardError "slow-lane-$lane.err" `
+            -ArgumentList (@('nextest', 'run', '--workspace', '-j', '4', '--partition', "count:$lane/4", '--no-fail-fast') + $slowArgs)
+    }
+    $laneProcs | ForEach-Object { $_.WaitForExit() }
+    $laneCodes = @($laneProcs | ForEach-Object { $_.ExitCode })
+    Write-Host ("   lanes: exits {0}, nextest list count {1}" -f ($laneCodes -join ','), $listed)
+    if (@($laneCodes | Where-Object { $_ -ne 0 }).Count -gt 0) { throw 'test lane failed' }
     & cargo test --workspace --doc
 }
 Step -Name 'core: I-06 integral cache (feature on)' -Dir 'qwb-core' -Body {

@@ -185,14 +185,18 @@ EOF
     # 都用 `cargo nextest run`（而不是直接跑 cargo-nextest）：cargo 自己分派子命令，
     # 于是 Windows 的 cargo-nextest.exe 在 WSL/Git Bash 下也能用（直接跑 .exe 会被
     # 它当成 cargo 的参数，报 "unrecognized subcommand 'run'"）。
-    "$0" nextest run --workspace -j 4 --partition count:1/2 --no-fail-fast $ri > shard1.log 2>&1 &
-    shard1_pid=$!
-    "$0" nextest run --workspace -j 4 --partition count:2/2 --no-fail-fast $ri
-    shard2_code=$?
-    wait $shard1_pid
-    shard1_code=$?
-    tail -3 shard1.log
-    if [ $shard1_code -ne 0 ] || [ $shard2_code -ne 0 ]; then exit 1; fi
+# 第 431 轮：与 verify.ps1 同步 —— 2 泳道 -> 4 泳道（各 -j 4），实测 436 s -> 360 s。
+pids=""
+for lane in 1 2 3 4; do
+  "$0" nextest run --workspace -j 4 --partition "count:$lane/4" --no-fail-fast $ri > "shard$lane.log" 2>&1 &
+  pids="$pids $!"
+done
+lane_code=0
+for pid in $pids; do
+  wait "$pid" || lane_code=1
+done
+for lane in 1 2 3 4; do tail -2 "shard$lane.log"; done
+if [ $lane_code -ne 0 ]; then exit 1; fi
     "$0" test --workspace --doc
 ' "$CARGO" "$slow"
 # I-00 验收：两个后端都必须编译，且给出同样的数（tests/backend_consistency.rs 的 golden 值）。
