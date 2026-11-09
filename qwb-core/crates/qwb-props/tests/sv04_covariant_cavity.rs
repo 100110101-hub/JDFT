@@ -5,12 +5,16 @@
 //! 250 点/原子时面积/体积漂移 4.76e-3 / 3.56e-3（判据 1e-6），而下游 SV-02 的解析梯度
 //! 判据（< 1e-5 Ha/Bohr vs 有限差分）在一个"转一下就跳 4.8e-3"的表面上不可能达到。
 //!
-//! 本轮加的 [`CavityFrame::Covariant`] 把每个原子的点放进由**邻居几何**构造的局部坐标架，
-//! 坐标架随分子一起转，于是面积/体积对刚性转动精确不变。这里逐条量：
+//! 第 434 轮加的 [`CavityFrame::Covariant`] 把每个原子的点放进由**邻居几何**构造的局部坐标架，
+//! 坐标架随分子一起转，于是面积/体积对刚性转动精确不变；第 435 轮把它**翻成默认**（`cavity()`
+//! 与 `smd_surface()` 都用它），因为旧默认的转动漂移（水 + Bondi 半径、250 点/原子 4.76e-3 /
+//! 3.56e-3，判据 1e-6）是 SV-02 解析梯度上不去、且同一分子转一下就移动 `ΔG_solv` 1.276
+//! kcal/mol 的直接原因。这里逐条量：
 //!
-//! * 协变模式的转动不变性（面积、体积、tessera 数 M）；
-//! * 全局模式的漂移（把缺陷本身记录成回归，默认路径没动，所以它仍在）；
-//! * 两种模式的面积/体积差（"若改成默认"的爆炸半径）；
+//! * 协变模式的转动不变性（面积、体积、tessera 数 M）—— 现在的**默认**；
+//! * `CavityFrame::default()` 确实是协变、`cavity()` 与它逐位相同；
+//! * 被换掉的全局模式的漂移（把缺陷本身留成回归，它仍在，只是不再是默认）；
+//! * 两种模式的面积/体积差（"翻默认"的爆炸半径）；
 //! * 坐标架本身随转动协变（逐原子逐轴）；
 //! * 退化环境（孤立原子 0 邻居、双原子/直线 1 个方向、甲烷这种球形陀螺）的确定性。
 use std::collections::BTreeMap;
@@ -147,9 +151,11 @@ fn covariant_area_and_volume_are_rotation_invariant() {
 }
 
 #[test]
-fn global_area_and_volume_drift_under_rotation() {
-    // 缺陷本身：默认（Global）路径**没有**改动，所以漂移仍在。这条断言的作用是
-    // 「若有人把默认路径也改成协变，这条会红，必须同步改这里与账本」，而不是在给缺陷背书。
+fn the_replaced_global_frame_still_drifts_which_is_why_the_default_flipped() {
+    // 被换掉的旧默认（`CavityFrame::Global`）**没有**改动，所以漂移仍在。这条的作用有两条：
+    // ① 它是"当初为什么要翻默认"的可执行记录（水 4.76e-3 / 3.56e-3，判据 1e-6）；
+    // ② 若有人把 Global 的实现也改成协变（那会让历史钉住的数值失去意义），这条会红 ——
+    //    那时必须同步改这里与账本，而不是放宽它。
     for (name, molecule) in [("water", water()), ("methanol", methanol())] {
         println!("{name}, 250 points/atom, CavityFrame::Global:");
         let [area, volume] = rotation_deviations(&molecule, CavityFrame::Global, 250);
@@ -161,26 +167,29 @@ fn global_area_and_volume_drift_under_rotation() {
         assert!(
             worst_area > 1.0e-6 || worst_volume > 1.0e-6,
             "{name}: the global frame is now rotation invariant too (worst area {worst_area:.3e}, \
-             worst volume {worst_volume:.3e}) - the default path changed; update this test, \
-             tests/sv04_cavity.rs and the ledger instead of relaxing it"
+             worst volume {worst_volume:.3e}) - update this test, tests/sv01_cavity.rs and the \
+             ledger instead of relaxing it"
         );
     }
 }
 
 #[test]
 fn the_covariant_cavity_keeps_the_same_tessera_count_under_rotation() {
-    // 旧模式的 M 在转动下从 410 跳到 413（遮蔽边界碎片翻转）。协变模式里 M 必须一个不差。
+    // 旧（全局）模式的 M 在转动下从 410 跳到 413 / 从 668 跳到 668+（遮蔽边界碎片翻转）。
+    // 协变模式里 M 必须一个不差。全局那一列必须**显式**点名：`cavity()` 已经是协变。
     for (name, molecule) in [("water", water()), ("methanol", methanol())] {
         let radii = bondi_radii();
         let reference = cavity_with_frame(&molecule, &radii, 1.0, 250, CavityFrame::Covariant)
             .expect("reference");
-        let global_reference = cavity(&molecule, &radii, 1.0, 250).expect("global");
+        let global_reference =
+            cavity_with_frame(&molecule, &radii, 1.0, 250, CavityFrame::Global).expect("global");
         let mut global_counts = Vec::new();
         for (axis, angle) in ROTATIONS {
             let rotated = rotate_molecule(&molecule, axis, angle);
             let covariant = cavity_with_frame(&rotated, &radii, 1.0, 250, CavityFrame::Covariant)
                 .expect("covariant");
-            let global = cavity(&rotated, &radii, 1.0, 250).expect("global");
+            let global =
+                cavity_with_frame(&rotated, &radii, 1.0, 250, CavityFrame::Global).expect("global");
             println!(
                 "  {name}: rotation {axis:?} {angle} -> M covariant {} (reference {}), global {} (reference {})",
                 covariant.tesserae.len(),
@@ -313,9 +322,16 @@ fn degenerate_environments_get_deterministic_frames() {
         [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]]
     );
     // 孤立原子的面积**精确**是 4πR²（所有碎片都暴露），两种模式逐位相同。
-    let global = cavity(&lone, &radii, 1.0, 250).expect("global");
+    let global = cavity_with_frame(&lone, &radii, 1.0, 250, CavityFrame::Global).expect("global");
     let covariant =
         cavity_with_frame(&lone, &radii, 1.0, 250, CavityFrame::Covariant).expect("covariant");
+    assert_eq!(
+        cavity(&lone, &radii, 1.0, 250)
+            .expect("default")
+            .surface_area_angstrom2,
+        covariant.surface_area_angstrom2,
+        "the default frame is covariant even for a lone atom"
+    );
     println!(
         "lone O: area global {:.12} covariant {:.12}, volume global {:.12} covariant {:.12}",
         global.surface_area_angstrom2,
@@ -379,7 +395,8 @@ fn degenerate_environments_get_deterministic_frames() {
     );
 
     // 两种模式在甲烷上都必须给出可用的空腔（体积为正、法向为单位向量）。
-    let cavity_global = cavity(&methane, &radii, 1.0, 250).expect("global methane");
+    let cavity_global =
+        cavity_with_frame(&methane, &radii, 1.0, 250, CavityFrame::Global).expect("global methane");
     let cavity_covariant = cavity_with_frame(&methane, &radii, 1.0, 250, CavityFrame::Covariant)
         .expect("covariant methane");
     println!(
@@ -398,11 +415,14 @@ fn degenerate_environments_get_deterministic_frames() {
 
 #[test]
 fn mode_to_mode_area_and_volume_shift_is_sampling_sized() {
-    // 若把协变模式改成默认，面积/体积会动多少（爆炸半径）。两种模式的差别**只**是
-    // 点集相对空腔的取向，所以差值必须留在采样误差量级（不是结构性的偏移）。
+    // 第 435 轮把协变模式翻成默认后，面积/体积相对旧默认（全局）动了多少（爆炸半径）。
+    // 两种模式的差别**只**是点集相对空腔的取向，所以差值必须留在采样误差量级（不是结构性
+    // 的偏移）。注意这里**必须**显式给 Global：`cavity()` 已经是协变，写成 `cavity()` 会
+    // 变成"协变 vs 协变"的自比（差值恒为 0，断言变成空话）。
     for (name, molecule) in [("water", water()), ("methanol", methanol())] {
         let radii = bondi_radii();
-        let global = cavity(&molecule, &radii, 1.0, 250).expect("global");
+        let global =
+            cavity_with_frame(&molecule, &radii, 1.0, 250, CavityFrame::Global).expect("global");
         let covariant = cavity_with_frame(&molecule, &radii, 1.0, 250, CavityFrame::Covariant)
             .expect("covariant");
         let area_absolute = covariant.surface_area_angstrom2 - global.surface_area_angstrom2;
@@ -476,14 +496,44 @@ fn the_covariant_tesserae_still_sit_on_their_atoms_spheres() {
 }
 
 #[test]
-fn the_default_global_path_keeps_its_bit_patterns() {
-    // 本轮只**加**一个可选模式：默认路径（`CavityFrame::Global`）的数值必须逐位不动。
-    // 这里钉的是 f64 位模式（不是"打印出来差不多"）—— 水的 M/A/V 与甲醇的 M/A/V。
-    // 对照实验（本轮跑过、未提交）：把 HEAD 的 `cavity()` 原样复制进一个临时测试，
-    // 5 个分子 × 4 种点数 × 2 个 scale 上 area/volume 的 `to_bits()` 全部相等。
+fn the_default_frame_is_covariant_and_the_global_bits_are_pinned() {
+    // 第 435 轮翻默认：`CavityFrame::default()` 必须是 `Covariant`，`cavity()` 必须与
+    // `cavity_with_frame(..., Covariant)` **逐位**相同；同时把被换掉的全局模式的 f64 位模式
+    // 继续钉住（历史数值不许无声变动），并把新默认的位模式也钉上（不许无声漂移）。
+    assert_eq!(
+        CavityFrame::default(),
+        CavityFrame::Covariant,
+        "the default frame must stay covariant - tests/sv01_cavity.rs and the ledger assume it"
+    );
     let radii = bondi_radii();
-    let water_global = cavity(&water(), &radii, 1.0, 250).expect("water");
-    let methanol_global = cavity(&methanol(), &radii, 1.0, 250).expect("methanol");
+    let water_default = cavity(&water(), &radii, 1.0, 250).expect("water");
+    let water_covariant = cavity_with_frame(&water(), &radii, 1.0, 250, CavityFrame::Covariant)
+        .expect("water covariant");
+    let methanol_default = cavity(&methanol(), &radii, 1.0, 250).expect("methanol");
+    let methanol_covariant =
+        cavity_with_frame(&methanol(), &radii, 1.0, 250, CavityFrame::Covariant)
+            .expect("methanol covariant");
+    for (name, default, covariant) in [
+        ("water", &water_default, &water_covariant),
+        ("methanol", &methanol_default, &methanol_covariant),
+    ] {
+        assert_eq!(
+            default.surface_area_angstrom2.to_bits(),
+            covariant.surface_area_angstrom2.to_bits(),
+            "{name}: cavity() must be bit-identical to the explicit covariant frame"
+        );
+        assert_eq!(
+            default.volume_angstrom3.to_bits(),
+            covariant.volume_angstrom3.to_bits(),
+            "{name}: cavity() must be bit-identical to the explicit covariant frame"
+        );
+        assert_eq!(default.tesserae.len(), covariant.tesserae.len());
+    }
+    // 被换掉的旧默认（`CavityFrame::Global`）：数值逐位不变，钉住它。
+    let water_global =
+        cavity_with_frame(&water(), &radii, 1.0, 250, CavityFrame::Global).expect("water global");
+    let methanol_global = cavity_with_frame(&methanol(), &radii, 1.0, 250, CavityFrame::Global)
+        .expect("methanol global");
     println!(
         "water Global: M {} A {:?} V {:?}",
         water_global.tesserae.len(),
@@ -514,15 +564,53 @@ fn the_default_global_path_keeps_its_bit_patterns() {
         methanol_global.volume_angstrom3.to_bits(),
         0x4042_5994_36eb_bc6e
     );
+    // 新默认（协变）：M 少 2 / 8 个碎片（遮蔽边界上少翻转），面积小 0.52 % / 1.04 %。
+    println!(
+        "water default (covariant): M {} A {:?} ({:#018x}) V {:?} ({:#018x})",
+        water_default.tesserae.len(),
+        water_default.surface_area_angstrom2,
+        water_default.surface_area_angstrom2.to_bits(),
+        water_default.volume_angstrom3,
+        water_default.volume_angstrom3.to_bits()
+    );
+    println!(
+        "methanol default (covariant): M {} A {:?} ({:#018x}) V {:?} ({:#018x})",
+        methanol_default.tesserae.len(),
+        methanol_default.surface_area_angstrom2,
+        methanol_default.surface_area_angstrom2.to_bits(),
+        methanol_default.volume_angstrom3,
+        methanol_default.volume_angstrom3.to_bits()
+    );
+    assert_eq!(water_default.tesserae.len(), 408);
+    assert_eq!(methanol_default.tesserae.len(), 660);
+    // 新默认的位模式也钉住（`V` 同上）。若协变实现的求和顺序/坐标架改动，这两行会红。
+    assert_eq!(
+        water_default.surface_area_angstrom2.to_bits(),
+        0x4042_2283_a097_7b67
+    );
+    assert_eq!(
+        water_default.volume_angstrom3.to_bits(),
+        0x4033_4e43_0a1e_736c
+    );
+    assert_eq!(
+        methanol_default.surface_area_angstrom2.to_bits(),
+        0x404d_8579_2dbd_00c2
+    );
+    assert_eq!(
+        methanol_default.volume_angstrom3.to_bits(),
+        0x4042_42ea_1901_2c8c
+    );
 }
 
 #[test]
 fn both_frames_converge_to_the_same_dense_surface() {
     // 点在哪个坐标架里生成不该改变"表面的面积"这个几何量：把点数加大，
-    // 两种模式必须收敛到同一个数（差别只剩 O(1/√N) 采样）。
+    // 两种模式必须收敛到同一个数（差别只剩 O(1/√N) 采样）。这里显式给两种坐标架
+    // —— `cavity()` 是协变，那个"全局"的那一半必须自己点名。
     let radii = bondi_radii();
     let molecule = water();
-    let global = cavity(&molecule, &radii, 1.0, 20_000).expect("global");
+    let global =
+        cavity_with_frame(&molecule, &radii, 1.0, 20_000, CavityFrame::Global).expect("global");
     let covariant = cavity_with_frame(&molecule, &radii, 1.0, 20_000, CavityFrame::Covariant)
         .expect("covariant");
     let area_relative = relative_difference(

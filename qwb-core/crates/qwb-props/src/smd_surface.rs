@@ -39,13 +39,27 @@
 //! 1. 单原子极限等于闭式 `4π(R+0.4)²`（与已验证的 σ 层对接）；
 //! 2. `w → 0` 复现二值遮蔽（与 SV-01 已验收的空腔几何对接）；
 //! 3. 二体极限收敛到**解析**球帽面积（`analytic_area_volume`，对双原子精确）；
-//! 4. 随距离/带宽单调、分离时严格可加；转动不变性只到 **采样误差**（点集钉在全局
-//!    坐标系里，这是所有点采样表面的共同缺陷，`O(1/√N)`，见测试的实测表）。
+//! 4. 随距离/带宽单调、分离时严格可加；转动不变性见下。
+//!
+//! # 坐标架：默认与 `cavity()` 同一个（转动协变）
+//!
+//! 采样点在哪个坐标系里生成，决定了"转一下分子面积会不会变"：
+//!
+//! * [`CavityFrame::Covariant`]（**默认**）：点放在**每原子的局部坐标架**里
+//!   （[`crate::cavity::atom_frame`]，由邻居几何构造），坐标架随分子一起转，于是面积为刚性
+//!   转动精确不变（只剩浮点舍入）。这与 [`crate::cavity::cavity`] 的默认**必须是同一个**：
+//!   COSMO 的空腔和 CDS 的面描述的是同一个溶剂边界，一个协变一个全局就等于把
+//!   `O(1/√N)` 的转动漂移留在了半条路径上。
+//! * [`CavityFrame::Global`]：SV-03 的原始做法，点钉在全局坐标轴上，面积对转动只到采样
+//!   误差（`O(1/√N)`）。保留它是因为历史数值按位钉着，而且比较"两种坐标架收敛到同一个
+//!   面积"需要一个参照。
+//!
+//! 显式要旧行为用 [`smd_surface_with_frame`] 与 [`CavityFrame::Global`]。
 
 use qwb_engine_api::{EngineError, Molecule};
 use qwb_registry::smd_atomic::SmdAtomic;
 
-use crate::cavity::fibonacci_point;
+use crate::cavity::{CavityFrame, atom_frame, compose_direction, fibonacci_point};
 
 /// 表面分解的结果。
 #[derive(Debug, Clone, PartialEq)]
@@ -110,10 +124,12 @@ fn switch_fraction(distance: f64, radius: f64, width: f64) -> f64 {
     u * u * (3.0 - 2.0 * u)
 }
 
-/// 多原子 CDS 表面分解。
+/// 多原子 CDS 表面分解（[`CavityFrame::default()`] = 转动协变）。
 ///
 /// `points_per_atom` 是每球采样点数（沿用 [`crate::cavity::cavity`] 的下限 12），
 /// `switch_width_angstrom` 是切换带宽 `w`（Å）；传 `0.0` 得到二值遮蔽极限。
+///
+/// 这个函数**逐位**等于 [`smd_surface_with_frame`] 传 [`CavityFrame::Covariant`]。
 ///
 /// # 已知精度
 ///
@@ -130,6 +146,35 @@ pub fn smd_surface(
     points_per_atom: usize,
     switch_width_angstrom: f64,
 ) -> Result<SmdSurface, EngineError> {
+    smd_surface_with_frame(
+        data,
+        molecule,
+        points_per_atom,
+        switch_width_angstrom,
+        CavityFrame::default(),
+    )
+}
+
+/// 多原子 CDS 表面分解，**可选坐标架**（与 [`crate::cavity::cavity_with_frame`] 同形状）。
+///
+/// 除坐标架外与 [`smd_surface`] 完全相同：同一批 Fibonacci 点、同一个面积权重
+/// `4πR²/N`、同一个切换函数、同一个每原子归属。
+///
+/// * [`CavityFrame::Covariant`]：点在每原子的局部坐标架（[`atom_frame`]）里生成，
+///   坐标架随分子刚性转动而转动，所以面积为刚性转动精确不变。
+/// * [`CavityFrame::Global`]：点在全局坐标轴下生成（SV-03 原始行为，逐位不变，
+///   但转动漂移 `O(1/√N)`）。
+///
+/// # Errors
+///
+/// 同 [`smd_surface`]。
+pub fn smd_surface_with_frame(
+    data: &SmdAtomic,
+    molecule: &Molecule,
+    points_per_atom: usize,
+    switch_width_angstrom: f64,
+    frame: CavityFrame,
+) -> Result<SmdSurface, EngineError> {
     if points_per_atom < 12 {
         return Err(EngineError::InvalidInput(format!(
             "smd-surface: {points_per_atom} points per atom is too few (need >= 12)"
@@ -142,13 +187,27 @@ pub fn smd_surface(
     }
     let radii = cds_effective_radii(data, molecule)?;
     let n_atoms = molecule.n_atoms();
+    // 协变模式下先把每原子的坐标架算好（只依赖几何，一次 O(n²)）；全局模式保持 `None`，
+    // 走的是与原始实现**逐位相同**的那条分支。
+    let frames: Option<Vec<[[f64; 3]; 3]>> = match frame {
+        CavityFrame::Global => None,
+        CavityFrame::Covariant => Some(
+            (0..n_atoms)
+                .map(|index| atom_frame(molecule, index))
+                .collect(),
+        ),
+    };
     let mut areas = vec![0.0_f64; n_atoms];
     for (index, atom) in molecule.atoms.iter().enumerate() {
         let radius = radii[index];
         let area_per_point = 4.0 * std::f64::consts::PI * radius * radius / points_per_atom as f64;
         let center = atom.position_angstrom;
         for k in 0..points_per_atom {
-            let normal = fibonacci_point(k, points_per_atom);
+            let local = fibonacci_point(k, points_per_atom);
+            let normal = match &frames {
+                Some(frames) => compose_direction(&frames[index], local),
+                None => local,
+            };
             let point = [
                 center[0] + radius * normal[0],
                 center[1] + radius * normal[1],

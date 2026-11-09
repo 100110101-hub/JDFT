@@ -91,7 +91,9 @@ fn the_cds_term_matches_pyscfs_smd_closely_and_the_electrostatics_is_recorded() 
     );
 
     // ② 静电：表面表示不同（SWIG vs tesserae），差值是**实测记录**的量，
-    //    判据先定成 2 kcal/mol（当前实测约 1.30），超出就说明有一边改了实现。
+    //    判据先定成 2 kcal/mol（当前实测约 0.96），超出就说明有一边改了实现。
+    //    第 435 轮把空腔/CDS 面的默认坐标架翻成协变之前的实测是 1.2961（同一判据下），
+    //    也就是说这一项对"表面采样的取向"敏感、而不是对某个 bug 敏感 —— 别再收紧它。
     let ours_el = block.electrostatic_hartree * HARTREE_PER_KCAL;
     let theirs_el = reference("electrostatic_kcal_per_mol");
     let el_gap = (ours_el - theirs_el).abs();

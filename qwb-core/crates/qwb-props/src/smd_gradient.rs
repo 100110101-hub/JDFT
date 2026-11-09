@@ -31,13 +31,29 @@
 //! 上游还有七条成对分支（`SIGMA(107/111/112/113/115/117/118)`）本仓库数据全为 0，
 //! [`crate::smd_sigma`] 没写它们、这里也没写。入口会**先检查**这七项确实为 0，否则报错 ——
 //! 而不是悄悄漏掉它们对梯度的贡献。
+//!
+//! # 坐标系：这条路径微分的是 `CavityFrame::Global` 的表面（**不是**默认的协变面）
+//!
+//! [`crate::cavity::cavity`] 与 [`crate::smd_surface::smd_surface`] 的默认坐标架已经翻成
+//! 转动协变的 [`CavityFrame::Covariant`]，但**这里的解析梯度还只对
+//! [`CavityFrame::Global`] 成立**：协变坐标架的每个轴依赖邻居几何
+//! （[`crate::cavity::atom_frame`]），于是采样点 `p_k = c_i + R_i·F_i·l_k` 对核坐标的导数
+//! 多出一项 `R_i·(∂F_i/∂c_m)·l_k`。那一项（坐标架雅可比）**没有实装**，所以
+//! [`smd_cds_energy_gradient_with_frame`] 传 `Covariant` 会显式返回
+//! [`EngineError::Unsupported`]，而不是把"另一张面"的导数当成本面的导数返回。
+//!
+//! 后果是明写的：对协变（默认）面的能量做有限差分，与这里的解析梯度会差一个采样量级的
+//! 坐标架项 —— 量值由 `tests/sv03_smd_gradient.rs` 的
+//! `the_covariant_frame_is_refused_by_the_analytic_gradient` 实测并钉住。溶剂化的梯度目前
+//! 在任何生产路径上都还没接线（`opt` + 溶剂由引擎显式拒绝，见 SV-02），所以这是**已知缺口**
+//! 而不是活着的错误：补它需要坐标架雅可比，那是 SV-02 的前置。
 #![deny(unsafe_code)]
 
 use qwb_engine_api::{EngineError, Molecule};
 use qwb_registry::elements::atomic_number;
 use qwb_registry::smd_atomic::SmdAtomic;
 
-use crate::cavity::fibonacci_point;
+use crate::cavity::{CavityFrame, fibonacci_point};
 use crate::smd::SmdDescriptors;
 use crate::smd_sigma::{
     DEFAULT_DELTA, ISTS, cot_weight, hsigma_at, pair_sigma_at, smd_sts, soft_weight,
@@ -484,7 +500,7 @@ fn sts_derivatives(
     Ok(derivatives)
 }
 
-/// CDS 的能量与解析梯度。
+/// CDS 的能量与解析梯度（[`CavityFrame::Global`] 的表面，见模块文档）。
 ///
 /// `switch_width_angstrom` **必须**大于 0（见模块文档：`w = 0` 的梯度不存在）。
 ///
@@ -499,6 +515,45 @@ pub fn smd_cds_energy_gradient(
     water: bool,
     descriptors: Option<&SmdDescriptors>,
 ) -> Result<CdsEnergyGradient, EngineError> {
+    smd_cds_energy_gradient_with_frame(
+        data,
+        molecule,
+        points_per_atom,
+        switch_width_angstrom,
+        water,
+        descriptors,
+        CavityFrame::Global,
+    )
+}
+
+/// CDS 的能量与解析梯度，**可选坐标架**（与 [`crate::smd_surface::smd_surface_with_frame`]
+/// 同形状）。
+///
+/// 目前只实现了 [`CavityFrame::Global`]：协变坐标架要求 [`crate::cavity::atom_frame`] 对核
+/// 坐标的雅可比 `∂F_i/∂c_m`（采样点 `p_k = c_i + R_i·F_i·l_k` 通过它依赖构型），本模块没有
+/// 实装它，所以传 [`CavityFrame::Covariant`] 会返回 [`EngineError::Unsupported`] —— 显式
+/// 报错，而不是静默地把另一张面的导数当成本面的导数。
+///
+/// # Errors
+///
+/// 加上一条：`frame = Covariant` → [`EngineError::Unsupported`]。
+pub fn smd_cds_energy_gradient_with_frame(
+    data: &SmdAtomic,
+    molecule: &Molecule,
+    points_per_atom: usize,
+    switch_width_angstrom: f64,
+    water: bool,
+    descriptors: Option<&SmdDescriptors>,
+    frame: CavityFrame,
+) -> Result<CdsEnergyGradient, EngineError> {
+    if frame != CavityFrame::Global {
+        return Err(EngineError::Unsupported(format!(
+            "smd: the CDS analytic gradient only differentiates the global-frame surface; the \
+             {frame:?} frame needs the frame Jacobian dF_i/dc_m (atom_frame depends on the nuclear \
+             coordinates), which is not implemented - refusing to return the derivative of a \
+             different surface"
+        )));
+    }
     if !switch_width_angstrom.is_finite() || switch_width_angstrom <= 0.0 {
         return Err(EngineError::InvalidInput(format!(
             "smd: the CDS gradient needs a positive switch width (the binary limit is not \

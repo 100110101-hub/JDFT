@@ -5,12 +5,15 @@
 //! A 36.4582→36.5878、`E_vac` 逐位相同）。来源是空腔的 Fibonacci 点钉在全局坐标轴上
 //! （见 `qwb_props::cavity` 的模块文档），不是 SCF 也不是 COSMO 求解器的问题。
 //!
-//! 本轮加的 [`qwb_props::cavity::CavityFrame::Covariant`] 让坐标架随分子一起转，于是
-//! 空腔逐位不变、`ΔG_solv` 只剩 SCF 的舍入。这个文件在**真实 COSMO-SCF** 上量：
+//! 第 434 轮加的 [`qwb_props::cavity::CavityFrame::Covariant`] 让坐标架随分子一起转，于是
+//! 空腔逐位不变、`ΔG_solv` 只剩 SCF 的舍入；第 435 轮把它**翻成默认**（`cavity()` 与
+//! `smd_surface()` 都用它）。这个文件在**真实 COSMO-SCF** 上量：
 //!
 //! * 协变模式下 COSMO SCF 是否还收敛、`ΔG_solv` 与实验值的差（水/甲醇）；
-//! * `ΔG_solv` 在三次刚性转动下的**离散度**（旧模式 0.24–1.28 kcal/mol）；
-//! * tessera 数 M 与表面积 A 在转动下是否还跳。
+//! * `ΔG_solv` 在三次刚性转动下的**离散度**（被换掉的全局模式实测 1.276 kcal/mol（水）/
+//!   0.121（甲醇）；现在默认的协变模式是 1.78e-11 / 1.78e-10 kcal/mol，只剩 SCF 舍入）；
+//! * tessera 数 M 与表面积 A 在转动下是否还跳（协变 408/660 逐个不差，全局 [410,413,413,409]）；
+//! * `CavityFrame::default()` 确实是协变（`[Global]` 那一列只剩历史对照的作用）。
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -223,9 +226,16 @@ fn covariant_cosmo_scf_converges_and_tracks_the_global_frame() {
 #[test]
 #[ignore = "slow: 20 COSMO-SCF runs (water+methanol, both frames, reference + 3 rigid rotations), 82 s"]
 fn solvation_energy_under_rigid_rotation() {
-    // 验收数字：旧模式 0.2410 / 1.2762 kcal/mol。协变模式下空腔逐位不变（见
-    // `sv04_covariant_cavity.rs`），所以这里只剩 SCF 的舍入。判据取 1e-4 kcal/mol：
-    // 比旧漂移小四个数量级，同时不把"SCF 自身的末位噪声"当成失败。
+    // 验收数字：被换掉的全局模式上一轮记录 0.2410 / 1.2762 kcal/mol，本轮同一组转动实测
+    // **0.1206（甲醇）/ 1.276（水）**（全局路径逐位未变，差异来自记录口径）。协变模式下空腔
+    // 逐位不变（见 `sv04_covariant_cavity.rs`），所以这里只剩 SCF 的舍入（实测 1.78e-11 /
+    // 1.78e-10）。判据取 1e-4 kcal/mol：比旧漂移小四个数量级，同时不把"SCF 自身的末位噪声"
+    // 当成失败。
+    assert_eq!(
+        CavityFrame::default(),
+        CavityFrame::Covariant,
+        "the default frame must be the covariant one - `cavity()` feeds the production solvent path"
+    );
     let registry = Registry::open(data_root()).expect("qwb-data");
     for (name, molecule, epsilon) in [("water", water(), 78.355), ("methanol", methanol(), 32.613)]
     {
@@ -263,13 +273,14 @@ fn solvation_energy_under_rigid_rotation() {
                      cavity is not rotation covariant"
                 );
             } else {
-                // 缺陷本身（默认路径未改动，所以它仍在）。若有人把默认路径也换成协变模式，
-                // 这条会红 —— 那时必须同步改这里与账本，而不是放宽它。
+                // 被换掉的全局模式（第 435 轮之前是默认）：缺陷本身没改，所以漂移仍在。这条
+                // 现在的作用是"当初为什么翻默认"的可执行记录；若有人把 Global 的实现也改了，
+                // 它会红 —— 那时必须同步改这里与账本，而不是放宽它。
                 assert!(
                     worst > 1.0e-4,
                     "{name}: the global frame no longer moves dG_solv under rotation (worst \
-                     {worst:.3e} kcal/mol) - the default path changed; update this test and the \
-                     ledger"
+                     {worst:.3e} kcal/mol) - the global implementation changed; update this test \
+                     and the ledger"
                 );
             }
         }

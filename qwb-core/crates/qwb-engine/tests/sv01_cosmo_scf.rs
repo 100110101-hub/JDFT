@@ -202,7 +202,8 @@ fn report(
 #[test]
 fn sv01_water_solvation_energy_against_experiment() {
     let registry = Registry::open(data_root()).expect("qwb-data");
-    // 水：−7.274 kcal/mol vs 实验 −6.32 → 差 −0.95 kcal/mol（判据内）
+    // 水：−6.937 kcal/mol vs 实验 −6.32 → 差 −0.62 kcal/mol（判据内）。
+    // （第 435 轮翻协变空腔之前是 −7.274，差 −0.95；转动漂移从 1.276 kcal/mol 降到 1.8e-11。）
     report("water", &registry, &water(), 78.355, -6.32, true);
 }
 
@@ -210,7 +211,9 @@ fn sv01_water_solvation_energy_against_experiment() {
 fn sv01_methanol_solvation_energy_against_experiment() {
     let registry = Registry::open(data_root()).expect("qwb-data");
     // 甲醇：用**甲醇自己的 ε = 32.613**（`qwb-data/solvent/methanol.yaml`），不是水的 78.355。
-    // 实测 −5.676 vs 实验 −3.71 → 差 −1.97 kcal/mol（判据外，卡点 = 缺非极性项）。
+    // 实测 −5.694 vs 实验 −3.71 → 差 −1.98 kcal/mol（判据外，卡点 = 缺非极性项）。
+    // 第 435 轮把空腔默认坐标架翻成协变（每原子局部坐标架）后的实测：−5.676 → −5.694
+    // （差 −0.018）；水的 −7.274 → −6.937（差 +0.337，离实验 −6.32 从 −0.95 收到 −0.62）。
     report("methanol", &registry, &methanol(), 32.613, -3.71, false);
 }
 
@@ -231,7 +234,9 @@ fn sv01_solvation_energy_is_stable_against_the_tessera_count() {
         energies.push(delta_g);
     }
     // 离散化误差是单调的：碎片越多，屏蔽越完全（ΔG 更负）。它不是收敛的障碍，
-    // 而是必须如实记下来的不确定度量级 —— 250 点/原子与 150 点/原子差 ~0.35 kcal/mol。
+    // 而是必须如实记下来的不确定度量级 —— 250 点/原子与 150 点/原子差 ~0.07 kcal/mol
+    // （第 435 轮翻协变空腔后实测，改动前是 ~0.35；三档 160/241/408 个碎片给 −6.295 /
+    // −6.870 / −6.937，总离散度 0.642 而不是 0.993 kcal/mol）。
     for window in energies.windows(2) {
         assert!(
             window[1] < window[0],

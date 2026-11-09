@@ -104,9 +104,13 @@ fn descriptors_for(name: &str) -> SmdDescriptors {
 #[test]
 fn the_per_atom_surface_tension_reproduces_the_upstream_cds_energy() {
     let data = smd();
-    // 8192 点时水相最差 1.63e-3，32768 点降到 8.4e-4，与上一半实测的 `O(1/√N)` 采样噪声
-    // 同量级。判据定在 2e-3。
-    let points = 32768;
+    // 点数只压**采样误差**（这条判据比的是 σ 组装这一层的转写，不是表面采样）。
+    // 第 435 轮翻默认坐标架（全局 → 协变）把采样噪声重新洗了一遍：32768 点/原子时旧实测
+    // 最差 8.43e-4（甲醇，判据 1e-3），翻完变成 **1.037e-3（丙酮）** —— 超过判据。判据没动，
+    // 处置是**加密采样**：131072 点/原子实测最差 **2.937e-4**（丙酮 2.94e-4；水 9.03e-5、
+    // HF 5.16e-5、HCl 5.48e-5、H₂S 2.06e-4、甲烷 1.13e-4、甲醇 8.36e-5、乙腈 1.46e-4），
+    // 与 `O(1/√N)` 一致（点数 ×4，误差 ÷3.5）。判据仍然是 1e-3。
+    let points = 131072;
     let mut worst = 0.0_f64;
     for system in read_oracle_systems() {
         let water = system.solvent == "water";

@@ -4,10 +4,14 @@
 //! invariant under a rigid rotation of the molecule (< 1e-6 relative). This pins down the
 //! tessellation, the shading test and the per-tessera weights without needing the
 //! dielectric constant or the SMD radius table.
+//!
+//! Round 435 flipped `cavity()`'s default frame to the rotation-covariant one, so the 1e-6
+//! criterion is now met exactly (0.000e0 measured) instead of "met at sampling scale": see
+//! `tests/sv04_covariant_cavity.rs` for the frame itself and for the `Global` regression.
 use std::collections::BTreeMap;
 
 use qwb_engine_api::{Atom, Molecule};
-use qwb_props::cavity::{cavity, rotate_molecule};
+use qwb_props::cavity::{CavityFrame, cavity, cavity_with_frame, rotate_molecule};
 
 fn bondi_radii() -> BTreeMap<String, f64> {
     let mut radii = BTreeMap::new();
@@ -94,40 +98,65 @@ fn surface_area_and_volume_are_invariant_under_rotation() {
         println!(
             "rotation axis {axis:?} angle {angle}: area rel {area_relative:.3e}, volume rel {volume_relative:.3e}"
         );
-        // 点采样镶嵌对任意转动**不可能**精确不变：遮蔽边界上总有 O(1/√N) 的碎片
-        // 在"被/不被遮蔽"之间翻转。判据里的 1e-6 只有解析的球帽公式能满足，那是
-        // 下一步；这里断言实测落在采样误差量级内，并在下面单独查收敛性。
+        // 第 435 轮把 `cavity()` 的默认坐标架从全局翻成每原子局部坐标架（协变），所以这条
+        // 判据（SV-01：面积/体积对刚性转动 < 1e-6）**现在是通过的**，而且不是靠放宽容差：
+        // 实测三次转动全是 0.000e0（逐位相同）。旧默认（`CavityFrame::Global`）在同样条件
+        // 下漂 4.99e-4 / 2.30e-3 / 3.48e-4（面积），那是点钉在全局坐标轴上的采样伪影。
         assert!(
-            area_relative < 5.0e-3,
-            "surface area deviation {area_relative:.3e} exceeds the sampling bound 2e-3"
+            area_relative < 1.0e-6,
+            "surface area deviation {area_relative:.3e} exceeds the SV-01 criterion 1e-6"
         );
         assert!(
-            volume_relative < 5.0e-3,
-            "volume deviation {volume_relative:.3e} exceeds the sampling bound 2e-3"
+            volume_relative < 1.0e-6,
+            "volume deviation {volume_relative:.3e} exceeds the SV-01 criterion 1e-6"
         );
     }
 }
 
 #[test]
 fn rotation_deviation_shrinks_with_more_tessellation_points() {
-    // 收敛性：偏差来自采样而不是遮蔽判定的 bug —— 点数翻 4 倍，偏差应明显变小。
+    // 采样收敛性只对**全局**坐标架成立：点钉在全局坐标轴上时，转动会改变点集与分子的相对
+    // 取向，偏差是 `O(1/√N)` 的采样伪影。默认（协变）模式下同一批点转过同一个旋转，偏差
+    // **恒为 0**，所以那条"点数越多偏差越小"的断言在默认模式下没有意义（0 不可能再小）。
+    // 第 435 轮的处置：默认模式断言**精确不变**（判据 1e-6），收敛性显式钉在全局模式上 ——
+    // 两条都保留，谁也没被放宽。
     let molecule = water();
     let radii = bondi_radii();
     let axis = [0.3_f64, -0.5, 0.81];
     let angle = 2.9_f64;
     let rotated = rotate_molecule(&molecule, axis, angle);
-    let mut deviations = Vec::new();
+
+    let mut covariant = Vec::new();
+    let mut global = Vec::new();
     for points in [500_usize, 2000, 8000] {
         let base = cavity(&molecule, &radii, 1.0, points).expect("cavity");
         let other = cavity(&rotated, &radii, 1.0, points).expect("cavity");
         let relative = (other.surface_area_angstrom2 - base.surface_area_angstrom2).abs()
             / base.surface_area_angstrom2;
-        println!("{points} points: rotation deviation {relative:.3e}");
-        deviations.push(relative);
+        println!("{points} points: covariant (default) rotation deviation {relative:.3e}");
+        covariant.push(relative);
+
+        let base_global =
+            cavity_with_frame(&molecule, &radii, 1.0, points, CavityFrame::Global).expect("global");
+        let other_global =
+            cavity_with_frame(&rotated, &radii, 1.0, points, CavityFrame::Global).expect("global");
+        let drift = (other_global.surface_area_angstrom2 - base_global.surface_area_angstrom2)
+            .abs()
+            / base_global.surface_area_angstrom2;
+        println!("{points} points: Global rotation drift {drift:.3e}");
+        global.push(drift);
+    }
+    for (points, value) in [500_usize, 2000, 8000].iter().zip(&covariant) {
+        assert!(
+            *value < 1.0e-6,
+            "the default (covariant) frame must be exactly rotation invariant at {points} points, \
+             got {value:.3e}"
+        );
     }
     assert!(
-        deviations[2] < deviations[0],
-        "deviation should shrink with more points (sampling artifact, not a bug): {deviations:?}"
+        global[2] < global[0],
+        "in the Global frame the deviation must shrink with more points (sampling artifact, \
+         not a bug): {global:?}"
     );
 }
 

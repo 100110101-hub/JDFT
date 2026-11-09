@@ -8,10 +8,11 @@
 //! 3. `w <= 0` 必须报错 —— 二值遮蔽下的面积不可微，不许悄悄给 0。
 use std::path::PathBuf;
 
-use qwb_engine_api::{Atom, Molecule};
-use qwb_props::smd_gradient::smd_cds_energy_gradient;
+use qwb_engine_api::{Atom, EngineError, Molecule};
+use qwb_props::cavity::CavityFrame;
+use qwb_props::smd_gradient::{smd_cds_energy_gradient, smd_cds_energy_gradient_with_frame};
 use qwb_props::smd_sigma::{cds_energy_kcal_from_sts, smd_sts};
-use qwb_props::smd_surface::smd_surface;
+use qwb_props::smd_surface::smd_surface_with_frame;
 use qwb_registry::Registry;
 use qwb_registry::smd_atomic::SmdAtomic;
 
@@ -28,8 +29,26 @@ fn smd() -> SmdAtomic {
 }
 
 /// 只算平滑面（`w > 0`）的能量 —— 有限差分的对照路径，**不经过**梯度代码。
+///
+/// 第 435 轮起 `smd_surface()` 的默认坐标架是协变，而这里的解析梯度只对**全局**坐标架
+/// 成立（坐标架雅可比未实装，见 `qwb_props::smd_gradient` 的模块文档）。所以对照路径必须
+/// 显式点名 `CavityFrame::Global`：跨路径比较必须在同一个坐标架里，否则数分的不是同一张面。
 fn smooth_energy(data: &SmdAtomic, molecule: &Molecule, points: usize, width: f64) -> f64 {
-    let surface = smd_surface(data, molecule, points, width).expect("surface");
+    let surface = smd_surface_with_frame(data, molecule, points, width, CavityFrame::Global)
+        .expect("surface");
+    let sts = smd_sts(data, molecule, true, None).expect("sts");
+    cds_energy_kcal_from_sts(&sts, 0.0, &surface.areas_angstrom2).expect("energy")
+}
+
+/// 同上，但用**默认（协变）**坐标架的面 —— 只为量出"解析梯度不是这张面的导数"差多少。
+fn smooth_energy_covariant(
+    data: &SmdAtomic,
+    molecule: &Molecule,
+    points: usize,
+    width: f64,
+) -> f64 {
+    let surface = smd_surface_with_frame(data, molecule, points, width, CavityFrame::Covariant)
+        .expect("surface");
     let sts = smd_sts(data, molecule, true, None).expect("sts");
     cds_energy_kcal_from_sts(&sts, 0.0, &surface.areas_angstrom2).expect("energy")
 }
@@ -169,6 +188,72 @@ fn the_gradient_is_translation_invariant() {
             "{name}: the total gradient must vanish under translation, got {norm:.3e}"
         );
     }
+}
+
+#[test]
+fn the_covariant_frame_is_refused_by_the_analytic_gradient() {
+    // 解析梯度只对 `CavityFrame::Global` 的面求导：协变坐标架依赖核坐标，采样点
+    // `p_k = c_i + R_i·F_i·l_k` 对核坐标的导数多一项 `R_i·(∂F_i/∂c_m)·l_k`（坐标架雅可比），
+    // 那一项**没实装**。这条测试钉两件事：
+    //
+    // ① 传协变坐标架必须**显式报错**（`Unsupported`），不许静默把另一张面的导数当本面返回；
+    // ② 把"若静默返回"的差距量出来：对默认（协变）面的能量做 Richardson 差分会与解析梯度
+    //    差千分之几 kcal/(mol·Å) 量级 —— 那是真差异，不是舍入，所以"报错"是唯一诚实的选项。
+    let data = smd();
+    let (name, molecule) = systems().remove(0);
+    let points = 2048;
+    let width = 0.10;
+    let step = 1.0e-4;
+
+    let refused = smd_cds_energy_gradient_with_frame(
+        &data,
+        &molecule,
+        points,
+        width,
+        true,
+        None,
+        CavityFrame::Covariant,
+    )
+    .expect_err("the covariant frame has no frame Jacobian, so the gradient must be refused");
+    println!("{name} [Covariant] -> {refused}");
+    assert!(
+        matches!(refused, EngineError::Unsupported(_)),
+        "expected Unsupported, got {refused:?}"
+    );
+    // 全局坐标架仍然照常可用（默认入口走的就是它）。
+    let global = smd_cds_energy_gradient(&data, &molecule, points, width, true, None)
+        .expect("global gradient");
+
+    let mut worst = 0.0_f64;
+    for atom in 0..molecule.n_atoms() {
+        for axis in 0..3 {
+            let plus = smooth_energy_covariant(
+                &data,
+                &perturbed(&molecule, atom, axis, step),
+                points,
+                width,
+            );
+            let minus = smooth_energy_covariant(
+                &data,
+                &perturbed(&molecule, atom, axis, -step),
+                points,
+                width,
+            );
+            let numeric = (plus - minus) / (2.0 * step);
+            let analytic = global.gradient_kcal_per_angstrom[atom][axis];
+            worst = worst.max((numeric - analytic).abs());
+        }
+    }
+    println!(
+        "{name}: max |analytic(Global) - numeric(Covariant)| = {worst:.3e} kcal/(mol A) \
+         (that is the missing frame-Jacobian term; the test above pins the analytic gradient to \
+         the same frame instead of hiding this behind a loose tolerance)"
+    );
+    assert!(
+        worst > 1.0e-3,
+        "if the covariant frame moved the gradient by less than 1e-3 kcal/(mol A) the refusal \
+         would be over-cautious; measured {worst:.3e} - re-derive the frame Jacobian requirement"
+    );
 }
 
 #[test]

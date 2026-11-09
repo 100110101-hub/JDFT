@@ -23,13 +23,20 @@
 //!
 //! 但**"局部坐标系"是相对什么**决定了转动不变性：
 //!
-//! * [`CavityFrame::Global`]（默认、SV-01 原始行为）：点钉在**全局**坐标轴上。分子整体
-//!   转动时点集不跟着转，遮蔽边界上的碎片会翻转，面积/体积漂移 `O(1/√N)`（水 + Bondi
-//!   半径、250 点/原子实测 4.76e-3 / 3.56e-3）。这一模式**保持逐位不变**（已有钉住的数值
-//!   不许动），本模块只把它命名清楚。
-//! * [`CavityFrame::Covariant`]：点钉在**每原子的局部坐标架**上（[`atom_frame`]，由邻居
-//!   几何构造），坐标架随分子一起转动，于是同一批点转过同一个旋转、遮蔽判定只看距离 ——
-//!   面积与体积对刚性转动精确不变（只有浮点舍入），实测见 `tests/sv04_covariant_cavity.rs`。
+//! * [`CavityFrame::Covariant`]（**默认**）：点钉在**每原子的局部坐标架**上（[`atom_frame`]，
+//!   由邻居几何构造），坐标架随分子一起转动，于是同一批点转过同一个旋转、遮蔽判定只看距离 ——
+//!   面积与体积对刚性转动精确不变（只剩浮点舍入），实测见 `tests/sv04_covariant_cavity.rs`。
+//!   SV-01 的判据（面积/体积对刚性转动 < 1e-6）**只有**这一模式能满足。
+//! * [`CavityFrame::Global`]（SV-01 的原始行为，保留但**不再是默认**）：点钉在**全局**坐标轴上。
+//!   分子整体转动时点集不跟着转，遮蔽边界上的碎片会翻转，面积/体积漂移 `O(1/√N)`（水 + Bondi
+//!   半径、250 点/原子实测 4.76e-3 / 3.56e-3）。这一模式**逐位不变**（历史数值在
+//!   `tests/sv04_covariant_cavity.rs` 里按位钉着），并且仍然是 CDS 解析梯度所用的模式
+//!   （见 `crate::smd_gradient`：那里的坐标架雅可比 ∂F/∂c 未实装，所以显式报错而不是
+//!   静默换一套点集）。
+//!
+//! **本轮（第 435 轮）把默认从 `Global` 翻到 `Covariant`**：不翻转的话，同一个分子转一下就
+//! 让 `ΔG_solv` 移动 1.276 kcal/mol，判据（< 1.5 kcal/mol）被离散化伪影吃掉一半。翻转的
+//! 实测后果逐条记在 `docs/error-budget.md` 与两个 `sv04_*` 验收测试里。
 //!
 //! 退化情形（孤立原子、双原子/直线分子）在 [`atom_frame`] 里逐条写明：那些几何不存在
 //! 转动协变的坐标架（绕轴转动是对称操作），所以显式退到确定的全局兜底。
@@ -41,23 +48,24 @@ use qwb_registry::elements::atomic_number;
 
 /// 镶嵌方向所用的**坐标架**。
 ///
-/// [`CavityFrame::Global`] 是 SV-01 的原始做法：每个原子的 Fibonacci 点在全局坐标轴下生成。
-/// 分子整体转动时这些点**不**跟着转，于是"哪些点被别的球遮住"会变，面积/体积对刚性转动
-/// 有 `O(1/√N)` 的漂移（水 + Bondi 半径、250 点/原子实测 4.76e-3 / 3.56e-3）—— 与
-/// SV-01 的判据（< 1e-6）不符，是 SV-02 的解析梯度上不去的前置缺陷。
-///
 /// [`CavityFrame::Covariant`] 在**每原子的局部坐标架**里生成同一批点，坐标架由邻居几何
 /// 构造（见 [`atom_frame`]）因而随分子一起转动：同一批点转过同一个旋转，遮蔽判定只看距离，
 /// 所以面积与体积对刚性转动精确不变（只剩浮点舍入，实测见
-/// `tests/sv04_covariant_cavity.rs`）。这一模式**不是**默认值，默认路径逐位不变。
+/// `tests/sv04_covariant_cavity.rs`）。**这是默认值**：SV-01 的判据（< 1e-6）只有它能满足。
+///
+/// [`CavityFrame::Global`] 是 SV-01 的原始做法：每个原子的 Fibonacci 点在全局坐标轴下生成。
+/// 分子整体转动时这些点**不**跟着转，于是"哪些点被别的球遮住"会变，面积/体积对刚性转动
+/// 有 `O(1/√N)` 的漂移（水 + Bondi 半径、250 点/原子实测 4.76e-3 / 3.56e-3）—— 与
+/// SV-01 的判据（< 1e-6）不符。它保留下来有两个用途：把历史数值按位钉住（回归），以及
+/// 给 CDS 的解析梯度用（那一半的坐标架雅可比还没实装，见 `crate::smd_gradient`）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 #[non_exhaustive]
 pub enum CavityFrame {
-    /// 全局坐标轴（SV-01 原始行为，默认；数值逐位不变）。
+    /// 每原子由邻居几何构造的局部坐标架（刚性转动协变；**默认**）。
     #[default]
-    Global,
-    /// 每原子由邻居几何构造的局部坐标架（刚性转动协变）。
     Covariant,
+    /// 全局坐标轴（SV-01 原始行为；数值逐位不变，但转动漂移 `O(1/√N)`）。
+    Global,
 }
 
 /// 一个表面碎片（tessera）。
@@ -337,7 +345,10 @@ pub fn atom_frame(molecule: &Molecule, index: usize) -> [[f64; 3]; 3] {
 }
 
 /// 把局部坐标下的单位方向 `local` 组合成全局方向 `Σ_k local_k · frame_k`。
-fn compose_direction(frame: &[[f64; 3]; 3], local: [f64; 3]) -> [f64; 3] {
+///
+/// `crate::smd_surface` 也要用同一条组合规则（SMD/CDS 的面必须与 COSMO 的空腔**同一个
+/// 坐标架**，否则溶剂路径只有一半是协变的），所以它是 `pub(crate)` 而不是模块私有。
+pub(crate) fn compose_direction(frame: &[[f64; 3]; 3], local: [f64; 3]) -> [f64; 3] {
     let mut direction = [0.0_f64; 3];
     for (axis, coefficient) in frame.iter().zip(local) {
         for (component, value) in axis.iter().enumerate() {
@@ -347,13 +358,15 @@ fn compose_direction(frame: &[[f64; 3]; 3], local: [f64; 3]) -> [f64; 3] {
     direction
 }
 
-/// 由分子与每元素半径构建空腔（[`CavityFrame::Global`]，SV-01 的原始行为）。
+/// 由分子与每元素半径构建空腔（[`CavityFrame::default()`] = 转动协变，即
+/// [`CavityFrame::Covariant`]）。
 ///
 /// `radii_angstrom` 是**每元素**的 vdW 半径（Å），`scale` 是半径缩放因子，
 /// `points_per_atom` 是每球的点数。
 ///
-/// 这个函数**逐位**等于 [`cavity_with_frame`] 传 [`CavityFrame::Global`]；要转动协变的
-/// 空腔用 [`cavity_with_frame`] 与 [`CavityFrame::Covariant`]。
+/// 这个函数**逐位**等于 [`cavity_with_frame`] 传 [`CavityFrame::Covariant`]。要 SV-01 的
+/// 原始行为（点钉在全局坐标轴上，转动漂移 `O(1/√N)`）用 [`cavity_with_frame`] 与
+/// [`CavityFrame::Global`]。
 ///
 /// # Errors
 ///
@@ -369,7 +382,7 @@ pub fn cavity(
         radii_angstrom,
         scale,
         points_per_atom,
-        CavityFrame::Global,
+        CavityFrame::default(),
     )
 }
 
@@ -380,9 +393,10 @@ pub fn cavity(
 ///
 /// # 两种模式的区别
 ///
-/// * [`CavityFrame::Global`]：点在全局坐标轴下生成（原始行为，逐位不变）。
 /// * [`CavityFrame::Covariant`]：点在每原子的局部坐标架（[`atom_frame`]）里生成，
-///   坐标架随分子刚性转动而转动，所以面积/体积对转动精确不变。
+///   坐标架随分子刚性转动而转动，所以面积/体积对转动精确不变（[`cavity`] 走这条）。
+/// * [`CavityFrame::Global`]：点在全局坐标轴下生成（SV-01 原始行为，逐位不变，但转动
+///   漂移 `O(1/√N)`）。
 ///
 /// # Errors
 ///

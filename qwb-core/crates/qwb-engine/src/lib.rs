@@ -856,11 +856,15 @@ impl RksBackend {
         //
         // 空腔的碎片数是**稠密**表面方程的规模（`O(M³)` 一次分解、每步 SCF 重解一次），
         // 所以这里既给默认值也设上限：大分子自动降采样并**记日志**，不静默改变精度。
-        // 250 点/原子是 `docs/choices.md` 六十二里的实测选择（160→250 差 0.6 kcal/mol）。
+        // 250 点/原子是 `docs/choices.md` 六十二里的实测选择（100→250 点/原子实测
+        // −6.281 → −7.274 kcal/mol，差 0.99；第 435 轮协变空腔下 −6.295 → −6.937，差 0.64）。
         const COSMO_POINTS_PER_ATOM: usize = 250;
         const COSMO_MAX_TESSERAE: usize = 1500;
-        // SMD 的 SASA 用同一个 Fibonacci 球面采样。实测：32768 点时水相 `G_CDS` 对上游
-        // `libsolvent` 最差 8.4e-4、8192 点 1.63e-3（`smd_sigma` 的收敛表，O(1/√N) 采样噪声）。
+        // SMD 的 SASA 用同一个 Fibonacci 球面采样，**同一个坐标架**（第 435 轮起两者默认都是
+        // 每原子局部坐标架，即 `CavityFrame::Covariant`：转一下分子不再改面积）。实测：全局
+        // 坐标架 32768 点水相 `G_CDS` 对上游 `libsolvent` 最差 8.4e-4、8192 点 1.63e-3；协变
+        // 坐标架（现在的默认）32768 点 1.04e-3、131072 点 2.9e-4 —— 都是 O(1/√N) 的采样噪声
+        // （`sv03_smd_sts` 的收敛表）。
         // 4096 点是"精度还在 2e-3 量级、成本可忽略"的折中，且**写进日志**，不静默取值。
         const SMD_POINTS_PER_ATOM: usize = 4096;
         let mut cosmo: Option<(std::sync::Arc<cosmo_scf::CosmoScfField>, f64, f64, usize)> = None;

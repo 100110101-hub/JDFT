@@ -7,14 +7,20 @@
 //! 1. 单原子极限 = 闭式 `4π(R+0.4)²`（与已验证的 σ 层对接）；
 //! 2. `w = 0` 复现二值遮蔽（与 SV-01 已验收的 `cavity()` 对接）；
 //! 3. 双原子极限收敛到**解析**球帽面积（`analytic_area_volume` 对双原子精确）；
-//! 4. 随距离/带宽单调、分离时严格可加；转动不变性只到采样误差（`O(1/√N)`）。
+//! 4. 随距离/带宽单调、分离时严格可加；转动不变性见下。
+//!
+//! 第 435 轮把 `smd_surface()` 的默认坐标架翻成与 `cavity()` 相同的**协变**（每原子局部
+//! 坐标架），所以第 4 条里的"转动不变性只到采样误差"变成了**精确不变**；旧（全局）模式
+//! 的 `O(1/√N)` 漂移保留成显式点名的回归，不再是默认。
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 
 use qwb_engine_api::{Atom, EngineError, Molecule};
-use qwb_props::cavity::{analytic_area_volume, cavity, rotate_molecule};
+use qwb_props::cavity::{
+    CavityFrame, analytic_area_volume, cavity, cavity_with_frame, rotate_molecule,
+};
 use qwb_props::smd::{cds_energy_kcal, single_atom_area_angstrom2};
-use qwb_props::smd_surface::{cds_effective_radii, smd_surface};
+use qwb_props::smd_surface::{cds_effective_radii, smd_surface, smd_surface_with_frame};
 use qwb_registry::Registry;
 use qwb_registry::smd_atomic::SmdAtomic;
 
@@ -113,42 +119,66 @@ fn the_single_atom_limit_matches_the_closed_form() {
 fn a_zero_switch_width_reproduces_the_binary_occlusion() {
     // `w = 0` 是二值遮蔽极限，必须与 SV-01 已经验收的 `cavity()` **逐原子**对上：
     // 这证明"平滑切换"退化成"点在球内就丢掉"，而不是另一套几何。
+    //
+    // 第 435 轮两条路径的**默认**都是协变坐标架，所以这一条是"同坐标架下"的横比（这正是
+    // 要求：跨路径比较必须同架）。下面再显式跑一遍 Global 架，保证两条实现**各自**在同一个
+    // 坐标架里也逐原子一致 —— 否则"只翻了一半"这类错误会躲在这一条后面。
     let data = smd();
     let molecule = water();
     let points = 1024;
     let radii = effective_radii_map(&data);
-    let reference = cavity(&molecule, &radii, 1.0, points).expect("cavity");
 
-    let mut per_atom = vec![0.0_f64; molecule.n_atoms()];
-    for tessera in &reference.tesserae {
-        per_atom[tessera.atom_index] += tessera.area_angstrom2;
-    }
-
-    let surface = smd_surface(&data, &molecule, points, 0.0).expect("surface");
-    println!(
-        "water: cavity total {:.12} vs smd_surface {:.12} (rel {:.2e})",
-        reference.surface_area_angstrom2,
-        surface.total_area_angstrom2,
-        relative(
-            surface.total_area_angstrom2,
-            reference.surface_area_angstrom2
-        )
-    );
-    assert!(
-        relative(
-            surface.total_area_angstrom2,
-            reference.surface_area_angstrom2
-        ) < 1.0e-12,
-        "the zero-width switch must reproduce the binary occlusion test"
-    );
-    for (index, expected) in per_atom.iter().enumerate() {
+    for frame in [CavityFrame::Covariant, CavityFrame::Global] {
+        let reference = cavity_with_frame(&molecule, &radii, 1.0, points, frame).expect("cavity");
+        let mut per_atom = vec![0.0_f64; molecule.n_atoms()];
+        for tessera in &reference.tesserae {
+            per_atom[tessera.atom_index] += tessera.area_angstrom2;
+        }
+        let surface =
+            smd_surface_with_frame(&data, &molecule, points, 0.0, frame).expect("surface");
         println!(
-            "  atom {index}: cavity {expected:.12} vs smd_surface {:.12}",
-            surface.areas_angstrom2[index]
+            "water [{frame:?}]: cavity total {:.12} vs smd_surface {:.12} (rel {:.2e})",
+            reference.surface_area_angstrom2,
+            surface.total_area_angstrom2,
+            relative(
+                surface.total_area_angstrom2,
+                reference.surface_area_angstrom2
+            )
         );
         assert!(
-            relative(surface.areas_angstrom2[index], *expected) < 1.0e-12,
-            "atom {index}: per-atom attribution must agree with the cavity tesserae"
+            relative(
+                surface.total_area_angstrom2,
+                reference.surface_area_angstrom2
+            ) < 1.0e-12,
+            "{frame:?}: the zero-width switch must reproduce the binary occlusion test"
+        );
+        for (index, expected) in per_atom.iter().enumerate() {
+            println!(
+                "  [{frame:?}] atom {index}: cavity {expected:.12} vs smd_surface {:.12}",
+                surface.areas_angstrom2[index]
+            );
+            assert!(
+                relative(surface.areas_angstrom2[index], *expected) < 1.0e-12,
+                "{frame:?} atom {index}: per-atom attribution must agree with the cavity tesserae"
+            );
+        }
+    }
+    // 默认必须是协变，而且 `smd_surface()` 与显式的协变调用逐位相同（"翻默认"这一步
+    // 没有顺手改动实现）。
+    assert_eq!(CavityFrame::default(), CavityFrame::Covariant);
+    let default = smd_surface(&data, &molecule, points, 0.0).expect("default");
+    let explicit = smd_surface_with_frame(&data, &molecule, points, 0.0, CavityFrame::Covariant)
+        .expect("covariant");
+    assert_eq!(
+        default.total_area_angstrom2.to_bits(),
+        explicit.total_area_angstrom2.to_bits(),
+        "smd_surface() must be bit-identical to the explicit covariant frame"
+    );
+    for (index, area) in default.areas_angstrom2.iter().enumerate() {
+        assert_eq!(
+            area.to_bits(),
+            explicit.areas_angstrom2[index].to_bits(),
+            "atom {index}: smd_surface() must be bit-identical to the explicit covariant frame"
         );
     }
 }
@@ -176,26 +206,53 @@ fn the_binary_limit_converges_to_the_analytic_two_sphere_area() {
     );
 
     let mut errors = Vec::new();
+    let mut global_errors = Vec::new();
     for points in [256_usize, 1024, 4096, 16384] {
         let surface = smd_surface(&data, &molecule, points, 0.0).expect("surface");
         let error = (surface.total_area_angstrom2 - analytic).abs();
         println!(
-            "  N = {points:>5}: area {:.9}, |error| {error:.3e} ({:.3} %)",
+            "  N = {points:>5}: covariant area {:.9}, |error| {error:.3e} ({:.3} %)",
             surface.total_area_angstrom2,
             100.0 * error / analytic
         );
         errors.push(error);
+
+        let global = smd_surface_with_frame(&data, &molecule, points, 0.0, CavityFrame::Global)
+            .expect("global surface");
+        let global_error = (global.total_area_angstrom2 - analytic).abs();
+        println!(
+            "  N = {points:>5}: Global    area {:.9}, |error| {global_error:.3e} ({:.3} %)",
+            global.total_area_angstrom2,
+            100.0 * global_error / analytic
+        );
+        global_errors.push(global_error);
     }
     // 准随机收敛：最密的一档必须比最疏的一档小一个量级以上（`O(1/√N)`：N 翻 64 倍
     // 期望缩 8 倍）。不要求逐档单调 —— Fibonacci 点集的误差会小幅振荡。
     println!(
-        "error 256 -> 16384: {:.3e} -> {:.3e}",
-        errors[0],
-        errors[errors.len() - 1]
+        "Global error 256 -> 16384: {:.3e} -> {:.3e}",
+        global_errors[0],
+        global_errors[global_errors.len() - 1]
+    );
+    // 全局坐标架：判据**逐字保留**（第 435 轮翻默认前后都通过）。
+    assert!(
+        global_errors[global_errors.len() - 1] < 0.5 * global_errors[0],
+        "the tessellation error must shrink with points_per_atom (Global frame): {global_errors:?}"
+    );
+    // 协变坐标架（默认）：N = 256 这一档**恰好**命中解析面积（实测 1.5e-13），因为键轴
+    // [0.6, 0.8, 0] 正好是坐标架的 e1，而 Fibonacci 点集的 z 分档关于 0 对称 —— 那是这个
+    // 点数的对称性巧合，不是收敛性，所以"最密 < 0.5 × 最疏"在这个坐标架下没有意义
+    // （0 不可能更小）。收敛性仍然钉住，参照取第一个"边界已被分辨"的档（N = 1024），
+    // 绝对上界（0.5 %）不变。
+    println!(
+        "covariant error 1024 -> 16384: {:.3e} -> {:.3e} (N = 256 hits the analytic area: {:.3e})",
+        errors[1],
+        errors[errors.len() - 1],
+        errors[0]
     );
     assert!(
-        errors[errors.len() - 1] < 0.5 * errors[0],
-        "the tessellation error must shrink with points_per_atom: {errors:?}"
+        errors.len() > 1 && errors[errors.len() - 1] < 0.5 * errors[1],
+        "the tessellation error must shrink with points_per_atom (covariant frame): {errors:?}"
     );
     // 这一层自己声明的精度上界（不是对上游的容差）。
     assert!(
@@ -251,30 +308,53 @@ fn the_switching_band_is_sandwiched_between_binary_and_isolated() {
 }
 
 #[test]
-fn the_rotation_drift_of_the_surface_is_sampling_noise() {
-    // 采样点钉在**全局**坐标系里（Fibonacci 球的 z 分档是全局的），分子整体转动时
-    // 采样图案与分子的相对取向变了 → 面积只能到采样误差量级。这不是遮蔽判定的 bug，
-    // 所以判据写成"漂移随点数收敛"，并把实测值打出来。
+fn the_rotation_drift_of_the_surface_is_exactly_zero_in_the_default_frame() {
+    // 第 435 轮起 `smd_surface()` 的默认坐标架是每原子局部坐标架（与 `cavity()` 同一个）。
+    // 于是"转过一个刚性旋转"不再改点集与分子的相对取向，面积对转动**精确**不变（实测只剩
+    // 加法舍入）。旧行为（点钉在全局坐标系里）的采样漂移仍然保留，但必须显式点名
+    // `CavityFrame::Global` 才拿得到 —— 那条曲线是"为什么这层以前只到采样误差"的证据。
     let data = smd();
     let molecule = water();
     let width = 0.15;
     let rotated = rotate_molecule(&molecule, [0.3, -0.5, 0.8], 2.6);
     let mut drift = Vec::new();
+    let mut global_drift = Vec::new();
     for points in [1024_usize, 4096, 16384] {
         let base = smd_surface(&data, &molecule, points, width).expect("surface");
         let other = smd_surface(&data, &rotated, points, width).expect("surface");
         let value = relative(other.total_area_angstrom2, base.total_area_angstrom2);
-        println!("{points} points: rotation drift {value:.3e}");
+        println!("{points} points: covariant (default) rotation drift {value:.3e}");
         drift.push(value);
+
+        let base_global =
+            smd_surface_with_frame(&data, &molecule, points, width, CavityFrame::Global)
+                .expect("global surface");
+        let other_global =
+            smd_surface_with_frame(&data, &rotated, points, width, CavityFrame::Global)
+                .expect("global surface");
+        let global = relative(
+            other_global.total_area_angstrom2,
+            base_global.total_area_angstrom2,
+        );
+        println!("{points} points: Global rotation drift {global:.3e}");
+        global_drift.push(global);
+    }
+    for (points, value) in [1024_usize, 4096, 16384].iter().zip(&drift) {
+        assert!(
+            *value < 1.0e-12,
+            "the default (covariant) frame must be exactly rotation invariant at {points} points, \
+             got {value:.3e}"
+        );
     }
     assert!(
-        drift[2] < drift[0],
-        "the rotation drift must shrink with more points (sampling artifact): {drift:?}"
+        global_drift[2] < global_drift[0],
+        "in the Global frame the rotation drift must shrink with more points (sampling \
+         artifact): {global_drift:?}"
     );
     assert!(
-        drift[0] < 2.0e-3,
-        "at 1024 points the drift must stay sampling-scale, got {:.3e}",
-        drift[0]
+        global_drift[0] < 2.0e-3,
+        "at 1024 points the Global drift must stay sampling-scale, got {:.3e}",
+        global_drift[0]
     );
 }
 
@@ -458,9 +538,13 @@ fn the_multi_atom_cds_energy_matches_the_oracle_when_the_sigma_is_zero_order_onl
     // （`HSIGMA(9)/HSIGMA(17)/HSIGMA(16)` 全为 0，成对项只对 C/N/Si/P 邻居生效），
     // 于是 `E_CDS = Σ σ_i·A_i` 只差**表面分解**。含 C–H/C–O/C–N 的分子要等修正进数据。
     let data = smd();
-    // 8192 点/原子：实测最差 1.86e-4（H₂S），水 1.25e-4、HF 6.8e-5、HCl 3.4e-5。
-    // 低点数下会看到 1e-3 量级的漂移，那是 Fibonacci 采样的 `O(1/√N)` 噪声（不是模型差）。
-    let points = 8192;
+    // 点数只影响**采样误差**，不影响模型：这一条比的是 `E_CDS = Σσ_i A_i` 的转写。
+    // 第 435 轮翻默认（全局 → 协变坐标架）把采样噪声重新洗了一遍：8192 点/原子时旧的
+    // 实测最差是 1.86e-4（H₂S，water 1.25e-4），翻完同一档变成 H₂S **1.13e-3** —— 超过
+    // 1e-3 的判据（判据没动）。这是 `O(1/√N)` 的噪声，不是模型差，所以处置是**加密采样**
+    // 而不是放宽判据：32768 点/原子实测最差 **5.77e-4**（水 7.37e-5、HF 4.49e-5、
+    // HCl 5.90e-5、H₂S 5.77e-4），仍然对 1e-3 有 1.7 倍余量。
+    let points = 32768;
     // 只取"零阶即全部"的四个体系：含 C/N 的体系在 `sv03_smd_sts.rs` 里连 σ 组装一起验。
     let zero_order = [
         "water",
