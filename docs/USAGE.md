@@ -486,11 +486,11 @@ options:
 ```json
 {"model": "cosmo", "solvent_name": "water", "total_hartree": -0.011592526967646677,
  "electrostatic_hartree": -0.011592526967646677,
- "surface_area_angstrom2": 36.4581576121684, "surface_volume_angstrom3": 19.388098029035742,
+ "surface_area_angstrom2": 36.269641946760025, "surface_volume_angstrom3": 19.30571044200353,
  "n_tesserae": 410, "iterations": 33, "converged": true}
 ```
 
-`E_solv − E_vac = −0.0115925 Ha = −7.274 kcal/mol`（实验 −6.32，判据 1.5 kcal/mol 内；
+`E_solv − E_vac = −0.0110548 Ha = −6.937 kcal/mol`（实验 −6.32，判据 1.5 kcal/mol 内；
 差的那 0.95 就是缺的非极性项，SV-03）。空腔碎片数随原子数自动降采样（上限 1500），
 降采样会写进日志，不静默改变精度。
 
@@ -509,7 +509,7 @@ options:
   （`radii_set: smd` 时也用参数化半径，由 `sv03_smd_radii_cosmo.rs` 直接测）。
   **当前没有溶剂文件声明 `radii_set: smd`**，所以那条数据分支只有测试在走；
   `solvent_model: smd` 这条由 `sv03_smd_engine.rs` 的 `smd_switches_the_cavity_to_the_parameterised_radii`
-  钉住（甲苯里的 C：Bondi 1.70 vs SMD 1.85，面积 47.753 → 49.545 Å²）。
+  钉住（甲苯里的 C：Bondi 1.70 vs SMD 1.85，面积 48.116 → 49.328 Å²）。
 
 ### 3.8 色散校正：`d3bj` / `d3zero` / `d4`
 
@@ -1097,7 +1097,7 @@ gitignored 的 `qwb-data/reference/_*_staging/raw/` 里，派生物（CSV/JSON�
   UKS/PBE 的 O2 与 PySCF 差 5.8e-7、OH 差 1.1e-6（容差 5e-6，网格）。
 * **meta-GGA**：M06-2X/M06-L 的逐点导数对 libxc < 1e-9；H2O/def2-SVP 端到端（coarse）
   差 2.3e-5 / 2.8e-5 Ha。
-* **COSMO**：H2O −7.274 kcal/mol（实验 −6.32，判据 1.5 内）；缺非极性项是已记账的偏差。
+* **COSMO**：H2O −6.937 kcal/mol（实验 −6.32，判据 1.5 内）；缺非极性项是已记账的偏差。
 * **色散**：D3(BJ)/D3(0)/D4 与官方实现逐项对上（门禁里三条数据检查）。
 
 ### 9.4 明确没做
@@ -1121,7 +1121,7 @@ gitignored 的 `qwb-data/reference/_*_staging/raw/` 里，派生物（CSV/JSON�
   只有一项 `G_CDS`，参数来自公开的 MNSOL 描述符表，已随数据钉住（见 choices 一百八十二）。
 * **近似路径**：`options.numerics` 一律退出码 4（IN-03 pseudospectral、IN-04 RI-J 都没过 K10）。
 * **解析 Hessian**（RS-05，blocked：20× 的两条前提都不成立）、**GIAO NMR**（RS-04，blocked：GIAO 已实现且对预言机 1e-5 ppm，但 HF/STO-3G 的位移精度 ¹H 0.68–1.28 ppm 达不到 0.5 的判据）、
-  **Raman**（RS-06，blocked：要简正模式 → 要 RS-05）、**VCD**（RS-07 pending）。
+  **Raman**（RS-06，blocked：**已实装**（`options.raman`：有限差分 `∂α/∂R` × 数值简正模式；活性对独立预言机 1.1e-4）；未达的是**与文献相对强度排序**（STO-3G 把弯曲模式活性高估约 10×，且判据措辞在「活性 vs 强度」上有歧义））、**VCD**（RS-07 pending）。
 * **TS 已接**（`qwb ts`，RP-01）：Hessian 引导的局部本征向量跟随，收敛后核对「恰好一个虚频」（只计波数 < −100 cm⁻¹ 的真虚频，零模噪声不算）；退出码 0 本身就说明是一阶鞍点。**IRC 已完成**（RP-02）：从鞍点双向沿质量加权最陡下降走，端点自由优化 + 内坐标指纹。**PES 扫描已完成**
   （`qwb scan`，RP-03）：距离/键角/二面角，刚性（逐点单点）与弛豫（**约束优化**：梯度投影 + 每步重设内坐标）都会写 `artifacts/pes.json`；结果块里 `relaxed` 与每点的 `optimised` 分开报。
 * **GPU**：只有 `gemm` 原语、显存预算 + 自动回退、AO→MO 变换（实测 60.8×）；格点 XC 的 GPU 核
@@ -1160,15 +1160,15 @@ ECP、频率库函数）在 `docs/status.yaml`；这里只列阶段二台账里�
 | 多极展开（traceless 四极 / 八极） | ✅ | RS-08 | — |
 | 色散 D3(BJ)/D3(0)（含开壳层与线程确定性） | ✅ | FX-04, DA-06 | 对官方 s-dftd3 逐项 |
 | 幽灵原子 / counterpoise（BSSE）单点 | ⚠ | M2 | 只支持 `sp`；色散/ECP/溶剂未审，显式拒绝 |
-| COSMO / C-PCM 单点 | ⚠ | SV-01 | 面积判据仍 blocked（解析球帽已部分落地）；缺非极性项 |
-| SMD 单点（静电 + `G_CDS`） | ⚠ | SV-03 | 判据（8 溶剂 × 3 分子对实验 MAE < 1.0）缺**实验参考集**与参数化层级；与 PySCF 的 SMD 比：`G_CDS` 差 3.9e-4、**静电差 1.2961** kcal/mol（表面表示不同）；标准态项 `RT ln(RT/p°) = +1.8943` 按对方约定加 |
+| COSMO / C-PCM 单点 | ⚠ | SV-01 | **面积/体积的转动不变已达成**（共变腔体自第 436 轮为默认：转动偏差 0.000e0、ΔG 的转动漂移 1.8e-11 kcal/mol）；仍 blocked 的硬卡点是**甲醇 1.98 kcal/mol**（缺非极性项，级别问题） |
+| SMD 单点（静电 + `G_CDS`） | ⚠ | SV-03 | 判据（8 溶剂 × 3 分子对实验 MAE < 1.0）缺**实验参考集**与参数化层级；与 PySCF 的 SMD 比：`G_CDS` 差 3.9e-4、**静电差 0.9587** kcal/mol（表面表示不同）；标准态项 `RT ln(RT/p°) = +1.8943` 按对方约定加 |
 | 溶剂化解析梯度 / 优化 | ❌ | SV-02 | 依赖 SV-01 |
 | 溶液相频率 / 热化学 | ❌ | SV-05 | 依赖 SV-01/SV-02 |
 | `jobtype: freq`（**数值** Hessian：频率/IR/热化学） | ⚠ | RS-05 | 已接线（第 388 轮）：频率对 PySCF 解析 Hessian 差 ≤ 0.19 cm⁻¹；**解析** Hessian 仍 blocked（20× 的前提不成立），freq 因此是 3N+1 次 SCF 级的成本 |
 | NMR 屏蔽（**共原规范** / **GIAO**，含规范变化报告） | ⚠ | RS-04 | GIAO 已实装（`gauge: giao`）：水 O 365.672801 / H 33.682095 ppm，**规范扩散 8.28e-7 ppm**（判据 1 ppm，达到；旧共原规范是 7.10 ppm）；对 PySCF GIAO 预言机 3e-5 ppm。**未达的是位移精度**：HF/STO-3G 下 ¹H |Δ| 0.676（CH4）/ 1.278（CH3OH）ppm，判据 0.5 没到；CH4 ¹³C 差 17.880 ppm —— 这是级别的能力而不是实现缺陷 |
-| Raman 活性 | ❌ | RS-06 | 要简正模式 → 要 RS-05 |
+| Raman 活性 | ❌ | RS-06 | **已实装**（`options.raman`：有限差分 `∂α/∂R` × 数值简正模式；活性对独立预言机 1.1e-4）；未达的是**与文献相对强度排序**（STO-3G 把弯曲模式活性高估约 10×，且判据措辞在「活性 vs 强度」上有歧义） |
 | VCD | ❌ | RS-07 | pending |
-| 过渡态搜索（`qwb ts`，局部本征向量跟随） | ⚠ | RP-01 | 机制有了：NH3 伞形鞍点 5 步收敛（max\|g\| = 3.7e-6、一个虚频 −1081 cm⁻¹）；**判据的"3 个反应势垒对文献 < 1.5 kcal/mol"没做**（要 DFT 层级，受 EX-03 约束） |
+| 过渡态搜索（`qwb ts`，局部本征向量跟随） | ⚠ | RP-01 | 机制有了：NH3 伞形鞍点 5 步收敛（max\|g\| = 3.7e-6、一个虚频 −1081 cm⁻¹）；**判据的"3 个反应势垒对文献 < 1.5 kcal/mol"没做**（要 DFT 层级；成本已实测：梯度 152.6 s、数值 Hessian ≈23 min、两向 IRC 2–5 h/反应） |
 | IRC（`qwb irc`，质量加权最陡下降，双向） | ✅ | RP-02 | NH3 伞形反转：双向各 27 点、单调、两端都落到 −55.4554197623 Ha 的镜像极小；内坐标指纹对独立优化的已知极小差 < 0.02 Å；`artifacts/irc.json` 与 `result.json` 的块逐字一致 |
 | PES 扫描（`qwb scan`：距离/键角/二面角，**刚性 + 弛豫**） | ✅ | RP-03 | 刚性 9 点 O–H 扫描 max adjacent |ΔE| = 3.1e-2 Ha、极小 1.000 Å；弛豫（约束优化）三点 −74.9549/−74.9658/−74.9543 Ha，约束下解析 vs 数值方向导数差 3.9e-6；`artifacts/pes.json` 与 `result.json` 的块逐字一致 |
 | 近似路径：pseudospectral / RI-J 的 Fock 构建 | ❌ | IN-03, IN-04 | 都受 K10 等价性门禁约束，`options.numerics` 退出码 4 |
@@ -1176,8 +1176,8 @@ ECP、频率库函数）在 `docs/status.yaml`；这里只列阶段二台账里�
 | EPR 超精细耦合 | ❌ | ST-05 | 未过 K10（anchor 定标仍差 0.169% 量级之外的判据） |
 | LMP2 | ❌ | ST-03 | pending |
 | pKa 工作流 | ❌ | ST-04 | pending |
-| 溶剂化自由能 / 势垒 / NMR 基准集 | ❌ | VF-02, VF-03, VF-04 | 参考族已建成 **457 行**（FreeSolv，DOI 10.1007/s10822-014-9747-x，sha256 钉住）；水柱实测（HF/STO-3G、atom_count ≤ 8 的 17 个分子）MAE **2.084** kcal/mol、偏置 **+2.052**、|error| ≤ 1 的只有 3/17 —— 判据 1.0 是 SMD 参数化层级的能力；其余七个溶剂仍卡在 MNSOL v2012 的 403 WAF；柔性分子另有约 0.5 kcal/mol 的构象/优化阈值不确定性（实测 2.013 kcal/mol 气相能差）；势垒/NMR 仍无参考集 |
-| GPU：`gemm`、显存预算 + 自动回退、AO→MO（60.8×） | ⚠ | EX-01, EX-02, EX-03 | 格点 XC 的 GPU 核要 NVRTC/cubin（另一类 unsafe 面），EX-03 blocked |
+| 溶剂化自由能 / 势垒 / NMR 基准集 | ❌ | VF-02, VF-03, VF-04 | 参考族已建成 **457 行**（FreeSolv，DOI 10.1007/s10822-014-9747-x，sha256 钉住）；水柱实测（HF/STO-3G、atom_count ≤ 8 的 17 个分子）MAE **2.133** kcal/mol、偏置 **+2.100**、|error| ≤ 1 的只有 3/17 —— 判据 1.0 是 SMD 参数化层级的能力；其余七个溶剂仍卡在 MNSOL v2012 的 403 WAF；柔性分子另有约 0.5 kcal/mol 的构象/优化阈值不确定性（实测 2.013 kcal/mol 气相能差）；势垒/NMR 仍无参考集 |
+| GPU：`gemm`、显存预算 + 自动回退、AO→MO（60.8×） | ⚠ | EX-01, EX-02, EX-03 | **EX-03 done**：LDA + GGA 通道、`Φ/∇Φ` 设备驻留、产品 SCF 可选路径（def2-SVP 端到端 **5.23×**、STO-3G **1.12×**），四条回退路径逐位等于 CPU；`unsafe` 只在一个模块，由边界测试守住 |
 | `--threads` / `options.threads` 驱动并行度 | ⚠ | IN-05 | Fock 构建按行并行（确定性归约），但线程数只写进 `env.json`，4 指标张量仍单线程 |
 | 开壳层的布居 / cube | ⚠ | SC-01b | 只有 α 套轨道，宁可不写（§3.4） |
 | `.qwb` 容器的 CLI 打包子命令 | ⚠ | PR-03 | 容器读写与双向互操作有测试，CLI 没有"打包"子命令 |
