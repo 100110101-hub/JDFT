@@ -214,6 +214,12 @@ Step -Name 'core: test' -Dir 'qwb-core' -Body {
         'qwb-scf::t06_benzene benzene_matches_cccbdb'
         'qwb-scf::t06_benzene benzene_pbe_converges_through_the_retry'
         'qwb-scf::t06_reference cccbdb_slow_tier_species_agree'
+        # SV-01 的转动协变空腔（`CavityFrame::Covariant`）：验收要在**真实** COSMO-SCF 上量
+        # `ΔG_solv` 对刚性转动的离散度（水+甲醇 × 两种坐标架 × reference+3 个转动 = 20 次
+        # SCF，本机 82 s），以及与实验值的差（8 次 SCF，21 s）。几何那一半（面积/体积/M）
+        # 在快道里（`qwb-props::sv04_covariant_cavity`，毫秒级）。
+        'qwb-engine::sv04_covariant_solvation solvation_energy_under_rigid_rotation'
+        'qwb-engine::sv04_covariant_solvation solvation_energy_against_the_experiment_at_250_points'
     )
     & cargo nextest list --workspace *> nextest-list.log
     if ($LASTEXITCODE -ne 0) { throw 'nextest list (fast lane) failed' }

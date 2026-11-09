@@ -17,15 +17,48 @@
 //!
 //! # 遮蔽判定与转动不变性
 //!
-//! 点在球 `i` 的局部坐标系里生成，再按"分子的全局取向"旋转；若该点落在**另一个**球
-//! 内部，就判为被遮蔽并丢掉。分子整体转动时，同一批点在空间里跟着转，谁被遮蔽不变，
-//! 所以面积与体积**应当**严格不变（浮点误差量级）。这条性质正好能抓住"遮蔽判定用了
-//! 错的坐标系"这类错误（例如漏做旋转、或用原子间距离却比较了错的半径）。
+//! 点在球 `i` 的局部坐标系里生成，再放到空间里；若该点落在**另一个**球内部，就判为被
+//! 遮蔽并丢掉。这条性质正好能抓住"遮蔽判定用了错的坐标系"这类错误（例如漏做旋转、
+//! 或用原子间距离却比较了错的半径）。
+//!
+//! 但**"局部坐标系"是相对什么**决定了转动不变性：
+//!
+//! * [`CavityFrame::Global`]（默认、SV-01 原始行为）：点钉在**全局**坐标轴上。分子整体
+//!   转动时点集不跟着转，遮蔽边界上的碎片会翻转，面积/体积漂移 `O(1/√N)`（水 + Bondi
+//!   半径、250 点/原子实测 4.76e-3 / 3.56e-3）。这一模式**保持逐位不变**（已有钉住的数值
+//!   不许动），本模块只把它命名清楚。
+//! * [`CavityFrame::Covariant`]：点钉在**每原子的局部坐标架**上（[`atom_frame`]，由邻居
+//!   几何构造），坐标架随分子一起转动，于是同一批点转过同一个旋转、遮蔽判定只看距离 ——
+//!   面积与体积对刚性转动精确不变（只有浮点舍入），实测见 `tests/sv04_covariant_cavity.rs`。
+//!
+//! 退化情形（孤立原子、双原子/直线分子）在 [`atom_frame`] 里逐条写明：那些几何不存在
+//! 转动协变的坐标架（绕轴转动是对称操作），所以显式退到确定的全局兜底。
 
 use std::collections::BTreeMap;
 
 use qwb_engine_api::{EngineError, Molecule};
 use qwb_registry::elements::atomic_number;
+
+/// 镶嵌方向所用的**坐标架**。
+///
+/// [`CavityFrame::Global`] 是 SV-01 的原始做法：每个原子的 Fibonacci 点在全局坐标轴下生成。
+/// 分子整体转动时这些点**不**跟着转，于是"哪些点被别的球遮住"会变，面积/体积对刚性转动
+/// 有 `O(1/√N)` 的漂移（水 + Bondi 半径、250 点/原子实测 4.76e-3 / 3.56e-3）—— 与
+/// SV-01 的判据（< 1e-6）不符，是 SV-02 的解析梯度上不去的前置缺陷。
+///
+/// [`CavityFrame::Covariant`] 在**每原子的局部坐标架**里生成同一批点，坐标架由邻居几何
+/// 构造（见 [`atom_frame`]）因而随分子一起转动：同一批点转过同一个旋转，遮蔽判定只看距离，
+/// 所以面积与体积对刚性转动精确不变（只剩浮点舍入，实测见
+/// `tests/sv04_covariant_cavity.rs`）。这一模式**不是**默认值，默认路径逐位不变。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[non_exhaustive]
+pub enum CavityFrame {
+    /// 全局坐标轴（SV-01 原始行为，默认；数值逐位不变）。
+    #[default]
+    Global,
+    /// 每原子由邻居几何构造的局部坐标架（刚性转动协变）。
+    Covariant,
+}
 
 /// 一个表面碎片（tessera）。
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -119,10 +152,208 @@ pub(crate) fn fibonacci_point(k: usize, n: usize) -> [f64; 3] {
     [radius * phi.cos(), radius * phi.sin(), z]
 }
 
-/// 由分子与每元素半径构建空腔。
+/// 共线判定的阈值：两方向夹角的正弦小于它就算共线。
+///
+/// 阈值不能取到舍入级别：`e2` 是由"去掉 `e1` 分量后归一化"得到的，它的相对误差约
+/// `ε/sin θ`（`ε ≈ 1e-16`）。`sin θ ≥ 1e-3` 时坐标架的误差 ≤ `1e-13`，转动不变性稳在
+/// 这个量级；若把阈值压到 `1e-6`，接近共线的体系会得到 `1e-10` 量级的噪声坐标架。
+const NON_COLLINEAR_SINE: f64 = 1.0e-3;
+
+/// 距离并列的**相对**容差：两个候选的距离相差不到 `1e-9` 就当作并列、按原子序号取小者。
+///
+/// 这一条是转动不变性的关键：对称分子里"数学上精确相等"的距离，在用转动后的坐标算出来时
+/// 会差 `~1e-16`；若直接比较这两个数，分支会在转动下翻转（实测甲醇的 H2/H3 就是这样把
+/// 面积抖动到 4.9e-3）。把并列判定的窗口放大到 `1e-9`（远大于 `1e-16`、又远小于任何真实
+/// 的化学距离差）之后，分支在转动下就是稳定的。
+const DISTANCE_TIE_RELATIVE: f64 = 1.0e-9;
+
+/// 三个三维向量的基础运算（只在本模块用，避免为一个坐标架拖进线性代数 crate）。
+fn sub3(a: [f64; 3], b: [f64; 3]) -> [f64; 3] {
+    [a[0] - b[0], a[1] - b[1], a[2] - b[2]]
+}
+
+fn dot3(a: [f64; 3], b: [f64; 3]) -> f64 {
+    a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
+}
+
+fn cross3(a: [f64; 3], b: [f64; 3]) -> [f64; 3] {
+    [
+        a[1] * b[2] - a[2] * b[1],
+        a[2] * b[0] - a[0] * b[2],
+        a[0] * b[1] - a[1] * b[0],
+    ]
+}
+
+fn norm3(a: [f64; 3]) -> f64 {
+    dot3(a, a).sqrt()
+}
+
+/// 单位化；长度非正/非有限时返回 `None`（调用方负责退化分支）。
+fn unit3(a: [f64; 3]) -> Option<[f64; 3]> {
+    let length = norm3(a);
+    if !length.is_finite() || length <= 0.0 {
+        return None;
+    }
+    Some([a[0] / length, a[1] / length, a[2] / length])
+}
+
+/// 给定一根单位轴 `axis`，返回一根**确定但不协变**的垂直单位向量。
+///
+/// 取绝对分量最小的全局坐标轴做参考向量。这条分支只在"其余所有原子都与 `axis` 共线"
+/// 时用到（双原子、直线分子、孤立原子之外的 0/1 方向体系）—— 那种几何**不存在**
+/// 转动协变的垂直向量（绕轴转动是对称操作，任何协变构造都只能给出与轴平行的向量，
+/// 矛盾），所以这里是显式的兜底而不是疏漏。
+fn fallback_perpendicular(axis: [f64; 3]) -> [f64; 3] {
+    let mut reference = [0.0_f64; 3];
+    let components = [axis[0].abs(), axis[1].abs(), axis[2].abs()];
+    let mut smallest = 0;
+    for candidate in 1..3 {
+        if components[candidate] < components[smallest] {
+            smallest = candidate;
+        }
+    }
+    reference[smallest] = 1.0;
+    let projection = dot3(reference, axis);
+    // 参考轴与 `axis` 的夹角 ≤ 54.7°（最小分量 ≤ 1/√3），去掉轴分量后长度 ≥ 0.816，非零。
+    let orthogonal = [
+        reference[0] - projection * axis[0],
+        reference[1] - projection * axis[1],
+        reference[2] - projection * axis[2],
+    ];
+    // 上面的界保证 `unit3` 不会返回 None；真要出现非有限值就退回全局 z 的垂直（+x）。
+    unit3(orthogonal).unwrap_or([1.0, 0.0, 0.0])
+}
+
+/// 按（距离，序号）排序候选方向，**并列判定带容差**。
+///
+/// 实现成一串贪心抽取而不是一次 `sort_by`：`sort_by` 的比较器要求传递性，而"相差不到
+/// `DISTANCE_TIE_RELATIVE` 就算并列"不满足传递性；贪心抽取每次只问"谁的序号最小且距离
+/// 在最小值的容差窗内"，结果唯一、确定，且在 `~1e-16` 的转动噪声下稳定。
+fn order_candidates(mut candidates: Vec<(f64, usize, [f64; 3])>) -> Vec<(f64, usize, [f64; 3])> {
+    // 先按原子序号排好（`remove` 保持顺序），于是"窗内序号最小"= 窗内第一个。
+    candidates.sort_by_key(|candidate| candidate.1);
+    let mut ordered = Vec::with_capacity(candidates.len());
+    while !candidates.is_empty() {
+        let nearest = candidates
+            .iter()
+            .map(|candidate| candidate.0)
+            .fold(f64::INFINITY, f64::min);
+        let window = nearest * (1.0 + DISTANCE_TIE_RELATIVE);
+        // `position` 不会失败：`nearest` 自己就在窗内。
+        let picked = candidates
+            .iter()
+            .position(|candidate| candidate.0 <= window)
+            .unwrap_or(0);
+        ordered.push(candidates.remove(picked));
+    }
+    ordered
+}
+
+/// 原子 `index` 的**局部坐标架**（三行 `e1`/`e2`/`e3`，单位正交、右手）。
+///
+/// # 定义
+///
+/// 1. `e1`：指向**最近**邻居的方向。距离并列（相对差 < `1e-9`）时按原子序号取小者，
+///    保证确定性与转动稳定性 —— 见本文件里的 `DISTANCE_TIE_RELATIVE` 常量及其说明。
+/// 2. `e2`：在其余原子中按（距离，序号）顺序找到**第一个与 `e1` 不共线**的方向
+///    （`sin θ ≥ 1e-3`），去掉 `e1` 分量后归一化。
+/// 3. `e3 = e1 × e2`，再把 `e2` 重算成 `e3 × e1`，让三根轴严格正交（Gram–Schmidt）。
+///
+/// 取"最近邻居 + 第一根不共线方向"而不是惯量主轴，是为了让坐标架对**任意配位数**
+/// 都良定义：惯量主轴在球形陀螺（甲烷）上三重简并，需要额外的确定性破缺规则；
+/// 而上面两条规则对所有非共线环境都直接给出唯一答案。
+///
+/// # 协变性
+///
+/// 输入只用到相对位置向量，且所有分支判定都带容差（远大于 `~1e-16` 的转动噪声），
+/// 所以对刚性旋转 `Q`：`frame(Q·r) = Q·frame(r)`（逐轴）—— 这就是
+/// [`CavityFrame::Covariant`] 精确转动不变的全部来源。
+///
+/// # 退化情形（显式、确定）
+///
+/// * **0 个邻居**（孤立原子、或与所有其它原子重合）：返回全局单位架。孤立原子没有任何
+///   取向信息，它的面积仍然精确是 `4πR²`（所有碎片都暴露），但体积的散度定理式
+///   `(1/3)Σ(r·n)A` 带一个**预先存在**的原点依赖，因此孤立原子**不可能**做到转动不变 ——
+///   这是 `cavity()` 体积公式本身的性质，不在坐标架这一层能修。
+/// * **其余原子都与 `e1` 共线**（双原子、直线分子）：退到本文件里 `fallback_perpendicular`
+///   的确定性兜底（取绝对分量最小的全局轴做参考），确定但**不**协变，同样是因为那种几何
+///   不存在协变的垂直向量。实测（`tests/sv04_covariant_cavity.rs`）：这种体系的面积/体积
+///   在三次刚性转动下**仍然逐位不变** —— 共线体系的遮蔽判据只依赖 `n·e1`，而 `n·e1` 是
+///   本地坐标里的固定量（`fibonacci_point` 的第一个分量），换一根垂直参考向量只是绕对称轴
+///   转，改不了"哪些点被遮住"。也就是说兜底只影响坐标架，不影响观测量。
+#[must_use]
+pub fn atom_frame(molecule: &Molecule, index: usize) -> [[f64; 3]; 3] {
+    let identity = [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]];
+    let Some(origin) = molecule.atoms.get(index).map(|atom| atom.position_angstrom) else {
+        return identity;
+    };
+    // 候选方向只依赖相对几何，所以随分子一起转动。
+    let mut candidates: Vec<(f64, usize, [f64; 3])> = Vec::new();
+    for (other_index, other) in molecule.atoms.iter().enumerate() {
+        if other_index == index {
+            continue;
+        }
+        let difference = sub3(other.position_angstrom, origin);
+        let distance = norm3(difference);
+        if !distance.is_finite() || distance <= 0.0 {
+            continue;
+        }
+        candidates.push((
+            distance,
+            other_index,
+            [
+                difference[0] / distance,
+                difference[1] / distance,
+                difference[2] / distance,
+            ],
+        ));
+    }
+    let candidates = order_candidates(candidates);
+    let Some(&(_, _, e1)) = candidates.first() else {
+        return identity;
+    };
+    let mut secondary: Option<[f64; 3]> = None;
+    for &(_, _, direction) in &candidates {
+        let projection = dot3(direction, e1);
+        let orthogonal = [
+            direction[0] - projection * e1[0],
+            direction[1] - projection * e1[1],
+            direction[2] - projection * e1[2],
+        ];
+        if norm3(orthogonal) > NON_COLLINEAR_SINE
+            && let Some(unit) = unit3(orthogonal)
+        {
+            secondary = Some(unit);
+            break;
+        }
+    }
+    let e2 = secondary.unwrap_or_else(|| fallback_perpendicular(e1));
+    let Some(e3) = unit3(cross3(e1, e2)) else {
+        // `e1 ⟂ e2` 且都单位化，叉积长度应为 1；走到这里说明输入是非有限值。
+        return identity;
+    };
+    let e2 = cross3(e3, e1);
+    [e1, e2, e3]
+}
+
+/// 把局部坐标下的单位方向 `local` 组合成全局方向 `Σ_k local_k · frame_k`。
+fn compose_direction(frame: &[[f64; 3]; 3], local: [f64; 3]) -> [f64; 3] {
+    let mut direction = [0.0_f64; 3];
+    for (axis, coefficient) in frame.iter().zip(local) {
+        for (component, value) in axis.iter().enumerate() {
+            direction[component] += coefficient * value;
+        }
+    }
+    direction
+}
+
+/// 由分子与每元素半径构建空腔（[`CavityFrame::Global`]，SV-01 的原始行为）。
 ///
 /// `radii_angstrom` 是**每元素**的 vdW 半径（Å），`scale` 是半径缩放因子，
 /// `points_per_atom` 是每球的点数。
+///
+/// 这个函数**逐位**等于 [`cavity_with_frame`] 传 [`CavityFrame::Global`]；要转动协变的
+/// 空腔用 [`cavity_with_frame`] 与 [`CavityFrame::Covariant`]。
 ///
 /// # Errors
 ///
@@ -132,6 +363,36 @@ pub fn cavity(
     radii_angstrom: &BTreeMap<String, f64>,
     scale: f64,
     points_per_atom: usize,
+) -> Result<Cavity, EngineError> {
+    cavity_with_frame(
+        molecule,
+        radii_angstrom,
+        scale,
+        points_per_atom,
+        CavityFrame::Global,
+    )
+}
+
+/// 由分子与每元素半径构建空腔，**可选坐标架**。
+///
+/// 除坐标架外与 [`cavity`] 完全相同：同一批 Fibonacci 点、同一批面积权重
+/// `4πR²/N`、同一个二值遮蔽判定、同一个散度定理体积。
+///
+/// # 两种模式的区别
+///
+/// * [`CavityFrame::Global`]：点在全局坐标轴下生成（原始行为，逐位不变）。
+/// * [`CavityFrame::Covariant`]：点在每原子的局部坐标架（[`atom_frame`]）里生成，
+///   坐标架随分子刚性转动而转动，所以面积/体积对转动精确不变。
+///
+/// # Errors
+///
+/// 同 [`cavity`]。
+pub fn cavity_with_frame(
+    molecule: &Molecule,
+    radii_angstrom: &BTreeMap<String, f64>,
+    scale: f64,
+    points_per_atom: usize,
+    frame: CavityFrame,
 ) -> Result<Cavity, EngineError> {
     if points_per_atom < 12 {
         return Err(EngineError::InvalidInput(format!(
@@ -146,6 +407,16 @@ pub fn cavity(
     let mut tesserae = Vec::new();
     let mut area_total = 0.0;
     let mut volume_total = 0.0;
+    // 协变模式下先把每原子的坐标架算好（只依赖几何，一次 O(n²)）；
+    // 全局模式保持 `None`，走的是与原始实现**逐位相同**的那条分支。
+    let frames: Option<Vec<[[f64; 3]; 3]>> = match frame {
+        CavityFrame::Global => None,
+        CavityFrame::Covariant => Some(
+            (0..molecule.atoms.len())
+                .map(|index| atom_frame(molecule, index))
+                .collect(),
+        ),
+    };
     for (index, atom) in molecule.atoms.iter().enumerate() {
         let radius = radii_angstrom.get(&atom.symbol).copied().ok_or_else(|| {
             EngineError::Data(format!("cavity: no radius for element `{}`", atom.symbol))
@@ -167,7 +438,11 @@ pub fn cavity(
         let area_per_point =
             4.0 * std::f64::consts::PI * weighted * weighted / points_per_atom as f64;
         for k in 0..points_per_atom {
-            let normal = fibonacci_point(k, points_per_atom);
+            let local = fibonacci_point(k, points_per_atom);
+            let normal = match &frames {
+                Some(frames) => compose_direction(&frames[index], local),
+                None => local,
+            };
             let point = [
                 center[0] + weighted * normal[0],
                 center[1] + weighted * normal[1],

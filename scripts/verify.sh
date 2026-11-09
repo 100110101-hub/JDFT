@@ -168,6 +168,8 @@ qwb-scf::t06_benzene benzene_pbe_converges_through_the_retry
 qwb-scf::t06_reference cccbdb_slow_tier_species_agree
 qwb-engine::rs06_raman the_finite_difference_step_is_converged_at_the_hessian_convention
 qwb-engine::rs06_raman methane_raman_activities_match_the_oracle_with_degenerate_subspaces_grouped
+qwb-engine::sv04_covariant_solvation solvation_energy_under_rigid_rotation
+qwb-engine::sv04_covariant_solvation solvation_energy_against_the_experiment_at_250_points
 EOF
     "$0" nextest list --workspace > nextest-list.log 2>&1 || { echo "!! nextest list（快道）失败"; exit 1; }
     "$0" nextest list --workspace --run-ignored all > nextest-list-all.log 2>&1 || { echo "!! nextest list（全量）失败"; exit 1; }
